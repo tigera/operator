@@ -490,7 +490,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "istio-pilot" }}
-	ComponentIstioPilot = Component{
+	ComponentCalicoIstioPilot = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -498,7 +498,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "istio-install-cni" }}
-	ComponentIstioInstallCNI = Component{
+	ComponentCalicoIstioInstallCNI = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -506,7 +506,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "istio-ztunnel" }}
-	ComponentIstioZTunnel = Component{
+	ComponentCalicoIstioZTunnel = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -514,7 +514,7 @@ var (
 	}
 {{- end }}
 {{ with index .Components "istio-proxyv2" }}
-	ComponentIstioProxyv2 = Component{
+	ComponentCalicoIstioProxyv2 = Component{
 		Version:  "{{ .Version }}",
 		Image:    "{{ .Image }}",
 		Registry: "{{ .Registry }}",
@@ -583,10 +583,10 @@ var (
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
-		ComponentIstioPilot,
-		ComponentIstioInstallCNI,
-		ComponentIstioZTunnel,
-		ComponentIstioProxyv2,
+		ComponentCalicoIstioPilot,
+		ComponentCalicoIstioInstallCNI,
+		ComponentCalicoIstioZTunnel,
+		ComponentCalicoIstioProxyv2,
 		ComponentTigeraWebhooks,
 	}
 )

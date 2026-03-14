@@ -139,19 +139,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 	})
 
-	It("should include kubevirt.io RBAC rules in calico-kube-controllers ClusterRole", func() {
-		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-
-		role := rtest.GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"kubevirt.io"},
-			Resources: []string{"virtualmachineinstances", "virtualmachines"},
-			Verbs:     []string{"get", "list", "watch"},
-		}))
-	})
-
 	It("should render all resources for a custom configuration", func() {
 		expectedResources := []struct {
 			name    string
@@ -266,7 +253,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(25), "cluster role should have 25 rules")
+		Expect(clusterRole.Rules).To(HaveLen(24), "cluster role should have 24 rules")
 
 		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
@@ -353,7 +340,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(23), "cluster role should have 23 rules")
+		Expect(clusterRole.Rules).To(HaveLen(22), "cluster role should have 22 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -564,7 +551,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(23), "cluster role should have 23 rules")
+		Expect(clusterRole.Rules).To(HaveLen(22), "cluster role should have 22 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -990,9 +977,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the KUBERNETES_SERVICE_... variables", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
-		cfg.K8sServiceEp = k8sServiceEp
+		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{
+			Host: "k8shost",
+			Port: "1234",
+		}
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1004,10 +992,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
-	It("should not add the KUBERNETES_SERVICE_... variables on docker EE using proxy.local", func() {
-		k8sServiceEp.Host = "proxy.local"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+	It("should not add the KUBERNETES_SERVICE_... variables when pod network endpoint is not set", func() {
+		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{}
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

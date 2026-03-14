@@ -50,7 +50,7 @@ import (
 const (
 	DeploymentName                                         = "tigera-linseed"
 	ServiceAccountName                                     = "tigera-linseed"
-	PolicyName                                             = networkpolicy.CalicoComponentPolicyPrefix + "linseed-access"
+	PolicyName                                             = networkpolicy.TigeraComponentPolicyPrefix + "linseed-access"
 	PortName                                               = "tigera-linseed"
 	TargetPort                                             = 8444
 	Port                                                   = 443
@@ -560,7 +560,7 @@ func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 		{
 			Action:      v3.Allow,
@@ -679,7 +679,7 @@ func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,

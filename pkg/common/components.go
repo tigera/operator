@@ -22,20 +22,15 @@ import (
 
 // MergeMaps merges current and desired maps. If both current and desired maps contain the same key, the
 // desired map's value is used.
-// MergeMaps does not copy operator-managed annotations from the current map.
+// MergeMaps does not copy hash.operator.tigera.io annotations from the current map, since those are managed by the operator.
 func MergeMaps(current, desired map[string]string) map[string]string {
 	for k, v := range current {
-		if _, ok := desired[k]; !ok && !isOperatorManaged(k) {
+		// Copy over key/value that should be copied.
+		if _, ok := desired[k]; !ok && !strings.Contains(k, "hash.operator.tigera.io") {
 			desired[k] = v
 		}
 	}
 	return desired
-}
-
-// isOperatorManaged returns true if the given annotation key is managed by the operator
-// and should not be copied from the current map during merges.
-func isOperatorManaged(key string) bool {
-	return strings.Contains(key, "operator.tigera.io")
 }
 
 // MapExistsOrInitialize returns the given map if non-nil or returns an empty map.

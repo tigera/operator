@@ -191,14 +191,6 @@ var _ = Describe("Node rendering tests", func() {
 					i++
 				}
 
-				// calico-cni-plugin clusterRole should have kubevirt.io PolicyRule for IPAM of KubeVirt workloads.
-				cniRole := rtest.GetResource(resources, "calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-				Expect(cniRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-					APIGroups: []string{"kubevirt.io"},
-					Resources: []string{"virtualmachineinstances", "virtualmachines"},
-					Verbs:     []string{"get"},
-				}))
-
 				// Check CNI configmap.
 				cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
 				Expect(cniCmResource).ToNot(BeNil())
@@ -2055,17 +2047,6 @@ var _ = Describe("Node rendering tests", func() {
 					rbacv1.Subject{
 						Kind:      "ServiceAccount",
 						Name:      "calico-node",
-						Namespace: "kube-system",
-					},
-				))
-
-				cniCrbResource := rtest.GetResource(resources, "calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
-				Expect(cniCrbResource).ToNot(BeNil())
-				cniCrb := cniCrbResource.(*rbacv1.ClusterRoleBinding)
-				Expect(cniCrb.Subjects).To(ContainElement(
-					rbacv1.Subject{
-						Kind:      "ServiceAccount",
-						Name:      "calico-cni-plugin",
 						Namespace: "kube-system",
 					},
 				))

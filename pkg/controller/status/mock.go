@@ -99,14 +99,6 @@ func (m *MockStatus) ClearDegraded() {
 	m.Called()
 }
 
-func (m *MockStatus) SetWarning(key string, msg string) {
-	m.Called(key, msg)
-}
-
-func (m *MockStatus) ClearWarning(key string) {
-	m.Called(key)
-}
-
 func (m *MockStatus) IsAvailable() bool {
 	return m.Called().Bool(0)
 }

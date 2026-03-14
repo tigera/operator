@@ -147,8 +147,6 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
-		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
-		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 		mockStatus.On("RemoveDeployments", mock.Anything)
@@ -382,32 +380,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should render calico-system policy when installation is calico when tier and tier watch are ready", func() {
-			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			installation.Spec.Variant = operatorv1.Calico
-			installation.Status.Variant = operatorv1.Calico
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-
-			r := ReconcileAPIServer{
-				client:         cli,
-				scheme:         scheme,
-				status:         mockStatus,
-				tierWatchReady: ready,
-				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-				},
-			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-
-			Expect(err).ShouldNot(HaveOccurred())
-			policies := v3.NetworkPolicyList{}
-			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(1))
-			Expect(policies.Items[0].Name).To(Equal("calico-system.apiserver-access"))
-		})
-
-		It("should omit calico-system policy and not degrade when installation is calico when tier is not ready", func() {
+		It("should omit calico-system policy and not degrade when installation is calico", func() {
 			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 			installation.Spec.Variant = operatorv1.Calico
 			installation.Status.Variant = operatorv1.Calico
@@ -415,34 +388,9 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
-				client:         cli,
-				scheme:         scheme,
-				status:         mockStatus,
-				tierWatchReady: ready,
-				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-				},
-			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-
-			Expect(err).ShouldNot(HaveOccurred())
-			policies := v3.NetworkPolicyList{}
-			Expect(cli.List(ctx, &policies)).ToNot(HaveOccurred())
-			Expect(policies.Items).To(HaveLen(0))
-		})
-
-		It("should omit calico-system policy and not degrade when installation is calico when tier watch is not ready", func() {
-			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			installation.Spec.Variant = operatorv1.Calico
-			installation.Status.Variant = operatorv1.Calico
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-
-			r := ReconcileAPIServer{
-				client:         cli,
-				scheme:         scheme,
-				status:         mockStatus,
-				tierWatchReady: notReady,
+				client: cli,
+				scheme: scheme,
+				status: mockStatus,
 				opts: options.ControllerOptions{
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
@@ -867,49 +815,6 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady: ready,
 				opts: options.ControllerOptions{
 					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-					UseV3CRDs:           true,
-					ClusterDomain:       dns.DefaultClusterDomain,
-				},
-			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			d := appsv1.Deployment{
-				TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-webhooks", Namespace: common.CalicoNamespace},
-			}
-			Expect(test.GetResource(cli, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-			Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-webhooks"))
-		})
-
-		It("should create webhook deployment for OSS with UseV3CRDs", func() {
-			replicas := int32(2)
-			ossInstallation := &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:       "default",
-					Generation: 2,
-				},
-				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.Calico,
-					Computed: &operatorv1.InstallationSpec{},
-				},
-				Spec: operatorv1.InstallationSpec{
-					ControlPlaneReplicas: &replicas,
-					Variant:              operatorv1.Calico,
-					Registry:             "some.registry.org/",
-				},
-			}
-			Expect(cli.Create(ctx, ossInstallation)).To(BeNil())
-
-			r := ReconcileAPIServer{
-				client:         cli,
-				scheme:         scheme,
-				status:         mockStatus,
-				tierWatchReady: ready,
-				opts: options.ControllerOptions{
-					EnterpriseCRDExists: false,
 					DetectedProvider:    operatorv1.ProviderNone,
 					UseV3CRDs:           true,
 					ClusterDomain:       dns.DefaultClusterDomain,

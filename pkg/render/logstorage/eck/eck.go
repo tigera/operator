@@ -1,4 +1,4 @@
-// Copyright (c) 2024-2026 Tigera, Inc. All rights reserved.
+// Copyright (c) 2024,2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ const (
 	OperatorName         = "elastic-operator"
 	OperatorNamespace    = "tigera-eck-operator"
 	LicenseConfigMapName = "elastic-licensing"
-	OperatorPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "elastic-operator-access"
+	OperatorPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "elastic-operator-access"
 	EnterpriseTrial      = "eck-trial-license"
 )
 
@@ -365,9 +365,9 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 							"--container-registry=" + e.cfg.Installation.Registry,
 							"--max-concurrent-reconciles=3",
 							"--ca-cert-validity=8760h",
-							"--ca-cert-rotate-before=720h",
-							"--cert-rotate-before=720h",
+							"--ca-cert-rotate-before=24h",
 							"--cert-validity=8760h",
+							"--cert-rotate-before=24h",
 							"--enable-webhook=false",
 							"--manage-webhook-certs=false",
 						},
@@ -448,7 +448,7 @@ func (e *eck) operatorCalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(OperatorName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

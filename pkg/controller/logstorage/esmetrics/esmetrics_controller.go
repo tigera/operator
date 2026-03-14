@@ -110,7 +110,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		}
 	}
 
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: esmetrics.ElasticsearchMetricsPolicyName, Namespace: render.ElasticsearchNamespace},
 	})
@@ -160,7 +160,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil

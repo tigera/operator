@@ -76,13 +76,10 @@ var _ = Describe("LogCollector controller tests", func() {
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
-		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
-		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
-		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -845,84 +842,6 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
 			pullSecret := pullSecrets.OwnerReferences[0]
 			Expect(pullSecret.Kind).To(Equal("LogCollector"))
-		})
-	})
-
-	Context("License expiry", func() {
-		It("should set degraded status and delete fluentd DaemonSet when license is expired", func() {
-			// First reconcile to create fluentd resources.
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Verify the DaemonSet exists.
-			ds := appsv1.DaemonSet{
-				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
-					Namespace: render.LogCollectorNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &ds)).To(BeNil())
-
-			// Replace the valid license with an expired one.
-			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.LicenseKey{
-				ObjectMeta: metav1.ObjectMeta{Name: "default", CreationTimestamp: metav1.Now()},
-				Status: v3.LicenseKeyStatus{
-					Expiry: metav1.Time{Time: time.Now().Add(-24 * time.Hour)},
-				},
-			})).NotTo(HaveOccurred())
-
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError,
-				"License is expired - Log forwarding is stopped. Contact Tigera support or email licensing@tigera.io", mock.Anything, mock.Anything).Return()
-
-			// Reconcile again with expired license.
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Verify the DaemonSet has been deleted.
-			ds = appsv1.DaemonSet{
-				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
-					Namespace: render.LogCollectorNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &ds)).NotTo(BeNil())
-		})
-
-		It("should requeue when license is in the grace period", func() {
-			// First reconcile to create fluentd resources.
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Replace the valid license with one that expired 1 day ago but has a 90-day grace period.
-			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, &v3.LicenseKey{
-				ObjectMeta: metav1.ObjectMeta{Name: "default", CreationTimestamp: metav1.Now()},
-				Status: v3.LicenseKeyStatus{
-					Expiry:      metav1.Time{Time: time.Now().Add(-24 * time.Hour)},
-					GracePeriod: "90d",
-					Features:    []string{"export-logs"},
-				},
-			})).NotTo(HaveOccurred())
-
-			result, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Should requeue to re-reconcile when the grace period expires.
-			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
-			Expect(result.RequeueAfter).To(BeNumerically("~", 89*24*time.Hour, 1*time.Hour))
-
-			// DaemonSet should still exist during the grace period.
-			ds := appsv1.DaemonSet{
-				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
-					Namespace: render.LogCollectorNamespace,
-				},
-			}
-			Expect(test.GetResource(c, &ds)).To(BeNil())
 		})
 	})
 })

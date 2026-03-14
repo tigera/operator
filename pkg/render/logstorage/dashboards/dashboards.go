@@ -46,7 +46,7 @@ import (
 var (
 	Name                     = "dashboards-installer"
 	ElasticCredentialsSecret = "tigera-ee-dashboards-installer-elasticsearch-user-secret"
-	PolicyName               = networkpolicy.CalicoComponentPolicyPrefix + Name
+	PolicyName               = networkpolicy.TigeraComponentPolicyPrefix + Name
 )
 
 func Dashboards(c *Config) render.Component {
@@ -174,7 +174,7 @@ func (d *dashboards) CalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: fmt.Sprintf("job-name == '%s'", Name),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

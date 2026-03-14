@@ -121,12 +121,10 @@ blocks:
           execution_time_limit:
             minutes: 30
           commands:
-            - make ut 2>&1 | tee ut.log
+            - make ut
             - make dirty-check
       epilogue:
-        always:
           commands:
-            - '[[ -f ut.log ]] && artifact push job ut.log'
             - '[[ -d ./report/ut ]] && test-results publish --name "UT" ./report/ut'
 
   - name: 'FV'
@@ -141,12 +139,10 @@ blocks:
           execution_time_limit:
             minutes: 60
           commands:
-            - make fv 2>&1 | tee fv.log
+            - make fv
             - make dirty-check
       epilogue:
-        always:
           commands:
-            - '[[ -f fv.log ]] && artifact push job fv.log'
             - '[[ -d ./report/fv ]] && test-results publish --name "FV" ./report/fv'
 
   - name: Release tooling

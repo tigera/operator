@@ -52,7 +52,7 @@ const (
 	TyphaContainerName = "calico-typha"
 
 	TyphaNonClusterHostSuffix            = "-noncluster-host"
-	TyphaNonClusterHostNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "typha-noncluster-host-access"
+	TyphaNonClusterHostNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "typha-noncluster-host-access"
 
 	defaultTyphaTerminationGracePeriod = 300
 	shutdownTimeoutEnvVar              = "TYPHA_SHUTDOWNTIMEOUTSECS"
@@ -647,7 +647,7 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		})
 	}
 
-	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
+	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars()...)
 
 	if c.cfg.Installation.TyphaMetricsPort != nil {
 		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.
@@ -860,7 +860,7 @@ func typhaNonClusterHostCalicoSystemPolicy(cfg *TyphaConfiguration) *v3.NetworkP
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(common.TyphaDeploymentName + TyphaNonClusterHostSuffix),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,

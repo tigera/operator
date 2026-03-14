@@ -66,7 +66,7 @@ const (
 	FluentdMetricsPort                       = 9081
 	FluentdInputPortName                     = "fluentd-http-input-port"
 	FluentdInputPort                         = 9880
-	FluentdPolicyName                        = networkpolicy.CalicoComponentPolicyPrefix + "allow-fluentd-node"
+	FluentdPolicyName                        = networkpolicy.TigeraComponentPolicyPrefix + "allow-fluentd-node"
 	filterHashAnnotation                     = "hash.operator.tigera.io/fluentd-filters"
 	s3CredentialHashAnnotation               = "hash.operator.tigera.io/s3-credentials"
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
@@ -185,9 +185,6 @@ type FluentdConfiguration struct {
 	PacketCapture *operatorv1.PacketCaptureAPI
 
 	NonClusterHost *operatorv1.NonClusterHost
-
-	// LicenseExpired indicates the license has expired and fluentd DaemonSet should be removed.
-	LicenseExpired bool
 }
 
 type fluentdComponent struct {
@@ -335,11 +332,7 @@ func (c *fluentdComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	}
 
-	if c.cfg.LicenseExpired {
-		toDelete = append(toDelete, c.daemonset())
-	} else {
-		objs = append(objs, c.daemonset())
-	}
+	objs = append(objs, c.daemonset())
 
 	if c.cfg.NonClusterHost != nil && c.cfg.OSType == rmeta.OSTypeLinux {
 		objs = append(objs, c.nonClusterHostInputService())
@@ -1348,7 +1341,7 @@ func (c *fluentdComponent) calicoSystemPolicy() *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:                  &networkpolicy.HighPrecedenceOrder,
-			Tier:                   networkpolicy.CalicoTierName,
+			Tier:                   networkpolicy.TigeraComponentTierName,
 			Selector:               networkpolicy.KubernetesAppSelector(FluentdNodeName, fluentdNodeWindowsName),
 			ServiceAccountSelector: "",
 			Types:                  []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},

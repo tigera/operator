@@ -29,9 +29,9 @@ import (
 )
 
 const (
-	CalicoTierName                       = "calico-system"
-	CalicoComponentPolicyPrefix          = CalicoTierName + "."
-	CalicoComponentDefaultDenyPolicyName = CalicoComponentPolicyPrefix + "default-deny"
+	TigeraComponentTierName              = "calico-system"
+	TigeraComponentPolicyPrefix          = TigeraComponentTierName + "."
+	TigeraComponentDefaultDenyPolicyName = TigeraComponentPolicyPrefix + "default-deny"
 )
 
 var (
@@ -184,11 +184,11 @@ func CalicoSystemDefaultDeny(namespace string) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      CalicoComponentDefaultDenyPolicyName,
+			Name:      TigeraComponentDefaultDenyPolicyName,
 			Namespace: namespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     CalicoTierName,
+			Tier:     TigeraComponentTierName,
 			Selector: "all()",
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 		},
@@ -197,6 +197,13 @@ func CalicoSystemDefaultDeny(namespace string) *v3.NetworkPolicy {
 
 // Entity rules not belonging to Calico/Tigera components.
 var KubeAPIServerEntityRule = v3.EntityRule{
+	Services: &v3.ServiceMatch{
+		Name:      "kubernetes",
+		Namespace: "default",
+	},
+}
+
+var KubeAPIServerServiceSelectorEntityRule = v3.EntityRule{
 	Services: &v3.ServiceMatch{
 		Namespace: "default",
 		Name:      "kubernetes",

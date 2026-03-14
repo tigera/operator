@@ -36,26 +36,6 @@ import (
 
 var log = logf.Log.WithName("components")
 
-// containerNameAliases maps deprecated container names to their current names.
-// When a user provides an override using a deprecated name, it is transparently
-// resolved to the current name before matching against rendered containers.
-// To support a rename: add an entry mapping old name → current name.
-// Values must not also appear as keys (no transitive aliases).
-var containerNameAliases = map[string]string{
-	"tigera-manager":  "calico-manager",
-	"tigera-voltron":  "calico-voltron",
-	"tigera-ui-apis":  "calico-ui-apis",
-	"tigera-es-proxy": "calico-ui-apis",
-	"tigera-voltron-linseed-tls-key-cert-provisioner": "calico-voltron-linseed-tls-key-cert-provisioner",
-}
-
-func resolveContainerName(name string) string {
-	if current, ok := containerNameAliases[name]; ok {
-		return current
-	}
-	return name
-}
-
 // replicatedPodResource contains the overridable data for a Deployment or DaemonSet.
 type replicatedPodResource struct {
 	labels             map[string]string
@@ -137,14 +117,6 @@ func GetContainers(overrides any) []corev1.Container {
 	return valueToContainers(value)
 }
 
-func GetHostNetwork(overrides any) *bool {
-	value := getField(overrides, "Spec", "Template", "Spec", "HostNetwork")
-	if !value.IsValid() || value.IsNil() {
-		return nil
-	}
-	return value.Interface().(*bool)
-}
-
 func GetDNSPolicy(overrides any) (corev1.DNSPolicy, bool) {
 	value := getField(overrides, "Spec", "Template", "Spec", "DNSPolicy")
 
@@ -171,7 +143,7 @@ func valueToContainers(value reflect.Value) []corev1.Container {
 		ports := valueToContainerPorts(v)
 		if !resources.IsNil() || ports != nil {
 			container := corev1.Container{
-				Name: resolveContainerName(name.String()),
+				Name: name.String(),
 			}
 			if !resources.IsNil() {
 				container.Resources = *(resources.Interface().(*corev1.ResourceRequirements))
@@ -190,16 +162,13 @@ func valueToContainerPorts(v reflect.Value) []corev1.ContainerPort {
 	if !portOverrides.IsValid() || portOverrides.IsNil() {
 		return nil
 	}
-	ports := make([]corev1.ContainerPort, 0, portOverrides.Len())
-	for i := 0; i < portOverrides.Len(); i++ {
-		p := portOverrides.Index(i)
-		port := corev1.ContainerPort{
-			ContainerPort: int32(p.FieldByName("ContainerPort").Int()),
-		}
-		if name := p.FieldByName("Name"); name.IsValid() && name.String() != "" {
-			port.Name = name.String()
-		}
-		ports = append(ports, port)
+	customPorts := portOverrides.Interface().([]operator.APIServerDeploymentContainerPort)
+	ports := make([]corev1.ContainerPort, 0, len(customPorts))
+	for _, p := range customPorts {
+		ports = append(ports, corev1.ContainerPort{
+			Name:          p.Name,
+			ContainerPort: p.ContainerPort,
+		})
 	}
 	return ports
 }
@@ -384,12 +353,6 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	// sets `r.podTemplateSpec.Spec.PriorityClassName`.
 	if priorityClassName := GetPriorityClassName(overrides); priorityClassName != "" {
 		r.podTemplateSpec.Spec.PriorityClassName = priorityClassName
-	}
-
-	// If `overrides` has a Spec.Template.Spec.HostNetwork field, and it's non-nil, it sets
-	// `r.podTemplateSpec.Spec.HostNetwork`.
-	if hostNetwork := GetHostNetwork(overrides); hostNetwork != nil {
-		r.podTemplateSpec.Spec.HostNetwork = *hostNetwork
 	}
 
 	// If `overrides` has a Spec.Template.Spec.DNSPolicy field, and it's non-empty, it sets

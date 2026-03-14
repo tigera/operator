@@ -171,7 +171,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: linseed.PolicyName, Namespace: helper.InstallNamespace()},
 	})
@@ -259,7 +259,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil

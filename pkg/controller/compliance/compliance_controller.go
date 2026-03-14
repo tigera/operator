@@ -84,11 +84,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(complianceController, opts.K8sClientset, log, licenseAPIReady)
 
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, complianceController, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, complianceController, opts.K8sClientset, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(complianceController, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.ComplianceAccessPolicyName, Namespace: installNS},
 		{Name: render.ComplianceServerPolicyName, Namespace: installNS},
-		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: installNS},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
 	})
 
 	// Watch for changes to primary resource Compliance
@@ -257,7 +257,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -511,15 +511,6 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-
-	// Check BYO certificate expiry warnings.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.ComplianceServerCertSecret:  complianceServerKeyPair,
-		render.ComplianceSnapshotterSecret: snapshotterKeyPair.Interface,
-		render.ComplianceBenchmarkerSecret: benchmarkerKeyPair.Interface,
-		render.ComplianceReporterSecret:    reporterKeyPair.Interface,
-		render.ComplianceControllerSecret:  controllerKeyPair.Interface,
-	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

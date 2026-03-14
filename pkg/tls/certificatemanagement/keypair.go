@@ -19,10 +19,6 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"net"
-	"regexp"
-	"strings"
-	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -83,21 +79,10 @@ func (k *KeyPair) Secret(namespace string) *corev1.Secret {
 	}
 	data[corev1.TLSPrivateKeyKey] = k.PrivateKeyPEM
 	data[corev1.TLSCertKey] = k.CertificatePEM
-
-	labels, annotations := tlsSecretMetadata(k.CertificatePEM)
-	if v := k.HashAnnotationValue(); v != "" {
-		annotations[k.HashAnnotationKey()] = v
-	}
-
 	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        k.GetName(),
-			Namespace:   namespace,
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Data: data,
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: k.GetName(), Namespace: namespace},
+		Data:       data,
 	}
 }
 
@@ -113,22 +98,6 @@ func (k *KeyPair) HashAnnotationValue() string {
 		return ""
 	}
 	return rmeta.AnnotationHash(rmeta.AnnotationHash(k.CertificatePEM))
-}
-
-// Warnings returns a warning string if this is a BYO certificate expiring within 30 days.
-func (k *KeyPair) Warnings() string {
-	if !k.BYO() {
-		return ""
-	}
-	cert, err := ParseCertificate(k.CertificatePEM)
-	if err != nil {
-		return ""
-	}
-	remaining := time.Until(cert.NotAfter)
-	if remaining <= 30*24*time.Hour {
-		return fmt.Sprintf("Warning: user provided certificate %q expires in %d days", k.Name, int(remaining.Hours()/24))
-	}
-	return ""
 }
 
 func (k *KeyPair) Volume() corev1.Volume {
@@ -178,73 +147,6 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 	return initContainer
 }
 
-// tlsSecretMetadata parses certPEM and returns labels and annotations that surface
-// certificate metadata on the owning Secret. On parse failure it returns empty maps.
-func tlsSecretMetadata(certPEM []byte) (labels map[string]string, annotations map[string]string) {
-	labels = map[string]string{}
-	annotations = map[string]string{}
-
-	cert, err := ParseCertificate(certPEM)
-	if err != nil {
-		return labels, annotations
-	}
-
-	// --- labels ---
-	labels["certificates.operator.tigera.io/signer"] = signerLabelValue(cert.Issuer.CommonName)
-
-	// --- annotations ---
-	issuerCN := cert.Issuer.CommonName
-	annotations["certificates.operator.tigera.io/issuer"] = issuerCN
-	annotations["certificates.operator.tigera.io/signer"] = issuerCN
-	annotations["certificates.operator.tigera.io/expiry"] = cert.NotAfter.UTC().Format("2006-01-02T15:04:05Z")
-
-	if len(cert.DNSNames) > 0 {
-		annotations["certificates.operator.tigera.io/dns-names"] = strings.Join(cert.DNSNames, ",")
-	}
-	if len(cert.IPAddresses) > 0 {
-		annotations["certificates.operator.tigera.io/ip-sans"] = strings.Join(ipStrings(cert.IPAddresses), ",")
-	}
-
-	return labels, annotations
-}
-
-// labelUnsafe matches any character that is not alphanumeric, '-', '_', or '.'.
-var labelUnsafe = regexp.MustCompile(`[^A-Za-z0-9_.\-]`)
-
-// signerLabelValue returns a Kubernetes-label-safe signer identifier from the
-// issuer CN. It replaces invalid characters with '-', trims leading/trailing
-// non-alphanumeric characters, and truncates to 63 chars to satisfy the label
-// value constraints.
-func signerLabelValue(cn string) string {
-	// Replace any character not in [A-Za-z0-9_.-] with '-'.
-	v := labelUnsafe.ReplaceAllString(cn, "-")
-
-	// Trim leading/trailing characters that are not alphanumeric.
-	v = strings.TrimLeft(v, "-_.")
-	v = strings.TrimRight(v, "-_.")
-
-	// Truncate to 63 characters, then trim any trailing non-alphanumeric
-	// chars that truncation may have exposed.
-	if len(v) > 63 {
-		v = v[:63]
-		v = strings.TrimRight(v, "-_.")
-	}
-
-	if v == "" {
-		return "unknown"
-	}
-	return v
-}
-
-// ipStrings converts a slice of net.IP to their string representations.
-func ipStrings(ips []net.IP) []string {
-	out := make([]string, len(ips))
-	for i, ip := range ips {
-		out[i] = ip.String()
-	}
-	return out
-}
-
 func ParseCertificate(certBytes []byte) (*x509.Certificate, error) {
 	pemBlock, _ := pem.Decode(certBytes)
 	if pemBlock == nil {
@@ -289,26 +191,6 @@ func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 		}
 	}
 	return nil, nil
-}
-
-// WarningReporter is a minimal interface for reporting certificate warnings to a status manager.
-type WarningReporter interface {
-	SetWarning(key string, msg string)
-	ClearWarning(key string)
-}
-
-// CheckKeyPairWarnings checks each keypair for BYO certificate expiry warnings and reports them
-// to the status manager. For nil keypairs or keypairs without warnings, the warning is cleared.
-func CheckKeyPairWarnings(keyPairs map[string]KeyPairInterface, status WarningReporter) {
-	for key, kp := range keyPairs {
-		if kp != nil {
-			if w := kp.Warnings(); w != "" {
-				status.SetWarning(key, w)
-				continue
-			}
-		}
-		status.ClearWarning(key)
-	}
 }
 
 // NewKeyPair returns a KeyPair, which wraps a Secret object that contains a private key and a certificate. Whether certificate

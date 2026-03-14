@@ -41,22 +41,8 @@ import (
 	"github.com/tigera/operator/pkg/render/istio"
 )
 
-// getCalicoTestImageSet returns a standard imageSet for testing with Calico variant
-func getCalicoTestImageSet() *operatorv1.ImageSet {
-	return &operatorv1.ImageSet{
-		Spec: operatorv1.ImageSetSpec{
-			Images: []operatorv1.Image{
-				{Image: "calico/istio-pilot", Digest: "sha256:test-pilot-digest"},
-				{Image: "calico/istio-install-cni", Digest: "sha256:test-cni-digest"},
-				{Image: "calico/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
-				{Image: "calico/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
-			},
-		},
-	}
-}
-
-// getEnterpriseTestImageSet returns a standard imageSet for testing with Enterprise variant
-func getEnterpriseTestImageSet() *operatorv1.ImageSet {
+// getTestImageSet returns a standard imageSet for testing
+func getTestImageSet() *operatorv1.ImageSet {
 	return &operatorv1.ImageSet{
 		Spec: operatorv1.ImageSetSpec{
 			Images: []operatorv1.Image{
@@ -245,7 +231,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify istiod policy
 			istiodPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioIstiodPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(istiodPolicy.Spec.Tier).To(Equal(networkpolicy.CalicoTierName))
+			Expect(istiodPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
 			Expect(istiodPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioIstiodDeploymentName)))
 			Expect(istiodPolicy.Spec.Ingress).To(HaveLen(1))
 			Expect(istiodPolicy.Spec.Ingress[0].Destination.Ports).To(ContainElements(
@@ -258,7 +244,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify istio-cni policy
 			cniPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioCNIPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(cniPolicy.Spec.Tier).To(Equal(networkpolicy.CalicoTierName))
+			Expect(cniPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
 			Expect(cniPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioCNIDaemonSetName)))
 			Expect(cniPolicy.Spec.Egress).To(HaveLen(1))
 			Expect(cniPolicy.Spec.Egress[0].Action).To(Equal(v3.Allow))
@@ -266,7 +252,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify ztunnel policy
 			ztunnelPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioZTunnelPolicyName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(ztunnelPolicy.Spec.Tier).To(Equal(networkpolicy.CalicoTierName))
+			Expect(ztunnelPolicy.Spec.Tier).To(Equal(networkpolicy.TigeraComponentTierName))
 			Expect(ztunnelPolicy.Spec.Selector).To(Equal(networkpolicy.KubernetesAppSelector(istio.IstioZTunnelDaemonSetName)))
 			Expect(ztunnelPolicy.Spec.Egress).NotTo(BeEmpty())
 			foundIstiodRule := false
@@ -650,7 +636,16 @@ var _ = Describe("Istio Component Rendering", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			imageSet := getCalicoTestImageSet()
+			imageSet := &operatorv1.ImageSet{
+				Spec: operatorv1.ImageSetSpec{
+					Images: []operatorv1.Image{
+						{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
+						{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
+						{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
+						{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
+					},
+				},
+			}
 			err = component.ResolveImages(imageSet)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -705,84 +700,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		It("should patch ConfigMap with proxyv2 image", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
-			err = component.ResolveImages(getCalicoTestImageSet())
-			Expect(err).ShouldNot(HaveOccurred())
-
-			objsToCreate, _ := component.Objects()
-
-			// Find the istio-sidecar-injector ConfigMap
-			configMap, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, "istio-sidecar-injector", istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			// Verify that the fake image has been replaced
-			for _, data := range configMap.Data {
-				Expect(data).NotTo(ContainSubstring("fake.io/fakeimg/proxyv2:faketag"))
-			}
-		})
-
-		It("should patch all required images for Enterprise variant", func() {
-			cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
-			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			imageSet := getEnterpriseTestImageSet()
-			err = component.ResolveImages(imageSet)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			objsToCreate, _ := component.Objects()
-
-			// Verify istiod deployment image
-			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundDiscoveryContainer := false
-			for _, container := range deployment.Spec.Template.Spec.Containers {
-				if container.Name == "discovery" {
-					foundDiscoveryContainer = true
-					expectedImage, _ := components.GetReference(components.ComponentIstioPilot, cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix, imageSet)
-					Expect(container.Image).To(Equal(expectedImage))
-					break
-				}
-			}
-			Expect(foundDiscoveryContainer).To(BeTrue(), "discovery container not found in istiod deployment")
-
-			// Verify CNI daemonset image
-			cniDS, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundInstallCNIContainer := false
-			for _, container := range cniDS.Spec.Template.Spec.Containers {
-				if container.Name == "install-cni" {
-					foundInstallCNIContainer = true
-					expectedImage, _ := components.GetReference(components.ComponentIstioInstallCNI, cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix, imageSet)
-					Expect(container.Image).To(Equal(expectedImage))
-					break
-				}
-			}
-			Expect(foundInstallCNIContainer).To(BeTrue(), "install-cni container not found in CNI daemonset")
-
-			// Verify ztunnel daemonset image
-			ztunnelDS, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundIstioProxyContainer := false
-			for _, container := range ztunnelDS.Spec.Template.Spec.Containers {
-				if container.Name == "istio-proxy" {
-					foundIstioProxyContainer = true
-					expectedImage, _ := components.GetReference(components.ComponentIstioZTunnel, cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix, imageSet)
-					Expect(container.Image).To(Equal(expectedImage))
-					break
-				}
-			}
-			Expect(foundIstioProxyContainer).To(BeTrue(), "istio-proxy container not found in ztunnel daemonset")
-		})
-
-		It("should patch ConfigMap with proxyv2 image for Enterprise variant", func() {
-			cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
-			_, component, err := istio.Istio(cfg)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			err = component.ResolveImages(getEnterpriseTestImageSet())
+			err = component.ResolveImages(getTestImageSet())
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
@@ -812,40 +730,19 @@ var _ = Describe("Istio Component Rendering", func() {
 		It("should render all workloads successfully on GKE", func() {
 			objsToCreate, objsToDelete := component.Objects()
 
-			// GKE adds: istio-cni ResourceQuota + ztunnel ResourceQuota
-			Expect(objsToCreate).To(HaveLen(34))
+			Expect(objsToCreate).To(HaveLen(33))
 			Expect(objsToDelete).To(HaveLen(3))
 
 			// Start with common resources and append GKE-specific ones
 			expectedResources := getCommonExpectedResources()
 			expectedResources = append(expectedResources,
-				// ResourceQuotas (GKE specific)
+				// ResourceQuota (GKE specific)
 				&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "istio-cni-resource-quota", Namespace: istio.IstioNamespace}},
-				&corev1.ResourceQuota{ObjectMeta: metav1.ObjectMeta{Name: "ztunnel", Namespace: istio.IstioNamespace}},
 			)
 			expectedDeleteResources := getCommonExpectedDeleteResources()
 
 			rtest.ExpectResources(objsToCreate, expectedResources)
 			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
-		})
-
-		It("should set PLATFORM env var on istiod", func() {
-			objsToCreate, _ := component.Objects()
-			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			foundPlatformEnv := false
-			for _, container := range deployment.Spec.Template.Spec.Containers {
-				if container.Name == "discovery" {
-					for _, env := range container.Env {
-						if env.Name == "PLATFORM" {
-							Expect(env.Value).To(Equal("gke"))
-							foundPlatformEnv = true
-						}
-					}
-				}
-			}
-			Expect(foundPlatformEnv).To(BeTrue(), "Expected PLATFORM=gke env var on istiod")
 		})
 	})
 
@@ -964,7 +861,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(foundPlatformEnv).To(BeTrue(), "Expected PLATFORM=openshift env var on istiod")
 		})
 
-		It("should set trusted ztunnel namespace to calico-system on istiod", func() {
+		It("should set trusted ztunnel namespace to kube-system on istiod", func() {
 			objsToCreate, _ := component.Objects()
 
 			deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, istio.IstioIstiodDeploymentName, istio.IstioNamespace)
@@ -975,13 +872,13 @@ var _ = Describe("Istio Component Rendering", func() {
 				if container.Name == "discovery" {
 					for _, env := range container.Env {
 						if env.Name == "CA_TRUSTED_NODE_ACCOUNTS" {
-							Expect(env.Value).To(Equal("calico-system/ztunnel"))
+							Expect(env.Value).To(Equal("kube-system/ztunnel"))
 							foundTrustedAccounts = true
 						}
 					}
 				}
 			}
-			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=calico-system/ztunnel on istiod")
+			Expect(foundTrustedAccounts).To(BeTrue(), "Expected CA_TRUSTED_NODE_ACCOUNTS=kube-system/ztunnel on istiod")
 		})
 
 		It("should set SELinux context on ztunnel", func() {

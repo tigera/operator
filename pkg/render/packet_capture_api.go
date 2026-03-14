@@ -48,7 +48,7 @@ const (
 	PacketCaptureClusterRoleBindingName = PacketCaptureName
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
-	PacketCapturePolicyName             = networkpolicy.CalicoComponentPolicyPrefix + PacketCaptureName
+	PacketCapturePolicyName             = networkpolicy.TigeraComponentPolicyPrefix + PacketCaptureName
 	PacketCapturePort                   = 8444
 	PacketCaptureServerCert             = "tigera-packetcapture-server-tls"
 )
@@ -393,7 +393,7 @@ func calicoSystemPolicy(cfg *PacketCaptureApiConfiguration) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(PacketCaptureName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,

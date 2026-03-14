@@ -1316,46 +1316,6 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			}))
 		})
 	})
-
-	It("should move DaemonSet to toDelete when LicenseExpired is true", func() {
-		cfg.LicenseExpired = true
-		component := render.Fluentd(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		toCreate, toDelete := component.Objects()
-
-		// DaemonSet should not be in toCreate.
-		for _, obj := range toCreate {
-			if ds, ok := obj.(*appsv1.DaemonSet); ok {
-				Fail("DaemonSet should not be in toCreate when license is expired, but found: " + ds.Name)
-			}
-		}
-
-		// DaemonSet should be in toDelete.
-		found := false
-		for _, obj := range toDelete {
-			if ds, ok := obj.(*appsv1.DaemonSet); ok && ds.Name == "fluentd-node" {
-				found = true
-				break
-			}
-		}
-		Expect(found).To(BeTrue(), "Expected fluentd-node DaemonSet to be in toDelete")
-	})
-
-	It("should include DaemonSet in toCreate when LicenseExpired is false", func() {
-		cfg.LicenseExpired = false
-		component := render.Fluentd(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		toCreate, _ := component.Objects()
-
-		found := false
-		for _, obj := range toCreate {
-			if ds, ok := obj.(*appsv1.DaemonSet); ok && ds.Name == "fluentd-node" {
-				found = true
-				break
-			}
-		}
-		Expect(found).To(BeTrue(), "Expected fluentd-node DaemonSet to be in toCreate")
-	})
 })
 
 func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {

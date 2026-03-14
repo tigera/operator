@@ -32,26 +32,6 @@ type CalicoWebhooksDeploymentContainer struct {
 	// If omitted, the calico-webhooks Deployment will use its default value for this container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
-
-	// Ports allows customization of the calico-webhooks container's ports.
-	// If specified, this overrides the default container port configuration.
-	// If omitted, the calico-webhooks Deployment will use its default port (6443).
-	// +optional
-	Ports []CalicoWebhooksDeploymentContainerPort `json:"ports,omitempty"`
-}
-
-// CalicoWebhooksDeploymentContainerPort defines a port override for a calico-webhooks container.
-type CalicoWebhooksDeploymentContainerPort struct {
-	// Name is an enum which identifies the calico-webhooks Deployment container port by name.
-	// Supported values are: calico-webhooks
-	// +kubebuilder:validation:Enum=calico-webhooks
-	Name string `json:"name"`
-
-	// Number of port to expose on the pod's IP address.
-	// This must be a valid port number, 0 < x < 65536.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	ContainerPort int32 `json:"containerPort"`
 }
 
 // CalicoWebhooksDeploymentPodSpec is the calico-webhooks Deployment's PodSpec.
@@ -85,13 +65,6 @@ type CalicoWebhooksDeploymentPodSpec struct {
 	// WARNING: Please note that this field will override the default calico-webhooks Deployment tolerations.
 	// +optional
 	Tolerations []v1.Toleration `json:"tolerations"`
-
-	// HostNetwork forces the webhook pod to use the host's network namespace.
-	// When true, the webhook pod will run with hostNetwork=true and DNSPolicy=ClusterFirstWithHostNet.
-	// When nil or omitted, the operator auto-detects whether host networking is required
-	// (e.g., for EKS/TKG with Calico CNI).
-	// +optional
-	HostNetwork *bool `json:"hostNetwork,omitempty"`
 }
 
 // CalicoWebhooksDeploymentPodTemplateSpec is the calico-webhooks Deployment's PodTemplateSpec

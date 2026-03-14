@@ -36,12 +36,6 @@ type Goldmane struct {
 
 type GoldmaneSpec struct {
 	GoldmaneDeployment *GoldmaneDeployment `json:"goldmaneDeployment,omitempty"`
-
-	// MetricsPort configures the port that Goldmane uses to serve Prometheus metrics.
-	// When set to a non-zero value, Goldmane will expose a /metrics endpoint on the given port.
-	// Set to zero to disable metrics. If omitted, metrics are disabled.
-	// +optional
-	MetricsPort *int32 `json:"metricsPort,omitempty"`
 }
 
 // +kubebuilder:object:root=true

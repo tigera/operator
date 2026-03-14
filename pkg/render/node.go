@@ -376,9 +376,6 @@ func (c *nodeComponent) cniPluginRoleBinding() *rbacv1.ClusterRoleBinding {
 			},
 		},
 	}
-	if c.cfg.MigrateNamespaces {
-		migration.AddBindingForKubeSystemCNIPlugin(crb)
-	}
 	return crb
 }
 
@@ -512,7 +509,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Resources: []string{
 					"clusterinformations",
 					"felixconfigurations",
-					"bgpconfigurations",
 					"ippools",
 				},
 				Verbs: []string{"create", "update"},
@@ -636,12 +632,6 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 					"ipreservations",
 				},
 				Verbs: []string{"get", "list", "create", "update", "delete"},
-			},
-			{
-				// The CNI plugin reads KubeVirt resources for IPAM of KubeVirt workloads.
-				APIGroups: []string{"kubevirt.io"},
-				Resources: []string{"virtualmachineinstances", "virtualmachines"},
-				Verbs:     []string{"get"},
 			},
 		},
 	}
@@ -1316,7 +1306,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 		},
 	}
 
-	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
+	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars()...)
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
@@ -1692,7 +1682,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
 	}
 
-	nodeEnv = append(nodeEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
+	nodeEnv = append(nodeEnv, c.cfg.K8sServiceEp.EnvVars()...)
 
 	if c.cfg.BGPLayouts != nil {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{

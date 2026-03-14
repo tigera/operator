@@ -40,12 +40,14 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/common/selector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -65,7 +67,7 @@ const (
 	GuardianVolumeName    = "guardian-certs"
 	GuardianSecretName    = "tigera-managed-cluster-connection"
 	GuardianTargetPort    = 8080
-	GuardianPolicyName    = networkpolicy.CalicoComponentPolicyPrefix + "guardian-access"
+	GuardianPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "guardian-access"
 	GuardianKeyPairSecret = "guardian-key-pair"
 
 	GoldmaneDeploymentName         = "goldmane"
@@ -86,21 +88,16 @@ func Guardian(cfg *GuardianConfiguration) Component {
 }
 
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
-	var policies []client.Object
-
 	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
 	if err != nil {
 		return nil, err
 	}
-	if guardianAccessPolicy != nil {
-		policies = []client.Object{
-			guardianAccessPolicy,
-			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
-		}
-	}
 
 	return NewPassthrough(
-		policies,
+		[]client.Object{
+			guardianAccessPolicy,
+			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
+		},
 		[]client.Object{
 			// allow-tigera Tier was renamed to calico-system
 			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
@@ -119,7 +116,6 @@ type GuardianConfiguration struct {
 	TrustedCertBundle           certificatemanagement.TrustedBundleRO
 	TunnelCAType                operatorv1.CAType
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	IncludeEgressNetworkPolicy  bool
 
 	// PodProxies represents the resolved proxy configuration for each Guardian pod.
 	// If this slice is empty, then resolution has not yet occurred. Pods with no proxy
@@ -174,6 +170,8 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 			managerClusterWideTigeraLayer(),
 			managerClusterWideDefaultView(),
 		)
+	} else {
+		objs = append(objs, c.networkPolicy())
 	}
 
 	objs = append(objs,
@@ -549,32 +547,30 @@ func (c *GuardianComponent) annotations() map[string]string {
 	return annotations
 }
 
-func ossNetworkPolicy() *v3.NetworkPolicy {
-	return &v3.NetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{Name: GuardianPolicyName, Namespace: GuardianNamespace},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
-			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
-			Ingress: []v3.Rule{
+func (c *GuardianComponent) networkPolicy() *netv1.NetworkPolicy {
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: GuardianName, Namespace: GuardianNamespace},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: *selector.PodLabelSelector(GuardianDeploymentName),
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{
 				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
+					From: []netv1.NetworkPolicyPeer{
+						{
+							PodSelector: selector.PodLabelSelector(GoldmaneDeploymentName),
+						},
 					},
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(GuardianTargetPort),
-					},
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolTCP),
+						Port:     ptr.ToPtr(intstr.FromInt32(GuardianTargetPort)),
+					}},
 				},
 				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.UDPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(53),
-					},
+					Ports: []netv1.NetworkPolicyPort{{
+						Protocol: ptr.ToPtr(corev1.ProtocolUDP),
+						Port:     ptr.ToPtr(intstr.FromInt32(53)),
+					}},
 				},
 			},
 		},
@@ -582,14 +578,6 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 }
 
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
-	if cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
-		return ossNetworkPolicy(), nil
-	}
-
-	if !cfg.IncludeEgressNetworkPolicy {
-		return nil, nil
-	}
-
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -699,7 +687,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 
 	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
 
-	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
+	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(8080)}
 	networkpolicyHelper := networkpolicy.DefaultHelper()
 	var ingressRules []v3.Rule
 	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
@@ -762,7 +750,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
@@ -793,7 +781,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		// Common rules required to handle requests from multiple components in the management cluster.
 		{
-			// ID uses read-only permissions and kube-controllers uses both read and write verbs.
+			// ID uses read-only permissions and KubeController uses both read and write verbs.
 			APIGroups: []string{""},
 			Resources: []string{"configmaps"},
 			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
@@ -801,20 +789,20 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		{
 			// Allows Linseed to watch namespaces before copying its token.
 			// Also enables PolicyRecommendation to watch namespaces,
-			// and Manager/kube-controllers to list them.
+			// and Manager/KubeController to list them.
 			APIGroups: []string{""},
 			Resources: []string{"namespaces"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// kube-controllers watches Nodes to monitor for deletions.
+			// KubeController watches Nodes to monitor for deletions.
 			// Manager performs a list operation on Nodes.
 			APIGroups: []string{""},
 			Resources: []string{"nodes"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// kube-controllers watches Pods to verify existence for IPAM garbage collection.
+			// KubeController watches Pods to verify existence for IPAM garbage collection.
 			// Manager performs get operations on Pods.
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
@@ -828,13 +816,13 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// Manager uses list; kube-controllers uses 'get', 'list', 'watch', 'update'.
+			// Manager uses list; KubeController uses 'get', 'list', 'watch', 'update'.
 			APIGroups: []string{""},
 			Resources: []string{"services"},
 			Verbs:     []string{"get", "list", "update", "watch"},
 		},
 		{
-			// Needed by kube-controllers to validate licenses; also used by ID.
+			// Needed by KubeController to validate licenses; also used by ID.
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
@@ -857,19 +845,8 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
-		// Rules needed by guardian to handle manager authorization reviews.
-		{
-			APIGroups: []string{"rbac.authorization.k8s.io"},
-			Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
-			Verbs:     []string{"list", "get"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"uisettings", "uisettingsgroups"},
-			Verbs:     []string{"list", "get"},
-		},
 
-		// Rules needed by guardian to handle other manager requests.
+		// Rules needed by guardian to handle manager requests.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"events"},
@@ -1120,12 +1097,6 @@ func deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRoleBinding{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-manager-binding"},
-		},
-
-		// Clean up deprecated k8s NetworkPolicy
-		&netv1.NetworkPolicy{
-			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "guardian", Namespace: GuardianNamespace},
 		},
 	}
 }

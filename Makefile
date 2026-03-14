@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.4
-CALICO_BASE_VER ?= ubi9-1771532994
+GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.3-1
+CALICO_BASE_VER ?= ubi9-1770969585
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -112,7 +112,6 @@ SRC_FILES+=$(shell find ./test -name '*.go')
 SRC_FILES+=cmd/main.go
 
 EXTRA_DOCKER_ARGS += -e GOPRIVATE=github.com/tigera/*
-GIT_CLONE_URL_BASE?=git@github.com:
 ifeq ($(GIT_USE_SSH),true)
 	GIT_CONFIG_SSH ?= git config --global url."ssh://git@github.com/".insteadOf "https://github.com/";
 endif
@@ -248,7 +247,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.5.9
+ENVOY_GATEWAY_VERSION ?= v1.5.6
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
@@ -358,7 +357,6 @@ run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
-KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
 KINDEST_NODE_VERSION?=v1.31.12
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
@@ -367,12 +365,11 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
-	        --name $(KIND_CLUSTER_NAME) \
 	        --config ./deploy/kind-config.yaml \
 	        --kubeconfig $(KIND_KUBECONFIG) \
 	        --image kindest/node:$(KINDEST_NODE_VERSION)
 
-	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./deploy/scripts/ipv6_kind_cluster_update.sh
+	./deploy/scripts/ipv6_kind_cluster_update.sh
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
 
@@ -462,7 +459,7 @@ IMAGE_TARS := calico-node.tar \
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.
-	KUBECONFIG=$(KIND_KUBECONFIG) KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
+	KUBECONFIG=$(KIND_KUBECONFIG) ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Restart the Calico containers so they launch with the newly loaded code.
 	# TODO: We should be able to do this without restarting everything in kube-system.
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl delete pods -n kube-system --all
@@ -486,7 +483,7 @@ create-tigera-operator-namespace: kubectl
 
 ## Destroy local kind cluster
 cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
-	-$(BINDIR)/kind delete cluster --name $(KIND_CLUSTER_NAME)
+	-$(BINDIR)/kind delete cluster
 	rm -f $(KIND_KUBECONFIG)
 
 
@@ -521,9 +518,9 @@ format-check:
 dirty-check:
 	@if [ "$$(git diff --stat)" != "" ]; then \
 	echo "The following files are dirty"; git diff --stat; exit 1; fi
-	@# Check that no new CRDs or admission policies needed to be committed
-	@if [ "$$(git status --porcelain pkg/imports)" != "" ]; then \
-	echo "The following imported files need to be added"; git status --porcelain pkg/imports; exit 1; fi
+	@# Check that no new CRDs needed to be committed
+	@if [ "$$(git status --porcelain pkg/imports/crds)" != "" ]; then \
+	echo "The following CRD files need to be added"; git status --porcelain pkg/imports/crds; exit 1; fi
 
 foss-checks:
 	@echo Running $@...
@@ -683,11 +680,9 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 define prep_local_crds
     $(eval product := $(1))
 	rm -rf pkg/imports/crds/$(product)
-	rm -rf pkg/imports/admission/$(product)
 	rm -rf .crds/$(product)
 	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
-	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
 
@@ -699,7 +694,7 @@ define fetch_crds
     $(eval branch := $(2))
     $(eval dir := $(3))
 	@echo "Fetching $(dir) CRDs from $(project) branch $(branch)"
-	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch $(GIT_CLONE_URL_BASE)$(project).git ./
+	git -C .crds/$(dir) clone --depth 1 --branch $(branch) --single-branch git@github.com:$(project).git ./
 endef
 define copy_v1_crds
     $(eval dir := $(1))
@@ -715,11 +710,6 @@ define copy_eck_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
 	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/* pkg/imports/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
-endef
-define copy_admission_policies
-    $(eval dir := $(1))
-		$(eval product := $(2))
-	@cp $(dir)/api/admission/* pkg/imports/admission/$(product)/ && echo "Copied $(product) admission policies"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
@@ -739,7 +729,6 @@ read-libcalico-calico-version:
 update-calico-crds: fetch-calico-crds
 	$(call copy_v1_crds, $(CALICO_CRDS_DIR),"calico")
 	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
-	$(call copy_admission_policies, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")
@@ -760,7 +749,6 @@ update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
-	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
 prepare-for-enterprise-crds:
 	$(call prep_local_crds,"enterprise")

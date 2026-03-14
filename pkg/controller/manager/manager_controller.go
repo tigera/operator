@@ -95,10 +95,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
-		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
 	})
 
 	// Watch for changes to primary resource Manager
@@ -304,7 +304,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, logc)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -721,13 +721,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
-
-	// Check BYO certificate expiry warnings.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.ManagerTLSSecretName:         tlsSecret,
-		render.ManagerInternalTLSSecretName: internalTrafficSecret,
-		render.VoltronLinseedTLS:            linseedVoltronServerCert,
-	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

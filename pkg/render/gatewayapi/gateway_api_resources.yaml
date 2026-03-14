@@ -24239,15 +24239,11 @@ spec:
                   If unspecified, the default filter order is applied.
                   Default filter order is:
 
-                  - envoy.filters.http.custom_response
-
                   - envoy.filters.http.health_check
 
                   - envoy.filters.http.fault
 
                   - envoy.filters.http.cors
-
-                  - envoy.filters.http.header_mutation
 
                   - envoy.filters.http.ext_authz
 
@@ -24271,15 +24267,7 @@ spec:
 
                   - envoy.filters.http.ratelimit
 
-                  - envoy.filters.http.grpc_web
-
-                  - envoy.filters.http.grpc_stats
-
-                  - envoy.filters.http.credential_injector
-
-                  - envoy.filters.http.compressor
-
-                  - envoy.filters.http.dynamic_forward_proxy
+                  - envoy.filters.http.custom_response
 
                   - envoy.filters.http.router
 
@@ -24293,85 +24281,67 @@ spec:
                         After defines the filter that should come after the filter.
                         Only one of Before or After must be set.
                       enum:
-                      - envoy.filters.http.custom_response
                       - envoy.filters.http.health_check
                       - envoy.filters.http.fault
                       - envoy.filters.http.cors
-                      - envoy.filters.http.header_mutation
                       - envoy.filters.http.ext_authz
                       - envoy.filters.http.api_key_auth
                       - envoy.filters.http.basic_auth
                       - envoy.filters.http.oauth2
                       - envoy.filters.http.jwt_authn
                       - envoy.filters.http.stateful_session
-                      - envoy.filters.http.buffer
                       - envoy.filters.http.lua
                       - envoy.filters.http.ext_proc
                       - envoy.filters.http.wasm
                       - envoy.filters.http.rbac
                       - envoy.filters.http.local_ratelimit
                       - envoy.filters.http.ratelimit
-                      - envoy.filters.http.grpc_web
-                      - envoy.filters.http.grpc_stats
-                      - envoy.filters.http.credential_injector
+                      - envoy.filters.http.custom_response
                       - envoy.filters.http.compressor
-                      - envoy.filters.http.dynamic_forward_proxy
                       type: string
                     before:
                       description: |-
                         Before defines the filter that should come before the filter.
                         Only one of Before or After must be set.
                       enum:
-                      - envoy.filters.http.custom_response
                       - envoy.filters.http.health_check
                       - envoy.filters.http.fault
                       - envoy.filters.http.cors
-                      - envoy.filters.http.header_mutation
                       - envoy.filters.http.ext_authz
                       - envoy.filters.http.api_key_auth
                       - envoy.filters.http.basic_auth
                       - envoy.filters.http.oauth2
                       - envoy.filters.http.jwt_authn
                       - envoy.filters.http.stateful_session
-                      - envoy.filters.http.buffer
                       - envoy.filters.http.lua
                       - envoy.filters.http.ext_proc
                       - envoy.filters.http.wasm
                       - envoy.filters.http.rbac
                       - envoy.filters.http.local_ratelimit
                       - envoy.filters.http.ratelimit
-                      - envoy.filters.http.grpc_web
-                      - envoy.filters.http.grpc_stats
-                      - envoy.filters.http.credential_injector
+                      - envoy.filters.http.custom_response
                       - envoy.filters.http.compressor
-                      - envoy.filters.http.dynamic_forward_proxy
                       type: string
                     name:
                       description: Name of the filter.
                       enum:
-                      - envoy.filters.http.custom_response
                       - envoy.filters.http.health_check
                       - envoy.filters.http.fault
                       - envoy.filters.http.cors
-                      - envoy.filters.http.header_mutation
                       - envoy.filters.http.ext_authz
                       - envoy.filters.http.api_key_auth
                       - envoy.filters.http.basic_auth
                       - envoy.filters.http.oauth2
                       - envoy.filters.http.jwt_authn
                       - envoy.filters.http.stateful_session
-                      - envoy.filters.http.buffer
                       - envoy.filters.http.lua
                       - envoy.filters.http.ext_proc
                       - envoy.filters.http.wasm
                       - envoy.filters.http.rbac
                       - envoy.filters.http.local_ratelimit
                       - envoy.filters.http.ratelimit
-                      - envoy.filters.http.grpc_web
-                      - envoy.filters.http.grpc_stats
-                      - envoy.filters.http.credential_injector
+                      - envoy.filters.http.custom_response
                       - envoy.filters.http.compressor
-                      - envoy.filters.http.dynamic_forward_proxy
                       type: string
                   required:
                   - name
@@ -24427,7 +24397,6 @@ spec:
                   Default: Strict
                 enum:
                 - Strict
-                - InsecureSyntax
                 - Disabled
                 type: string
               mergeGateways:
@@ -45016,10 +44985,10 @@ metadata:
   name: envoy-gateway
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: gateway-helm/templates/envoy-gateway-config.yaml
@@ -45029,10 +44998,10 @@ metadata:
   name: envoy-gateway-config
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 data:
   envoy-gateway.yaml: |
@@ -45059,7 +45028,7 @@ data:
                     - imagePullPolicy: IfNotPresent
                       name: envoy-ratelimit
         shutdownManager:
-          image: docker.io/envoyproxy/gateway:v1.5.9
+          image: docker.io/envoyproxy/gateway:v1.5.6
       type: Kubernetes
 ---
 # Source: gateway-helm/templates/envoy-gateway-rbac.yaml
@@ -45215,10 +45184,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -45274,10 +45243,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-role
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -45319,10 +45288,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45340,10 +45309,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -45362,10 +45331,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 spec:
   selector:
@@ -45397,10 +45366,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
@@ -45431,7 +45400,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.5.9
+        image: docker.io/envoyproxy/gateway:v1.5.6
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -45500,10 +45469,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45515,10 +45484,10 @@ kind: ClusterRole
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45548,10 +45517,10 @@ kind: ClusterRoleBinding
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45572,10 +45541,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45597,10 +45566,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45621,10 +45590,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -45649,7 +45618,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.5.9
+        image: docker.io/envoyproxy/gateway:v1.5.6
         imagePullPolicy: IfNotPresent
         name: envoy-gateway-certgen
         securityContext:
@@ -45679,10 +45648,10 @@ metadata:
     "helm.sh/hook-weight": "-1"
   labels:
     app.kubernetes.io/component: topology-injector
-    helm.sh/chart: gateway-helm-v1.5.9
+    helm.sh/chart: gateway-helm-v1.5.6
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.5.9"
+    app.kubernetes.io/version: "v1.5.6"
     app.kubernetes.io/managed-by: Helm
 webhooks:
   - name: topology.webhook.gateway.envoyproxy.io

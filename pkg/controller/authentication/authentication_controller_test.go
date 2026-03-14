@@ -86,8 +86,6 @@ var _ = Describe("authentication controller tests", func() {
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ClearDegraded")
-		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
-		mockStatus.On("ClearWarning", mock.Anything).Return()
 		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("OnCRNotFound").Return()
@@ -491,8 +489,6 @@ var _ = Describe("authentication controller tests", func() {
 
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("OnCRFound").Return()
-			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
-			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			r = &ReconcileAuthentication{
 				client:         cli,
 				scheme:         scheme,

@@ -39,7 +39,6 @@ var (
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	numExpectedObjects       = 5
-	numDeprecatedObjects     = 1
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -59,7 +58,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
-			numExpectedObjects, numDeprecatedObjects,
+			numExpectedObjects, 0,
 		),
 		Entry("Should return objects to delete when variant is not Calico",
 			&whisker.Configuration{
@@ -71,7 +70,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
 			},
-			0, numExpectedObjects+numDeprecatedObjects,
+			0, numExpectedObjects,
 		),
 	)
 

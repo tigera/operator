@@ -42,10 +42,9 @@ type BaseOpts struct {
 }
 
 type IstiodOpts struct {
-	Image                   string        `json:"image,omitempty"`
-	Global                  *GlobalConfig `json:"global,omitempty"`
-	Profile                 string        `json:"profile,omitempty"`
-	TrustedZtunnelNamespace string        `json:"trustedZtunnelNamespace,omitempty"`
+	Image   string        `json:"image,omitempty"`
+	Global  *GlobalConfig `json:"global,omitempty"`
+	Profile string        `json:"profile,omitempty"`
 }
 
 type IstioCNIOpts struct {

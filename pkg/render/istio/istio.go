@@ -70,9 +70,9 @@ const (
 	IstioOperatorAnnotationMode       = "operator.tigera.io/istioAmbientMode"
 	IstioOperatorAnnotationDSCP       = "operator.tigera.io/istioDSCPMark"
 	IstioFinalizer                    = "operator.tigera.io/calico-istio"
-	IstioIstiodPolicyName             = networkpolicy.CalicoComponentPolicyPrefix + IstioIstiodDeploymentName
-	IstioCNIPolicyName                = networkpolicy.CalicoComponentPolicyPrefix + IstioCNIDaemonSetName
-	IstioZTunnelPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + IstioZTunnelDaemonSetName
+	IstioIstiodPolicyName             = networkpolicy.TigeraComponentPolicyPrefix + IstioIstiodDeploymentName
+	IstioCNIPolicyName                = networkpolicy.TigeraComponentPolicyPrefix + IstioCNIDaemonSetName
+	IstioZTunnelPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + IstioZTunnelDaemonSetName
 	IstioIstiodServiceName            = "istiod"
 
 	istioFakeImageProxyv2 = "fake.io/fakeimg/proxyv2:faketag"
@@ -104,8 +104,7 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 					Image: istioFakeImageProxyv2,
 				},
 			},
-			Profile:                 "ambient",
-			TrustedZtunnelNamespace: IstioNamespace,
+			Profile: "ambient",
 		},
 		IstioCNIOpts: IstioCNIOpts{
 			Global: &GlobalConfig{
@@ -128,8 +127,6 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 	// RBAC rules, SELinux options, and sidecar injection settings.
 	if cfg.Installation.KubernetesProvider.IsGKE() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "gke"
-		istioResOpts.IstiodOpts.Global.Platform = "gke"
-		istioResOpts.ZTunnelOpts.Global.Platform = "gke"
 	}
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {
 		istioResOpts.IstioCNIOpts.Global.Platform = "openshift"
@@ -185,40 +182,21 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		c.IstioPilotImage, err = components.GetReference(components.ComponentIstioPilot, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		c.IstioInstallCNIImage, err = components.GetReference(components.ComponentIstioInstallCNI, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		c.IstioZTunnelImage, err = components.GetReference(components.ComponentIstioZTunnel, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		c.IstioProxyv2Image, err = components.GetReference(components.ComponentIstioProxyv2, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-	} else {
-		c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		c.IstioInstallCNIImage, err = components.GetReference(components.ComponentCalicoIstioInstallCNI, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		c.IstioZTunnelImage, err = components.GetReference(components.ComponentCalicoIstioZTunnel, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		c.IstioProxyv2Image, err = components.GetReference(components.ComponentCalicoIstioProxyv2, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
+	c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.IstioInstallCNIImage, err = components.GetReference(components.ComponentCalicoIstioInstallCNI, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.IstioZTunnelImage, err = components.GetReference(components.ComponentCalicoIstioZTunnel, reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.IstioProxyv2Image, err = components.GetReference(components.ComponentCalicoIstioProxyv2, reg, path, prefix, is)
+	if err != nil {
+		return err
 	}
 
 	if err = c.patchImages(); err != nil {
@@ -344,7 +322,7 @@ func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 			Namespace: c.cfg.IstioNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IstioIstiodDeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
@@ -369,7 +347,7 @@ func (c *IstioComponent) istioCNICalicoSystemPolicy() *v3.NetworkPolicy {
 			Namespace: c.cfg.IstioNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IstioCNIDaemonSetName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,
@@ -394,7 +372,7 @@ func (c *IstioComponent) ztunnelCalicoSystemPolicy() *v3.NetworkPolicy {
 			Namespace: c.cfg.IstioNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(IstioZTunnelDaemonSetName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Egress:   egressRules,

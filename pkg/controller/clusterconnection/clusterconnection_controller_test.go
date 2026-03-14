@@ -168,10 +168,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 
 	Context("default config", func() {
-		BeforeEach(func() {
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
-		})
-
 		It("should create a default ManagementClusterConnection", func() {
 			By("reconciling with the required prerequisites")
 			err := c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
@@ -187,10 +183,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 
 	Context("guardian finalizer", func() {
-		BeforeEach(func() {
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
-		})
-
 		It("should be added and removed from the Installation CR", func() {
 			By("reconciling with the required prerequisites")
 			err := c.Get(ctx, client.ObjectKey{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}, dpl)
@@ -225,10 +217,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	})
 
 	Context("image reconciliation", func() {
-		BeforeEach(func() {
-			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
-		})
-
 		It("should use builtin images", func() {
 			r = clusterconnection.NewReconcilerWithShims(c, clientScheme, mockStatus, operatorv1.ProviderNone, ready, ready)
 			_, err := r.Reconcile(ctx, reconcile.Request{})

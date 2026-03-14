@@ -52,13 +52,13 @@ const (
 	KubeControllerRole              = "calico-kube-controllers"
 	KubeControllerRoleBinding       = "calico-kube-controllers"
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
-	KubeControllerNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "kube-controller-access"
+	KubeControllerNetworkPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "kube-controller-access"
 
 	EsKubeController                    = "es-calico-kube-controllers"
 	EsKubeControllerRole                = "es-calico-kube-controllers"
 	EsKubeControllerRoleBinding         = "es-calico-kube-controllers"
 	EsKubeControllerMetrics             = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "es-kube-controller-access"
+	EsKubeControllerNetworkPolicyName   = networkpolicy.TigeraComponentPolicyPrefix + "es-kube-controller-access"
 	ManagedClustersWatchRoleBindingName = "es-calico-kube-controllers-managed-cluster-watch"
 
 	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
@@ -69,7 +69,8 @@ const (
 )
 
 type KubeControllersConfiguration struct {
-	K8sServiceEp k8sapi.ServiceEndpoint
+	K8sServiceEp           k8sapi.ServiceEndpoint
+	K8sServiceEpPodNetwork k8sapi.ServiceEndpoint
 
 	Installation                *operatorv1.InstallationSpec
 	ManagementCluster           *operatorv1.ManagementCluster
@@ -397,12 +398,6 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			},
 			Verbs: []string{"get", "list", "watch", "create", "update", "delete"},
 		},
-		{
-			// The IPAM GC controller uses informers to list/watch KubeVirt VMs/VMIs for IP garbage collection.
-			APIGroups: []string{"kubevirt.io"},
-			Resources: []string{"virtualmachineinstances", "virtualmachines"},
-			Verbs:     []string{"get", "list", "watch"},
-		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {
@@ -528,7 +523,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
 	}
 
-	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)
+	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Tenant != nil {
@@ -833,7 +828,7 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(KubeController),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,
@@ -884,7 +879,7 @@ func esKubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(EsKubeController),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

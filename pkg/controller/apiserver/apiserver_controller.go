@@ -78,13 +78,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
 
-	// Established deferred watches against the v3 API that should succeed after the API Server becomes available.
-	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
+	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
+	if opts.EnterpriseCRDExists {
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-		{Name: render.APIServerPolicyName, Namespace: render.APIServerNamespace},
-	})
+		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+			{Name: render.APIServerPolicyName, Namespace: render.APIServerNamespace},
+		})
+	}
 
 	// Watch for changes to primary resource APIServer
 	err = c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
@@ -266,6 +268,18 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, nil
 	}
 
+	if r.opts.UseV3CRDs && installationSpec.Variant == operatorv1.Calico {
+		// For Calico OSS, if we're running in v3 CRD mode, there is no reason to continue. For Enterprise,
+		// we still install some containers with this controller so we'll need to carry on.
+		r.status.SetDegraded(
+			operatorv1.ResourceValidationError,
+			"APIServer should not be used when using v3 CRDs, please delete the APIServer CR",
+			nil,
+			reqLogger,
+		)
+		return reconcile.Result{}, nil
+	}
+
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
@@ -351,6 +365,23 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			}
 		}
 
+		// Ensure the calico-system tier exists, before rendering any network policies within it.
+		//
+		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+		// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+		// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
+		if r.tierWatchReady.IsReady() {
+			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+				if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+			} else {
+				includeV3NetworkPolicy = true
+			}
+		}
+
 		prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
@@ -394,23 +425,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
-	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	//
-	// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
-	// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
-	// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
-	// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
-	if r.tierWatchReady.IsReady() {
-		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
-			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		} else {
-			includeV3NetworkPolicy = true
-		}
-	}
-
 	err = utils.PopulateK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
@@ -430,27 +444,27 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	reqLogger.V(3).Info("rendering components")
 
 	apiServerCfg := render.APIServerConfiguration{
-		K8SServiceEndpoint:          k8sapi.Endpoint,
-		Installation:                installationSpec,
-		APIServer:                   &instance.Spec,
-		ForceHostNetwork:            false,
-		ApplicationLayer:            applicationLayer,
-		ManagementCluster:           managementCluster,
-		ManagementClusterConnection: managementClusterConnection,
-		TLSKeyPair:                  tlsSecret,
-		PullSecrets:                 pullSecrets,
-		OpenShift:                   r.opts.DetectedProvider.IsOpenShift(),
-		TrustedBundle:               trustedBundle,
-		MultiTenant:                 r.opts.MultiTenant,
-		KeyValidatorConfig:          keyValidatorConfig,
-		KubernetesVersion:           r.opts.KubernetesVersion,
-		RequiresAggregationServer:   !r.opts.UseV3CRDs,
+		K8SServiceEndpoint:           k8sapi.Endpoint,
+		K8SServiceEndpointPodNetwork: k8sapi.PodNetworkEndpoint,
+		Installation:                 installationSpec,
+		APIServer:                    &instance.Spec,
+		ForceHostNetwork:             false,
+		ApplicationLayer:             applicationLayer,
+		ManagementCluster:            managementCluster,
+		ManagementClusterConnection:  managementClusterConnection,
+		TLSKeyPair:                   tlsSecret,
+		PullSecrets:                  pullSecrets,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+		TrustedBundle:                trustedBundle,
+		MultiTenant:                  r.opts.MultiTenant,
+		KeyValidatorConfig:           keyValidatorConfig,
+		KubernetesVersion:            r.opts.KubernetesVersion,
+		RequiresAggregationServer:    !r.opts.UseV3CRDs,
 		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}
 
 	var components []render.Component
 
-	var webhooksTLS certificatemanagement.KeyPairInterface
 	certKeyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 	}
@@ -468,7 +482,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		//
 		// The network policy is included within the webhooks component so it is reconciled alongside
 		// the Deployment. The TLS keypair is provisioned by the CertificateManagement component below.
-		webhooksTLS, err = certificateManager.GetOrCreateKeyPair(
+		webhooksTLS, err := certificateManager.GetOrCreateKeyPair(
 			r.client,
 			webhooks.WebhooksTLSSecretName,
 			common.OperatorNamespace(),
@@ -524,12 +538,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 	}
-
-	// Check BYO certificate expiry warnings.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.CalicoAPIServerTLSSecretName: tlsSecret,
-		webhooks.WebhooksTLSSecretName:      webhooksTLS,
-	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

@@ -47,7 +47,7 @@ const (
 
 	PolicyRecommendationName       = "tigera-policy-recommendation"
 	PolicyRecommendationNamespace  = common.CalicoNamespace
-	PolicyRecommendationPolicyName = networkpolicy.CalicoComponentPolicyPrefix + PolicyRecommendationName
+	PolicyRecommendationPolicyName = networkpolicy.TigeraComponentPolicyPrefix + PolicyRecommendationName
 
 	PolicyRecommendationTLSSecretName                                   = "policy-recommendation-tls"
 	PolicyRecommendationMultiTenantManagedClustersAccessRoleBindingName = "tigera-policy-recommendation-managed-cluster-access"
@@ -430,7 +430,7 @@ func (pr *policyRecommendationComponent) calicoSystemPolicyForPolicyRecommendati
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 		{
 			Action:      v3.Allow,
@@ -457,7 +457,7 @@ func (pr *policyRecommendationComponent) calicoSystemPolicyForPolicyRecommendati
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(PolicyRecommendationName),
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Ingress:  []v3.Rule{},

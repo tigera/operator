@@ -37,7 +37,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
@@ -293,11 +292,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 		if err := crds.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
-			os.Exit(1)
-		}
-
-		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
-			setupLog.Error(err, "Failed to ensure MutatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
 

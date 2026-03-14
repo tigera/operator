@@ -92,7 +92,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	policiesToWatch := []types.NamespacedName{
 		{Name: render.IntrusionDetectionControllerPolicyName, Namespace: installNS},
-		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: installNS},
+		{Name: networkpolicy.TigeraComponentDefaultDenyPolicyName, Namespace: installNS},
 	}
 	if !opts.MultiTenant {
 		// DPI is only supported in single-tenant mode.
@@ -102,7 +102,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policiesToWatch)
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, tierWatchReady)
 
 	// Watch for changes to operator.tigera.io APIs.
 	if err = c.WatchObject(&operatorv1.IntrusionDetection{}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -304,7 +304,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -499,7 +499,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		intrusionDetectionComponent,
 	}
 
-	var dpiKeyPair certificatemanagement.KeyPairInterface
 	if !r.opts.MultiTenant {
 		// FIXME: core controller creates TyphaNodeTLSConfig, this controller should only get it.
 		// But changing the call from GetOrCreateTyphaNodeTLSConfig() to GetTyphaNodeTLSConfig()
@@ -512,7 +511,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		typhaNodeTLS.TrustedBundle.AddCertificates(linseedCertificate)
 
 		// dpiKeyPair is the key pair dpi presents to identify itself
-		dpiKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
+		dpiKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DPITLSSecretName, helper.TruthNamespace(), []string{render.IntrusionDetectionTLSSecretName})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -581,12 +580,6 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-
-	// Check BYO certificate expiry warnings.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.IntrusionDetectionTLSSecretName: intrusionDetectionKeyPair,
-		render.DPITLSSecretName:                dpiKeyPair,
-	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

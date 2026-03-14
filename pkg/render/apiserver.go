@@ -54,7 +54,7 @@ type ContainerName string
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
-	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
+	APIServerPolicyName = networkpolicy.TigeraComponentPolicyPrefix + "apiserver-access"
 
 	auditLogsVolumeName   = "calico-audit-logs"
 	auditPolicyVolumeName = "calico-audit-policy"
@@ -125,20 +125,21 @@ func APIServerPolicy(cfg *APIServerConfiguration) Component {
 
 // APIServerConfiguration contains all the config information needed to render the component.
 type APIServerConfiguration struct {
-	K8SServiceEndpoint          k8sapi.ServiceEndpoint
-	Installation                *operatorv1.InstallationSpec
-	APIServer                   *operatorv1.APIServerSpec
-	ForceHostNetwork            bool
-	ApplicationLayer            *operatorv1.ApplicationLayer
-	ManagementCluster           *operatorv1.ManagementCluster
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	TLSKeyPair                  certificatemanagement.KeyPairInterface
-	PullSecrets                 []*corev1.Secret
-	OpenShift                   bool
-	TrustedBundle               certificatemanagement.TrustedBundle
-	MultiTenant                 bool
-	KeyValidatorConfig          authentication.KeyValidatorConfig
-	KubernetesVersion           *common.VersionInfo
+	K8SServiceEndpoint           k8sapi.ServiceEndpoint
+	K8SServiceEndpointPodNetwork k8sapi.ServiceEndpoint
+	Installation                 *operatorv1.InstallationSpec
+	APIServer                    *operatorv1.APIServerSpec
+	ForceHostNetwork             bool
+	ApplicationLayer             *operatorv1.ApplicationLayer
+	ManagementCluster            *operatorv1.ManagementCluster
+	ManagementClusterConnection  *operatorv1.ManagementClusterConnection
+	TLSKeyPair                   certificatemanagement.KeyPairInterface
+	PullSecrets                  []*corev1.Secret
+	OpenShift                    bool
+	TrustedBundle                certificatemanagement.TrustedBundle
+	MultiTenant                  bool
+	KeyValidatorConfig           authentication.KeyValidatorConfig
+	KubernetesVersion            *common.VersionInfo
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
@@ -188,7 +189,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 				errMsgs = append(errMsgs, err.Error())
 			}
 		}
-	} else if c.cfg.RequiresAggregationServer {
+	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
 			if err != nil {
@@ -235,23 +236,12 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
-	// The deployment and its supporting objects are needed when running the aggregation API server
-	// or when running Enterprise (which always needs the queryserver).
-	if c.cfg.RequiresAggregationServer || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
-		namespacedObjects = append(namespacedObjects,
-			c.apiServerServiceAccount(),
-			c.apiServerDeployment(),
-			c.apiServerService(),
-			c.apiServerPodDisruptionBudget(),
-		)
-	} else {
-		objsToDelete = append(objsToDelete,
-			&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceAccountName, Namespace: APIServerNamespace}},
-			&appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
-			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceName, Namespace: APIServerNamespace}},
-			&policyv1.PodDisruptionBudget{TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
-		)
-	}
+	namespacedObjects = append(namespacedObjects,
+		c.apiServerServiceAccount(),
+		c.apiServerDeployment(),
+		c.apiServerService(),
+		c.apiServerPodDisruptionBudget(),
+	)
 
 	// These are objects that only need to exist when we are running an aggregation API server to
 	// serve projectcalico.org/v3 APIs. If using CRDs for this API group, we can remove these objects.
@@ -338,15 +328,12 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
 		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
 	} else {
+		// Add in a NetworkPolicy.
+		namespacedObjects = append(namespacedObjects, c.networkPolicy())
+
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
-
-		// Clean up deprecated k8s NetworkPolicy
-		objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
-			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
-		})
 	}
 
 	// Add or remove the aggregation API server objects as needed.
@@ -546,7 +533,7 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -776,12 +763,98 @@ func (c *apiServerComponent) authClusterRole() client.Object {
 // multiTenantSecretsRBAC provides the tigera API server with the ability to read secrets on the cluster.
 // This is needed in multi-tenant management clusters only, in order to read tenant secrets for signing managed cluster certificates.
 func (c *apiServerComponent) multiTenantSecretsRBAC() []client.Object {
-	return TunnelSecretRBAC(APIServerSecretsRBACName, APIServerServiceAccountName, c.cfg.ManagementCluster, true)
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{c.tunnelSecretName()},
+		},
+	}
+
+	return []client.Object{
+		// Return the cluster role itself.
+		&rbacv1.ClusterRole{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: APIServerSecretsRBACName,
+			},
+			Rules: rules,
+		},
+
+		// And a binding to attach it to the API server.
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name: APIServerSecretsRBACName,
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "ClusterRole",
+				Name:     APIServerSecretsRBACName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      APIServerServiceAccountName,
+					Namespace: APIServerNamespace,
+				},
+			},
+		},
+	}
+}
+
+func (c *apiServerComponent) tunnelSecretName() string {
+	secretName := VoltronTunnelSecretName
+	if c.cfg.ManagementCluster != nil && c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
+		secretName = c.cfg.ManagementCluster.Spec.TLS.SecretName
+	}
+	return secretName
 }
 
 // secretsRBAC provides the tigera API server with the ability to read secrets from the API server's namespace.
 func (c *apiServerComponent) secretsRBAC() []client.Object {
-	return TunnelSecretRBAC(APIServerSecretsRBACName, APIServerServiceAccountName, c.cfg.ManagementCluster, false)
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			Verbs:         []string{"get"},
+			ResourceNames: []string{c.tunnelSecretName()},
+		},
+	}
+
+	return []client.Object{
+		// Return the role itself.
+		&rbacv1.Role{
+			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      APIServerSecretsRBACName,
+				Namespace: APIServerNamespace,
+			},
+			Rules: rules,
+		},
+
+		// And a binding to attach it to the API server.
+		&rbacv1.RoleBinding{
+			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      APIServerSecretsRBACName,
+				Namespace: APIServerNamespace,
+			},
+			RoleRef: rbacv1.RoleRef{
+				Kind:     "Role",
+				Name:     APIServerSecretsRBACName,
+				APIGroup: "rbac.authorization.k8s.io",
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      APIServerServiceAccountName,
+					Namespace: APIServerNamespace,
+				},
+			},
+		},
+	}
 }
 
 // authClusterRoleBinding returns a clusterrolebinding to create, and a clusterrolebinding to delete.
@@ -1146,7 +1219,11 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_TENANT_ENABLED", Value: "true"})
 	}
 
-	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
+	if c.hostNetwork() {
+		env = append(env, c.cfg.K8SServiceEndpoint.EnvVars()...)
+	} else {
+		env = append(env, c.cfg.K8SServiceEndpointPodNetwork.EnvVars()...)
+	}
 
 	// set Log_LEVEL for apiserver container
 	if logging := c.cfg.APIServer.Logging; logging != nil &&
@@ -1249,7 +1326,11 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
 	}
 
-	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
+	if c.hostNetwork() {
+		env = append(env, c.cfg.K8SServiceEndpoint.EnvVars()...)
+	} else {
+		env = append(env, c.cfg.K8SServiceEndpointPodNetwork.EnvVars()...)
+	}
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
@@ -1355,6 +1436,34 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	return tolerations
 }
 
+// networkPolicy returns a NP to allow traffic to the API server. This prevents it from
+// being cut off from the main API server. The enterprise equivalent is currently handled in manifests.
+//
+// Calico only.
+func (c *apiServerComponent) networkPolicy() *netv1.NetworkPolicy {
+	tcp := corev1.ProtocolTCP
+	apiServerPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
+	p := intstr.FromInt32(apiServerPort)
+	return &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
+		Spec: netv1.NetworkPolicySpec{
+			PodSelector: *c.deploymentSelector(),
+			PolicyTypes: []netv1.PolicyType{netv1.PolicyTypeIngress},
+			Ingress: []netv1.NetworkPolicyIngressRule{
+				{
+					Ports: []netv1.NetworkPolicyPort{
+						{
+							Protocol: &tcp,
+							Port:     &p,
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 // tigeraAPIServerClusterRole creates a clusterrole that gives permissions to access backing CRDs
 //
 // Calico Enterprise only
@@ -1395,6 +1504,17 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"delete",
 				"patch",
 			},
+		},
+		{
+			// this rbac group (authorizationreview) is required for apiserver service account because:
+			// - queryserver (part of the apiserver pod) needs to authorize users for tiered resources (policies) to return the
+			// appropriate result set where user is authorized to have access to all items in the result set.
+			// - for authorization, queryserver needs to create authorizationReview resource.
+			// - queryserver needs to have "create" on "authorizationreviews" to be able to create authrozationreview
+			// and get user's permissions on both tiered and non-tiered resources.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
 		},
 	}
 
@@ -1649,6 +1769,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			},
 			Verbs: []string{"get", "watch", "list"},
 		},
+		// A POST to AuthorizationReviews lets the UI determine what features it can enable.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
+		},
 		// User can:
 		// - read UISettings in the cluster-settings group
 		// - read and write UISettings in the user-settings group
@@ -1851,6 +1977,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 				"securityeventwebhooks",
 			},
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
+		// A POST to AuthorizationReviews lets the UI determine what features it can enable.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews"},
+			Verbs:     []string{"create"},
 		},
 		// User can:
 		// - read and write UISettings in the cluster-settings group, and rename the group

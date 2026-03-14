@@ -31,7 +31,6 @@ import (
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -74,7 +73,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -146,12 +144,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Established deferred watches against the v3 API that should succeed after the Enterprise API Server becomes available.
-	// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
-	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, ri.tierWatchReady)
+	if opts.EnterpriseCRDExists {
+		// Watch for changes to Tier, as its status is used as input to determine whether network policy should be reconciled by this controller.
+		go utils.WaitToAddTierWatch(networkpolicy.TigeraComponentTierName, c, opts.K8sClientset, log, ri.tierWatchReady)
 
-	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-		{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
-	})
+		go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+			{Name: kubecontrollers.KubeControllerNetworkPolicyName, Namespace: common.CalicoNamespace},
+		},
+		)
+	}
 
 	// Watch for changes to primary resource Installation
 	err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{})
@@ -332,7 +333,6 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		tierWatchReady:       &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
-		kubernetesVersion:    opts.KubernetesVersion,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -388,7 +388,6 @@ type ReconcileInstallation struct {
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	v3CRDs                        bool
-	kubernetesVersion             *common.VersionInfo
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -921,10 +920,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	// Now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
 	r.migrationChecked = true
@@ -1014,6 +1009,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var logCollector *operatorv1.LogCollector
+	includeV3NetworkPolicy := false
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
@@ -1040,23 +1036,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	}
 
-	includeV3NetworkPolicy := false
-	// Ensure the calico-system tier exists, before rendering any network policies within it.
-	//
-	// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
-	// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
-	// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
-	// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
-	if r.tierWatchReady.IsReady() {
-		if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
-			if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
-				return reconcile.Result{}, err
+		// Ensure the calico-system tier exists, before rendering any network policies within it.
+		//
+		// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that
+		// the API Server becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from
+		// reconciliation and tolerate errors arising from the Tier not being created or the API server not being available.
+		// We also exclude NetworkPolicy and do not degrade when the Tier watch is not ready, as this means the API server is not available.
+		if r.tierWatchReady.IsReady() {
+			if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.TigeraComponentTierName}, &v3.Tier{}); err != nil {
+				if !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+			} else {
+				includeV3NetworkPolicy = true
 			}
-		} else {
-			includeV3NetworkPolicy = true
 		}
 	}
 
@@ -1144,34 +1139,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return false, err
 		}
-
-		// Configure cluster routing mode.
-		u3, err := setClusterRoutingOnFelixConfiguration(instance, fc, reqLogger)
-		if err != nil {
-			return false, err
-		}
-
-		updated := u || u2 || u3
-		return updated, nil
+		return u || u2, nil
 	})
 	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Set any non-default BGPConfiguration values that we need.
-	_, err = utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
-		// Configure cluster routing mode.
-		u, err := setClusterRoutingOnBGPConfiguration(instance, bgpConfig, reqLogger)
-		if err != nil {
-			return false, err
-		}
-
-		return u, nil
-	})
-	if err != nil {
-		// Since, programClusterRoutes in FelixConfiguration is already updated earlier,
-		// failure in updating programClusterRouting in BGPConfiguration, essentially results in inconsistency
-		// between the configuration of BIRD and Felix in programming cluster routes, until the next reconcile convergence
 		return reconcile.Result{}, err
 	}
 
@@ -1574,6 +1544,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
+		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
 		Installation:                &instance.Spec,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
@@ -1717,15 +1688,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Tell the status manager that we're ready to monitor the resources we've told it about and receive statuses.
 	r.status.ReadyToMonitor()
-
-	// Check BYO certificate expiry warnings and propagate them to the status manager.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
-		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
-		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
-		render.NodePrometheusTLSServerSecret:                         nodePrometheusTLS,
-		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
-	}, r.status)
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -2036,59 +1998,6 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	return updated, nil
 }
 
-// setClusterRoutingOnFelixConfiguration sets programClusterRoutes in the FelixConfiguration resource
-// based on the value of clusterRoutingMode in the install config.
-func setClusterRoutingOnFelixConfiguration(
-	install *operatorv1.Installation,
-	fc *v3.FelixConfiguration,
-	reqLogger logr.Logger,
-) (bool, error) {
-	updated := false
-	desiredValue := "Disabled"
-	if felixProgramsClusterRoutes(install) {
-		desiredValue = "Enabled"
-	}
-
-	if fc.Spec.ProgramClusterRoutes == nil || *fc.Spec.ProgramClusterRoutes != desiredValue {
-		fc.Spec.ProgramClusterRoutes = &desiredValue
-		updated = true
-		reqLogger.Info("Patching FelixConfiguration", "programClusterRoutes", desiredValue)
-	}
-
-	return updated, nil
-}
-
-// setClusterRoutingOnBGPConfiguration sets programClusterRoutes in the BGPConfiguration resource
-// based on the value of clusterRoutingMode in the install config.
-func setClusterRoutingOnBGPConfiguration(
-	install *operatorv1.Installation,
-	bgpConfig *v3.BGPConfiguration,
-	reqLogger logr.Logger,
-) (bool, error) {
-	updated := false
-	desiredValue := "Enabled"
-
-	if felixProgramsClusterRoutes(install) {
-		desiredValue = "Disabled"
-	}
-
-	if bgpConfig.Spec.ProgramClusterRoutes == nil || *bgpConfig.Spec.ProgramClusterRoutes != desiredValue {
-		bgpConfig.Spec.ProgramClusterRoutes = &desiredValue
-		updated = true
-		reqLogger.Info("Patching BGPConfiguration", "programClusterRoutes", desiredValue)
-	}
-
-	return updated, nil
-}
-
-func felixProgramsClusterRoutes(install *operatorv1.Installation) bool {
-	if install.Spec.CalicoNetwork != nil && install.Spec.CalicoNetwork.ClusterRoutingMode != nil &&
-		*install.Spec.CalicoNetwork.ClusterRoutingMode == operatorv1.ClusterRoutingModeFelix {
-		return true
-	}
-	return false
-}
-
 // setBPFUpdatesOnFelixConfiguration will take the passed in fc and update any BPF properties needed
 // based on the install config and the daemonset.
 func (r *ReconcileInstallation) setBPFUpdatesOnFelixConfiguration(ctx context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
@@ -2223,64 +2132,6 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 	return nil
 }
 
-func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
-	if !r.manageCRDs || !r.v3CRDs {
-		return nil
-	}
-	if !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes version does not support MutatingAdmissionPolicy v1beta1 (requires v1.32+); policy defaulting will not be available", nil, log)
-		return nil
-	}
-
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs)
-
-	// Build a set of desired resource names for comparison.
-	desiredMAPs := map[string]bool{}
-	desiredMAPBs := map[string]bool{}
-	for _, obj := range desired {
-		switch obj.(type) {
-		case *admissionv1beta1.MutatingAdmissionPolicy:
-			desiredMAPs[obj.GetName()] = true
-		case *admissionv1beta1.MutatingAdmissionPolicyBinding:
-			desiredMAPBs[obj.GetName()] = true
-		}
-	}
-
-	// Find stale MAPs that are labeled as managed but no longer desired.
-	existingMAPs := &admissionv1beta1.MutatingAdmissionPolicyList{}
-	if err := r.client.List(ctx, existingMAPs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicies", err, log)
-		return err
-	}
-	var toDelete []client.Object
-	for i := range existingMAPs.Items {
-		if !desiredMAPs[existingMAPs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPs.Items[i])
-		}
-	}
-
-	// Find stale MAPBs that are labeled as managed but no longer desired.
-	existingMAPBs := &admissionv1beta1.MutatingAdmissionPolicyBindingList{}
-	if err := r.client.List(ctx, existingMAPBs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicyBindings", err, log)
-		return err
-	}
-	for i := range existingMAPBs.Items {
-		if !desiredMAPBs[existingMAPBs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPBs.Items[i])
-		}
-	}
-
-	// Create or update desired MAPs/MAPBs and delete any stale ones in a single pass.
-	handler := r.newComponentHandler(log, r.client, r.scheme, install)
-	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired, toDelete), nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error syncing MutatingAdmissionPolicy resources", err, log)
-		return err
-	}
-
-	return nil
-}
-
 func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
@@ -2361,11 +2212,11 @@ func calicoSystemDefaultDenyForCalicoSystem() *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      networkpolicy.CalicoComponentDefaultDenyPolicyName,
+			Name:      networkpolicy.TigeraComponentDefaultDenyPolicyName,
 			Namespace: common.CalicoNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier: networkpolicy.CalicoTierName,
+			Tier: networkpolicy.TigeraComponentTierName,
 			// Default deny policy should exclude pods with label k8s-app=tigera-apiserver
 			// so the API server remains accessible within the calico-system namespace.
 			Selector: "k8s-app != 'calico-apiserver'",

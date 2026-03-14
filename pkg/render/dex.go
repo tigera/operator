@@ -51,7 +51,7 @@ const (
 	DexPort          = 5556
 	DexTLSSecretName = "tigera-dex-tls"
 	DexClientId      = "tigera-manager"
-	DexPolicyName    = networkpolicy.CalicoComponentPolicyPrefix + "dex"
+	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "dex"
 )
 
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
@@ -443,7 +443,7 @@ func (c *dexComponent) calicoSystemNetworkPolicy(installationVariant operatorv1.
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(DexObjectName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{

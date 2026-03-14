@@ -67,18 +67,18 @@ const (
 	// TigeraExternalPrometheus is the name of the objects created when Monitor.Spec.ExternalPrometheus is enabled.
 	TigeraExternalPrometheus = "tigera-external-prometheus"
 
-	PrometheusAPIPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "tigera-prometheus-api"
+	PrometheusAPIPolicyName       = networkpolicy.TigeraComponentPolicyPrefix + "tigera-prometheus-api"
 	PrometheusClientTLSSecretName = "calico-node-prometheus-client-tls"
 	PrometheusClusterRoleName     = "prometheus"
 	PrometheusDefaultPort         = 9090
 	PrometheusServiceServiceName  = "prometheus-http-api"
-	PrometheusOperatorPolicyName  = networkpolicy.CalicoComponentPolicyPrefix + "prometheus-operator"
-	PrometheusPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + "prometheus"
+	PrometheusOperatorPolicyName  = networkpolicy.TigeraComponentPolicyPrefix + "prometheus-operator"
+	PrometheusPolicyName          = networkpolicy.TigeraComponentPolicyPrefix + "prometheus"
 	PrometheusProxyPort           = 9095
 	PrometheusServiceAccountName  = "prometheus"
 	PrometheusServerTLSSecretName = "calico-node-prometheus-tls"
 
-	AlertManagerPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + CalicoNodeAlertmanager
+	AlertManagerPolicyName     = networkpolicy.TigeraComponentPolicyPrefix + CalicoNodeAlertmanager
 	AlertmanagerConfigSecret   = "alertmanager-calico-node-alertmanager"
 	AlertmanagerPort           = 9093
 	MeshAlertManagerPolicyName = AlertManagerPolicyName + "-mesh"
@@ -145,7 +145,6 @@ type Config struct {
 	OpenShift                     bool
 	KubeControllerPort            int
 	FelixPrometheusMetricsEnabled bool
-	LicenseExpired                bool
 }
 
 type monitorComponent struct {
@@ -231,22 +230,12 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
 		mc.prometheusRule(),
-	)
-
-	var toDelete []client.Object
-
-	serviceMonitors := []client.Object{
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasticsearch(),
 		mc.serviceMonitorFluentd(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
-	}
-	if mc.cfg.LicenseExpired {
-		toDelete = append(toDelete, serviceMonitors...)
-	} else {
-		toCreate = append(toCreate, serviceMonitors...)
-	}
+	)
 
 	if mc.cfg.KeyValidatorConfig != nil {
 		toCreate = append(toCreate, secret.ToRuntimeObjects(mc.cfg.KeyValidatorConfig.RequiredSecrets(common.TigeraPrometheusNamespace)...)...)
@@ -265,6 +254,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		}
 	}
 
+	var toDelete []client.Object
 	if mc.cfg.Installation.TyphaMetricsPort != nil {
 		toCreate = append(toCreate, mc.typhaServiceMonitor())
 	} else {
@@ -1173,7 +1163,7 @@ func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: alertManagerSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -1220,7 +1210,7 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: alertManagerSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -1327,7 +1317,7 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.PrometheusSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -1362,7 +1352,7 @@ func calicoSystemPrometheusAPIPolicy(cfg *Config) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector("tigera-prometheus-api"),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
@@ -1397,7 +1387,7 @@ func calicoSystemPrometheusOperatorPolicy(cfg *Config) *v3.NetworkPolicy {
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: "operator == 'prometheus'",
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,

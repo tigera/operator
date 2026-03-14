@@ -280,11 +280,6 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.BGP = override.BGP
 	}
 
-	switch compareFields(out.ClusterRoutingMode, override.ClusterRoutingMode) {
-	case BOnlySet, Different:
-		out.ClusterRoutingMode = override.ClusterRoutingMode
-	}
-
 	switch compareFields(out.IPPools, override.IPPools) {
 	case BOnlySet, Different:
 		out.IPPools = make([]operatorv1.IPPool, len(override.IPPools))

@@ -74,7 +74,7 @@ const (
 
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
-	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
+	ManagerPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "manager-access"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -371,6 +371,20 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 
 	if c.cfg.Manager != nil {
 		if overrides := c.cfg.Manager.Spec.ManagerDeployment; overrides != nil {
+			// Due to the change of prefix for some components (eg. tigera-manager -> calico-manager) we need to support
+			// the upgrade scenario in a graceful way that doesn't force the user to update the new names. To accomplish
+			// this we will simply perform the substitution from old name to new name before applying the settings to
+			// the deployment
+			if overrides.Spec != nil && overrides.Spec.Template != nil && overrides.Spec.Template.Spec != nil {
+				fixedUpContainers := overrides.Spec.Template.Spec.Containers
+				for i, container := range overrides.Spec.Template.Spec.Containers {
+					container.Name = strings.Replace(container.Name, "tigera-", "calico-", 1)
+					container.Name = strings.Replace(container.Name, "es-proxy", "ui-apis", 1)
+
+					fixedUpContainers[i] = container
+				}
+				overrides.Spec.Template.Spec.Containers = fixedUpContainers
+			}
 			rcomponents.ApplyDeploymentOverrides(d, overrides)
 		}
 	}
@@ -941,8 +955,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
 			},
@@ -1070,20 +1082,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"dismiss", "delete"},
 			},
-			{
-				// Required by the AuthorizationReview calculator in ui-apis to evaluate
-				// RBAC permissions for users.
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				// Required by the AuthorizationReview calculator in ui-apis to evaluate
-				// RBAC permissions for UISettingsGroups.
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
-			},
 		},
 	}
 
@@ -1174,7 +1172,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
+			Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
 		},
 	}
 
@@ -1246,7 +1244,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
+			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: networkpolicy.KubernetesAppSelector(ManagerDeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
@@ -1452,10 +1450,6 @@ func (m *managerComponent) deprecatedResources(tenant *operatorv1.Tenant, instal
 				TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 			},
 		}
-		objs = append(objs,
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("manager-access", legacyNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", legacyNamespace),
-		)
 	}
 
 	managedClustersWatchObj.SetName(managedClustersWatchRoleBindingName)

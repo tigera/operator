@@ -140,16 +140,9 @@ var _ = Describe("Tests for Whisker installation", func() {
 
 		By("Verifying that the whisker and goldmane finalizer is created in the installation CR")
 		install := &operator.Installation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-		Eventually(func() error {
-			Expect(GetResource(c, install)).To(BeNil())
-			if !slices.Contains(install.ObjectMeta.Finalizers, render.WhiskerFinalizer) {
-				return fmt.Errorf("expected whisker finalizer to be present, but found: %v", install.ObjectMeta.Finalizers)
-			}
-			if !slices.Contains(install.ObjectMeta.Finalizers, render.GoldmaneFinalizer) {
-				return fmt.Errorf("expected goldmane finalizer to be present, but found: %v", install.ObjectMeta.Finalizers)
-			}
-			return nil
-		}, 1*time.Minute, 1*time.Second).Should(BeNil())
+		Expect(GetResource(c, install)).To(BeNil())
+		Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.WhiskerFinalizer))
+		Expect(install.ObjectMeta.Finalizers).To(ContainElement(render.GoldmaneFinalizer))
 
 		By("Verifying that the whisker finalizer is removed in the installation CR")
 		Expect(c.Delete(context.Background(), whiskerCR)).To(BeNil())

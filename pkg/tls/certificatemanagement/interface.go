@@ -59,9 +59,6 @@ type KeyPairInterface interface {
 	Secret(namespace string) *corev1.Secret
 	HashAnnotationKey() string
 	HashAnnotationValue() string
-	// Warnings returns a warning message if the certificate requires attention (e.g., a BYO secret
-	// expiring within 30 days). Returns an empty string if there are no warnings.
-	Warnings() string
 	CertificateInterface
 }
 

@@ -125,20 +125,21 @@ func APIServerPolicy(cfg *APIServerConfiguration) Component {
 
 // APIServerConfiguration contains all the config information needed to render the component.
 type APIServerConfiguration struct {
-	K8SServiceEndpoint          k8sapi.ServiceEndpoint
-	Installation                *operatorv1.InstallationSpec
-	APIServer                   *operatorv1.APIServerSpec
-	ForceHostNetwork            bool
-	ApplicationLayer            *operatorv1.ApplicationLayer
-	ManagementCluster           *operatorv1.ManagementCluster
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	TLSKeyPair                  certificatemanagement.KeyPairInterface
-	PullSecrets                 []*corev1.Secret
-	OpenShift                   bool
-	TrustedBundle               certificatemanagement.TrustedBundle
-	MultiTenant                 bool
-	KeyValidatorConfig          authentication.KeyValidatorConfig
-	KubernetesVersion           *common.VersionInfo
+	K8SServiceEndpoint           k8sapi.ServiceEndpoint
+	K8SServiceEndpointPodNetwork k8sapi.ServiceEndpoint
+	Installation                 *operatorv1.InstallationSpec
+	APIServer                    *operatorv1.APIServerSpec
+	ForceHostNetwork             bool
+	ApplicationLayer             *operatorv1.ApplicationLayer
+	ManagementCluster            *operatorv1.ManagementCluster
+	ManagementClusterConnection  *operatorv1.ManagementClusterConnection
+	TLSKeyPair                   certificatemanagement.KeyPairInterface
+	PullSecrets                  []*corev1.Secret
+	OpenShift                    bool
+	TrustedBundle                certificatemanagement.TrustedBundle
+	MultiTenant                  bool
+	KeyValidatorConfig           authentication.KeyValidatorConfig
+	KubernetesVersion            *common.VersionInfo
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
@@ -1146,7 +1147,11 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_TENANT_ENABLED", Value: "true"})
 	}
 
-	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
+	if c.hostNetwork() {
+		env = append(env, c.cfg.K8SServiceEndpoint.EnvVars()...)
+	} else {
+		env = append(env, c.cfg.K8SServiceEndpointPodNetwork.EnvVars()...)
+	}
 
 	// set Log_LEVEL for apiserver container
 	if logging := c.cfg.APIServer.Logging; logging != nil &&
@@ -1249,7 +1254,11 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "TRUSTED_BUNDLE_PATH", Value: c.cfg.TrustedBundle.MountPath()})
 	}
 
-	env = append(env, c.cfg.K8SServiceEndpoint.EnvVars(c.hostNetwork(), c.cfg.Installation.KubernetesProvider)...)
+	if c.hostNetwork() {
+		env = append(env, c.cfg.K8SServiceEndpoint.EnvVars()...)
+	} else {
+		env = append(env, c.cfg.K8SServiceEndpointPodNetwork.EnvVars()...)
+	}
 
 	if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})

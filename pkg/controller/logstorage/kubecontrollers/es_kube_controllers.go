@@ -332,6 +332,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
+		K8sServiceEpPodNetwork:       k8sapi.PodNetworkEndpoint,
 		Installation:                 install,
 		ManagementCluster:            managementCluster,
 		ClusterDomain:                r.clusterDomain,

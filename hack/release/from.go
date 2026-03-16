@@ -169,7 +169,6 @@ func newHashreleaseOperator(dir, version, imageName, registry string, arches []s
 }
 
 func buildHashreleaseOperator(dir, version, imageName, registry string, arches []string) error {
-	initImageName := fmt.Sprintf("%s-init", imageName)
 	env := os.Environ()
 	env = append(env, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	env = append(env, fmt.Sprintf("GIT_VERSION=%s", version))
@@ -190,27 +189,6 @@ func buildHashreleaseOperator(dir, version, imageName, registry string, arches [
 		}
 		logrus.WithField("tag", tag).Debug("Built image")
 	}
-
-	env = os.Environ()
-	env = append(env, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
-	env = append(env, fmt.Sprintf("GIT_VERSION=%s", version))
-	env = append(env, fmt.Sprintf("BUILD_IMAGE=%s", imageName))
-	env = append(env, fmt.Sprintf("BUILD_INIT_IMAGE=%s", initImageName))
-	if out, err := makeInDir(dir, "image-init", env...); err != nil {
-		logrus.Error(out)
-		return fmt.Errorf("building init image: %w", err)
-	}
-
-	initTag := fmt.Sprintf("%s/%s:%s", registry, initImageName, version)
-	if out, err := runCommand("docker", []string{
-		"tag",
-		fmt.Sprintf("%s:latest", initImageName),
-		fmt.Sprintf("%s/%s:%s", registry, initImageName, version),
-	}, env); err != nil {
-		logrus.Error(out)
-		return fmt.Errorf("tagging init image: %w", err)
-	}
-	logrus.WithField("tag", initTag).Debug("Built init image")
 	return nil
 }
 
@@ -240,13 +218,6 @@ func publishHashreleaseOperator(version, imageName, registry string, archs []str
 		return fmt.Errorf("pushing manifest: %w", err)
 	}
 	logrus.WithField("image", image).Debug("Pushed manifest")
-
-	initImage := fmt.Sprintf("%s/%s-init:%s", registry, imageName, version)
-	if out, err := runCommand("docker", []string{"push", initImage}, nil); err != nil {
-		logrus.Error(out)
-		return fmt.Errorf("pushing init image: %w", err)
-	}
-	logrus.WithField("image", initImage).Debug("Pushed init image")
 	return nil
 }
 

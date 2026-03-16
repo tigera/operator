@@ -399,7 +399,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 1},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).NotTo(BeNil())
 			Expect(warning).To(BeEmpty())
 		})
@@ -410,7 +410,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 2},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).NotTo(BeNil())
 			Expect(warning).To(BeEmpty())
 		})
@@ -421,7 +421,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 2},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).To(BeNil())
 			Expect(warning).To(ContainSubstring("only 1 more than"))
 		})
@@ -432,7 +432,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 3},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).To(BeNil())
 			Expect(warning).To(ContainSubstring("only 1 more than"))
 		})
@@ -443,7 +443,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 3},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).To(BeNil())
 			Expect(warning).To(BeEmpty())
 		})
@@ -454,7 +454,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 1},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).To(BeNil())
 			Expect(warning).To(BeEmpty())
 		})
@@ -463,7 +463,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			spec := &operatorv1.LogStorageSpec{
 				Nodes: &operatorv1.Nodes{Count: 1},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).To(BeNil())
 			Expect(warning).To(BeEmpty())
 		})
@@ -473,7 +473,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			spec := &operatorv1.LogStorageSpec{
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			err, warning := validateReplicasForNodeCount(spec)
+			warning, err := validateReplicasForNodeCount(spec)
 			Expect(err).To(BeNil())
 			Expect(warning).To(BeEmpty())
 		})

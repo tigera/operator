@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"os"
 	"reflect"
 	"regexp"
 	"slices"
@@ -72,19 +71,28 @@ type ComponentHandler interface {
 	SetCreateOnly()
 }
 
+// calicoAPIGroupEnvs holds the env vars to inject into workloads when the
+// operator has determined a specific API group should be used. Set once at
+// startup via SetCalicoAPIGroup.
+var calicoAPIGroupEnvs []v1.EnvVar
+
+// SetCalicoAPIGroup configures the API group that will be injected into all
+// workload containers managed by the operator. Called once at startup after
+// UseV3CRDS determines the active API group.
+func SetCalicoAPIGroup(apiGroup string) {
+	calicoAPIGroupEnvs = []v1.EnvVar{{Name: "CALICO_API_GROUP", Value: apiGroup}}
+}
+
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
 func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
-	h := &componentHandler{
-		client: cli,
-		scheme: scheme,
-		cr:     cr,
-		log:    log,
+	return &componentHandler{
+		client:       cli,
+		scheme:       scheme,
+		cr:           cr,
+		log:          log,
+		apiGroupEnvs: calicoAPIGroupEnvs,
 	}
-	if apiGroup := os.Getenv("CALICO_API_GROUP"); apiGroup != "" {
-		h.apiGroupEnvs = []v1.EnvVar{{Name: "CALICO_API_GROUP", Value: apiGroup}}
-	}
-	return h
 }
 
 type componentHandler struct {

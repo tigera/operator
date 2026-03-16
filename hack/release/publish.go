@@ -140,7 +140,6 @@ func publishImages(c *cli.Command, repoRootDir string) error {
 	if image := c.String(imageFlag.Name); image != defaultImageName {
 		log = log.WithField("image", image)
 		publishEnv = append(publishEnv, fmt.Sprintf("BUILD_IMAGE=%s", image))
-		publishEnv = append(publishEnv, fmt.Sprintf("BUILD_INIT_IMAGE=%s-init", image))
 	}
 	if registry := c.String(registryFlag.Name); registry != "" && registry != quayRegistry {
 		log = log.WithField("registry", registry)

@@ -149,7 +149,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 DOCKER_RUN := $(CONTAINERIZED) $(CALICO_BUILD)
 
 BUILD_IMAGE?=tigera/operator
-BUILD_INIT_IMAGE?=tigera/operator-init
 
 BUILD_DIR?=build/_output
 BINDIR?=$(BUILD_DIR)/bin
@@ -308,12 +307,6 @@ images: image
 image-all: $(addprefix sub-image-,$(VALIDARCHES))
 sub-image-%:
 	$(MAKE) images ARCH=$*
-
-.PHONY: image-init
-image-init: image
-ifeq ($(ARCH),amd64)
-	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
-endif
 
 BINDIR?=build/init/bin
 $(BINDIR)/kubectl:

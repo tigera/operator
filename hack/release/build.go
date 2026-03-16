@@ -183,9 +183,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	image := c.String(imageFlag.Name)
 	if image != defaultImageName {
 		buildLog = buildLog.WithField("image", image)
-		buildEnv = append(buildEnv,
-			fmt.Sprintf("BUILD_IMAGE=%s", image),
-			fmt.Sprintf("BUILD_INIT_IMAGE=%s-init", image))
+		buildEnv = append(buildEnv, fmt.Sprintf("BUILD_IMAGE=%s", image))
 	}
 	registry := c.String(registryFlag.Name)
 	if registry != "" && registry != quayRegistry {

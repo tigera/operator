@@ -168,6 +168,35 @@ func FillDefaults(opr *operatorv1.LogStorage) {
 	}
 }
 
+func validateLogStorage(spec *operatorv1.LogStorageSpec) (string, error) {
+	warning, err := validateReplicasForNodeCount(spec)
+	if err != nil {
+		return "", err
+	}
+	if err := validateComponentResources(spec); err != nil {
+		return "", err
+	}
+	return warning, nil
+}
+
+func validateReplicasForNodeCount(spec *operatorv1.LogStorageSpec) (string, error) {
+	if spec.Nodes == nil || spec.Indices == nil || spec.Indices.Replicas == nil {
+		return "", nil
+	}
+
+	replicas := int(*spec.Indices.Replicas)
+	nodeCount := int(spec.Nodes.Count)
+	if replicas > 0 && nodeCount <= replicas {
+		return "", fmt.Errorf("LogStorage spec.indices.replicas (%d) must be less than spec.nodes.count (%d); replica shards cannot be allocated when there are not enough nodes. For a single-node Elasticsearch cluster, set spec.indices.replicas to 0", replicas, nodeCount)
+	}
+
+	if replicas > 0 && nodeCount == replicas+1 {
+		return fmt.Sprintf("LogStorage spec.nodes.count (%d) is only 1 more than spec.indices.replicas (%d); this may prevent voluntary pod evictions (e.g., node repaving) due to PodDisruptionBudget constraints. If this is expected for your environment, no action is needed. Otherwise, consider setting spec.nodes.count to at least %d", nodeCount, replicas, replicas+2), nil
+	}
+
+	return "", nil
+}
+
 func validateComponentResources(spec *operatorv1.LogStorageSpec) error {
 	if spec.ComponentResources == nil {
 		return fmt.Errorf("LogStorage spec.ComponentResources is nil %+v", spec)
@@ -232,12 +261,15 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 
 	// Default and validate the object.
 	FillDefaults(ls)
-	err = validateComponentResources(&ls.Spec)
+	warning, err := validateLogStorage(&ls.Spec)
 	if err != nil {
 		// Invalid - mark it as such and return.
 		r.setConditionDegraded(ctx, ls, reqLogger)
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "An error occurred while validating LogStorage", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+	if warning != "" {
+		reqLogger.Info(warning)
 	}
 
 	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)

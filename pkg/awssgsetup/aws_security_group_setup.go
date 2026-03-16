@@ -18,21 +18,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 
-	//nolint:staticcheck // Ignore SA1019 deprecated
-	"github.com/aws/aws-sdk-go/aws"
-	//nolint:staticcheck // Ignore SA1019 deprecated
-	"github.com/aws/aws-sdk-go/aws/credentials"
-	//nolint:staticcheck // Ignore SA1019 deprecated
-	"github.com/aws/aws-sdk-go/aws/ec2metadata"
-	//nolint:staticcheck // Ignore SA1019 deprecated
-	"github.com/aws/aws-sdk-go/aws/session"
-	//nolint:staticcheck // Ignore SA1019 deprecated
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
+	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
+	k8stypes "k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 )
@@ -64,72 +61,69 @@ func SetupAWSSecurityGroups(ctx context.Context, client client.Client, hosted bo
 		return fmt.Errorf("failed to get AWS credentials: %v", err)
 	}
 
-	metaSess, err := session.NewSession()
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to get metadata session: %v", err)
+		return fmt.Errorf("failed to load AWS config: %v", err)
 	}
 
-	meta := ec2metadata.New(metaSess)
-	if !meta.Available() {
-		return fmt.Errorf("instance metadata is not available, unable to configure Security Groups")
-	}
+	imdsClient := imds.NewFromConfig(cfg)
 
-	doc, err := meta.GetInstanceIdentityDocument()
+	doc, err := imdsClient.GetInstanceIdentityDocument(ctx, &imds.GetInstanceIdentityDocumentInput{})
 	if err != nil {
 		return fmt.Errorf("failed to get metadata document: %v", err)
 	}
 
 	region := doc.Region
-	vpcId, err := getVPCid(meta)
+	vpcId, err := getVPCid(ctx, imdsClient)
 	if err != nil {
 		return fmt.Errorf("failed to update AWS SecurityGroups: %v", err)
 	}
 
-	sess, err := session.NewSession(&aws.Config{
-		Region:      aws.String(region),
-		Credentials: credentials.NewStaticCredentials(awsKeyId, awsSecret, ""),
-	})
+	cfg, err = awsconfig.LoadDefaultConfig(ctx,
+		awsconfig.WithRegion(region),
+		awsconfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(awsKeyId, awsSecret, "")),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to update AWS SecurityGroups: %v", err)
 	}
 
-	ec2Cli := ec2.New(sess)
+	ec2Cli := ec2.NewFromConfig(cfg)
 	if hosted {
-		return setupHostedClusterSGs(ec2Cli, vpcId)
+		return setupHostedClusterSGs(ctx, ec2Cli, vpcId)
 	}
 
-	return setupClusterSGs(ec2Cli, vpcId)
+	return setupClusterSGs(ctx, ec2Cli, vpcId)
 }
 
-func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
+func setupClusterSGs(ctx context.Context, ec2Cli *ec2.Client, vpcId string) error {
 	// Get SG ids in VPC
 	// Get controlplane SG with role filter
-	controlPlaneSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "controlplane")
+	controlPlaneSg, err := getSecurityGroup(ctx, ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "controlplane")
 	// Fall back to using filter tag:Name with *-master-sg if not found
 	var notFound errorSecurityGroupNotFound
 	if err != nil && errors.As(err, &notFound) {
-		controlPlaneSg, err = getSecurityGroup(ec2Cli, vpcId, "tag:Name", "*-master-sg")
+		controlPlaneSg, err = getSecurityGroup(ctx, ec2Cli, vpcId, "tag:Name", "*-master-sg")
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get controlplane AWS SecurityGroup: %v", err)
 	}
 
 	// Get node SG with role filter
-	nodeSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "node")
+	nodeSg, err := getSecurityGroup(ctx, ec2Cli, vpcId, "tag:sigs.k8s.io/cluster-api-provider-aws/role", "node")
 	// Fall back to using filter tag:Name with *-worker-sg if not found
 	if err != nil && errors.As(err, &notFound) {
-		nodeSg, err = getSecurityGroup(ec2Cli, vpcId, "tag:Name", "*-worker-sg")
+		nodeSg, err = getSecurityGroup(ctx, ec2Cli, vpcId, "tag:Name", "*-worker-sg")
 	}
 	if err != nil {
 		return fmt.Errorf("failed to get node AWS SecurityGroup: %v", err)
 	}
 
-	err = setupSG(ec2Cli, controlPlaneSg, []*string{controlPlaneSg.GroupId, nodeSg.GroupId})
+	err = setupSG(ctx, ec2Cli, controlPlaneSg, []string{aws.ToString(controlPlaneSg.GroupId), aws.ToString(nodeSg.GroupId)})
 	if err != nil {
 		return fmt.Errorf("failed to update controlplane AWS SecurityGroup: %v", err)
 	}
 
-	err = setupSG(ec2Cli, nodeSg, []*string{controlPlaneSg.GroupId, nodeSg.GroupId})
+	err = setupSG(ctx, ec2Cli, nodeSg, []string{aws.ToString(controlPlaneSg.GroupId), aws.ToString(nodeSg.GroupId)})
 	if err != nil {
 		return fmt.Errorf("failed to update node AWS SecurityGroup: %v", err)
 	}
@@ -137,14 +131,14 @@ func setupClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
 	return nil
 }
 
-func setupHostedClusterSGs(ec2Cli *ec2.EC2, vpcId string) error {
+func setupHostedClusterSGs(ctx context.Context, ec2Cli *ec2.Client, vpcId string) error {
 	// On an OpenShift HCP hosted (guest) cluster, there are no master and worker
 	// security groups, there is only one sg named '*-default-sg'
-	defaultSg, err := getSecurityGroup(ec2Cli, vpcId, "tag:Name", "*-default-sg")
+	defaultSg, err := getSecurityGroup(ctx, ec2Cli, vpcId, "tag:Name", "*-default-sg")
 	if err != nil {
 		return fmt.Errorf("failed to get AWS SecurityGroups: %v", err)
 	}
-	err = setupSG(ec2Cli, defaultSg, []*string{defaultSg.GroupId})
+	err = setupSG(ctx, ec2Cli, defaultSg, []string{aws.ToString(defaultSg.GroupId)})
 	if err != nil {
 		return fmt.Errorf("failed to update default AWS SecurityGroup: %v", err)
 	}
@@ -157,7 +151,7 @@ func getAWSCreds(ctx context.Context, client client.Client) (id, secret string, 
 	// Grab Secret kube-system aws-creds
 	//		get aws_access_key_id and aws_secret_access_key
 	creds := &v1.Secret{}
-	key := types.NamespacedName{Name: "aws-creds", Namespace: metav1.NamespaceSystem}
+	key := k8stypes.NamespacedName{Name: "aws-creds", Namespace: metav1.NamespaceSystem}
 
 	if err := client.Get(ctx, key, creds); err != nil {
 		return "", "", err
@@ -176,19 +170,31 @@ func getAWSCreds(ctx context.Context, client client.Client) (id, secret string, 
 }
 
 // getVPCid gets the VPC id by querying the instance metadata.
-func getVPCid(meta *ec2metadata.EC2Metadata) (string, error) {
-	mac, err := meta.GetMetadata("mac")
+func getVPCid(ctx context.Context, meta *imds.Client) (string, error) {
+	macOut, err := meta.GetMetadata(ctx, &imds.GetMetadataInput{Path: "mac"})
 	if err != nil {
 		return "", fmt.Errorf("failed to read MAC for VPC Id: %v", err)
 	}
+	defer func() { _ = macOut.Content.Close() }()
+	macBytes, err := io.ReadAll(macOut.Content)
+	if err != nil {
+		return "", fmt.Errorf("failed to read MAC response body: %v", err)
+	}
+	mac := string(macBytes)
 	log.V(TRACE).Info("MAC read from metadata", "MAC", mac)
 	if len(mac) < 1 {
 		return "", fmt.Errorf("no MAC read for VPC Id: %v", err)
 	}
-	vpcId, err := meta.GetMetadata(fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac))
+	vpcOut, err := meta.GetMetadata(ctx, &imds.GetMetadataInput{Path: fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac)})
 	if err != nil {
 		return "", fmt.Errorf("failed to read VPC Id: %v", err)
 	}
+	defer func() { _ = vpcOut.Content.Close() }()
+	vpcBytes, err := io.ReadAll(vpcOut.Content)
+	if err != nil {
+		return "", fmt.Errorf("failed to read VPC Id response body: %v", err)
+	}
+	vpcId := string(vpcBytes)
 
 	log.V(TRACE).Info("VPC id read from metadata", "VPCid", vpcId)
 	return vpcId, nil
@@ -196,19 +202,20 @@ func getVPCid(meta *ec2metadata.EC2Metadata) (string, error) {
 
 // getSecurityGroup returns the first SG that is in the specified VPC and matches the nameFilter.
 // nameFilter matches tag:Name.
-func getSecurityGroup(cli *ec2.EC2, vpcId string, filterKey string, filterValue string) (*ec2.SecurityGroup, error) {
-	in := &ec2.DescribeSecurityGroupsInput{}
-	in.SetFilters([]*ec2.Filter{
-		{
-			Name:   aws.String("vpc-id"),
-			Values: []*string{aws.String(vpcId)},
+func getSecurityGroup(ctx context.Context, cli *ec2.Client, vpcId string, filterKey string, filterValue string) (*types.SecurityGroup, error) {
+	in := &ec2.DescribeSecurityGroupsInput{
+		Filters: []types.Filter{
+			{
+				Name:   aws.String("vpc-id"),
+				Values: []string{vpcId},
+			},
+			{
+				Name:   aws.String(filterKey),
+				Values: []string{filterValue},
+			},
 		},
-		{
-			Name:   aws.String(filterKey),
-			Values: []*string{aws.String(filterValue)},
-		},
-	})
-	out, err := cli.DescribeSecurityGroups(in)
+	}
+	out, err := cli.DescribeSecurityGroups(ctx, in)
 	if err != nil {
 		return nil, err
 	}
@@ -223,11 +230,11 @@ func getSecurityGroup(cli *ec2.EC2, vpcId string, filterKey string, filterValue 
 	}
 
 	log.V(TRACE).Info("DescribeSecurityGroups", "SecurityGroupOutput", out)
-	return out.SecurityGroups[0], nil
+	return &out.SecurityGroups[0], nil
 }
 
 type ingressSrc struct {
-	port     *int64
+	port     *int32
 	protocol string
 	srcSGId  string
 }
@@ -241,18 +248,18 @@ func (is *ingressSrc) String() string {
 
 // ingressSrcMatchesIpPermission checks if the s (source) is already in the
 // IpPermission and returns true if so, otherwise file is returned.
-func ingressSrcMatchesIpPermission(s ingressSrc, ipp *ec2.IpPermission) bool {
-	if aws.StringValue(ipp.IpProtocol) != s.protocol {
+func ingressSrcMatchesIpPermission(s ingressSrc, ipp types.IpPermission) bool {
+	if aws.ToString(ipp.IpProtocol) != s.protocol {
 		return false
 	}
 	// Some protocols do not use port so skip checking that if we don't have one
 	// specified in s
-	p := aws.Int64Value(s.port)
-	if s.port != nil && (aws.Int64Value(ipp.FromPort) != p || aws.Int64Value(ipp.ToPort) != p) {
+	p := aws.ToInt32(s.port)
+	if s.port != nil && (aws.ToInt32(ipp.FromPort) != p || aws.ToInt32(ipp.ToPort) != p) {
 		return false
 	}
 	for _, y := range ipp.UserIdGroupPairs {
-		if *y.GroupId == s.srcSGId {
+		if aws.ToString(y.GroupId) == s.srcSGId {
 			return true
 		}
 	}
@@ -260,31 +267,31 @@ func ingressSrcMatchesIpPermission(s ingressSrc, ipp *ec2.IpPermission) bool {
 }
 
 // setupSG adds rules to SG that allow incoming from srcSGIDs for BGP, IPIP, Typha comms
-func setupSG(ec2Cli *ec2.EC2, sg *ec2.SecurityGroup, srcSGIDs []*string) error {
+func setupSG(ctx context.Context, ec2Cli *ec2.Client, sg *types.SecurityGroup, srcSGIDs []string) error {
 	src := []ingressSrc{}
 	for _, srcSGID := range srcSGIDs {
 		src = append(src, []ingressSrc{
 			{
 				// BGP
-				srcSGId:  aws.StringValue(srcSGID),
+				srcSGId:  srcSGID,
 				protocol: "tcp",
-				port:     aws.Int64(179),
+				port:     aws.Int32(179),
 			},
 			{
 				// IP-in-IP
-				srcSGId:  aws.StringValue(srcSGID),
+				srcSGId:  srcSGID,
 				protocol: "4",
 			},
 			{
 				// Typha
-				srcSGId:  aws.StringValue(srcSGID),
+				srcSGId:  srcSGID,
 				protocol: "tcp",
-				port:     aws.Int64(5473),
+				port:     aws.Int32(5473),
 			},
 		}...)
 	}
 
-	err := allowIngressToSG(ec2Cli, sg, src)
+	err := allowIngressToSG(ctx, ec2Cli, sg, src)
 	if err != nil {
 		return fmt.Errorf("failed to update AWS SecurityGroup Name: %v, ID: %v, error: %v", sg.GroupName, sg.GroupId, err)
 	}
@@ -294,10 +301,11 @@ func setupSG(ec2Cli *ec2.EC2, sg *ec2.SecurityGroup, srcSGIDs []*string) error {
 // allowIngressToSG adds rules to the toSG Security Group for each element of sources.
 // Before attempting to add a rule the function checks the toSG to see if the rule already exists.
 // If there is an error adding the rules then an error is returned.
-func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSrc) error {
-	in := &ec2.AuthorizeSecurityGroupIngressInput{}
-	sgId := aws.StringValue(toSG.GroupId)
-	in.SetGroupId(sgId)
+func allowIngressToSG(ctx context.Context, cli *ec2.Client, toSG *types.SecurityGroup, sources []ingressSrc) error {
+	sgId := aws.ToString(toSG.GroupId)
+	in := &ec2.AuthorizeSecurityGroupIngressInput{
+		GroupId: aws.String(sgId),
+	}
 	for _, s := range sources {
 		log.V(DEBUG).Info("Ingress src being added", "toSG.GroupId", sgId, "ingressSrc", s.String())
 		skip := false
@@ -314,15 +322,15 @@ func allowIngressToSG(cli *ec2.EC2, toSG *ec2.SecurityGroup, sources []ingressSr
 		if skip {
 			continue
 		}
-		in.SetIpPermissions([]*ec2.IpPermission{{
-			UserIdGroupPairs: []*ec2.UserIdGroupPair{{
+		in.IpPermissions = []types.IpPermission{{
+			UserIdGroupPairs: []types.UserIdGroupPair{{
 				GroupId: aws.String(s.srcSGId),
 			}},
 			IpProtocol: aws.String(s.protocol),
 			FromPort:   s.port,
 			ToPort:     s.port,
-		}})
-		_, err := cli.AuthorizeSecurityGroupIngress(in)
+		}}
+		_, err := cli.AuthorizeSecurityGroupIngress(ctx, in)
 		if err != nil {
 			return fmt.Errorf("failed to add to SG '%s' the ingress rule '%s': %v: %v", sgId, s.String(), toSG, err)
 		}

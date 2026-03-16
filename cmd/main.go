@@ -16,12 +16,15 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"flag"
 	"fmt"
 	"net/url"
 	"os"
 	goruntime "runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudflare/cfssl/log"
@@ -34,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/metrics"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -44,13 +48,17 @@ import (
 	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/version"
 
 	operatortigeraiov1 "github.com/tigera/operator/api/v1"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -61,6 +69,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/yaml"
@@ -251,11 +260,33 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
 
+	metricsOpts := server.Options{
+		BindAddress: metricsAddr(),
+	}
+	var certLoader *dynamicCertLoader
+	if metricsTLSEnabled() {
+		certLoader = newDynamicCertLoader()
+		metricsOpts.TLSOpts = []func(*tls.Config){
+			func(cfg *tls.Config) {
+				cfg.GetCertificate = certLoader.GetCertificate
+				cfg.ClientAuth = tls.RequireAndVerifyClientCert
+				cfg.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+					pool := certLoader.GetClientCAs()
+					return &tls.Config{
+						GetCertificate: certLoader.GetCertificate,
+						ClientAuth:     tls.RequireAndVerifyClientCert,
+						ClientCAs:      pool,
+						MinVersion:     tls.VersionTLS12,
+					}, nil
+				}
+				cfg.MinVersion = tls.VersionTLS12
+			},
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: server.Options{
-			BindAddress: metricsAddr(),
-		},
+		Scheme:  scheme,
+		Metrics: metricsOpts,
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: 9443,
 		}),
@@ -474,6 +505,17 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Register custom Prometheus metrics collector.
+	if metricsAddr() != "0" {
+		collector := metrics.NewOperatorCollector(mgr.GetClient())
+		ctrlmetrics.Registry.MustRegister(collector)
+	}
+
+	// Start watching TLS secrets for the mTLS metrics endpoint.
+	if certLoader != nil {
+		go watchMetricsTLSSecrets(ctx, mgr, certLoader)
+	}
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
@@ -623,5 +665,127 @@ func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts opti
 			return fmt.Errorf("unexpected error encountered when confirming elastic is not currently external: %v", err)
 		}
 		return fmt.Errorf("refusing to run: configured as internal-es but secret/%s found which suggests external ES", logstorage.ExternalCertsSecret)
+	}
+}
+
+// metricsTLSEnabled returns true when the operator metrics endpoint should use mTLS.
+func metricsTLSEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_SCHEME"), "https")
+}
+
+// dynamicCertLoader dynamically loads TLS certificates from Kubernetes secrets
+// for the metrics endpoint. The monitor controller creates the server cert, and
+// the client CA is loaded from the Prometheus client TLS secret.
+type dynamicCertLoader struct {
+	mu       sync.RWMutex
+	cert     *tls.Certificate
+	clientCA *x509.CertPool
+}
+
+func newDynamicCertLoader() *dynamicCertLoader {
+	return &dynamicCertLoader{
+		clientCA: x509.NewCertPool(),
+	}
+}
+
+// GetCertificate returns the current server certificate for the metrics endpoint.
+func (d *dynamicCertLoader) GetCertificate(*tls.ClientHelloInfo) (*tls.Certificate, error) {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	if d.cert == nil {
+		return nil, fmt.Errorf("operator metrics TLS certificate not yet available")
+	}
+	return d.cert, nil
+}
+
+// GetClientCAs returns the current client CA pool.
+func (d *dynamicCertLoader) GetClientCAs() *x509.CertPool {
+	d.mu.RLock()
+	defer d.mu.RUnlock()
+	return d.clientCA
+}
+
+// updateServerCert updates the server certificate from a Kubernetes TLS secret.
+func (d *dynamicCertLoader) updateServerCert(secret *corev1.Secret) error {
+	certPEM, ok := secret.Data[corev1.TLSCertKey]
+	if !ok {
+		return fmt.Errorf("secret %s/%s missing %s", secret.Namespace, secret.Name, corev1.TLSCertKey)
+	}
+	keyPEM, ok := secret.Data[corev1.TLSPrivateKeyKey]
+	if !ok {
+		return fmt.Errorf("secret %s/%s missing %s", secret.Namespace, secret.Name, corev1.TLSPrivateKeyKey)
+	}
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return fmt.Errorf("failed to parse TLS keypair from %s/%s: %w", secret.Namespace, secret.Name, err)
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.cert = &cert
+	return nil
+}
+
+// updateClientCA updates the client CA pool from a Kubernetes secret containing a certificate.
+func (d *dynamicCertLoader) updateClientCA(secrets ...*corev1.Secret) {
+	pool := x509.NewCertPool()
+	for _, s := range secrets {
+		if s == nil {
+			continue
+		}
+		if certPEM, ok := s.Data[corev1.TLSCertKey]; ok {
+			pool.AppendCertsFromPEM(certPEM)
+		}
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.clientCA = pool
+}
+
+// watchMetricsTLSSecrets periodically loads TLS secrets for the metrics endpoint.
+// It runs until the context is canceled.
+func watchMetricsTLSSecrets(ctx context.Context, mgr ctrl.Manager, loader *dynamicCertLoader) {
+	logger := ctrl.Log.WithName("metrics-tls")
+
+	// Wait for the cache to start before reading secrets.
+	if !mgr.GetCache().WaitForCacheSync(ctx) {
+		logger.Error(fmt.Errorf("cache sync failed"), "Cannot watch metrics TLS secrets")
+		return
+	}
+
+	c := mgr.GetClient()
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	operatorNs := common.OperatorNamespace()
+
+	loadSecrets := func() {
+		// Load operator server TLS secret.
+		serverSecret := &corev1.Secret{}
+		if err := c.Get(ctx, types.NamespacedName{Name: monitor.OperatorMetricsSecretName, Namespace: operatorNs}, serverSecret); err != nil {
+			logger.V(2).Info("Operator metrics TLS secret not yet available", "error", err)
+		} else {
+			if err := loader.updateServerCert(serverSecret); err != nil {
+				logger.Error(err, "Failed to update operator metrics server cert")
+			}
+		}
+
+		// Load client CA from the tigera-ca-private secret. Any cert signed by this CA
+		// will be trusted for mTLS client authentication.
+		caSecret := &corev1.Secret{}
+		if err := c.Get(ctx, types.NamespacedName{Name: certificatemanagement.CASecretName, Namespace: operatorNs}, caSecret); err == nil {
+			loader.updateClientCA(caSecret)
+		}
+	}
+
+	// Initial load.
+	loadSecrets()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			loadSecrets()
+		}
 	}
 }

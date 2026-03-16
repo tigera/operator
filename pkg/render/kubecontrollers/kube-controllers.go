@@ -403,6 +403,24 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			Resources: []string{"virtualmachineinstances", "virtualmachines"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{
+			// The datastore migration controller watches DatastoreMigration CRs and updates their status.
+			APIGroups: []string{"migration.projectcalico.org"},
+			Resources: []string{"datastoremigrations", "datastoremigrations/status"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+		{
+			// The migration controller needs to check and remove the aggregated APIService.
+			APIGroups: []string{"apiregistration.k8s.io"},
+			Resources: []string{"apiservices"},
+			Verbs:     []string{"get", "list", "watch", "delete"},
+		},
+		{
+			// The migration controller deletes v1 CRDs during post-migration cleanup.
+			APIGroups: []string{"apiextensions.k8s.io"},
+			Resources: []string{"customresourcedefinitions"},
+			Verbs:     []string{"get", "list", "delete"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {

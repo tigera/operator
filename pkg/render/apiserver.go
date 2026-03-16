@@ -1415,6 +1415,12 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"patch",
 			},
 		},
+		{
+			// Linseed policy activity access for queryserver enrichment.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"policyactivity"},
+			Verbs:     []string{"get"},
+		},
 	}
 
 	return &rbacv1.ClusterRole{

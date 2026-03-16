@@ -104,7 +104,8 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 					Image: istioFakeImageProxyv2,
 				},
 			},
-			Profile: "ambient",
+			Profile:                 "ambient",
+			TrustedZtunnelNamespace: IstioNamespace,
 		},
 		IstioCNIOpts: IstioCNIOpts{
 			Global: &GlobalConfig{

@@ -198,6 +198,10 @@ func calicoVersions(repo, rootDir, operatorVersion string, local bool) (map[stri
 	return versions, nil
 }
 
+// isValidReleaseVersion validates the operator release version format.
+// It defaults to standard release format (vX.Y.Z) but can be overridden if a different format is needed.
+var isValidReleaseVersion = isReleaseVersionFormat
+
 // isReleaseVersionFormat checks if the version in the format vX.Y.Z.
 func isReleaseVersionFormat(version string) (bool, error) {
 	releaseRegex, err := regexp.Compile(releaseFormat)

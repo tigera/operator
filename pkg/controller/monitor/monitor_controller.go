@@ -18,6 +18,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
+	"os"
 	"reflect"
 	"time"
 
@@ -408,6 +409,20 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Create operator TLS keypair for mTLS metrics if metrics are enabled.
+	operatorMetricsEnabled := metricsEnabled()
+	var operatorTLSSecret certificatemanagement.KeyPairInterface
+	if operatorMetricsEnabled {
+		operatorMetricsServiceName := common.OperatorName() + "-metrics"
+		operatorTLSDNSNames := dns.GetServiceDNSNames(operatorMetricsServiceName, common.OperatorNamespace(), r.clusterDomain)
+		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorMetricsSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating operator metrics TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		trustedBundle.AddCertificates(operatorTLSSecret)
+	}
+
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,
 		Installation:                  install,
@@ -422,6 +437,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		LicenseExpired:                licenseExpired,
+		OperatorMetricsEnabled:        operatorMetricsEnabled,
+		OperatorNamespace:             common.OperatorNamespace(),
+		OperatorName:                  common.OperatorName(),
+		OperatorTLSSecret:             operatorTLSSecret,
 	}
 
 	// Render prometheus component
@@ -595,4 +614,10 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	// Alertmanager configuration secret is not found in the tigera-operator or tigera-prometheus namespace (new install).
 	// Operator should create a new default secret and set the owner reference.
 	return defaultConfigSecret, true, nil
+}
+
+// metricsEnabled returns true when the operator metrics endpoint is configured
+// (both METRICS_HOST and METRICS_PORT, or at least one, are set).
+func metricsEnabled() bool {
+	return os.Getenv("METRICS_HOST") != "" || os.Getenv("METRICS_PORT") != ""
 }

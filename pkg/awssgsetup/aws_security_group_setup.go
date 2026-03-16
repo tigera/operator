@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -180,10 +181,10 @@ func getVPCid(ctx context.Context, meta *imds.Client) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read MAC response body: %v", err)
 	}
-	mac := string(macBytes)
+	mac := strings.TrimSpace(string(macBytes))
 	log.V(TRACE).Info("MAC read from metadata", "MAC", mac)
 	if len(mac) < 1 {
-		return "", fmt.Errorf("no MAC read for VPC Id: %v", err)
+		return "", fmt.Errorf("no MAC read for VPC Id; metadata service returned empty response")
 	}
 	vpcOut, err := meta.GetMetadata(ctx, &imds.GetMetadataInput{Path: fmt.Sprintf("network/interfaces/macs/%s/vpc-id", mac)})
 	if err != nil {
@@ -194,7 +195,7 @@ func getVPCid(ctx context.Context, meta *imds.Client) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("failed to read VPC Id response body: %v", err)
 	}
-	vpcId := string(vpcBytes)
+	vpcId := strings.TrimSpace(string(vpcBytes))
 
 	log.V(TRACE).Info("VPC id read from metadata", "VPCid", vpcId)
 	return vpcId, nil
@@ -247,7 +248,7 @@ func (is *ingressSrc) String() string {
 }
 
 // ingressSrcMatchesIpPermission checks if the s (source) is already in the
-// IpPermission and returns true if so, otherwise file is returned.
+// IpPermission and returns true if so, otherwise false is returned.
 func ingressSrcMatchesIpPermission(s ingressSrc, ipp types.IpPermission) bool {
 	if aws.ToString(ipp.IpProtocol) != s.protocol {
 		return false

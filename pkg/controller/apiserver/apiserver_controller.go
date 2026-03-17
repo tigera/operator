@@ -24,7 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -61,12 +63,24 @@ const ResourceName string = "apiserver"
 
 var log = logf.Log.WithName("controller_apiserver")
 
+var datastoreMigrationGVR = schema.GroupVersionResource{
+	Group:    "migration.projectcalico.org",
+	Version:  "v1beta1",
+	Resource: "datastoremigrations",
+}
+
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
+	dc, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
 	r := &ReconcileAPIServer{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
+		dynamicClient:  dc,
 		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		tierWatchReady: &utils.ReadyFlag{},
 		opts:           opts,
@@ -194,6 +208,7 @@ type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client         client.Client
+	dynamicClient  dynamic.Interface
 	scheme         *runtime.Scheme
 	status         status.StatusManager
 	tierWatchReady *utils.ReadyFlag
@@ -208,6 +223,27 @@ type ReconcileAPIServer struct {
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(2).Info("Reconciling APIServer")
+
+	// Check if a datastore migration is in progress. If so, the migration controller
+	// owns the APIService and we should not reconcile to avoid fighting over it.
+	migrationPhase, err := r.getDatastoreMigrationPhase(ctx)
+	if err != nil {
+		reqLogger.V(2).Info("Failed to check DatastoreMigration phase", "error", err)
+	}
+	if migrationPhase == "Migrating" {
+		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	if migrationPhase == "Converged" && !r.opts.UseV3CRDs {
+		// Migration has converged but the operator is still running in v1 mode.
+		// Trigger a restart by updating our own deployment with the CALICO_API_GROUP env var.
+		reqLogger.Info("DatastoreMigration converged, triggering operator restart to switch to v3 CRD mode")
+		if err := r.setAPIGroupEnvVar(ctx); err != nil {
+			reqLogger.Error(err, "Failed to trigger operator restart")
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		return reconcile.Result{}, nil
+	}
 
 	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
@@ -562,6 +598,58 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		if err != nil {
 			return fmt.Errorf("APIServer spec.CalicoWebhooksDeployment is not valid: %w", err)
 		}
+	}
+	return nil
+}
+
+// getDatastoreMigrationPhase returns the phase of the first DatastoreMigration CR found,
+// or an empty string if none exists. Errors from the CRD not being installed are ignored.
+func (r *ReconcileAPIServer) getDatastoreMigrationPhase(ctx context.Context) (string, error) {
+	if r.dynamicClient == nil {
+		return "", nil
+	}
+	list, err := r.dynamicClient.Resource(datastoreMigrationGVR).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	for _, item := range list.Items {
+		status, ok := item.Object["status"].(map[string]any)
+		if !ok {
+			continue
+		}
+		phase, _ := status["phase"].(string)
+		if phase != "" {
+			return phase, nil
+		}
+	}
+	return "", nil
+}
+
+// setAPIGroupEnvVar updates the operator's own Deployment to add the
+// CALICO_API_GROUP env var, which triggers a rolling restart. On restart,
+// UseV3CRDS() picks up the env var and the operator starts in v3 CRD mode.
+func (r *ReconcileAPIServer) setAPIGroupEnvVar(ctx context.Context) error {
+	dep := &v1.Deployment{}
+	key := types.NamespacedName{Name: "tigera-operator", Namespace: common.OperatorNamespace()}
+	if err := r.client.Get(ctx, key, dep); err != nil {
+		return fmt.Errorf("failed to get operator deployment: %w", err)
+	}
+
+	envVar := corev1.EnvVar{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}
+	for i, c := range dep.Spec.Template.Spec.Containers {
+		for _, e := range c.Env {
+			if e.Name == "CALICO_API_GROUP" {
+				return nil
+			}
+		}
+		dep.Spec.Template.Spec.Containers[i].Env = append(dep.Spec.Template.Spec.Containers[i].Env, envVar)
+	}
+
+	if err := r.client.Update(ctx, dep); err != nil {
+		return fmt.Errorf("failed to update operator deployment: %w", err)
 	}
 	return nil
 }

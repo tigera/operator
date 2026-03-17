@@ -1587,6 +1587,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
+	// If a DatastoreMigration CR exists, grant kube-controllers broad RBAC across
+	// both API groups so it can read v1 resources and write v3 resources. When no
+	// migration is active, clean up the extra permissions.
+	migrationRBAC, err := kubecontrollers.MigrationRBACComponent(r.config)
+	if err != nil {
+		reqLogger.V(2).Info("Failed to check for DatastoreMigration RBAC", "error", err)
+	} else {
+		components = append(components, migrationRBAC)
+	}
+
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.

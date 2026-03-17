@@ -244,7 +244,7 @@ func (c *windowsComponent) cniEnvVars() []corev1.EnvVar {
 		},
 	}
 
-	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
+	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars()...)
 
 	return envVars
 }
@@ -712,7 +712,7 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"})
 	}
 
-	windowsEnv = append(windowsEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
+	windowsEnv = append(windowsEnv, c.cfg.K8sServiceEp.EnvVars()...)
 
 	return windowsEnv
 }

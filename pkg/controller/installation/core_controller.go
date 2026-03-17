@@ -1574,6 +1574,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
+		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
 		Installation:                &instance.Spec,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,

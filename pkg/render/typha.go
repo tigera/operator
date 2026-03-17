@@ -647,7 +647,7 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		})
 	}
 
-	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars(true, c.cfg.Installation.KubernetesProvider)...)
+	typhaEnv = append(typhaEnv, c.cfg.K8sServiceEp.EnvVars()...)
 
 	if c.cfg.Installation.TyphaMetricsPort != nil {
 		// If a typha metrics port was given, then enable typha prometheus metrics and set the port.

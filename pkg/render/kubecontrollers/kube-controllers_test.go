@@ -990,9 +990,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the KUBERNETES_SERVICE_... variables", func() {
-		k8sServiceEp.Host = "k8shost"
-		k8sServiceEp.Port = "1234"
-		cfg.K8sServiceEp = k8sServiceEp
+		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{
+			Host: "k8shost",
+			Port: "1234",
+		}
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1004,10 +1005,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		rtest.ExpectK8sServiceEpEnvVars(deployment.Spec.Template.Spec, "k8shost", "1234")
 	})
 
-	It("should not add the KUBERNETES_SERVICE_... variables on docker EE using proxy.local", func() {
-		k8sServiceEp.Host = "proxy.local"
-		k8sServiceEp.Port = "1234"
-		instance.KubernetesProvider = operatorv1.ProviderDockerEE
+	It("should not add the KUBERNETES_SERVICE_... variables when pod network endpoint is not set", func() {
+		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{}
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

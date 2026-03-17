@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	migrationClusterRoleName        = "calico-kube-controllers-migration"
+	MigrationClusterRoleName        = "calico-kube-controllers-migration"
 	migrationClusterRoleBindingName = "calico-kube-controllers-migration"
 )
 
@@ -48,7 +48,7 @@ func migrationRBACObjects() []client.Object {
 	return []client.Object{
 		&rbacv1.ClusterRole{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: migrationClusterRoleName},
+			ObjectMeta: metav1.ObjectMeta{Name: MigrationClusterRoleName},
 			Rules: []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
@@ -73,7 +73,7 @@ func migrationRBACObjects() []client.Object {
 			RoleRef: rbacv1.RoleRef{
 				APIGroup: "rbac.authorization.k8s.io",
 				Kind:     "ClusterRole",
-				Name:     migrationClusterRoleName,
+				Name:     MigrationClusterRoleName,
 			},
 			Subjects: []rbacv1.Subject{
 				{

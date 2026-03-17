@@ -40,8 +40,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
@@ -279,6 +281,17 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
+	// migration state changes (e.g., Converged → triggers env var injection on components).
+	// This is a deferred watch since the CRD may not be installed.
+	migrationObj := &unstructured.Unstructured{}
+	migrationObj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "migration.projectcalico.org",
+		Version: "v1beta1",
+		Kind:    "DatastoreMigration",
+	})
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, nil, []client.Object{migrationObj})
+
 	return nil
 }
 
@@ -355,6 +368,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.MigrationClusterRoleName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},

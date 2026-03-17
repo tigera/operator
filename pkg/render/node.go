@@ -1331,7 +1331,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 func (c *nodeComponent) nodeContainer() corev1.Container {
 	sc := securitycontext.NewRootContext(true)
 
-	lp, rp := c.nodeLivenessReadinessProbes()
+	lp, rp, sp := c.nodeLivenessReadinessProbes()
 
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
@@ -1343,6 +1343,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 		VolumeMounts:    c.nodeVolumeMounts(),
 		LivenessProbe:   lp,
 		ReadinessProbe:  rp,
+		StartupProbe:    sp,
 		Lifecycle:       c.nodeLifecycle(),
 	}
 }
@@ -1722,8 +1723,8 @@ func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	return lc
 }
 
-// nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
-func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
+// nodeLivenessReadinessProbes creates the node's liveness, readiness, and startup probes.
+func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(c.cfg.FelixHealthPort)
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
@@ -1750,11 +1751,21 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	}
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
-		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
-		// This timeout should be less than the PeriodSeconds (30s in controller/utils/component.go).
 		TimeoutSeconds: 10,
 	}
-	return lp, rp
+
+	// The startup probe runs the same check as the readiness probe but with a
+	// shorter interval. Kubernetes doesn't start the readiness/liveness probes
+	// until the startup probe succeeds, so this gives us fast initial detection
+	// (important for rolling update speed) while keeping the steady-state
+	// readiness probe at the default 10s interval.
+	sp := &corev1.Probe{
+		ProbeHandler:     corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
+		TimeoutSeconds:   10,
+		PeriodSeconds:    5,
+		FailureThreshold: 24,
+	}
+	return lp, rp, sp
 }
 
 // nodeMetricsService creates a Service which exposes two endpoints on calico/node for

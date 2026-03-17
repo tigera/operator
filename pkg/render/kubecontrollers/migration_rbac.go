@@ -55,6 +55,16 @@ func migrationRBACObjects() []client.Object {
 					Resources: []string{"*"},
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 				},
+				{
+					APIGroups: []string{"apiregistration.k8s.io"},
+					Resources: []string{"apiservices"},
+					Verbs:     []string{"get", "list", "watch", "create", "delete"},
+				},
+				{
+					APIGroups: []string{"apiextensions.k8s.io"},
+					Resources: []string{"customresourcedefinitions"},
+					Verbs:     []string{"get", "list", "delete"},
+				},
 			},
 		},
 		&rbacv1.ClusterRoleBinding{

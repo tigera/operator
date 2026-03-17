@@ -506,7 +506,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	// Register custom Prometheus metrics collector.
-	if metricsAddr() != "0" {
+	if metricsEnabled() {
 		collector := metrics.NewOperatorCollector(mgr.GetClient())
 		ctrlmetrics.Registry.MustRegister(collector)
 	}
@@ -554,27 +554,32 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 	return nil
 }
 
-// metricsAddr processes user-specified metrics host and port and sets
-// default values accordingly.
+// metricsAddr returns the bind address for the metrics endpoint.
+// When METRICS_ENABLED is not "true", returns "0" to disable metrics.
+// Otherwise, defaults to 0.0.0.0:8484 and allows overriding via
+// METRICS_HOST and METRICS_PORT.
 func metricsAddr() string {
-	metricsHost := os.Getenv("METRICS_HOST")
-	metricsPort := os.Getenv("METRICS_PORT")
-
-	// if neither are specified, disable metrics.
-	if metricsHost == "" && metricsPort == "" {
+	if !metricsEnabled() {
 		// the controller-runtime accepts '0' to denote that metrics should be disabled.
 		return "0"
 	}
-	// if just a host is specified, listen on port 8484 of that host.
-	if metricsHost != "" && metricsPort == "" {
-		// the controller-runtime will choose a random port if none is specified.
-		// so use the defaultMetricsPort in that case.
+
+	metricsHost := os.Getenv("METRICS_HOST")
+	if metricsHost == "" {
+		metricsHost = "0.0.0.0"
+	}
+
+	metricsPort := os.Getenv("METRICS_PORT")
+	if metricsPort == "" {
 		return fmt.Sprintf("%s:%d", metricsHost, defaultMetricsPort)
 	}
 
-	// finally, handle cases where just a port is specified or both are specified in the same case
-	// since controller-runtime correctly uses all interfaces if no host is specified.
 	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
+}
+
+// metricsEnabled returns true when the operator metrics endpoint is enabled.
+func metricsEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_ENABLED"), "true")
 }
 
 func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {
@@ -758,14 +763,26 @@ func watchMetricsTLSSecrets(ctx context.Context, mgr ctrl.Manager, loader *dynam
 
 	operatorNs := common.OperatorNamespace()
 
+	serverCertLoaded := false
 	loadSecrets := func() {
 		// Load operator server TLS secret.
 		serverSecret := &corev1.Secret{}
 		if err := c.Get(ctx, types.NamespacedName{Name: monitor.OperatorMetricsSecretName, Namespace: operatorNs}, serverSecret); err != nil {
-			logger.V(2).Info("Operator metrics TLS secret not yet available", "error", err)
+			if !serverCertLoaded {
+				logger.Info("Metrics mTLS is enabled but the server certificate secret is not yet available. "+
+					"Create the secret manually or apply the Monitor CR to have it provisioned automatically.",
+					"secret", monitor.OperatorMetricsSecretName, "namespace", operatorNs)
+			} else {
+				logger.V(2).Info("Operator metrics TLS secret not yet available", "error", err)
+			}
 		} else {
 			if err := loader.updateServerCert(serverSecret); err != nil {
 				logger.Error(err, "Failed to update operator metrics server cert")
+			} else {
+				if !serverCertLoaded {
+					logger.Info("Operator metrics TLS certificate loaded successfully", "secret", monitor.OperatorMetricsSecretName)
+				}
+				serverCertLoaded = true
 			}
 		}
 

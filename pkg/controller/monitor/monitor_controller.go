@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -616,8 +617,7 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	return defaultConfigSecret, true, nil
 }
 
-// metricsEnabled returns true when the operator metrics endpoint is configured
-// (both METRICS_HOST and METRICS_PORT, or at least one, are set).
+// metricsEnabled returns true when the operator metrics endpoint is enabled.
 func metricsEnabled() bool {
-	return os.Getenv("METRICS_HOST") != "" || os.Getenv("METRICS_PORT") != ""
+	return strings.EqualFold(os.Getenv("METRICS_ENABLED"), "true")
 }

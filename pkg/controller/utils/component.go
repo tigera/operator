@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
@@ -71,28 +72,6 @@ type ComponentHandler interface {
 	SetCreateOnly()
 }
 
-// calicoAPIGroupEnvs holds the env vars to inject into workloads when the
-// operator has determined a specific API group should be used.
-var (
-	calicoAPIGroupMu   sync.Mutex
-	calicoAPIGroupEnvs []v1.EnvVar
-)
-
-// SetCalicoAPIGroup configures the API group that will be injected into all
-// workload containers managed by the operator. Called at startup and when
-// the installation controller detects a completed migration.
-func SetCalicoAPIGroup(apiGroup string) {
-	calicoAPIGroupMu.Lock()
-	defer calicoAPIGroupMu.Unlock()
-	calicoAPIGroupEnvs = []v1.EnvVar{{Name: "CALICO_API_GROUP", Value: apiGroup}}
-}
-
-func getCalicoAPIGroupEnvs() []v1.EnvVar {
-	calicoAPIGroupMu.Lock()
-	defer calicoAPIGroupMu.Unlock()
-	return calicoAPIGroupEnvs
-}
-
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
 func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
@@ -101,7 +80,7 @@ func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Sch
 		scheme:       scheme,
 		cr:           cr,
 		log:          log,
-		apiGroupEnvs: getCalicoAPIGroupEnvs(),
+		apiGroupEnvs: apigroup.EnvVars(),
 	}
 }
 

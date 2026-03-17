@@ -30,6 +30,7 @@ import (
 
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/active"
+	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
@@ -219,7 +220,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	// Tell the component handler which API group to inject into workloads.
 	if v3CRDs {
-		utils.SetCalicoAPIGroup("projectcalico.org/v3")
+		apigroup.Set(apigroup.V3)
 	}
 
 	// Add the Calico API to the scheme, now that we know which backing CRD version to use.

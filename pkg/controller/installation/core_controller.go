@@ -65,6 +65,7 @@ import (
 	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
+	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -1145,7 +1146,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// at startup, so if the migration converges after boot we need to set
 	// the API group here.
 	if migrationPhase == "Converged" || migrationPhase == "Complete" {
-		utils.SetCalicoAPIGroup("projectcalico.org/v3")
+		apigroup.Set(apigroup.V3)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If

@@ -481,7 +481,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(1))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPacketsRate"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("critical"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("info"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
 
@@ -1063,6 +1063,53 @@ var _ = Describe("monitor rendering tests", func() {
 
 		// Neither should be in toDelete (only PodMonitor, Deployment, typhaServiceMonitor).
 		Expect(toDelete).To(HaveLen(3))
+	})
+
+	It("Should include operator alert rules in PrometheusRule when OperatorMetricsEnabled is true", func() {
+		cfg.OperatorMetricsEnabled = true
+		cfg.OperatorNamespace = "tigera-operator"
+		cfg.OperatorName = "tigera-operator"
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, _ := component.Objects()
+
+		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusDPRate, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
+		Expect(ok).To(BeTrue())
+		rules := prometheusruleObj.Spec.Groups[0].Rules
+		Expect(rules).To(HaveLen(7))
+
+		// DeniedPacketsRate - severity downgraded to info
+		Expect(rules[0].Alert).To(Equal("DeniedPacketsRate"))
+		Expect(rules[0].Labels["severity"]).To(Equal("info"))
+
+		// TLS cert alerts
+		Expect(rules[1].Alert).To(Equal("TLSCertExpiringWarning"))
+		Expect(rules[1].Expr).To(Equal(intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < 29 * 24 * 3600")))
+		Expect(rules[1].Labels["severity"]).To(Equal("warning"))
+
+		Expect(rules[2].Alert).To(Equal("TLSCertExpiringCritical"))
+		Expect(rules[2].Expr).To(Equal(intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < 7 * 24 * 3600")))
+		Expect(rules[2].Labels["severity"]).To(Equal("critical"))
+
+		// License alerts
+		Expect(rules[3].Alert).To(Equal("LicenseExpiringWarning"))
+		Expect(rules[3].Expr).To(Equal(intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 30 * 24 * 3600")))
+		Expect(rules[3].Labels["severity"]).To(Equal("warning"))
+
+		Expect(rules[4].Alert).To(Equal("LicenseExpiringCritical"))
+		Expect(rules[4].Expr).To(Equal(intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 7 * 24 * 3600 or tigera_operator_license_valid == 0")))
+		Expect(rules[4].Labels["severity"]).To(Equal("critical"))
+
+		// Component health alerts
+		Expect(rules[5].Alert).To(Equal("ComponentDegradedWarning"))
+		Expect(rules[5].Expr).To(Equal(intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`)))
+		Expect(rules[5].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[5].For).To(Equal(ptr.To(monitoringv1.Duration("10s"))))
+
+		Expect(rules[6].Alert).To(Equal("ComponentDegradedCritical"))
+		Expect(rules[6].Expr).To(Equal(intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`)))
+		Expect(rules[6].Labels["severity"]).To(Equal("critical"))
+		Expect(rules[6].For).To(Equal(ptr.To(monitoringv1.Duration("1m"))))
 	})
 
 	It("Should delete operator metrics resources when OperatorMetricsEnabled is false", func() {

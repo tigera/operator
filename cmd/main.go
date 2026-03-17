@@ -77,7 +77,7 @@ import (
 )
 
 var (
-	defaultMetricsPort int32 = 8484
+	defaultMetricsPort int32 = 9484
 	scheme                   = runtime.NewScheme()
 	setupLog                 = ctrl.Log.WithName("setup")
 )
@@ -556,7 +556,7 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 
 // metricsAddr returns the bind address for the metrics endpoint.
 // When METRICS_ENABLED is not "true", returns "0" to disable metrics.
-// Otherwise, defaults to 0.0.0.0:8484 and allows overriding via
+// Otherwise, defaults to 0.0.0.0:9484 and allows overriding via
 // METRICS_HOST and METRICS_PORT.
 func metricsAddr() string {
 	if !metricsEnabled() {

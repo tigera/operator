@@ -1134,10 +1134,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// If a DatastoreMigration CR exists, ensure the migration RBAC is created
 	// early so kube-controllers can start the migration without waiting for
 	// the rest of this reconcile to complete.
-	migrationActive := datastoreMigrationExists(r.config)
+	migrationPhase := datastoreMigrationPhase(r.config)
 	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
-	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationActive), nil); err != nil {
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationPhase != ""), nil); err != nil {
 		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
+	}
+
+	// If the migration has reached Converged or Complete, ensure the operator
+	// is injecting CALICO_API_GROUP into all components. UseV3CRDS only runs
+	// at startup, so if the migration converges after boot we need to set
+	// the API group here.
+	if migrationPhase == "Converged" || migrationPhase == "Complete" {
+		utils.SetCalicoAPIGroup("projectcalico.org/v3")
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If
@@ -2447,18 +2455,24 @@ var datastoreMigrationGVR = schema.GroupVersionResource{
 	Resource: "datastoremigrations",
 }
 
-// datastoreMigrationExists checks whether a DatastoreMigration CR exists in the cluster.
-func datastoreMigrationExists(cfg *rest.Config) bool {
+// datastoreMigrationPhase returns the phase of the first DatastoreMigration CR,
+// or empty string if none exists or the CRD is not installed.
+func datastoreMigrationPhase(cfg *rest.Config) string {
 	if cfg == nil {
-		return false
+		return ""
 	}
 	dc, err := dynamic.NewForConfig(cfg)
 	if err != nil {
-		return false
+		return ""
 	}
 	list, err := dc.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
-	if err != nil {
-		return false
+	if err != nil || len(list.Items) == 0 {
+		return ""
 	}
-	return len(list.Items) > 0
+	status, ok := list.Items[0].Object["status"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	phase, _ := status["phase"].(string)
+	return phase
 }

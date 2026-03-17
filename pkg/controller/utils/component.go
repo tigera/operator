@@ -72,15 +72,25 @@ type ComponentHandler interface {
 }
 
 // calicoAPIGroupEnvs holds the env vars to inject into workloads when the
-// operator has determined a specific API group should be used. Set once at
-// startup via SetCalicoAPIGroup.
-var calicoAPIGroupEnvs []v1.EnvVar
+// operator has determined a specific API group should be used.
+var (
+	calicoAPIGroupMu   sync.Mutex
+	calicoAPIGroupEnvs []v1.EnvVar
+)
 
 // SetCalicoAPIGroup configures the API group that will be injected into all
-// workload containers managed by the operator. Called once at startup after
-// UseV3CRDS determines the active API group.
+// workload containers managed by the operator. Called at startup and when
+// the installation controller detects a completed migration.
 func SetCalicoAPIGroup(apiGroup string) {
+	calicoAPIGroupMu.Lock()
+	defer calicoAPIGroupMu.Unlock()
 	calicoAPIGroupEnvs = []v1.EnvVar{{Name: "CALICO_API_GROUP", Value: apiGroup}}
+}
+
+func getCalicoAPIGroupEnvs() []v1.EnvVar {
+	calicoAPIGroupMu.Lock()
+	defer calicoAPIGroupMu.Unlock()
+	return calicoAPIGroupEnvs
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -91,7 +101,7 @@ func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Sch
 		scheme:       scheme,
 		cr:           cr,
 		log:          log,
-		apiGroupEnvs: calicoAPIGroupEnvs,
+		apiGroupEnvs: getCalicoAPIGroupEnvs(),
 	}
 }
 

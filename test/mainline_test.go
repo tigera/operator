@@ -300,7 +300,7 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	v3CRDs, err := apis.UseV3CRDS(clientset)
+	v3CRDs, err := apis.UseV3CRDS(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a scheme to use.

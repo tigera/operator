@@ -1135,6 +1135,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// If a DatastoreMigration CR exists, ensure the migration RBAC is created
+	// early so kube-controllers can start the migration without waiting for
+	// the rest of this reconcile to complete.
+	migrationRBAC, err := kubecontrollers.MigrationRBACComponent(r.config)
+	if err != nil {
+		reqLogger.V(2).Info("Failed to check for DatastoreMigration RBAC", "error", err)
+	} else {
+		ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
+		if err := ch.CreateOrUpdateOrDelete(ctx, migrationRBAC, nil); err != nil {
+			reqLogger.V(2).Info("Failed to reconcile migration RBAC", "error", err)
+		}
+	}
+
 	// Determine if we need to migrate resources from the kube-system namespace. If
 	// we do then we'll render the Calico components with additional node selectors to
 	// prevent scheduling, later we will run a migration that migrates nodes one by one
@@ -1600,16 +1613,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BindingNamespaces:           []string{common.CalicoNamespace},
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
-
-	// If a DatastoreMigration CR exists, grant kube-controllers broad RBAC across
-	// both API groups so it can read v1 resources and write v3 resources. When no
-	// migration is active, clean up the extra permissions.
-	migrationRBAC, err := kubecontrollers.MigrationRBACComponent(r.config)
-	if err != nil {
-		reqLogger.V(2).Info("Failed to check for DatastoreMigration RBAC", "error", err)
-	} else {
-		components = append(components, migrationRBAC)
-	}
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller

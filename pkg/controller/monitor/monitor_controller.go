@@ -453,6 +453,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(operatorTLSSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

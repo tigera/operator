@@ -211,10 +211,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	v3CRDs, err := apis.UseV3CRDS(cs)
+	v3CRDs, err := apis.UseV3CRDS(cfg)
 	if err != nil {
 		log.Error(err, "Failed to determine CRD version to use")
 		os.Exit(1)
+	}
+
+	// Tell the component handler which API group to inject into workloads.
+	if v3CRDs {
+		utils.SetCalicoAPIGroup("projectcalico.org/v3")
 	}
 
 	// Add the Calico API to the scheme, now that we know which backing CRD version to use.

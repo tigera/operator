@@ -40,10 +40,13 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -279,6 +282,17 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
+	// migration state changes (e.g., Converged → triggers env var injection on components).
+	// This is a deferred watch since the CRD may not be installed.
+	migrationObj := &unstructured.Unstructured{}
+	migrationObj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "migration.projectcalico.org",
+		Version: "v1beta1",
+		Kind:    "DatastoreMigration",
+	})
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, nil, []client.Object{migrationObj})
+
 	return nil
 }
 
@@ -355,6 +369,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.MigrationClusterRoleName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
@@ -1119,6 +1134,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// If a DatastoreMigration CR exists, ensure the migration RBAC is created
+	// early so kube-controllers can start the migration without waiting for
+	// the rest of this reconcile to complete.
+	migrationActive := datastoreMigrationExists(r.config)
+	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationActive), nil); err != nil {
+		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If
@@ -2390,4 +2414,26 @@ func parseCommonNameAndURISAN(secret *corev1.Secret) (cn, urisan string, err err
 		urisan = cert.URIs[0].String()
 	}
 	return cn, urisan, nil
+}
+
+var datastoreMigrationGVR = schema.GroupVersionResource{
+	Group:    "migration.projectcalico.org",
+	Version:  "v1beta1",
+	Resource: "datastoremigrations",
+}
+
+// datastoreMigrationExists checks whether a DatastoreMigration CR exists in the cluster.
+func datastoreMigrationExists(cfg *rest.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	dc, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return false
+	}
+	list, err := dc.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
+	if err != nil {
+		return false
+	}
+	return len(list.Items) > 0
 }

@@ -95,7 +95,7 @@ const (
 	OperatorMetricsSecretName  = "tigera-operator-tls"
 	OperatorMetricsServiceName = "tigera-operator-metrics"
 	OperatorMetricsPortName    = "tigera-operator-metrics-port"
-	OperatorMetricsPort        = 8484
+	OperatorMetricsPort        = 9484
 )
 
 var alertManagerSelector = fmt.Sprintf(

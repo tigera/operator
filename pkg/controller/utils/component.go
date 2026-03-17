@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
@@ -75,19 +76,21 @@ type ComponentHandler interface {
 // this is useful for CRD management so that they are not removed automatically.
 func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
 	return &componentHandler{
-		client: cli,
-		scheme: scheme,
-		cr:     cr,
-		log:    log,
+		client:       cli,
+		scheme:       scheme,
+		cr:           cr,
+		log:          log,
+		apiGroupEnvs: apigroup.EnvVars(),
 	}
 }
 
 type componentHandler struct {
-	client     client.Client
-	scheme     *runtime.Scheme
-	cr         metav1.Object
-	log        logr.Logger
-	createOnly bool
+	client       client.Client
+	scheme       *runtime.Scheme
+	cr           metav1.Object
+	log          logr.Logger
+	createOnly   bool
+	apiGroupEnvs []v1.EnvVar
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -443,6 +446,12 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 
 	objsToCreate, objsToDelete := component.Objects()
 	osType := component.SupportedOSType()
+
+	if len(c.apiGroupEnvs) > 0 {
+		for _, obj := range objsToCreate {
+			c.injectAPIGroupEnv(obj)
+		}
+	}
 
 	var alreadyExistsErr error = nil
 
@@ -1086,7 +1095,6 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 		owner, ok := cr.(runtime.Object)
 		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
 			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
-
 		}
 	}
 }
@@ -1128,4 +1136,31 @@ func (r *ReadyFlag) MarkAsReady() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.isReady = true
+}
+
+// injectAPIGroupEnv adds the CALICO_API_GROUP env var to all containers in
+// workload objects. This ensures every component uses the correct API group
+// during and after a datastore migration.
+func (c *componentHandler) injectAPIGroupEnv(obj client.Object) {
+	var podSpec *v1.PodSpec
+	switch o := obj.(type) {
+	case *apps.Deployment:
+		podSpec = &o.Spec.Template.Spec
+	case *apps.DaemonSet:
+		podSpec = &o.Spec.Template.Spec
+	case *apps.StatefulSet:
+		podSpec = &o.Spec.Template.Spec
+	case *batchv1.Job:
+		podSpec = &o.Spec.Template.Spec
+	case *batchv1.CronJob:
+		podSpec = &o.Spec.JobTemplate.Spec.Template.Spec
+	default:
+		return
+	}
+	for i := range podSpec.Containers {
+		podSpec.Containers[i].Env = append(podSpec.Containers[i].Env, c.apiGroupEnvs...)
+	}
+	for i := range podSpec.InitContainers {
+		podSpec.InitContainers[i].Env = append(podSpec.InitContainers[i].Env, c.apiGroupEnvs...)
+	}
 }

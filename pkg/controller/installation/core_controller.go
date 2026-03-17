@@ -25,6 +25,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/sirupsen/logrus"
@@ -285,13 +286,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// This is a deferred watch since the CRD may not be installed.
-	migrationObj := &unstructured.Unstructured{}
-	migrationObj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "migration.projectcalico.org",
-		Version: "v1beta1",
-		Kind:    "DatastoreMigration",
-	})
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, nil, []client.Object{migrationObj})
+	go waitToAddDatastoreMigrationWatch(c, opts.K8sClientset)
 
 	return nil
 }
@@ -2414,6 +2409,36 @@ func parseCommonNameAndURISAN(secret *corev1.Secret) (cn, urisan string, err err
 		urisan = cert.URIs[0].String()
 	}
 	return cn, urisan, nil
+}
+
+// waitToAddDatastoreMigrationWatch polls for the DatastoreMigration CRD and
+// sets up a watch once it's available. This triggers installation controller
+// reconciliation when the migration phase changes.
+func waitToAddDatastoreMigrationWatch(c ctrlruntime.Controller, cs *kubernetes.Clientset) {
+	duration := 1 * time.Second
+	maxDuration := 30 * time.Second
+	for {
+		time.Sleep(duration)
+		duration = min(2*duration, maxDuration)
+
+		_, err := cs.Discovery().ServerResourcesForGroupVersion("migration.projectcalico.org/v1beta1")
+		if err != nil {
+			continue
+		}
+
+		obj := &unstructured.Unstructured{}
+		obj.SetGroupVersionKind(schema.GroupVersionKind{
+			Group:   "migration.projectcalico.org",
+			Version: "v1beta1",
+			Kind:    "DatastoreMigration",
+		})
+		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
+			log.V(2).Info("Failed to watch DatastoreMigration, will retry", "error", err)
+			continue
+		}
+		log.Info("Successfully watching DatastoreMigration CRs")
+		return
+	}
 }
 
 var datastoreMigrationGVR = schema.GroupVersionResource{

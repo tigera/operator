@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/sirupsen/logrus"
@@ -41,13 +40,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -73,6 +69,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -287,7 +284,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// This is a deferred watch since the CRD may not be installed.
-	go waitToAddDatastoreMigrationWatch(c, opts.K8sClientset)
+	go datastoremigration.WaitForWatchAndAdd(c, opts.K8sClientset)
 
 	return nil
 }
@@ -1135,17 +1132,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// If a DatastoreMigration CR exists, ensure the migration RBAC is created
 	// early so kube-controllers can start the migration without waiting for
 	// the rest of this reconcile to complete.
-	migrationPhase := datastoreMigrationPhase(r.config)
+	migrationPhase := datastoremigration.GetPhase(r.config)
 	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
-	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationPhase != ""), nil); err != nil {
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(datastoremigration.Exists(r.config)), nil); err != nil {
 		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 
 	// If the migration has reached Converged or Complete, ensure the operator
 	// is injecting CALICO_API_GROUP into all components. UseV3CRDS only runs
-	// at startup, so if the migration converges after boot we need to set
-	// the API group here.
-	if migrationPhase == "Converged" || migrationPhase == "Complete" {
+	// at startup, so if the migration converges after boot we need to set the
+	// API group here for immediate effect. The apiserver controller separately
+	// patches the operator deployment with the env var to persist this across
+	// restarts, but that path is slow (requires a rolling restart). Setting it
+	// here lets the current reconcile inject the env var into components
+	// without waiting for the restart.
+	if migrationPhase == datastoremigration.PhaseConverged || migrationPhase == datastoremigration.PhaseComplete {
 		apigroup.Set(apigroup.V3)
 	}
 
@@ -2418,62 +2419,4 @@ func parseCommonNameAndURISAN(secret *corev1.Secret) (cn, urisan string, err err
 		urisan = cert.URIs[0].String()
 	}
 	return cn, urisan, nil
-}
-
-// waitToAddDatastoreMigrationWatch polls for the DatastoreMigration CRD and
-// sets up a watch once it's available. This triggers installation controller
-// reconciliation when the migration phase changes.
-func waitToAddDatastoreMigrationWatch(c ctrlruntime.Controller, cs *kubernetes.Clientset) {
-	duration := 1 * time.Second
-	maxDuration := 30 * time.Second
-	for {
-		time.Sleep(duration)
-		duration = min(2*duration, maxDuration)
-
-		_, err := cs.Discovery().ServerResourcesForGroupVersion("migration.projectcalico.org/v1beta1")
-		if err != nil {
-			continue
-		}
-
-		obj := &unstructured.Unstructured{}
-		obj.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "migration.projectcalico.org",
-			Version: "v1beta1",
-			Kind:    "DatastoreMigration",
-		})
-		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
-			log.V(2).Info("Failed to watch DatastoreMigration, will retry", "error", err)
-			continue
-		}
-		log.Info("Successfully watching DatastoreMigration CRs")
-		return
-	}
-}
-
-var datastoreMigrationGVR = schema.GroupVersionResource{
-	Group:    "migration.projectcalico.org",
-	Version:  "v1beta1",
-	Resource: "datastoremigrations",
-}
-
-// datastoreMigrationPhase returns the phase of the first DatastoreMigration CR,
-// or empty string if none exists or the CRD is not installed.
-func datastoreMigrationPhase(cfg *rest.Config) string {
-	if cfg == nil {
-		return ""
-	}
-	dc, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return ""
-	}
-	list, err := dc.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
-	if err != nil || len(list.Items) == 0 {
-		return ""
-	}
-	status, ok := list.Items[0].Object["status"].(map[string]any)
-	if !ok {
-		return ""
-	}
-	phase, _ := status["phase"].(string)
-	return phase
 }

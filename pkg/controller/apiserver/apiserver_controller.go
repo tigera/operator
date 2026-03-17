@@ -24,9 +24,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -44,6 +43,7 @@ import (
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -63,24 +63,13 @@ const ResourceName string = "apiserver"
 
 var log = logf.Log.WithName("controller_apiserver")
 
-var datastoreMigrationGVR = schema.GroupVersionResource{
-	Group:    "migration.projectcalico.org",
-	Version:  "v1beta1",
-	Resource: "datastoremigrations",
-}
-
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	dc, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %w", err)
-	}
-
 	r := &ReconcileAPIServer{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		dynamicClient:  dc,
+		config:         mgr.GetConfig(),
 		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		tierWatchReady: &utils.ReadyFlag{},
 		opts:           opts,
@@ -196,6 +185,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
+	// to migration phase changes (e.g., goes hands-off during Migrating).
+	go datastoremigration.WaitForWatchAndAdd(c, opts.K8sClientset)
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -208,7 +201,7 @@ type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client         client.Client
-	dynamicClient  dynamic.Interface
+	config         *rest.Config
 	scheme         *runtime.Scheme
 	status         status.StatusManager
 	tierWatchReady *utils.ReadyFlag
@@ -226,15 +219,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Check if a datastore migration is in progress. If so, the migration controller
 	// owns the APIService and we should not reconcile to avoid fighting over it.
-	migrationPhase, err := r.getDatastoreMigrationPhase(ctx)
-	if err != nil {
-		reqLogger.V(2).Info("Failed to check DatastoreMigration phase", "error", err)
-	}
-	if migrationPhase == "Migrating" {
+	migrationPhase := datastoremigration.GetPhase(r.config)
+	if migrationPhase == datastoremigration.PhaseMigrating {
 		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
-	if migrationPhase == "Converged" && !r.opts.UseV3CRDs {
+	if migrationPhase == datastoremigration.PhaseConverged && !r.opts.UseV3CRDs {
 		// Migration has converged but the operator is still running in v1 mode.
 		// Trigger a restart by updating our own deployment with the CALICO_API_GROUP env var.
 		reqLogger.Info("DatastoreMigration converged, triggering operator restart to switch to v3 CRD mode")
@@ -600,32 +590,6 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		}
 	}
 	return nil
-}
-
-// getDatastoreMigrationPhase returns the phase of the first DatastoreMigration CR found,
-// or an empty string if none exists. Errors from the CRD not being installed are ignored.
-func (r *ReconcileAPIServer) getDatastoreMigrationPhase(ctx context.Context) (string, error) {
-	if r.dynamicClient == nil {
-		return "", nil
-	}
-	list, err := r.dynamicClient.Resource(datastoreMigrationGVR).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		if errors.IsNotFound(err) || meta.IsNoMatchError(err) {
-			return "", nil
-		}
-		return "", err
-	}
-	for _, item := range list.Items {
-		status, ok := item.Object["status"].(map[string]any)
-		if !ok {
-			continue
-		}
-		phase, _ := status["phase"].(string)
-		if phase != "" {
-			return phase, nil
-		}
-	}
-	return "", nil
 }
 
 // setAPIGroupEnvVar updates the operator's own Deployment to add the

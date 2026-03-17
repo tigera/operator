@@ -1158,9 +1158,29 @@ func (c *componentHandler) injectAPIGroupEnv(obj client.Object) {
 		return
 	}
 	for i := range podSpec.Containers {
-		podSpec.Containers[i].Env = append(podSpec.Containers[i].Env, c.apiGroupEnvs...)
+		podSpec.Containers[i].Env = mergeEnvVars(podSpec.Containers[i].Env, c.apiGroupEnvs)
 	}
 	for i := range podSpec.InitContainers {
-		podSpec.InitContainers[i].Env = append(podSpec.InitContainers[i].Env, c.apiGroupEnvs...)
+		podSpec.InitContainers[i].Env = mergeEnvVars(podSpec.InitContainers[i].Env, c.apiGroupEnvs)
 	}
+}
+
+// mergeEnvVars adds or updates env vars in existing. If an env var with the
+// same name already exists, its value is updated in place.
+func mergeEnvVars(existing []v1.EnvVar, toMerge []v1.EnvVar) []v1.EnvVar {
+	for _, env := range toMerge {
+		found := false
+		for i, e := range existing {
+			if e.Name == env.Name {
+				existing[i].Value = env.Value
+				existing[i].ValueFrom = env.ValueFrom
+				found = true
+				break
+			}
+		}
+		if !found {
+			existing = append(existing, env)
+		}
+	}
+	return existing
 }

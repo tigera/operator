@@ -238,7 +238,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// Migration has converged but the operator is still running in v1 mode.
 		// Trigger a restart by updating our own deployment with the CALICO_API_GROUP env var.
 		reqLogger.Info("DatastoreMigration converged, triggering operator restart to switch to v3 CRD mode")
-		if err := r.triggerOperatorRestart(ctx); err != nil {
+		if err := r.setAPIGroupEnvVar(ctx); err != nil {
 			reqLogger.Error(err, "Failed to trigger operator restart")
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
@@ -628,10 +628,10 @@ func (r *ReconcileAPIServer) getDatastoreMigrationPhase(ctx context.Context) (st
 	return "", nil
 }
 
-// triggerOperatorRestart updates the operator's own Deployment to add the
+// setAPIGroupEnvVar updates the operator's own Deployment to add the
 // CALICO_API_GROUP env var, which triggers a rolling restart. On restart,
 // UseV3CRDS() picks up the env var and the operator starts in v3 CRD mode.
-func (r *ReconcileAPIServer) triggerOperatorRestart(ctx context.Context) error {
+func (r *ReconcileAPIServer) setAPIGroupEnvVar(ctx context.Context) error {
 	dep := &v1.Deployment{}
 	key := types.NamespacedName{Name: "tigera-operator", Namespace: common.OperatorNamespace()}
 	if err := r.client.Get(ctx, key, dep); err != nil {

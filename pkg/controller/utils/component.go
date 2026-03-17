@@ -1161,6 +1161,10 @@ func (c *componentHandler) injectAPIGroupEnv(obj client.Object) {
 		podSpec = &o.Spec.Template.Spec
 	case *apps.StatefulSet:
 		podSpec = &o.Spec.Template.Spec
+	case *batchv1.Job:
+		podSpec = &o.Spec.Template.Spec
+	case *batchv1.CronJob:
+		podSpec = &o.Spec.JobTemplate.Spec.Template.Spec
 	default:
 		return
 	}

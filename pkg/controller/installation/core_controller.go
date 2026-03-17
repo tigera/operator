@@ -46,6 +46,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -1138,14 +1139,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// If a DatastoreMigration CR exists, ensure the migration RBAC is created
 	// early so kube-controllers can start the migration without waiting for
 	// the rest of this reconcile to complete.
-	migrationRBAC, err := kubecontrollers.MigrationRBACComponent(r.config)
-	if err != nil {
-		reqLogger.V(2).Info("Failed to check for DatastoreMigration RBAC", "error", err)
-	} else {
-		ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
-		if err := ch.CreateOrUpdateOrDelete(ctx, migrationRBAC, nil); err != nil {
-			reqLogger.V(2).Info("Failed to reconcile migration RBAC", "error", err)
-		}
+	migrationActive := datastoreMigrationExists(r.config)
+	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationActive), nil); err != nil {
+		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If
@@ -2417,4 +2414,26 @@ func parseCommonNameAndURISAN(secret *corev1.Secret) (cn, urisan string, err err
 		urisan = cert.URIs[0].String()
 	}
 	return cn, urisan, nil
+}
+
+var datastoreMigrationGVR = schema.GroupVersionResource{
+	Group:    "migration.projectcalico.org",
+	Version:  "v1beta1",
+	Resource: "datastoremigrations",
+}
+
+// datastoreMigrationExists checks whether a DatastoreMigration CR exists in the cluster.
+func datastoreMigrationExists(cfg *rest.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	dc, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return false
+	}
+	list, err := dc.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
+	if err != nil {
+		return false
+	}
+	return len(list.Items) > 0
 }

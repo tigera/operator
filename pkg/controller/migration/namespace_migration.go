@@ -405,13 +405,23 @@ func min(a, b int32) int32 {
 	return b
 }
 
-// NeedCleanup returns if the migration has been marked completed or not.
-// If cleanup is needed then we need to make sure that all our labels have
-// been removed from the nodes. We could check if the label is present
-// on any nodes but it is almost the same operation to call the remove
-// so we'll assume there are labels if we have not removed them previously.
+// NeedCleanup returns true if any nodes still have migration labels that need to be removed.
+// We check the node informer cache to avoid triggering unnecessary cleanup (including waiting
+// for calico-node readiness) on clusters where no migration has occurred.
 func (m *CoreNamespaceMigration) NeedCleanup() bool {
-	return !m.migrationComplete
+	if m.migrationComplete {
+		return false
+	}
+	for _, obj := range m.indexer.List() {
+		node, ok := obj.(*v1.Node)
+		if !ok {
+			continue
+		}
+		if _, exists := node.Labels[nodeSelectorKey]; exists {
+			return true
+		}
+	}
+	return false
 }
 
 // CleanupMigration ensures all labels used during the migration are removed

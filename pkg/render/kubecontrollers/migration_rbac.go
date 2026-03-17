@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	logrus "github.com/sirupsen/logrus"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -93,6 +94,7 @@ func migrationRBACObjects() []client.Object {
 // extra permissions are cleaned up.
 func MigrationRBACComponent(cfg *rest.Config) (render.Component, error) {
 	if cfg == nil {
+		logrus.Info("MigrationRBACComponent: no config, returning deletion passthrough")
 		return render.NewDeletionPassthrough(migrationRBACObjects()...), nil
 	}
 	dc, err := dynamic.NewForConfig(cfg)
@@ -102,12 +104,15 @@ func MigrationRBACComponent(cfg *rest.Config) (render.Component, error) {
 	list, err := dc.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
 	if err != nil {
 		if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+			logrus.Info("MigrationRBACComponent: DatastoreMigration CRD not found, returning deletion passthrough")
 			return render.NewDeletionPassthrough(migrationRBACObjects()...), nil
 		}
 		return nil, fmt.Errorf("listing DatastoreMigration CRs: %w", err)
 	}
 	if len(list.Items) > 0 {
+		logrus.WithField("count", len(list.Items)).Info("MigrationRBACComponent: DatastoreMigration CR found, creating migration RBAC")
 		return render.NewCreationPassthrough(migrationRBACObjects()...), nil
 	}
+	logrus.Info("MigrationRBACComponent: no DatastoreMigration CRs found, returning deletion passthrough")
 	return render.NewDeletionPassthrough(migrationRBACObjects()...), nil
 }

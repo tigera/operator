@@ -149,7 +149,6 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 DOCKER_RUN := $(CONTAINERIZED) $(CALICO_BUILD)
 
 BUILD_IMAGE?=tigera/operator
-BUILD_INIT_IMAGE?=tigera/operator-init
 
 BUILD_DIR?=build/_output
 BINDIR?=$(BUILD_DIR)/bin
@@ -308,12 +307,6 @@ images: image
 image-all: $(addprefix sub-image-,$(VALIDARCHES))
 sub-image-%:
 	$(MAKE) images ARCH=$*
-
-.PHONY: image-init
-image-init: image
-ifeq ($(ARCH),amd64)
-	docker tag $(BUILD_IMAGE):latest-$(ARCH) $(BUILD_INIT_IMAGE):latest
-endif
 
 BINDIR?=build/init/bin
 $(BINDIR)/kubectl:
@@ -562,7 +555,7 @@ endif
 ## Create a release for the specified RELEASE_TAG.
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release VERSION=$(RELEASE_TAG)
-	REPO=$(REPO) CREATE_GITHUB_RELEASE=true $(MAKE) release-publish VERSION=$(RELEASE_TAG)
+	REPO=$(REPO) $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
 ## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN

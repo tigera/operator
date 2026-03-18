@@ -820,8 +820,8 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with non-proxy address", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+		cfg.K8SServiceEndpointPodNetwork.Host = "k8shost"
+		cfg.K8SServiceEndpointPodNetwork.Port = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component, err := render.APIServer(cfg)
@@ -2072,9 +2072,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectNoK8sServiceEpEnvVars(deployment.Spec.Template.Spec)
 	})
 
-	It("should not set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
-		cfg.K8SServiceEndpoint.Host = "k8shost"
-		cfg.K8SServiceEndpoint.Port = "1234"
+	It("should set KUBERNETES_SERVICE_... variables if Docker EE using non-proxy address", func() {
+		cfg.K8SServiceEndpointPodNetwork.Host = "k8shost"
+		cfg.K8SServiceEndpointPodNetwork.Port = "1234"
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderDockerEE
 
 		component, err := render.APIServer(cfg)

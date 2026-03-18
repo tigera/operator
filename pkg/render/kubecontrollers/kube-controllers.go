@@ -69,7 +69,8 @@ const (
 )
 
 type KubeControllersConfiguration struct {
-	K8sServiceEp k8sapi.ServiceEndpoint
+	K8sServiceEp           k8sapi.ServiceEndpoint
+	K8sServiceEpPodNetwork k8sapi.ServiceEndpoint
 
 	Installation                *operatorv1.InstallationSpec
 	ManagementCluster           *operatorv1.ManagementCluster
@@ -534,7 +535,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
 	}
 
-	env = append(env, c.cfg.K8sServiceEp.EnvVars(false, c.cfg.Installation.KubernetesProvider)...)
+	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		if c.cfg.Tenant != nil {

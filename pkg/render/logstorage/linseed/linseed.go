@@ -658,6 +658,13 @@ func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 			Source:      networkpolicyHelper.PolicyRecommendationSourceEntityRule(),
 			Destination: linseedIngressDestinationEntityRule,
 		},
+		{
+			// Allow queryserver to read policy activity data.
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.APIServerSourceEntityRule(l.cfg.Installation.Variant),
+			Destination: linseedIngressDestinationEntityRule,
+		},
 	}
 
 	if l.cfg.HasDPIResource {

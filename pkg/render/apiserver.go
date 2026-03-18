@@ -1265,6 +1265,13 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
+	// Linseed client configuration for policy activity enrichment.
+	// The queryserver uses its own TLS cert for mTLS with Linseed.
+	env = append(env,
+		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
+		corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
+	)
+
 	// set LogLEVEL for queryserver container
 	if logging := c.cfg.APIServer.Logging; logging != nil &&
 		logging.QueryServerLogging != nil && logging.QueryServerLogging.LogSeverity != nil {
@@ -1366,6 +1373,12 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 // Calico Enterprise only
 func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
+		{
+			// Read access to Linseed policy activity data for queryserver enrichment.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"policyactivity"},
+			Verbs:     []string{"get"},
+		},
 		{
 			// Calico Enterprise backing storage.
 			APIGroups: []string{"crd.projectcalico.org"},

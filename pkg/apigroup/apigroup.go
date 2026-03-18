@@ -42,7 +42,7 @@ const (
 )
 
 var (
-	mu      sync.Mutex
+	mu      sync.RWMutex
 	current APIGroup
 	envVars []corev1.EnvVar
 )
@@ -62,15 +62,15 @@ func Set(g APIGroup) {
 
 // Get returns the current API group.
 func Get() APIGroup {
-	mu.Lock()
-	defer mu.Unlock()
+	mu.RLock()
+	defer mu.RUnlock()
 	return current
 }
 
 // EnvVars returns the env vars to inject into workload containers, or nil if
 // no explicit API group has been configured.
 func EnvVars() []corev1.EnvVar {
-	mu.Lock()
-	defer mu.Unlock()
+	mu.RLock()
+	defer mu.RUnlock()
 	return envVars
 }

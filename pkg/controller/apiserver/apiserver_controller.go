@@ -25,7 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/rest"
+	"k8s.io/client-go/dynamic"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -66,10 +66,14 @@ var log = logf.Log.WithName("controller_apiserver")
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
+	dc, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return fmt.Errorf("failed to create dynamic client: %w", err)
+	}
 	r := &ReconcileAPIServer{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		config:         mgr.GetConfig(),
+		dynamicClient:  dc,
 		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		tierWatchReady: &utils.ReadyFlag{},
 		opts:           opts,
@@ -201,7 +205,7 @@ type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client         client.Client
-	config         *rest.Config
+	dynamicClient  dynamic.Interface
 	scheme         *runtime.Scheme
 	status         status.StatusManager
 	tierWatchReady *utils.ReadyFlag
@@ -219,7 +223,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Check if a datastore migration is in progress. If so, the migration controller
 	// owns the APIService and we should not reconcile to avoid fighting over it.
-	migrationPhase := datastoremigration.GetPhase(r.config)
+	migrationPhase := datastoremigration.GetPhase(r.dynamicClient)
 	if migrationPhase == datastoremigration.PhaseMigrating {
 		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil

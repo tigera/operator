@@ -29,7 +29,8 @@ import (
 
 var log = ctrl.Log.WithName("apis")
 
-var datastoreMigrationGVR = schema.GroupVersionResource{
+// DatastoreMigrationGVR is the GroupVersionResource for DatastoreMigration CRs.
+var DatastoreMigrationGVR = schema.GroupVersionResource{
 	Group:    "migration.projectcalico.org",
 	Version:  "v1beta1",
 	Resource: "datastoremigrations",
@@ -81,7 +82,7 @@ func checkDatastoreMigration(cfg *rest.Config) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	list, err := dc.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{})
+	list, err := dc.Resource(DatastoreMigrationGVR).List(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		return false, err
 	}

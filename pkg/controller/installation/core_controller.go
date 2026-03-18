@@ -44,6 +44,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -61,7 +62,6 @@ import (
 	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
-	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -322,10 +322,16 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
+	dc, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
 		clientset:            opts.K8sClientset,
+		dynamicClient:        dc,
 		scheme:               mgr.GetScheme(),
 		shutdownContext:      opts.ShutdownContext,
 		watches:              make(map[runtime.Object]struct{}),
@@ -382,6 +388,7 @@ type ReconcileInstallation struct {
 	config                        *rest.Config
 	client                        client.Client
 	clientset                     *kubernetes.Clientset
+	dynamicClient                 dynamic.Interface
 	scheme                        *runtime.Scheme
 	shutdownContext               context.Context
 	watches                       map[runtime.Object]struct{}
@@ -1132,22 +1139,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// If a DatastoreMigration CR exists, ensure the migration RBAC is created
 	// early so kube-controllers can start the migration without waiting for
 	// the rest of this reconcile to complete.
-	migrationPhase := datastoremigration.GetPhase(r.config)
 	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
-	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(datastoremigration.Exists(r.config)), nil); err != nil {
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(datastoremigration.Exists(r.dynamicClient)), nil); err != nil {
 		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
-	}
-
-	// If the migration has reached Converged or Complete, ensure the operator
-	// is injecting CALICO_API_GROUP into all components. UseV3CRDS only runs
-	// at startup, so if the migration converges after boot we need to set the
-	// API group here for immediate effect. The apiserver controller separately
-	// patches the operator deployment with the env var to persist this across
-	// restarts, but that path is slow (requires a rolling restart). Setting it
-	// here lets the current reconcile inject the env var into components
-	// without waiting for the restart.
-	if migrationPhase == datastoremigration.PhaseConverged || migrationPhase == datastoremigration.PhaseComplete {
-		apigroup.Set(apigroup.V3)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If

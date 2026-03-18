@@ -20,27 +20,19 @@ import (
 	"context"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
-
+	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 )
 
 var log = logf.Log.WithName("datastoremigration")
-
-// GVR is the GroupVersionResource for DatastoreMigration CRs.
-var GVR = schema.GroupVersionResource{
-	Group:    "migration.projectcalico.org",
-	Version:  "v1beta1",
-	Resource: "datastoremigrations",
-}
 
 // Phase constants for DatastoreMigration status.
 const (
@@ -52,51 +44,36 @@ const (
 	PhaseFailed                       = "Failed"
 )
 
-// GetPhase returns the phase of the first DatastoreMigration CR, or empty
-// string if none exists or the CRD is not installed.
-func GetPhase(cfg *rest.Config) string {
-	if cfg == nil {
-		return ""
+// get fetches the first DatastoreMigration CR and returns its phase and
+// whether it exists. Returns ("", false) if the CRD is not installed or
+// no CR exists.
+func get(dc dynamic.Interface) (string, bool) {
+	if dc == nil {
+		return "", false
 	}
-	dc, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return ""
-	}
-	list, err := dc.Resource(GVR).List(context.Background(), metav1.ListOptions{Limit: 1})
+	list, err := dc.Resource(apis.DatastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
 	if err != nil || len(list.Items) == 0 {
-		return ""
+		return "", false
 	}
 	status, ok := list.Items[0].Object["status"].(map[string]any)
 	if !ok {
-		return ""
+		return "", true
 	}
-	phase, ok := status["phase"].(string)
-	if !ok {
-		return ""
-	}
+	phase, _ := status["phase"].(string)
+	return phase, true
+}
+
+// GetPhase returns the phase of the first DatastoreMigration CR, or empty
+// string if none exists or the CRD is not installed.
+func GetPhase(dc dynamic.Interface) string {
+	phase, _ := get(dc)
 	return phase
 }
 
 // Exists returns true if at least one DatastoreMigration CR exists.
-func Exists(cfg *rest.Config) bool {
-	return GetPhase(cfg) != "" || existsWithoutPhase(cfg)
-}
-
-// existsWithoutPhase checks if a CR exists even if it has no phase set yet
-// (e.g., just created, Pending with empty status).
-func existsWithoutPhase(cfg *rest.Config) bool {
-	if cfg == nil {
-		return false
-	}
-	dc, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return false
-	}
-	list, err := dc.Resource(GVR).List(context.Background(), metav1.ListOptions{Limit: 1})
-	if err != nil {
-		return false
-	}
-	return len(list.Items) > 0
+func Exists(dc dynamic.Interface) bool {
+	_, exists := get(dc)
+	return exists
 }
 
 // WaitForWatchAndAdd polls for the DatastoreMigration CRD and sets up a watch

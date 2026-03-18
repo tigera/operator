@@ -31,7 +31,7 @@ var _ = Describe("Test get Kubernetes version", func() {
 	var clientset kubernetes.Interface
 
 	BeforeEach(func() {
-		clientset = fake.NewSimpleClientset()
+		clientset = fake.NewClientset()
 	})
 
 	It("should return expected major and minor version when both version numbers are valid integers", func() {

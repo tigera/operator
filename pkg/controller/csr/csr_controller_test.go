@@ -78,7 +78,7 @@ var _ = Describe("CSR controller tests", func() {
 		Expect(operatorv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		// Create a client that will have a crud interface of k8s objects.
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithStatusSubresource(ctrlrclient.TypesWithStatuses(scheme, certificatesv1.SchemeGroupVersion)...).Build()
-		clientset = fake.NewSimpleClientset()
+		clientset = fake.NewClientset()
 		calicoClientset = fakecalicoclient.NewSimpleClientset()
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},

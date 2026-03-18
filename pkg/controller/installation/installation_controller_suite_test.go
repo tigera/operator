@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"os"
 	"testing"
 
 	"github.com/onsi/ginkgo/v2"
@@ -24,6 +25,14 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
+
+func init() {
+	// Disable WatchListClient feature gate for fake clientset compatibility.
+	// k8s.io/client-go v0.35.0 defaults WatchListClient to true, which makes
+	// reflectors require bookmark events that the fake clientset doesn't send,
+	// causing informers to hang indefinitely on HasSynced().
+	os.Setenv("KUBE_FEATURE_WatchListClient", "false")
+}
 
 func TestInstallation(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))

@@ -1405,6 +1405,21 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"patch",
 			},
 		},
+		{
+			// The queryserver's RBAC calculator needs to list tiers,
+			// uisettingsgroups, and managedclusters via the aggregated
+			// API to evaluate user permissions for the /policies endpoint.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"tiers",
+				"uisettingsgroups",
+				"managedclusters",
+			},
+			Verbs: []string{
+				"get",
+				"list",
+			},
+		},
 	}
 
 	return &rbacv1.ClusterRole{

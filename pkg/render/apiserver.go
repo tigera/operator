@@ -505,6 +505,12 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: DexEntityRule,
 		},
+		{
+			// Allow queryserver to reach Linseed for policy activity enrichment.
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
+		},
 	}...)
 
 	if cfg.KeyValidatorConfig != nil {

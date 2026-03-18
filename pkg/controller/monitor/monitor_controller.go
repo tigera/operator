@@ -433,6 +433,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(operatorTLSSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -494,6 +495,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {
+	if instance.Spec.AlertManager == nil {
+		instance.Spec.AlertManager = &operatorv1.AlertManager{}
+	}
+	if instance.Spec.AlertManager.AlertManagerSpec == nil {
+		instance.Spec.AlertManager.AlertManagerSpec = &operatorv1.AlertManagerSpec{}
+	}
+	if instance.Spec.AlertManager.AlertManagerSpec.Replicas == nil {
+		var replicas int32 = 0
+		instance.Spec.AlertManager.AlertManagerSpec.Replicas = &replicas
+	}
+
 	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
 
 		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {

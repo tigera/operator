@@ -46,6 +46,12 @@ spec:
                     spec:
                       description: Spec is the specification of the Alertmanager.
                       properties:
+                        replicas:
+                          description: |-
+                            Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
+                            Default: 0
+                          format: int32
+                          type: integer
                         resources:
                           description:
                             Define resources requests and limits for single

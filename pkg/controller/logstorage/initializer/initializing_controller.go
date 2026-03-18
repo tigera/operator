@@ -151,6 +151,17 @@ func FillDefaults(opr *operatorv1.LogStorage) {
 		opr.Spec.Nodes = &operatorv1.Nodes{Count: 1}
 	}
 
+	if opr.Spec.Kibana == nil {
+		opr.Spec.Kibana = &operatorv1.Kibana{}
+	}
+	if opr.Spec.Kibana.Spec == nil {
+		opr.Spec.Kibana.Spec = &operatorv1.KibanaSpec{}
+	}
+	if opr.Spec.Kibana.Spec.Replicas == nil {
+		var replicas int32 = 1
+		opr.Spec.Kibana.Spec.Replicas = &replicas
+	}
+
 	if opr.Spec.ComponentResources == nil {
 		limits := corev1.ResourceList{}
 		requests := corev1.ResourceList{}

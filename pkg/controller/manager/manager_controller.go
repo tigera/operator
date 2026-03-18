@@ -145,6 +145,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.ImageSet{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
+	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch LogStorage resource: %w", err)
+	}
 	if opts.MultiTenant {
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
@@ -652,6 +655,21 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Determine if Kibana is enabled based on multi-tenancy and LogStorage replicas.
+	kibanaEnabled := !r.opts.MultiTenant
+	if kibanaEnabled {
+		ls := &operatorv1.LogStorage{}
+		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls); err != nil {
+			if !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query LogStorage resource", err, logc)
+				return reconcile.Result{}, err
+			}
+		} else if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
+			ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
+			kibanaEnabled = false
+		}
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:      routeConfig,
 		KeyValidatorConfig:      keyValidatorConfig,
@@ -678,6 +696,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		BindingNamespaces:       namespaces,
 		OSSTenantNamespaces:     ossTenantNamespaces,
 		Manager:                 instance,
+		KibanaEnabled:           kibanaEnabled,
 	}
 
 	// Render the desired objects from the CRD and create or update them.

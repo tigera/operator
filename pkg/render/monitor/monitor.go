@@ -215,7 +215,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 
 	toCreate = append(toCreate,
 		mc.prometheusOperatorServiceAccount(),
@@ -225,13 +224,19 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusClusterRole(),
 		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
-		mc.alertmanagerService(),
-		mc.alertmanager(),
 		mc.prometheusServiceService(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
 		mc.prometheusRule(),
 	)
+
+	if mc.alertmanagerReplicas() > 0 {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
+		toCreate = append(toCreate,
+			mc.alertmanagerService(),
+			mc.alertmanager(),
+		)
+	}
 
 	var toDelete []client.Object
 
@@ -433,6 +438,15 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
+func (mc *monitorComponent) alertmanagerReplicas() int32 {
+	if mc.cfg.Monitor.AlertManager != nil &&
+		mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil &&
+		mc.cfg.Monitor.AlertManager.AlertManagerSpec.Replicas != nil {
+		return *mc.cfg.Monitor.AlertManager.AlertManagerSpec.Replicas
+	}
+	return 0
+}
+
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
@@ -458,7 +472,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
-			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
+			Replicas:           mc.cfg.Monitor.AlertManager.AlertManagerSpec.Replicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        tolerations,
@@ -555,8 +569,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
-	promNamespace := common.TigeraPrometheusNamespace
-
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -625,27 +637,31 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				VolumeMounts:           volumeMounts,
 				Volumes:                volumes,
 			},
-			Alerting: &monitoringv1.AlertingSpec{
-				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
-					{
-						Name:      CalicoNodeAlertmanager,
-						Namespace: &promNamespace,
-						Port:      intstr.FromString("web"),
-						RelabelConfigs: []monitoringv1.RelabelConfig{
-							{
-								TargetLabel: "__scheme__",
-								Replacement: ptr.To("http"),
-							},
-						},
-					},
-				},
-			},
 			Retention: "24h",
 			RuleSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
 				"prometheus": CalicoNodePrometheus,
 				"role":       "tigera-prometheus-rules",
 			}},
 		},
+	}
+
+	if mc.alertmanagerReplicas() > 0 {
+		promNamespace := common.TigeraPrometheusNamespace
+		prometheus.Spec.Alerting = &monitoringv1.AlertingSpec{
+			Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
+				{
+					Name:      CalicoNodeAlertmanager,
+					Namespace: &promNamespace,
+					Port:      intstr.FromString("web"),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("http"),
+						},
+					},
+				},
+			},
+		}
 	}
 
 	if overrides := mc.cfg.Monitor.Prometheus; overrides != nil {

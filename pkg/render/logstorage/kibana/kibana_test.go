@@ -420,6 +420,11 @@ var _ = Describe("Kibana rendering tests", func() {
 			It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
 				var replicas int32 = 2
 				cfg.Installation.ControlPlaneReplicas = &replicas
+				cfg.LogStorage.Spec.Kibana = &operatorv1.Kibana{
+					Spec: &operatorv1.KibanaSpec{
+						Replicas: &replicas,
+					},
+				}
 
 				component := kibana.Kibana(cfg)
 				resources, _ := component.Objects()

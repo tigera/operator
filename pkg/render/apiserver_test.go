@@ -249,7 +249,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 
-		Expect(d.Spec.Template.Spec.Containers[1].Env).To(HaveLen(6))
+		Expect(d.Spec.Template.Spec.Containers[1].Env).To(HaveLen(10))
 
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Name).To(Equal("DATASTORE_TYPE"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[0].Value).To(Equal("kubernetes"))
@@ -265,9 +265,17 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers[1].Env[3].ValueFrom).To(BeNil())
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Name).To(Equal("TRUSTED_BUNDLE_PATH"))
 		Expect(d.Spec.Template.Spec.Containers[1].Env[4].Value).To(Equal("/etc/pki/tls/certs/tigera-ca-bundle.crt"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("LOGLEVEL"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("info"))
-		Expect(d.Spec.Template.Spec.Containers[1].Env[5].ValueFrom).To(BeNil())
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Name).To(Equal("LINSEED_URL"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[5].Value).To(Equal("https://tigera-linseed.tigera-elasticsearch.svc"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[6].Name).To(Equal("LINSEED_CLIENT_CERT"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[6].Value).To(Equal("/calico-apiserver-certs/tls.crt"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[7].Name).To(Equal("LINSEED_CLIENT_KEY"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[7].Value).To(Equal("/calico-apiserver-certs/tls.key"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[8].Name).To(Equal("LINSEED_CA"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[8].Value).To(Equal("/etc/pki/tls/certs/tigera-ca-bundle.crt"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[9].Name).To(Equal("LOGLEVEL"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[9].Value).To(Equal("info"))
+		Expect(d.Spec.Template.Spec.Containers[1].Env[9].ValueFrom).To(BeNil())
 
 		// Expect the SECURITY_GROUP env variables to not be set
 		Expect(d.Spec.Template.Spec.Containers[1].Env).NotTo(ContainElement(gstruct.MatchFields(gstruct.IgnoreExtras, gstruct.Fields{"Name": Equal("TIGERA_DEFAULT_SECURITY_GROUPS")})))

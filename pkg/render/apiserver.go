@@ -506,6 +506,12 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: DexEntityRule,
 		},
+		{
+			// Allow queryserver to reach Linseed for policy activity enrichment.
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
+		},
 	}...)
 
 	if cfg.KeyValidatorConfig != nil {
@@ -1268,6 +1274,20 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
+	// Linseed client configuration for policy activity enrichment.
+	linseedURL := fmt.Sprintf("https://tigera-linseed.%s.svc", ElasticsearchNamespace)
+	if c.cfg.ManagementClusterConnection != nil {
+		linseedURL = "https://guardian.calico-system.svc"
+	}
+	env = append(env,
+		corev1.EnvVar{Name: "LINSEED_URL", Value: linseedURL},
+		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
+		corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
+	)
+	if c.cfg.TrustedBundle != nil {
+		env = append(env, corev1.EnvVar{Name: "LINSEED_CA", Value: c.cfg.TrustedBundle.MountPath()})
+	}
+
 	// set LogLEVEL for queryserver container
 	if logging := c.cfg.APIServer.Logging; logging != nil &&
 		logging.QueryServerLogging != nil && logging.QueryServerLogging.LogSeverity != nil {
@@ -1369,6 +1389,12 @@ func (c *apiServerComponent) tolerations() []corev1.Toleration {
 // Calico Enterprise only
 func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
+		{
+			// Read access to Linseed policy activity data for queryserver enrichment.
+			APIGroups: []string{"linseed.tigera.io"},
+			Resources: []string{"policyactivity"},
+			Verbs:     []string{"get"},
+		},
 		{
 			// Calico Enterprise backing storage.
 			APIGroups: []string{"crd.projectcalico.org"},

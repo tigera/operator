@@ -75,7 +75,7 @@ var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command)
 		return ctx, fmt.Errorf("compiling hashrelease regex: %s", err)
 	}
 	if !hashreleaseRegex.MatchString(version) {
-		if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == quayRegistry && c.String(imageFlag.Name) == defaultImageName {
+		if c.Bool(publishFlag.Name) && c.String(registryFlag.Name) == defaultRegistry && c.String(imageFlag.Name) == defaultImage {
 			return ctx, fmt.Errorf("cannot use the default registry and image for publishing operator version %q. "+
 				"Either update registry and/or image flag OR specify version in the format ", version)
 		}

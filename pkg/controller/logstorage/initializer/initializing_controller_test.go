@@ -197,26 +197,6 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(ls.Status.State).Should(Equal(operatorv1.TigeraStatusDegraded))
 		})
 
-		It("logs a warning but does not degrade when node count only exceeds replicas by 1", func() {
-			var replicas int32 = 1
-			ls := &operatorv1.LogStorage{}
-			ls.Name = "tigera-secure"
-			FillDefaults(ls)
-			ls.Spec.Indices.Replicas = &replicas
-			ls.Spec.Nodes.Count = 2
-			Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
-
-			r, err := NewTestInitializer(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
-			Expect(err).ShouldNot(HaveOccurred())
-			_, err = r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(mockStatus.AssertNumberOfCalls(GinkgoT(), "SetDegraded", 0)).Should(BeTrue())
-
-			ls = &operatorv1.LogStorage{}
-			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, ls)).ShouldNot(HaveOccurred())
-			Expect(ls.Status.State).Should(Equal(operatorv1.TigeraStatusReady))
-		})
-
 		It("handles LogStorage deletion", func() {
 			// Create a LogStorage instance.
 			ls := &operatorv1.LogStorage{}
@@ -313,9 +293,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 1},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).NotTo(BeNil())
-			Expect(warning).To(BeEmpty())
+			Expect(validateReplicasForNodeCount(spec)).NotTo(BeNil())
 		})
 
 		It("should return an error when replicas equals node count", func() {
@@ -324,72 +302,40 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				Nodes:   &operatorv1.Nodes{Count: 2},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).NotTo(BeNil())
-			Expect(warning).To(BeEmpty())
+			Expect(validateReplicasForNodeCount(spec)).NotTo(BeNil())
 		})
 
-		It("should return a warning when node count is only 1 more than replicas", func() {
-			var replicas int32 = 1
-			spec := &operatorv1.LogStorageSpec{
-				Nodes:   &operatorv1.Nodes{Count: 2},
-				Indices: &operatorv1.Indices{Replicas: &replicas},
-			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).To(BeNil())
-			Expect(warning).To(ContainSubstring("only 1 more than"))
-		})
-
-		It("should return a warning when node count is 3 and replicas is 2", func() {
-			var replicas int32 = 2
-			spec := &operatorv1.LogStorageSpec{
-				Nodes:   &operatorv1.Nodes{Count: 3},
-				Indices: &operatorv1.Indices{Replicas: &replicas},
-			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).To(BeNil())
-			Expect(warning).To(ContainSubstring("only 1 more than"))
-		})
-
-		It("should return no error or warning when node count exceeds replicas by 2 or more", func() {
+		It("should return no error when node count exceeds replicas", func() {
 			var replicas int32 = 1
 			spec := &operatorv1.LogStorageSpec{
 				Nodes:   &operatorv1.Nodes{Count: 3},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).To(BeNil())
-			Expect(warning).To(BeEmpty())
+			Expect(validateReplicasForNodeCount(spec)).To(BeNil())
 		})
 
-		It("should return no error or warning when replicas is 0 and node count is 1", func() {
+		It("should return no error when replicas is 0 and node count is 1", func() {
 			var replicas int32 = 0
 			spec := &operatorv1.LogStorageSpec{
 				Nodes:   &operatorv1.Nodes{Count: 1},
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).To(BeNil())
-			Expect(warning).To(BeEmpty())
+			Expect(validateReplicasForNodeCount(spec)).To(BeNil())
 		})
 
-		It("should return no error or warning when indices is nil", func() {
+		It("should return no error when indices is nil", func() {
 			spec := &operatorv1.LogStorageSpec{
 				Nodes: &operatorv1.Nodes{Count: 1},
 			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).To(BeNil())
-			Expect(warning).To(BeEmpty())
+			Expect(validateReplicasForNodeCount(spec)).To(BeNil())
 		})
 
-		It("should return no error or warning when nodes is nil", func() {
+		It("should return no error when nodes is nil", func() {
 			var replicas int32 = 1
 			spec := &operatorv1.LogStorageSpec{
 				Indices: &operatorv1.Indices{Replicas: &replicas},
 			}
-			warning, err := validateReplicasForNodeCount(spec)
-			Expect(err).To(BeNil())
-			Expect(warning).To(BeEmpty())
+			Expect(validateReplicasForNodeCount(spec)).To(BeNil())
 		})
 	})
 

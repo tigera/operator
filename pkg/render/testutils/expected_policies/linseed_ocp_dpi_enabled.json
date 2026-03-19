@@ -172,6 +172,19 @@
       },
       {
         "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'calico-apiserver'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
         "destination": {
           "ports": [
             8444

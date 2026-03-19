@@ -92,8 +92,16 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	GatewayControllerPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "gateway-api-controller-access"
 	GatewayCertgenPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "gateway-api-certgen-access"
 	wafFilterName                       = "waf-http-filter"
+
+	// Envoy gateway controller serving ports.
+	EnvoyGatewayPortGRPC      = 18000
+	EnvoyGatewayPortRateLimit = 18001
+	EnvoyGatewayPortWasm      = 18002
+	EnvoyGatewayPortMetrics   = 19001
+	EnvoyGatewayPortWebhook   = 9443
 )
 
 var (
@@ -642,6 +650,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// default-deny policy.
 	objs = append(objs,
 		pr.gatewayCertgenAllowTigeraPolicy(),
+		pr.gatewayControllerAllowTigeraPolicy(),
 		networkpolicy.CalicoSystemDefaultDeny(common.TigeraGatewayNamespace),
 	)
 
@@ -1202,6 +1211,44 @@ func (pr *gatewayAPIImplementationComponent) gatewayCertgenAllowTigeraPolicy() *
 			Tier:     networkpolicy.TigeraComponentTierName,
 			Selector: "app == 'certgen'",
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+// gatewayControllerAllowTigeraPolicy creates a NetworkPolicy that allows the envoy-gateway
+// controller to access DNS and the Kubernetes API server, and to receive ingress on its
+// serving ports (xDS gRPC, ratelimit, wasm, metrics, webhook).
+func (pr *gatewayAPIImplementationComponent) gatewayControllerAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.Installation.KubernetesProvider.IsOpenShift())
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+	})
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(EnvoyGatewayPortGRPC, EnvoyGatewayPortRateLimit, EnvoyGatewayPortWasm, EnvoyGatewayPortMetrics, EnvoyGatewayPortWebhook),
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GatewayControllerPolicyName,
+			Namespace: common.TigeraGatewayNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: "k8s-app == '" + GatewayControllerLabel + "'",
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
 			Egress:   egressRules,
 		},
 	}

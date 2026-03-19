@@ -217,6 +217,16 @@ var _ = Describe("ECK rendering tests", func() {
 					Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
 				},
 				{
+					APIGroups: []string{"autoops.k8s.elastic.co"},
+					Resources: []string{"autoopsagentpolicies", "autoopsagentpolicies/status", "autoopsagentpolicies/finalizers"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
+					APIGroups: []string{"packageregistry.k8s.elastic.co"},
+					Resources: []string{"packageregistries", "packageregistries/status", "packageregistries/finalizers"},
+					Verbs:     []string{"get", "list", "watch"},
+				},
+				{
 					APIGroups: []string{"storage.k8s.io"},
 					Resources: []string{"storageclasses"},
 					Verbs:     []string{"get", "list", "watch"},

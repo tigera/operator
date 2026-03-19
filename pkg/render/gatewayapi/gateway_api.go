@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -29,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
@@ -90,6 +92,7 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	GatewayCertgenPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "gateway-api-certgen-access"
 	wafFilterName                       = "waf-http-filter"
 )
 
@@ -635,6 +638,13 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
+	// Add network policies to allow gateway components to function under a
+	// default-deny policy.
+	objs = append(objs,
+		pr.gatewayCertgenAllowTigeraPolicy(),
+		networkpolicy.CalicoSystemDefaultDeny(common.TigeraGatewayNamespace),
+	)
+
 	// Provision GatewayClasses.
 	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
 		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
@@ -671,7 +681,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      gcName,
-					Namespace: "tigera-gateway",
+					Namespace: common.TigeraGatewayNamespace,
 				},
 			},
 		)
@@ -706,7 +716,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		envoyProxy.APIVersion = "gateway.envoyproxy.io/v1alpha1"
 	}
 	envoyProxy.Name = className
-	envoyProxy.Namespace = "tigera-gateway"
+	envoyProxy.Namespace = common.TigeraGatewayNamespace
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
@@ -1052,7 +1062,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayClass(className, controllerN
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      className,
-			Namespace: "tigera-gateway",
+			Namespace: common.TigeraGatewayNamespace,
 		},
 		Spec: gapi.GatewayClassSpec{
 			ControllerName: gapi.GatewayController(controllerName),
@@ -1114,7 +1124,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *core
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wafFilterName,
-			Namespace: "tigera-gateway",
+			Namespace: common.TigeraGatewayNamespace,
 		},
 	}
 }
@@ -1165,8 +1175,34 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
-				Namespace: "tigera-gateway",
+				Namespace: common.TigeraGatewayNamespace,
 			},
+		},
+	}
+}
+
+// gatewayCertgenAllowTigeraPolicy creates a NetworkPolicy that allows the certgen job
+// to access DNS and the Kubernetes API server, which it needs to create TLS secrets.
+func (pr *gatewayAPIImplementationComponent) gatewayCertgenAllowTigeraPolicy() *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, pr.cfg.Installation.KubernetesProvider.IsOpenShift())
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+	})
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GatewayCertgenPolicyName,
+			Namespace: common.TigeraGatewayNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.TigeraComponentTierName,
+			Selector: "app == 'certgen'",
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
 		},
 	}
 }

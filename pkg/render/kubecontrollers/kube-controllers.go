@@ -404,6 +404,19 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 			Resources: []string{"virtualmachineinstances", "virtualmachines"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		{
+			// The datastore migration controller watches DatastoreMigration CRs and updates their status.
+			APIGroups: []string{"migration.projectcalico.org"},
+			Resources: []string{"datastoremigrations", "datastoremigrations/status"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch"},
+		},
+		{
+			// The datastore migration controller needs to list/watch CRDs to determine
+			// which API group is active.
+			APIGroups: []string{"apiextensions.k8s.io"},
+			Resources: []string{"customresourcedefinitions"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 	}
 
 	if cfg.Installation.KubernetesProvider.IsOpenShift() {

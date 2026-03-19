@@ -1266,11 +1266,18 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	// Linseed client configuration for policy activity enrichment.
-	// The queryserver uses its own TLS cert for mTLS with Linseed.
+	linseedURL := fmt.Sprintf("https://tigera-linseed.%s.svc", ElasticsearchNamespace)
+	if c.cfg.ManagementClusterConnection != nil {
+		linseedURL = "https://guardian.calico-system.svc"
+	}
 	env = append(env,
+		corev1.EnvVar{Name: "LINSEED_URL", Value: linseedURL},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
 	)
+	if c.cfg.TrustedBundle != nil {
+		env = append(env, corev1.EnvVar{Name: "LINSEED_CA", Value: c.cfg.TrustedBundle.MountPath()})
+	}
 
 	// set LogLEVEL for queryserver container
 	if logging := c.cfg.APIServer.Logging; logging != nil &&
@@ -1414,12 +1421,6 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"delete",
 				"patch",
 			},
-		},
-		{
-			// Linseed policy activity access for queryserver enrichment.
-			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"policyactivity"},
-			Verbs:     []string{"get"},
 		},
 	}
 

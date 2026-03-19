@@ -227,12 +227,12 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 		buildEnv = append(buildEnv, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	}
 	image := c.String(imageFlag.Name)
-	if image != defaultImageName {
+	if image != defaultImage {
 		buildLog = buildLog.WithField("image", image)
 		buildEnv = append(buildEnv, fmt.Sprintf("BUILD_IMAGE=%s", image))
 	}
 	registry := c.String(registryFlag.Name)
-	if registry != "" && registry != quayRegistry {
+	if registry != "" && registry != defaultRegistry {
 		buildLog = buildLog.WithField("registry", registry)
 		buildEnv = append(buildEnv,
 			fmt.Sprintf("IMAGE_REGISTRY=%s", registry),
@@ -334,14 +334,14 @@ func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 // It registers a cleanup function to reset git state after the build completes.
 var setupHashreleaseBuild = func(ctx context.Context, c *cli.Command, repoRootDir string) error {
 	image := c.String(imageFlag.Name)
-	if image != defaultImageName {
+	if image != defaultImage {
 		imageParts := strings.SplitN(c.String(imageFlag.Name), "/", 2)
 		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, operatorImagePathConfigKey, addTrailingSlash(imageParts[0])); err != nil {
 			return fmt.Errorf("updating Operator image path: %w", err)
 		}
 	}
 	registry := c.String(registryFlag.Name)
-	if registry != "" && registry != quayRegistry {
+	if registry != "" && registry != defaultRegistry {
 		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, operatorRegistryConfigKey, addTrailingSlash(registry)); err != nil {
 			return fmt.Errorf("updating Operator registry: %w", err)
 		}

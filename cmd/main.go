@@ -212,7 +212,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	v3CRDs, err := apis.UseV3CRDS(cs)
+	v3CRDs, err := apis.UseV3CRDS(cfg)
 	if err != nil {
 		log.Error(err, "Failed to determine CRD version to use")
 		os.Exit(1)

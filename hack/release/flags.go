@@ -157,7 +157,7 @@ var (
 		Category: operatorFlagCategory,
 		Usage:    "The image name to use for the new operator (ONLY for hashreleases operator).",
 		Sources:  cli.EnvVars("IMAGE_NAME"),
-		Value:    defaultImageName,
+		Value:    defaultImage,
 	}
 	archOptions = []string{"amd64", "arm64", "ppc64le", "s390x"}
 	archFlag    = &cli.StringSliceFlag{
@@ -181,7 +181,7 @@ var (
 		Category: operatorFlagCategory,
 		Usage:    "The registry to push the new operator to (ONLY for hashreleases operator).",
 		Sources:  cli.EnvVars("REGISTRY"),
-		Value:    quayRegistry,
+		Value:    defaultRegistry,
 	}
 )
 

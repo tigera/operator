@@ -34,12 +34,17 @@ import (
 //go:embed templates/release-notes.md.gotmpl
 var releaseNoteTemplate string
 
+var (
+	defaultRegistry = quayRegistry
+	defaultImage    = operatorImage
+)
+
 const (
 	dockerHub    = "docker.io"
 	quayRegistry = "quay.io"
 
-	mainRepo         = "tigera/operator"
-	defaultImageName = "tigera/operator"
+	mainRepo      = "tigera/operator"
+	operatorImage = "tigera/operator"
 
 	tmplGithubFileURL = `https://github.com/{gitRepo}/raw/{gitHashOrTag}/{filePath}`
 

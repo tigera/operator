@@ -133,11 +133,11 @@ var publishImages = func(c *cli.Command, repoRootDir string) error {
 		log = log.WithField("arches", arches)
 		publishEnv = append(publishEnv, fmt.Sprintf("ARCHES=%s", strings.Join(arches, " ")))
 	}
-	if image := c.String(imageFlag.Name); image != defaultImageName {
+	if image := c.String(imageFlag.Name); image != defaultImage {
 		log = log.WithField("image", image)
 		publishEnv = append(publishEnv, fmt.Sprintf("BUILD_IMAGE=%s", image))
 	}
-	if registry := c.String(registryFlag.Name); registry != "" && registry != quayRegistry {
+	if registry := c.String(registryFlag.Name); registry != "" && registry != defaultRegistry {
 		log = log.WithField("registry", registry)
 		publishEnv = append(publishEnv,
 			fmt.Sprintf("IMAGE_REGISTRY=%s", registry),
@@ -164,7 +164,7 @@ var publishImages = func(c *cli.Command, repoRootDir string) error {
 func operatorImagePublished(c *cli.Command) (bool, error) {
 	registry := c.String(registryFlag.Name)
 	if registry == "" {
-		registry = quayRegistry
+		registry = defaultRegistry
 	}
 	fqImage := fmt.Sprintf("%s:%s", path.Join(registry, c.String(imageFlag.Name)), c.String(versionFlag.Name))
 	ref, err := name.ParseReference(fqImage)

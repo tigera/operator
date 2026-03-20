@@ -373,7 +373,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 FV_IMAGE_REGISTRY := docker.io
-VERSION_TAG := master
+VERSION_TAG := release-v1.42
 NODE_IMAGE := calico/node
 APISERVER_IMAGE := calico/apiserver
 CNI_IMAGE := calico/cni

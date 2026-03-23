@@ -2,57 +2,34 @@
 
 ## Preparing a new release branch
 
-For a major or minor release, you will need to create:
+For a major or minor release, you will need to create a new `release-vX.Y` branch, a dev tag on master,
+and a GitHub milestone for the next release. The `create-release-branch` Makefile target automates this:
 
-- A new `release-vX.Y` branch based on the target minor version.  We always do releases from a release
-  branch, not from master.
-- An empty commit on the master branch, tagged with the "dev" version for the next minor release.
-  This ensures that `git describe --tags` (which is used to generate versions for CI builds) will
-  produce a version that "makes sense" for master commits after the release branch is created.
-- A new GitHub milestone for the next minor release.  This ensures that new PRs get auto-added to
-  the correct milestone.
+```sh
+make create-release-branch STREAM=vX.Y CALICO_REF=<calico-git-ref> ENTERPRISE_REF=<enterprise-git-ref>
+```
 
-To create a new release branch:
+This command:
 
-1. If needed, fetch the latest changes from the repository remote `<remote>`:
+- Creates a `release-vX.Y` branch from master
+- Updates `config/calico_versions.yml` and `config/enterprise_versions.yml` to point at the given refs
+- Runs `make fix gen-versions-calico gen-versions-enterprise` to regenerate files
+- Commits the changes to the release branch
+- Switches back to master, creates an empty commit, and tags it `vX.Y.0-0.dev`
+- Pushes the release branch, master, and tag to the remote
 
-    ```sh
-    git fetch <remote>
-    ```
+**Flags / environment variables:**
 
-1. Create a new branch based on the target minor version:
+| Env var                     | Flag                      | Description                                                       |
+| --------------------------- | ------------------------- | ----------------------------------------------------------------- |
+| `STREAM` (required)         | `--stream`                | Release stream, e.g., `v1.43`                                     |
+| `CALICO_REF` (required)     | `--calico-ref`            | Calico git ref (branch or tag), e.g., `release-v3.32`             |
+| `ENTERPRISE_REF` (required) | `--enterprise-ref`        | Enterprise git ref (branch or tag), e.g., `release-calient-v3.22` |
+| `RELEASE_BRANCH_PREFIX`     | `--release-branch-prefix` | Branch name prefix (default: `release`)                           |
 
-   ```sh
-   git checkout <remote>/master -b release-vX.Y
-   ```
-
-1. Push the new branch to the repository:
-
-   ```sh
-   git push <remote> release-vX.Y
-   ```
-
-To create an empty commit and tag on master; run the following commands.  This will push directly to master,
-bypassing the normal PR process.  This is important to make sure that the tag is directly on the master branch.
-We create an empty commit because, when the release branch is created, it shares its commit history with master.
-So, if we tagged the tip of master, we'd also be tagging the tip of the release branch, which would give
-incorrect results for `git describe --tags` on the release branch.
-
-   ```sh
-   git checkout <remote>/master
-   git commit --allow-empty -m "Start development on vX.Y"  # Where vX.Y is the next minor version
-   git tag vX.Y.0-0.dev
-   git push <remote> HEAD:master   # Note: if someone updates master before you push, delete the tag and start over from the new tip of master.
-   git push <remote> vX.Y.0-0.dev
-   ```
-
-*Note* that the tag should have the exact format `vX.Y.0-0.dev` where `X.Y` is the next minor version.
-The `-0.dev` suffix was chosen to produce a semver-compliant version that is less than the
-first release version for the new minor version.
-
-Finally, create the next minor release's first milestone at https://github.com/tigera/operator/milestones.
-This would mean if the branch release-v1.30 is being created, then the milestone v1.31.0 should be created too.
-This ensures that new PRs against master will be automatically given the correct tag.
+After the branch is created, create the next minor release's first milestone at
+https://github.com/tigera/operator/milestones (e.g., if `release-v1.43` was created,
+create milestone `v1.44.0`).
 
 ## Preparing for the release
 

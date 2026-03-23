@@ -615,7 +615,6 @@ hack/release/ut:
 	sh -c '$(GIT_CONFIG_SSH) \
 	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
 
-
 release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
 	hack/bin/release from
 
@@ -630,6 +629,9 @@ endif
 
 release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-one-of-CALICO_VERSION-ENTERPRISE_VERSION
 	@REPO=$(REPO) hack/bin/release prep
+
+create-release-branch: hack/bin/release var-require-all-STREAM
+	RELEASE_STREAM=$(STREAM) hack/bin/release branch
 
 ###############################################################################
 # Utilities

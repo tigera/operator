@@ -16,13 +16,11 @@ package clusterconnection
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 
-	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/goldmane"
-	"github.com/tigera/operator/pkg/render/whisker"
 	"golang.org/x/net/http/httpproxy"
 	v1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -50,9 +48,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -70,7 +71,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	// Create the reconciler
 	tierWatchReady := &utils.ReadyFlag{}
-	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, opts)
+	clusterInfoWatchReady := &utils.ReadyFlag{}
+	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, clusterInfoWatchReady, opts)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
@@ -89,13 +91,16 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 		})
 	}
 
+	// Watch for changes to ClusterInformation, as Guardian needs to restart the tunnel
+	// if the cluster's version changes.
+	go utils.WaitToAddClusterInformationWatch(c, opts.K8sClientset, log, clusterInfoWatchReady)
+
 	for _, secretName := range []string{
 		render.PacketCaptureServerCert,
 		monitor.PrometheusServerTLSSecretName,
 		goldmane.GoldmaneKeyPairSecret,
 		certificatemanagement.TrustedBundleName("guardian", false),
-		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.TigeraSecureEnterprise),
-		render.ProjectCalicoAPIServerTLSSecretName(operatorv1.Calico),
+		render.CalicoAPIServerTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -160,15 +165,17 @@ func newReconciler(
 	statusMgr status.StatusManager,
 	p operatorv1.Provider,
 	tierWatchReady *utils.ReadyFlag,
+	clusterInfoWatchReady *utils.ReadyFlag,
 	opts options.AddOptions,
 ) *ReconcileConnection {
 	c := &ReconcileConnection{
-		cli:            cli,
-		scheme:         schema,
-		provider:       p,
-		status:         statusMgr,
-		clusterDomain:  opts.ClusterDomain,
-		tierWatchReady: tierWatchReady,
+		cli:                   cli,
+		scheme:                schema,
+		provider:              p,
+		status:                statusMgr,
+		clusterDomain:         opts.ClusterDomain,
+		tierWatchReady:        tierWatchReady,
+		clusterInfoWatchReady: clusterInfoWatchReady,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -185,6 +192,7 @@ type ReconcileConnection struct {
 	status                     status.StatusManager
 	clusterDomain              string
 	tierWatchReady             *utils.ReadyFlag
+	clusterInfoWatchReady      *utils.ReadyFlag
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
 }
@@ -195,7 +203,7 @@ type ReconcileConnection struct {
 // remove the work from the queue.
 func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling the management cluster connection")
+	reqLogger.V(2).Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
 	variant, instl, err := utils.GetInstallation(ctx, r.cli)
@@ -210,7 +218,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
-		return result, r.maintainFinalizer(ctx, nil)
+		f, err := r.maintainFinalizer(ctx, nil)
+		// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer
+		if f {
+			return reconcile.Result{RequeueAfter: utils.FinalizerRemovalRetry}, nil
+		} else {
+			return reconcile.Result{}, err
+		}
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -245,12 +259,24 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	if err := utils.ApplyDefaults(ctx, r.cli, managementClusterConnection); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+	// Validate that the cluster information watch is ready.
+	if !r.clusterInfoWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for clusterInfoWatchReady watch to be established", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	if err = validate(managementClusterConnection, instl.Variant); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if err := r.maintainFinalizer(ctx, managementClusterConnection); err != nil {
+	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+	fillDefaults(managementClusterConnection, instl.Variant)
+	if err = r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
+	}
+
+	if _, err = r.maintainFinalizer(ctx, managementClusterConnection); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -274,7 +300,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
 		common.OperatorNamespace(), includeSystem,
-		render.ProjectCalicoAPIServerTLSSecretName(instl.Variant), render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
+		render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
@@ -377,6 +403,18 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
+	var managedClusterVersion string
+	clusterInformation, err := utils.FetchClusterInformation(ctx, r.cli)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying clusterInformation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if variant == operatorv1.TigeraSecureEnterprise {
+		managedClusterVersion = clusterInformation.Spec.CNXVersion
+	} else {
+		managedClusterVersion = clusterInformation.Spec.CalicoVersion
+	}
+
 	var includeEgressNetworkPolicy bool
 	if variant == operatorv1.TigeraSecureEnterprise {
 		// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
@@ -409,6 +447,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		// License becomes available. Therefore, if we fail to query the Tier, we exclude NetworkPolicy from reconciliation
 		// and tolerate errors arising from the Tier not being created.
 		includeEgressNetworkPolicy = tierAvailable && licenseActive
+
 	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
@@ -423,6 +462,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		TrustedCertBundle:           trustedBundle,
 		ManagementClusterConnection: managementClusterConnection,
 		GuardianClientKeyPair:       guardianKeyPair,
+		Version:                     managedClusterVersion,
 	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -466,8 +506,33 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// We should create the Guardian deployment.
 	return result, nil
 }
-func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) error {
+
+// The bool return value indicates if the finalizer is Set
+func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, render.GuardianFinalizer, &guardianDeployment)
+}
+
+func validate(cr *operatorv1.ManagementClusterConnection, variant operatorv1.ProductVariant) error {
+	if variant == operatorv1.Calico && cr.Spec.Impersonation != nil {
+		return errors.New("ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico")
+	}
+	return nil
+}
+
+func fillDefaults(cr *operatorv1.ManagementClusterConnection, variant operatorv1.ProductVariant) {
+	if cr.Spec.TLS == nil {
+		cr.Spec.TLS = &operatorv1.ManagementClusterTLS{}
+	}
+	if cr.Spec.TLS.CA == "" {
+		cr.Spec.TLS.CA = operatorv1.CATypeTigera
+	}
+	if variant == operatorv1.TigeraSecureEnterprise && cr.Spec.Impersonation == nil {
+		cr.Spec.Impersonation = &operatorv1.Impersonation{
+			Users:           []string{},
+			Groups:          []string{},
+			ServiceAccounts: []string{},
+		}
+	}
 }

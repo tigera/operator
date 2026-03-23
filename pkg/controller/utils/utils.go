@@ -24,6 +24,7 @@ import (
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
+	csiv1 "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
 	"github.com/go-logr/logr"
 
@@ -35,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/client-go/kubernetes"
@@ -68,6 +70,7 @@ var (
 	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
 	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
 	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
+	KubeProxyInstanceKey   = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
 
 	PeriodicReconcileTime = 5 * time.Minute
 
@@ -75,6 +78,9 @@ var (
 	// most scenarios. Retries should be used sparingly, and only in extraordinary
 	// circumstances. Use this as a default when retries are needed.
 	StandardRetry = 30 * time.Second
+	// FinalizerRemovalRetry is the amount of time to wait before retrying a request
+	// when waiting for the removal of a finalizer from the Installation by a non-core controller.
+	FinalizerRemovalRetry = 10 * time.Second
 
 	// AllowedSysctlKeys controls the allowed Sysctl keys can be set in Tuning plugin
 	AllowedSysctlKeys = map[string]bool{
@@ -89,7 +95,7 @@ func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
 	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
 	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	return log.WithValues("Name", name, "Namespace", namespace, "Kind", gvk.Kind)
+	return log.WithValues("name", name, "namespace", namespace, "kind", gvk.Kind)
 }
 
 // IgnoreObject returns true if the object has been marked as ignored by the user,
@@ -126,16 +132,28 @@ func AddNamespaceWatch(c ctrlruntime.Controller, name string) error {
 
 type MetaMatch func(metav1.ObjectMeta) bool
 
-func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string, metaMatches ...MetaMatch) error {
-	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{}, metaMatches...)
+func AddSecretsWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddSecretsWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
 }
 
-func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler, metaMatches ...MetaMatch) error {
+func AddSecretsWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
 	s := &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "V1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}
-	return AddNamespacedWatch(c, s, h, metaMatches...)
+	return AddNamespacedWatch(c, s, h)
+}
+
+func AddSecretProviderClassWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddSecretProviderClassWatchWithHandler(c, name, namespace, &handler.EnqueueRequestForObject{})
+}
+
+func AddSecretProviderClassWatchWithHandler(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
+	s := &csiv1.SecretProviderClass{
+		TypeMeta:   metav1.TypeMeta{Kind: "SecretProviderClass", APIVersion: "secrets-store.csi.x-k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}
+	return AddNamespacedWatch(c, s, h)
 }
 
 func AddConfigMapWatch(c ctrlruntime.Controller, name, namespace string, h handler.EventHandler) error {
@@ -225,6 +243,10 @@ func WaitToAddLicenseKeyWatch(controller ctrlruntime.Controller, c kubernetes.In
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.LicenseKey{TypeMeta: metav1.TypeMeta{Kind: v3.KindLicenseKey}}})
 }
 
+func WaitToAddClusterInformationWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
+	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.ClusterInformation{TypeMeta: metav1.TypeMeta{Kind: v3.KindClusterInformation}}})
+}
+
 func WaitToAddPolicyRecommendationScopeWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.PolicyRecommendationScope{TypeMeta: metav1.TypeMeta{Kind: v3.KindPolicyRecommendationScope}}})
 }
@@ -256,10 +278,18 @@ func WaitToAddTierWatch(tierName string, controller ctrlruntime.Controller, c ku
 // AddNamespacedWatch creates a watch on the given object. If a name and namespace are provided, then it will
 // use predicates to only return matching objects. If they are not, then all events of the provided kind
 // will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
-func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler, metaMatches ...MetaMatch) error {
-	objMeta := obj.(metav1.ObjectMetaAccessor).GetObjectMeta()
-	pred := createPredicateForObject(objMeta)
+func AddNamespacedWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler) error {
+	pred := createPredicateForObject(obj)
 	return c.WatchObject(obj, h, pred)
+}
+
+// AddClusterWatch creates a watch on the given Cluster scoped object. If a name is provided, then it will
+// use predicates to only return matching objects. If it is not, then all events of the provided kind
+// will be generated. Updates that do not modify the object's generation (e.g., status and metadata) will be ignored.
+// If a namespace is set on the obj passed in, the namespace will be set to the empty string.
+func AddClusterWatch(c ctrlruntime.Controller, obj client.Object, h handler.EventHandler) error {
+	obj.SetNamespace("")
+	return AddNamespacedWatch(c, obj, h)
 }
 
 func IsAPIServerReady(client client.Client, l logr.Logger) bool {
@@ -310,6 +340,13 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 // It will return an error if the license is not installed/cannot be read
 func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}
+	err := cli.Get(ctx, DefaultInstanceKey, instance)
+	return *instance, err
+}
+
+// FetchClusterInformation fetches and returns the clusterinformation.
+func FetchClusterInformation(ctx context.Context, cli client.Client) (v3.ClusterInformation, error) {
+	instance := &v3.ClusterInformation{}
 	err := cli.Get(ctx, DefaultInstanceKey, instance)
 	return *instance, err
 }
@@ -472,23 +509,6 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	}
 
 	return obj, nil
-}
-
-type Defaultable[E any, O ClientObjType[E]] interface {
-	ClientObjType[E]
-	client.Object
-	FillDefaults()
-	DeepCopy() O
-}
-
-// ApplyDefaults sets any defaults that haven't been set on the given object and writes it to the k8s server.
-func ApplyDefaults[E any, O ClientObjType[E], D Defaultable[E, O]](ctx context.Context, c client.Client, obj D) error {
-	preDefaultPatchFrom := client.MergeFrom(obj.DeepCopy())
-	obj.FillDefaults()
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	return c.Patch(ctx, obj, preDefaultPatchFrom)
 }
 
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.
@@ -661,8 +681,8 @@ type resourceWatchContext struct {
 	logger    logr.Logger
 }
 
-// WaitToAddResourceWatch will check if projectcalico.org APIs are available and if so, it will add a watch for resource
-// The completion of this operation will be signaled on a ready channel
+// WaitToAddResourceWatch will check if the required CRD APIs are available and if so, it will add a watch for the
+// resource. The completion of this operation will be signaled on a ready channel
 func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
 	// Track resources left to watch and establish their watch context.
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
@@ -687,7 +707,8 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 		for obj := range resourcesToWatch {
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
-			if ok, err := isCalicoResourceReady(c, obj.GetObjectKind().GroupVersionKind().Kind); err != nil {
+			gvk := obj.GetObjectKind().GroupVersionKind()
+			if ok, err := isResourceReady(c, gvk); err != nil {
 				msg := "Failed to check if resource is ready - will retry"
 				if errors.IsNotFound(err) {
 					objLog.WithValues("Error", err).V(2).Info(msg)
@@ -713,17 +734,27 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 	}
 }
 
-// isCalicoResourceReady checks if the specified resourceKind is available.
-// the resourceKind must be of the calico resource group.
-func isCalicoResourceReady(client kubernetes.Interface, resourceKind string) (bool, error) {
+// isResourceReady checks if the specified resource is available.
+func isResourceReady(client kubernetes.Interface, gvk schema.GroupVersionKind) (bool, error) {
+	gv := gvk.GroupVersion()
+	if gv.Empty() {
+		// Default to the Calico group and version if not specified so existing callers that only
+		// provide the Kind continue to function.
+		var err error
+		gv, err = schema.ParseGroupVersion(v3.GroupVersionCurrent)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	// Only get the resources for the groupVersion we care about so that we are resilient to other
 	// apiservices being down.
-	res, err := client.Discovery().ServerResourcesForGroupVersion(v3.GroupVersionCurrent)
+	res, err := client.Discovery().ServerResourcesForGroupVersion(gv.String())
 	if err != nil {
 		return false, err
 	}
 	for _, r := range res.APIResources {
-		if resourceKind == r.Kind {
+		if gvk.Kind == r.Kind {
 			return true, nil
 		}
 	}
@@ -825,6 +856,17 @@ func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch
 		return nil, err
 	}
 	return &es, nil
+}
+
+// AddKubeProxyWatch creates a watch on the kube-proxy DaemonSet.
+func AddKubeProxyWatch(c ctrlruntime.Controller) error {
+	ds := &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{
+			Namespace: KubeProxyInstanceKey.Namespace,
+			Name:      KubeProxyInstanceKey.Name,
+		},
+	}
+	return c.WatchObject(&appsv1.DaemonSet{}, &handler.EnqueueRequestForObject{}, createPredicateForObject(ds))
 }
 
 func IsNodeLocalDNSAvailable(ctx context.Context, cli client.Client) (bool, error) {
@@ -994,48 +1036,118 @@ func RemoveInstallationFinalizer(i *operatorv1.Installation, finalizer string) {
 // We add a finalizer to the Installation when the mainResource has been installed, and only remove that finalizer when
 // the resource has been deleted and its secondary resources have stopped running. This allows for a graceful cleanup of any resources
 // prior to the CNI plugin being removed.
+// The bool return value indicates if the finalizer is Set
 func MaintainInstallationFinalizer(
 	ctx context.Context,
 	c client.Client,
 	mainResource client.Object,
 	finalizer string,
 	secondaryResources ...client.Object,
-) error {
+) (bool, error) {
+	finalizerSet := false
 	// Get the Installation.
 	installation := &operatorv1.Installation{}
 	if err := c.Get(ctx, DefaultInstanceKey, installation); err != nil {
 		if errors.IsNotFound(err) {
 			log.V(1).Info("Installation config not found")
-			return nil
+			return finalizerSet, nil
 		}
 		log.Error(err, "An error occurred when querying the Installation resource")
-		return err
+		return finalizerSet, err
 	}
-	patchFrom := client.MergeFrom(installation.DeepCopy())
+	// Use optimistic locking so that concurrent finalizer patches from different controllers
+	// (e.g., whisker and goldmane) produce a conflict error instead of silently overwriting
+	// each other. JSON merge patch replaces the entire finalizers array, so without the lock
+	// the second writer wins and the first controller's finalizer is lost until re-reconciliation.
+	patchFrom := client.MergeFromWithOptions(installation.DeepCopy(), client.MergeFromWithOptimisticLock{})
 
 	// Determine the correct finalizers to apply to the Installation.
 	if mainResource != nil {
 		// Add a finalizer indicating that the mainResource is still available.
 		SetInstallationFinalizer(installation, finalizer)
+		finalizerSet = true
 	} else {
+		// Remove the finalizer. We can skip this check if the finalizer is already not present.
+		if !stringsutil.StringInSlice(finalizer, installation.GetFinalizers()) {
+			log.V(2).Info("Finalizer not present, skipping removal", "finalizer", finalizer)
+			return finalizerSet, nil
+		}
+		finalizerSet = true
+
 		// Check if the namespaced secondaryResources are still present.
 		// Keep track of all the secondary resources that the main resource creates.
-		// Only delete the finalizer if all of the secondary resources are deleted.
+		// Only delete the finalizer if all of the secondary resources are deleted and there are no lingering Pods.
 		for _, secondaryResource := range secondaryResources {
 			err := c.Get(ctx, types.NamespacedName{Namespace: secondaryResource.GetNamespace(), Name: secondaryResource.GetName()}, secondaryResource)
 			if err != nil && !errors.IsNotFound(err) {
-				return err
+				return finalizerSet, err
 			} else if errors.IsNotFound(err) {
 				log.Info("Object no longer exists.", "object", secondaryResource)
 			} else {
 				log.Info("Object is still present, waiting for termination", "object", secondaryResource)
-				return nil
+				return finalizerSet, nil
+			}
+
+			// If the secondary resource itself is gone, ensure there are no Pods left over from this resource.
+			terminated, err := AllPodsTerminated(ctx, c, secondaryResource)
+			if err != nil {
+				return finalizerSet, err
+			}
+			if !terminated {
+				log.Info("Pods for object are still present, waiting for termination", "object", secondaryResource)
+				return finalizerSet, nil
 			}
 		}
 		log.Info("All objects no longer exist. Removing finalizer", "finalizer", finalizer)
 		RemoveInstallationFinalizer(installation, finalizer)
+		finalizerSet = false
 	}
 
 	// Update the installation with any finalizer changes.
-	return c.Patch(ctx, installation, patchFrom)
+	return finalizerSet, c.Patch(ctx, installation, patchFrom)
+}
+
+func AllPodsTerminated(ctx context.Context, c client.Client, obj client.Object) (bool, error) {
+	// Find the selector to use for listing Pods owned by obj.
+	matchLabels := getMatchLabels(obj)
+	if matchLabels == nil {
+		// This resource doesn't have a selector, so it can't own Pods.
+		return true, nil
+	}
+
+	// List the Pods in the same namespace as obj, matching the selector.
+	podList := &corev1.PodList{}
+	if err := c.List(ctx, podList, client.InNamespace(obj.GetNamespace()), client.MatchingLabels(matchLabels)); err != nil {
+		return false, err
+	}
+	return len(podList.Items) == 0, nil
+}
+
+// getMatchLabels extracts the matchLabels from the given workload object.
+// Returns nil if the object is not a supported workload type or if it has no matchLabels.
+// TODO: This should be extended with full label selector support if we ever need to support more complex matching.
+func getMatchLabels(obj client.Object) map[string]string {
+	switch o := obj.(type) {
+	case *appsv1.Deployment:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+		// If the Selector or MatchLabels is nil then assume it isn't populated and return the operator default
+		if o.Spec.Selector == nil || o.Spec.Selector.MatchLabels == nil {
+			return map[string]string{"k8s-app": o.Name}
+		}
+	case *appsv1.DaemonSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+		// If the Selector or MatchLabels is nil then assume it isn't populated and return the operator default
+		if o.Spec.Selector == nil || o.Spec.Selector.MatchLabels == nil {
+			return map[string]string{"k8s-app": o.Name}
+		}
+	case *appsv1.StatefulSet:
+		if o.Spec.Selector != nil && o.Spec.Selector.MatchLabels != nil {
+			return o.Spec.Selector.MatchLabels
+		}
+	}
+	return nil
 }

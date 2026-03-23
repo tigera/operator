@@ -807,11 +807,12 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
 
-			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			// These are only set for multi-tenant clusters or internal ES. Make sure they aren't set here.
 			for _, env := range envs {
 				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
 				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
 				Expect(env.Name).NotTo(Equal("BACKEND"))
+				Expect(env.Name).NotTo(Equal("ELASTIC_MULTI_INDEX_TENANT_SUFFIX_ENABLED"))
 			}
 		})
 
@@ -824,6 +825,12 @@ var _ = Describe("Linseed rendering tests", func() {
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+
+			// Tenant ID is always set when a tenant is configured.
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+
+			// For internal ES, tenant suffix is disabled in multi-index names for backward compatibility.
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_MULTI_INDEX_TENANT_SUFFIX_ENABLED", Value: "false"}))
 
 			// These are only set for multi-tenant clusters. Make sure they aren't set here.
 			for _, env := range envs {

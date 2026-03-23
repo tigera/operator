@@ -377,9 +377,16 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
-		if l.cfg.ExternalElastic {
-			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		// Always set the expected tenant ID when a tenant is configured, regardless of
+		// whether Elasticsearch is internal or external. This ensures tenant isolation
+		// via the x-tenant-id header for all indices including shared single indices.
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+
+		if !l.cfg.ExternalElastic {
+			// For internal Elasticsearch, existing multi-index indices were created without
+			// tenant ID in the name. Disable tenant suffix in index names to preserve
+			// backward compatibility while still enforcing tenant isolation at the query level.
+			envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_MULTI_INDEX_TENANT_SUFFIX_ENABLED", Value: "false"})
 		}
 
 		if l.cfg.Tenant.MultiTenant() {

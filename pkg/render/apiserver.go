@@ -146,7 +146,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	} else {
-		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
+		c.apiServerImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -930,11 +930,17 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
+	var command []string
+	if c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		command = []string{"calico", "apiserver"}
+	}
+
 	apiServer := corev1.Container{
-		Name:  APIServerContainerName,
-		Image: c.apiServerImage,
-		Args:  c.startUpArgs(),
-		Env:   env,
+		Name:    APIServerContainerName,
+		Image:   c.apiServerImage,
+		Command: command,
+		Args:    c.startUpArgs(),
+		Env:     env,
 		// OpenShift apiserver needs privileged access to write audit logs to host path volume.
 		// Audit logs are owned by root on hosts so we need to be root user and group.
 		SecurityContext: securitycontext.NewRootContext(c.cfg.Openshift),

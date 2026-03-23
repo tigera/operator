@@ -211,7 +211,7 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, prefix, is)
+		c.image, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 	}
 	return err
 }
@@ -457,19 +457,26 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	sc.RunAsUser = ptr.Int64ToPtr(999)
 	sc.RunAsGroup = ptr.Int64ToPtr(0)
 
+	readinessCmd := []string{"/usr/bin/check-status", "-r"}
+	livenessCmd := []string{"/usr/bin/check-status", "-l"}
+	var command []string
+	if c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		command = []string{"calico", "kube-controllers"}
+		readinessCmd = []string{"/usr/bin/calico", "check-status", "-r"}
+		livenessCmd = []string{"/usr/bin/calico", "check-status", "-l"}
+	}
+
 	container := corev1.Container{
 		Name:      c.kubeControllerName,
 		Image:     c.image,
+		Command:   command,
 		Env:       env,
 		Resources: c.kubeControllersResources(),
 		ReadinessProbe: &corev1.Probe{
 			PeriodSeconds: int32(10),
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/usr/bin/check-status",
-						"-r",
-					},
+					Command: readinessCmd,
 				},
 			},
 			TimeoutSeconds: 10,
@@ -480,10 +487,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			FailureThreshold:    int32(6),
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/usr/bin/check-status",
-						"-l",
-					},
+					Command: livenessCmd,
 				},
 			},
 			TimeoutSeconds: 10,

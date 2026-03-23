@@ -93,10 +93,16 @@ func (c *csiComponent) csiTolerations() []corev1.Toleration {
 
 func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
+	var csiCommand []string
+	if c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		csiCommand = []string{"calico", "csi"}
+	}
+
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
 		Image:           c.csiImage,
 		ImagePullPolicy: corev1.PullIfNotPresent,
+		Command:         csiCommand,
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
 			"--loglevel=$(LOG_LEVEL)",
@@ -373,7 +379,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 		c.csiRegistrarImage, err = components.GetReference(components.ComponentCSINodeDriverRegistrarPrivate, reg, path, prefix, is)
 	} else {
-		c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
+		c.csiImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}

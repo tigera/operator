@@ -81,6 +81,12 @@ var (
 		Image:   "{{ .Image }}",
 	}
 {{- end }}
+{{ with index .Components "calico/calico"}}
+	ComponentCalico = component{
+		Version: "{{ .Version }}",
+		Image:   "{{ .Image }}",
+	}
+{{- end }}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -98,5 +104,6 @@ var (
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalico,
 	}
 )

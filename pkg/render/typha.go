@@ -96,7 +96,7 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
-		c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
+		c.typhaImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 	}
 	if err != nil {
 		return err
@@ -497,7 +497,7 @@ func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
 // typhaContainer creates the main typha container.
 func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes()
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            TyphaContainerName,
 		Image:           c.typhaImage,
 		Resources:       c.typhaResources(),
@@ -508,6 +508,10 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		ReadinessProbe:  rp,
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
+	if c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		container.Command = []string{"calico", "typha"}
+	}
+	return container
 }
 
 // typhaResources creates the typha's resource requirements.

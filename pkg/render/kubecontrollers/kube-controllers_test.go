@@ -183,9 +183,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		ds := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 
-		// Image override results in correct image.
+		// Image override results in correct image (uber image for OSS).
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("test-reg/%s:%s", components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
+			fmt.Sprintf("test-reg/%s:%s", components.ComponentCalico.Image, components.ComponentCalico.Version),
 		))
 
 		// Verify env

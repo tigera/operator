@@ -71,6 +71,11 @@ var (
 		Version: "master",
 		Image:   "calico/node-driver-registrar",
 	}
+
+	ComponentCalico = component{
+		Version: "master",
+		Image:   "calico/calico",
+	}
 	ComponentOperatorInit = component{
 		Version: version.VERSION,
 		Image:   "tigera/operator",
@@ -88,5 +93,6 @@ var (
 		ComponentWindowsUpgrade,
 		ComponentCalicoCSI,
 		ComponentCalicoCSIRegistrar,
+		ComponentCalico,
 	}
 )

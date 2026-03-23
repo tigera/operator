@@ -1612,7 +1612,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(1))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentCalicoAPIServer.Image, components.ComponentCalicoAPIServer.Version),
+			fmt.Sprintf("testregistry.com/%s:%s", components.ComponentCalico.Image, components.ComponentCalico.Version),
 		))
 
 		expectedArgs := []string{

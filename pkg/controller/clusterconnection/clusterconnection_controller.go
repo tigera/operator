@@ -470,6 +470,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// We should create the Guardian deployment.
 	return result, nil
 }
+
 // The bool return value indicates if the finalizer is set.
 func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.

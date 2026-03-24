@@ -15,53 +15,37 @@
 package apigroup
 
 import (
-	"testing"
-
+	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
-func TestSetAndGet(t *testing.T) {
-	tests := []struct {
-		name        string
-		set         APIGroup
-		wantGet     APIGroup
-		wantEnvVars []corev1.EnvVar
-	}{
-		{
-			name:        "default state is Unknown with nil env vars",
-			set:         Unknown,
-			wantGet:     Unknown,
-			wantEnvVars: nil,
-		},
-		{
-			name:    "V3 returns CALICO_API_GROUP env var",
-			set:     V3,
-			wantGet: V3,
-			wantEnvVars: []corev1.EnvVar{
-				{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
-			},
-		},
-		{
-			name:        "V1 returns nil env vars",
-			set:         V1,
-			wantGet:     V1,
-			wantEnvVars: nil,
-		},
-		{
-			name:        "setting back to Unknown clears env vars",
-			set:         Unknown,
-			wantGet:     Unknown,
-			wantEnvVars: nil,
-		},
-	}
+var _ = Describe("apigroup", func() {
+	It("should default to Unknown with nil env vars", func() {
+		Set(Unknown)
+		Expect(Get()).To(Equal(Unknown))
+		Expect(EnvVars()).To(BeNil())
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			g := NewWithT(t)
-			Set(tt.set)
-			g.Expect(Get()).To(Equal(tt.wantGet))
-			g.Expect(EnvVars()).To(Equal(tt.wantEnvVars))
-		})
-	}
-}
+	It("should return CALICO_API_GROUP env var when set to V3", func() {
+		Set(V3)
+		Expect(Get()).To(Equal(V3))
+		Expect(EnvVars()).To(Equal([]corev1.EnvVar{
+			{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"},
+		}))
+	})
+
+	It("should return nil env vars when set to V1", func() {
+		Set(V1)
+		Expect(Get()).To(Equal(V1))
+		Expect(EnvVars()).To(BeNil())
+	})
+
+	It("should clear env vars when set back to Unknown", func() {
+		Set(V3)
+		Set(Unknown)
+		Expect(Get()).To(Equal(Unknown))
+		Expect(EnvVars()).To(BeNil())
+	})
+})

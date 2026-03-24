@@ -218,7 +218,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return result, err
 	} else if managementClusterConnection == nil {
 		r.status.OnCRNotFound()
-		return result, r.maintainFinalizer(ctx, nil)
+		f, err := r.maintainFinalizer(ctx, nil)
+		if f {
+			return reconcile.Result{RequeueAfter: utils.FinalizerRemovalRetry}, nil
+		}
+		return result, err
 	}
 	r.status.OnCRFound()
 	// SetMetaData in the TigeraStatus such as observedGenerations.
@@ -270,7 +274,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 	}
 
-	if err = r.maintainFinalizer(ctx, managementClusterConnection); err != nil {
+	if _, err = r.maintainFinalizer(ctx, managementClusterConnection); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error setting finalizer on Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -501,7 +505,8 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	return result, nil
 }
 
-func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) error {
+// The bool return value indicates if the finalizer is set.
+func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementClusterConnection client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
 	guardianDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianDeploymentName, Namespace: render.GuardianNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, render.GuardianFinalizer, &guardianDeployment)

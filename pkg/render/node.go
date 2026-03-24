@@ -170,6 +170,7 @@ type nodeComponent struct {
 	cniImage     string
 	flexvolImage string
 	nodeImage    string
+	uberImage    bool
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -189,13 +190,15 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
 	} else {
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalicoFlexVolume, reg, path, prefix, is))
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalicoFlexVolume, reg, path, prefix, is))
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
 			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
 		} else {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalico, reg, path, prefix, is))
+			c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalico, reg, path, prefix, is))
 			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
+			c.uberImage = true
 		}
 	}
 
@@ -1187,11 +1190,16 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
+	cniCommand := []string{"/opt/cni/bin/install"}
+	if c.uberImage {
+		cniCommand = []string{"calico", "cni", "install"}
+	}
+
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
 		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{"/opt/cni/bin/install"},
+		Command:         cniCommand,
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    cniVolumeMounts,
@@ -1205,9 +1213,15 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
 
+	var flexvolCommand []string
+	if c.uberImage {
+		flexvolCommand = []string{"calico", "flexvol"}
+	}
+
 	return corev1.Container{
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
+		Command:         flexvolCommand,
 		ImagePullPolicy: ImagePullPolicy(),
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,

@@ -191,8 +191,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		// Image override results in correct image.
 		Expect(ds.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("test-reg/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
+			fmt.Sprintf("test-reg/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version),
 		))
+
+		// Verify command and probes use the uber image entrypoint.
+		Expect(ds.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"calico", "kube-controllers"}))
+		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command).To(Equal([]string{"calico", "check-status", "-r"}))
+		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe.Exec.Command).To(Equal([]string{"calico", "check-status", "-l"}))
 
 		// Verify env
 		expectedEnv := []corev1.EnvVar{

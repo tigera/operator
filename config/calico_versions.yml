@@ -49,3 +49,5 @@ components:
     version: master
   webhooks:
     version: master
+  calico:
+    version: master

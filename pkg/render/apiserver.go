@@ -157,6 +157,7 @@ type apiServerComponent struct {
 	l7AdmissionControllerImage      string
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
+	uberImage                       bool
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -196,10 +197,11 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 				errMsgs = append(errMsgs, err.Error())
 			}
 		} else {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
+			c.apiServerImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
+			c.uberImage = true
 		}
 	}
 
@@ -1175,9 +1177,15 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
+	var apiServerCommand []string
+	if c.uberImage {
+		apiServerCommand = []string{"calico", "apiserver"}
+	}
+
 	apiServer := corev1.Container{
 		Name:            string(APIServerContainerName),
 		Image:           c.apiServerImage,
+		Command:         apiServerCommand,
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
 		Env:             env,

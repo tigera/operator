@@ -116,7 +116,7 @@ var (
 		Category: operatorFlagCategory,
 		Usage:    "The suffix used to denote development tags",
 		Sources:  cli.EnvVars("DEV_TAG_SUFFIX"),
-		Value:    "0-dev",
+		Value:    "0.dev",
 	}
 	versionFlag = &cli.StringFlag{
 		Name:     "version",
@@ -136,6 +136,27 @@ var (
 			}
 			return nil
 		},
+	}
+	streamFlag = &cli.StringFlag{
+		Name:     "stream",
+		Category: operatorFlagCategory,
+		Usage:    "The release stream for the release branch name (e.g. vX.Y). The full branch name will be <release-branch-prefix>-<stream>",
+		Sources:  cli.EnvVars("RELEASE_STREAM"),
+		Required: true,
+		Action: func(ctx context.Context, c *cli.Command, s string) error {
+			// Validate stream is in the format vX.Y
+			if !regexp.MustCompile(`^v\d+\.\d+$`).MatchString(s) {
+				return fmt.Errorf("stream must be in the format vX.Y, got %q", s)
+			}
+			return nil
+		},
+	}
+	releaseBranchPrefixFlag = &cli.StringFlag{
+		Name:     "release-branch-prefix",
+		Category: operatorFlagCategory,
+		Usage:    "The prefix to use for the release branch name. The full branch name will be <prefix>-<stream>",
+		Sources:  cli.EnvVars("RELEASE_BRANCH_PREFIX"),
+		Value:    "release",
 	}
 	baseOperatorFlag = &cli.StringFlag{
 		Name:     "base-version",
@@ -269,6 +290,12 @@ var (
 			return nil
 		},
 	}
+	calicoRefFlag = &cli.StringFlag{
+		Name:     "calico-ref",
+		Category: calicoFlagCategory,
+		Usage:    "The Calico git ref (branch or tag) to use for version config (e.g. release-vX.Y)",
+		Sources:  cli.EnvVars("CALICO_REF"),
+	}
 	exceptCalicoFlag = &cli.StringSliceFlag{
 		Name:     "except-calico",
 		Category: calicoFlagCategory,
@@ -357,6 +384,12 @@ var (
 			}
 			return nil
 		},
+	}
+	enterpriseRefFlag = &cli.StringFlag{
+		Name:     "enterprise-ref",
+		Category: enterpriseFlagCategory,
+		Usage:    "The Enterprise git ref (branch or tag) to use for version config (e.g. release-calient-vX.Y-1)",
+		Sources:  cli.EnvVars("ENTERPRISE_REF"),
 	}
 	enterpriseRegistryFlag = &cli.StringFlag{
 		Name:     "enterprise-registry",

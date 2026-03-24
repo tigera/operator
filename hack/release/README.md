@@ -8,18 +8,20 @@
     - [Build and publish a release](#build-and-publish-a-release)
     - [Build and publish a hashrelease](#build-and-publish-a-hashrelease)
   - [Commands](#commands)
-    - [release build](#release-build)
+    - [release branch](#release-branch)
       - [Examples](#examples)
-    - [release publish](#release-publish)
+    - [release build](#release-build)
       - [Examples](#examples-1)
-    - [release prep](#release-prep)
+    - [release publish](#release-publish)
       - [Examples](#examples-2)
-    - [release notes](#release-notes)
+    - [release prep](#release-prep)
       - [Examples](#examples-3)
-    - [release github](#release-github)
+    - [release notes](#release-notes)
       - [Examples](#examples-4)
-    - [release from](#release-from)
+    - [release github](#release-github)
       - [Examples](#examples-5)
+    - [release from](#release-from)
+      - [Examples](#examples-6)
 
 ## Installation
 
@@ -130,6 +132,49 @@ Unlike a release, a hashrelease is typically for either a Calico or Calico Enter
      ```
 
 ## Commands
+
+### release branch
+
+This command creates a new release branch for the operator.
+It updates the calico and enterprise version configs, regenerates files,
+commits the changes, creates a dev tag, and pushes to the remote.
+
+Both `--calico-ref` and `--enterprise-ref` are required.
+They specify the git ref (branch or tag) to use for each product's version config.
+
+```sh
+release branch --stream <vX.Y> --calico-ref <git-ref> --enterprise-ref <git-ref>
+```
+
+If the `--local` flag is specified, the branch and tag are created locally without pushing to the remote.
+
+| Flag | Env var | Description |
+|------|---------|-------------|
+| `--stream` | `RELEASE_STREAM` | Release stream (e.g., `v1.43`). Required. |
+| `--calico-ref` | `CALICO_REF` | Calico git ref (branch or tag). Required. |
+| `--enterprise-ref` | `ENTERPRISE_REF` | Enterprise git ref (branch or tag). Required. |
+| `--release-branch-prefix` | `RELEASE_BRANCH_PREFIX` | Branch name prefix (default: `release`). |
+| `--local` | `LOCAL` | Skip pushing to remote. |
+
+There is also a Makefile target:
+
+```sh
+make create-release-branch STREAM=vX.Y CALICO_REF=<ref> ENTERPRISE_REF=<ref>
+```
+
+#### Examples
+
+1. To create a release branch for operator v1.43 with Calico v3.32 and Enterprise v3.22
+
+    ```sh
+    release branch --stream v1.43 --calico-ref release-v3.32 --enterprise-ref release-calient-v3.22
+    ```
+
+1. To create a release branch locally without pushing
+
+    ```sh
+    release branch --stream v1.43 --calico-ref release-v3.32 --enterprise-ref release-calient-v3.22 --local
+    ```
 
 ### release build
 

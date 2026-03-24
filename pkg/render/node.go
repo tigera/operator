@@ -160,10 +160,10 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
 		} else {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
+			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalico, reg, path, prefix, is))
 		}
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentFlexVolume, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalico, reg, path, prefix, is))
 	}
 
 	if len(errMsgs) != 0 {
@@ -959,10 +959,15 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
+	cniCommand := []string{"/opt/cni/bin/install"}
+	if c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		cniCommand = []string{"calico", "cni", "install"}
+	}
+
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
-		Command:         []string{"/opt/cni/bin/install"},
+		Command:         cniCommand,
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    cniVolumeMounts,
@@ -976,9 +981,15 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 		{MountPath: "/host/driver", Name: "flexvol-driver-host"},
 	}
 
+	var flexvolCommand []string
+	if c.cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+		flexvolCommand = []string{"calico", "flexvol"}
+	}
+
 	return corev1.Container{
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
+		Command:         flexvolCommand,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,
 	}

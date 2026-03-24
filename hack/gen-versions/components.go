@@ -56,6 +56,19 @@ var ignoredImages = map[string]struct{}{
 	"calico/api":        {},
 	"libcalico-go":      {},
 	"calico/windows":    {},
+	"node-windows":      {},
+	"cni-windows":       {},
+	"goldmane":          {},
+	"webhooks":          {},
+	"whisker":           {},
+	"whisker-backend":   {},
+	"envoy-gateway":     {},
+	"envoy-proxy":       {},
+	"envoy-ratelimit":   {},
+	"istio-pilot":       {},
+	"istio-install-cni": {},
+	"istio-ztunnel":     {},
+	"istio-proxyv2":     {},
 }
 
 type Release struct {

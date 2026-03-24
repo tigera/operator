@@ -384,7 +384,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			return err
 		}
 
-		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 	}
 
 	return err

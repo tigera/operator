@@ -83,6 +83,7 @@ type Component struct {
 	cfg *Configuration
 
 	goldmaneImage string
+	uberImage     bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -92,7 +93,12 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 
 	var err error
 
-	c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise || operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+		c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
+	} else {
+		c.goldmaneImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
+		c.uberImage = true
+	}
 	if err != nil {
 		return err
 	}
@@ -236,7 +242,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		MountPath: GoldmaneConfigFilePath,
 	})
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            GoldmaneContainerName,
 		Image:           c.goldmaneImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
@@ -256,6 +262,10 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		},
 		VolumeMounts: volumeMounts,
 	}
+	if c.uberImage {
+		container.Command = []string{"calico", "goldmane"}
+	}
+	return container
 }
 
 func (c *Component) goldmaneService() *corev1.Service {

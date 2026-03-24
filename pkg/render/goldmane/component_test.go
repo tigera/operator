@@ -92,6 +92,7 @@ var _ = Describe("ComponentRendering", func() {
 
 	DescribeTable("Goldmane Deployment", func(cfg *goldmane.Configuration, expected *appsv1.Deployment) {
 		component := goldmane.Goldmane(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		objsToCreate, _ := component.Objects()
 
 		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, goldmane.GoldmaneName, goldmane.GoldmaneNamespace)
@@ -138,7 +139,8 @@ var _ = Describe("ComponentRendering", func() {
 							Containers: []corev1.Container{
 								{
 									Name:            goldmane.GoldmaneContainerName,
-									Image:           "",
+									Image:           "quay.io/calico/calico:master",
+									Command:         []string{"calico", "goldmane"},
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},

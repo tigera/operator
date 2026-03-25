@@ -1475,6 +1475,12 @@ spec:
                             the given regex.
                           type: string
                       type: object
+                      x-kubernetes-validations:
+                        - message: no more than one autodetection method can be specified
+                          rule:
+                            "[has(self.firstFound) && self.firstFound == true, has(self.kubernetes),
+                            size(self.interface) > 0, size(self.skipInterface) > 0, size(self.canReach)
+                            > 0, size(self.cidrs) > 0].filter(x, x).size() <= 1"
                     nodeAddressAutodetectionV6:
                       description: |-
                         NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv6 addresses. If not specified,
@@ -1515,6 +1521,12 @@ spec:
                             the given regex.
                           type: string
                       type: object
+                      x-kubernetes-validations:
+                        - message: no more than one autodetection method can be specified
+                          rule:
+                            "[has(self.firstFound) && self.firstFound == true, has(self.kubernetes),
+                            size(self.interface) > 0, size(self.skipInterface) > 0, size(self.canReach)
+                            > 0, size(self.cidrs) > 0].filter(x, x).size() <= 1"
                     sysctl:
                       description: Sysctl configures sysctl parameters for tuning plugin
                       items:
@@ -10298,6 +10310,13 @@ spec:
                                 the given regex.
                               type: string
                           type: object
+                          x-kubernetes-validations:
+                            - message: no more than one autodetection method can be specified
+                              rule:
+                                "[has(self.firstFound) && self.firstFound == true,
+                                has(self.kubernetes), size(self.interface) > 0, size(self.skipInterface)
+                                > 0, size(self.canReach) > 0, size(self.cidrs) > 0].filter(x,
+                                x).size() <= 1"
                         nodeAddressAutodetectionV6:
                           description: |-
                             NodeAddressAutodetectionV6 specifies an approach to automatically detect node IPv6 addresses. If not specified,
@@ -10338,6 +10357,13 @@ spec:
                                 the given regex.
                               type: string
                           type: object
+                          x-kubernetes-validations:
+                            - message: no more than one autodetection method can be specified
+                              rule:
+                                "[has(self.firstFound) && self.firstFound == true,
+                                has(self.kubernetes), size(self.interface) > 0, size(self.skipInterface)
+                                > 0, size(self.canReach) > 0, size(self.cidrs) > 0].filter(x,
+                                x).size() <= 1"
                         sysctl:
                           description:
                             Sysctl configures sysctl parameters for tuning

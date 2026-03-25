@@ -15,26 +15,18 @@
 package apis
 
 import (
-	"context"
 	"os"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
 
 var log = ctrl.Log.WithName("apis")
-
-// DatastoreMigrationGVR is the GroupVersionResource for DatastoreMigration CRs.
-var DatastoreMigrationGVR = schema.GroupVersionResource{
-	Group:    "migration.projectcalico.org",
-	Version:  "v1beta1",
-	Resource: "datastoremigrations",
-}
 
 // UseV3CRDS detects whether we should use the crd.projectcalico.org/v1 or
 // projectcalico.org/v3 API group for Calico CRDs.
@@ -46,10 +38,17 @@ func UseV3CRDS(cfg *rest.Config) (bool, error) {
 
 	// Check if a DatastoreMigration CR exists in a state that indicates v3 CRDs
 	// should be used. This handles operator restarts during or after migration.
-	if v3, err := checkDatastoreMigration(cfg); err != nil {
-		log.Info("Failed to check DatastoreMigration CR, falling through to API discovery", "error", err)
-	} else if v3 {
-		return true, nil
+	dc, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		log.Info("Failed to create dynamic client for DatastoreMigration check, falling through to API discovery", "error", err)
+	} else {
+		phase, err := datastoremigration.GetPhase(dc)
+		if err != nil {
+			log.Info("Failed to check DatastoreMigration CR, falling through to API discovery", "error", err)
+		} else if phase == datastoremigration.PhaseConverged || phase == datastoremigration.PhaseComplete {
+			log.Info("DatastoreMigration CR found in post-migration phase, using v3 CRDs", "phase", phase)
+			return true, nil
+		}
 	}
 
 	cs, err := kubernetes.NewForConfig(cfg)
@@ -73,29 +72,4 @@ func UseV3CRDS(cfg *rest.Config) (bool, error) {
 
 	log.Info("Detected API groups from API server", "v3present", v3present, "v1present", v1present)
 	return v3present && !v1present, nil
-}
-
-// checkDatastoreMigration uses a dynamic client to look for a DatastoreMigration CR
-// and returns true if one exists in a phase that indicates v3 CRDs should be used.
-func checkDatastoreMigration(cfg *rest.Config) (bool, error) {
-	dc, err := dynamic.NewForConfig(cfg)
-	if err != nil {
-		return false, err
-	}
-	list, err := dc.Resource(DatastoreMigrationGVR).List(context.Background(), metav1.ListOptions{})
-	if err != nil {
-		return false, err
-	}
-	for _, item := range list.Items {
-		status, ok := item.Object["status"].(map[string]any)
-		if !ok {
-			continue
-		}
-		phase, _ := status["phase"].(string)
-		if phase == "Converged" || phase == "Complete" {
-			log.Info("DatastoreMigration CR found in post-migration phase, using v3 CRDs", "name", item.GetName(), "phase", phase)
-			return true, nil
-		}
-	}
-	return false, nil
 }

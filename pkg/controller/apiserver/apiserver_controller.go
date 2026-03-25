@@ -191,7 +191,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
-	go datastoremigration.WaitForWatchAndAdd(c, opts.K8sClientset)
+	go datastoremigration.WaitForWatchAndAdd(opts.ShutdownContext, c, opts.K8sClientset)
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
@@ -223,7 +223,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Check if a datastore migration is in progress. If so, the migration controller
 	// owns the APIService and we should not reconcile to avoid fighting over it.
-	migrationPhase := datastoremigration.GetPhase(r.dynamicClient)
+	migrationPhase, err := datastoremigration.GetPhase(r.dynamicClient)
+	if err != nil {
+		reqLogger.Info("Failed to check DatastoreMigration phase, requeueing to avoid conflicting with a possible migration", "error", err)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
 	if migrationPhase == datastoremigration.PhaseMigrating {
 		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -608,13 +612,22 @@ func (r *ReconcileAPIServer) setAPIGroupEnvVar(ctx context.Context) error {
 	}
 
 	envVar := corev1.EnvVar{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}
+	changed := false
 	for i, c := range dep.Spec.Template.Spec.Containers {
+		hasVar := false
 		for _, e := range c.Env {
 			if e.Name == "CALICO_API_GROUP" {
-				return nil
+				hasVar = true
+				break
 			}
 		}
-		dep.Spec.Template.Spec.Containers[i].Env = append(dep.Spec.Template.Spec.Containers[i].Env, envVar)
+		if !hasVar {
+			dep.Spec.Template.Spec.Containers[i].Env = append(dep.Spec.Template.Spec.Containers[i].Env, envVar)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
 	}
 
 	if err := r.client.Update(ctx, dep); err != nil {

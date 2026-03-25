@@ -284,7 +284,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// This is a deferred watch since the CRD may not be installed.
-	go datastoremigration.WaitForWatchAndAdd(c, opts.K8sClientset)
+	go datastoremigration.WaitForWatchAndAdd(opts.ShutdownContext, c, opts.K8sClientset)
 
 	return nil
 }
@@ -1140,7 +1140,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// early so kube-controllers can start the migration without waiting for
 	// the rest of this reconcile to complete.
 	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
-	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(datastoremigration.Exists(r.dynamicClient)), nil); err != nil {
+	migrationExists, err := datastoremigration.Exists(r.dynamicClient)
+	if err != nil {
+		reqLogger.Info("Failed to check DatastoreMigration existence", "error", err)
+	}
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationExists), nil); err != nil {
 		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 

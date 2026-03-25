@@ -30,6 +30,8 @@ const (
 
 // migrationRBACObjects returns the ClusterRole and ClusterRoleBinding that grant
 // calico-kube-controllers broad access to both API groups during a datastore migration.
+// These permissions are time-bounded: they are only created while a DatastoreMigration
+// CR exists and are automatically cleaned up when migration completes.
 func migrationRBACObjects() []client.Object {
 	return []client.Object{
 		&rbacv1.ClusterRole{

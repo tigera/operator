@@ -18,8 +18,11 @@ package datastoremigration
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -28,11 +31,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 )
 
 var log = logf.Log.WithName("datastoremigration")
+
+// DatastoreMigrationGVR is the GroupVersionResource for DatastoreMigration CRs.
+var DatastoreMigrationGVR = schema.GroupVersionResource{
+	Group:    "migration.projectcalico.org",
+	Version:  "v1beta1",
+	Resource: "datastoremigrations",
+}
 
 // Phase constants for DatastoreMigration status.
 const (
@@ -45,58 +54,72 @@ const (
 )
 
 // get fetches the first DatastoreMigration CR and returns its phase and
-// whether it exists. Returns ("", false) if the CRD is not installed or
-// no CR exists.
-func get(dc dynamic.Interface) (string, bool) {
+// whether it exists. Returns ("", false, nil) if the CRD is not installed or
+// no CR exists. Returns a non-nil error for transient failures (API server
+// blips, RBAC issues, etc.) so callers can distinguish "no migration" from
+// "couldn't check".
+func get(dc dynamic.Interface) (string, bool, error) {
 	if dc == nil {
-		return "", false
+		return "", false, nil
 	}
-	list, err := dc.Resource(apis.DatastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
-	if err != nil || len(list.Items) == 0 {
-		return "", false
+	list, err := dc.Resource(DatastoreMigrationGVR).List(context.Background(), metav1.ListOptions{Limit: 1})
+	if err != nil {
+		if errors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("failed to list DatastoreMigration CRs: %w", err)
+	}
+	if len(list.Items) == 0 {
+		return "", false, nil
 	}
 	status, ok := list.Items[0].Object["status"].(map[string]any)
 	if !ok {
-		return "", true
+		return "", true, nil
 	}
 	phase, _ := status["phase"].(string)
-	return phase, true
+	return phase, true, nil
 }
 
 // GetPhase returns the phase of the first DatastoreMigration CR, or empty
-// string if none exists or the CRD is not installed.
-func GetPhase(dc dynamic.Interface) string {
-	phase, _ := get(dc)
-	return phase
+// string if none exists or the CRD is not installed. Returns a non-nil error
+// for transient failures so callers can decide how to handle uncertainty.
+func GetPhase(dc dynamic.Interface) (string, error) {
+	phase, _, err := get(dc)
+	return phase, err
 }
 
-// Exists returns true if at least one DatastoreMigration CR exists.
-func Exists(dc dynamic.Interface) bool {
-	_, exists := get(dc)
-	return exists
+// Exists returns true if at least one DatastoreMigration CR exists. Returns
+// a non-nil error for transient failures.
+func Exists(dc dynamic.Interface) (bool, error) {
+	_, exists, err := get(dc)
+	return exists, err
 }
 
 // WaitForWatchAndAdd polls for the DatastoreMigration CRD and sets up a watch
 // on the given controller once available. This triggers controller reconciliation
-// when the migration phase changes.
-func WaitForWatchAndAdd(c ctrlruntime.Controller, cs *kubernetes.Clientset) {
+// when the migration phase changes. The goroutine exits when ctx is cancelled.
+func WaitForWatchAndAdd(ctx context.Context, c ctrlruntime.Controller, cs *kubernetes.Clientset) {
+	gvr := DatastoreMigrationGVR
+	groupVersion := gvr.Group + "/" + gvr.Version
+
 	duration := 1 * time.Second
 	maxDuration := 30 * time.Second
 	for {
-		time.Sleep(duration)
+		select {
+		case <-ctx.Done():
+			log.Info("Context cancelled, stopping DatastoreMigration watch setup")
+			return
+		case <-time.After(duration):
+		}
 		duration = min(2*duration, maxDuration)
 
-		_, err := cs.Discovery().ServerResourcesForGroupVersion("migration.projectcalico.org/v1beta1")
+		_, err := cs.Discovery().ServerResourcesForGroupVersion(groupVersion)
 		if err != nil {
 			continue
 		}
 
 		obj := &unstructured.Unstructured{}
-		obj.SetGroupVersionKind(schema.GroupVersionKind{
-			Group:   "migration.projectcalico.org",
-			Version: "v1beta1",
-			Kind:    "DatastoreMigration",
-		})
+		obj.SetGroupVersionKind(gvr.GroupVersion().WithKind("DatastoreMigration"))
 		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
 			log.V(2).Info("Failed to watch DatastoreMigration, will retry", "error", err)
 			continue

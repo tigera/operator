@@ -22,14 +22,12 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
-
-	"github.com/tigera/operator/pkg/apis"
 )
 
 func newFakeClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	scheme := runtime.NewScheme()
 	gvrToListKind := map[schema.GroupVersionResource]string{
-		apis.DatastoreMigrationGVR: "DatastoreMigrationList",
+		DatastoreMigrationGVR: "DatastoreMigrationList",
 	}
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objects...)
 }
@@ -98,14 +96,22 @@ func TestGetPhaseAndExists(t *testing.T) {
 			g := NewWithT(t)
 
 			if tt.nilClient {
-				g.Expect(GetPhase(nil)).To(Equal(tt.wantPhase))
-				g.Expect(Exists(nil)).To(Equal(tt.wantExist))
+				phase, err := GetPhase(nil)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(phase).To(Equal(tt.wantPhase))
+				exists, err := Exists(nil)
+				g.Expect(err).NotTo(HaveOccurred())
+				g.Expect(exists).To(Equal(tt.wantExist))
 				return
 			}
 
 			dc := newFakeClient(tt.objects...)
-			g.Expect(GetPhase(dc)).To(Equal(tt.wantPhase))
-			g.Expect(Exists(dc)).To(Equal(tt.wantExist))
+			phase, err := GetPhase(dc)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(phase).To(Equal(tt.wantPhase))
+			exists, err := Exists(dc)
+			g.Expect(err).NotTo(HaveOccurred())
+			g.Expect(exists).To(Equal(tt.wantExist))
 		})
 	}
 }

@@ -44,6 +44,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -68,6 +69,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -279,6 +281,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
+	// migration state changes (e.g., Converged → triggers env var injection on components).
+	// This is a deferred watch since the CRD may not be installed.
+	go datastoremigration.WaitForWatchAndAdd(opts.ShutdownContext, c, opts.K8sClientset)
+
 	return nil
 }
 
@@ -315,10 +322,16 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
+	dc, err := dynamic.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
 		clientset:            opts.K8sClientset,
+		dynamicClient:        dc,
 		scheme:               mgr.GetScheme(),
 		shutdownContext:      opts.ShutdownContext,
 		watches:              make(map[runtime.Object]struct{}),
@@ -355,6 +368,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.MigrationClusterRoleName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
@@ -374,6 +388,7 @@ type ReconcileInstallation struct {
 	config                        *rest.Config
 	client                        client.Client
 	clientset                     *kubernetes.Clientset
+	dynamicClient                 dynamic.Interface
 	scheme                        *runtime.Scheme
 	shutdownContext               context.Context
 	watches                       map[runtime.Object]struct{}
@@ -1119,6 +1134,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Reconcile the migration RBAC ClusterRole/ClusterRoleBinding. We do this
+	// early so kube-controllers can start the migration without waiting for
+	// the rest of this reconcile to complete.
+	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
+	migrationExists, err := datastoremigration.Exists(r.dynamicClient)
+	if err != nil {
+		reqLogger.Info("Failed to check DatastoreMigration existence", "error", err)
+	}
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationExists), nil); err != nil {
+		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If

@@ -18,20 +18,43 @@ import (
 	"os"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
 
 var log = ctrl.Log.WithName("apis")
 
-// UseV3CRDS detects whether we should use the crd.projectcalic.org/v1 or
+// UseV3CRDS detects whether we should use the crd.projectcalico.org/v1 or
 // projectcalico.org/v3 API group for Calico CRDs.
-func UseV3CRDS(cs kubernetes.Interface) (bool, error) {
+func UseV3CRDS(cfg *rest.Config) (bool, error) {
 	if os.Getenv("CALICO_API_GROUP") != "" {
 		log.Info("CALICO_API_GROUP environment variable is set, using its value to determine API group", "CALICO_API_GROUP", os.Getenv("CALICO_API_GROUP"))
 		return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3", nil
 	}
 
+	// Check if a DatastoreMigration CR exists in a state that indicates v3 CRDs
+	// should be used. This handles operator restarts during or after migration.
+	dc, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		log.Info("Failed to create dynamic client for DatastoreMigration check, falling through to API discovery", "error", err)
+	} else {
+		phase, err := datastoremigration.GetPhase(dc)
+		if err != nil {
+			log.Info("Failed to check DatastoreMigration CR, falling through to API discovery", "error", err)
+		} else if phase == datastoremigration.PhaseConverged || phase == datastoremigration.PhaseComplete {
+			log.Info("DatastoreMigration CR found in post-migration phase, using v3 CRDs", "phase", phase)
+			return true, nil
+		}
+	}
+
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return false, err
+	}
 	apiGroups, err := cs.Discovery().ServerGroups()
 	if err != nil {
 		return false, err

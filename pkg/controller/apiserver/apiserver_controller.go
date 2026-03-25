@@ -25,8 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -66,17 +64,13 @@ var log = logf.Log.WithName("controller_apiserver")
 // Add creates a new APIServer Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	dc, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return fmt.Errorf("failed to create dynamic client: %w", err)
-	}
 	r := &ReconcileAPIServer{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		dynamicClient:  dc,
-		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
-		tierWatchReady: &utils.ReadyFlag{},
-		opts:           opts,
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		tierWatchReady:      &utils.ReadyFlag{},
+		migrationWatchReady: &utils.ReadyFlag{},
+		opts:                opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -191,7 +185,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
-	go datastoremigration.WaitForWatchAndAdd(opts.ShutdownContext, c, opts.K8sClientset)
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	})
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
@@ -204,12 +202,12 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client         client.Client
-	dynamicClient  dynamic.Interface
-	scheme         *runtime.Scheme
-	status         status.StatusManager
-	tierWatchReady *utils.ReadyFlag
-	opts           options.ControllerOptions
+	client              client.Client
+	scheme              *runtime.Scheme
+	status              status.StatusManager
+	tierWatchReady      *utils.ReadyFlag
+	migrationWatchReady *utils.ReadyFlag
+	opts                options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -223,10 +221,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	// Check if a datastore migration is in progress. If so, the migration controller
 	// owns the APIService and we should not reconcile to avoid fighting over it.
-	migrationPhase, err := datastoremigration.GetPhase(r.dynamicClient)
-	if err != nil {
-		reqLogger.Info("Failed to check DatastoreMigration phase, requeueing to avoid conflicting with a possible migration", "error", err)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	// Only query migration state once the watch is established to ensure we use the cache.
+	var migrationPhase string
+	if r.migrationWatchReady.IsReady() {
+		migrationPhase = datastoremigration.GetPhase(r.client)
 	}
 	if migrationPhase == datastoremigration.PhaseMigrating {
 		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")

@@ -18,30 +18,35 @@ import (
 	"testing"
 
 	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func newFakeClient(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
+func newFakeClient(t *testing.T, objects ...*DatastoreMigration) client.Client {
+	t.Helper()
 	scheme := runtime.NewScheme()
-	gvrToListKind := map[schema.GroupVersionResource]string{
-		DatastoreMigrationGVR: "DatastoreMigrationList",
+	if err := AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to add scheme: %v", err)
 	}
-	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(scheme, gvrToListKind, objects...)
+	b := fake.NewClientBuilder().WithScheme(scheme)
+	for _, obj := range objects {
+		b = b.WithObjects(obj)
+	}
+	return b.Build()
 }
 
-func migrationCR(name, phase string) *unstructured.Unstructured {
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(schema.GroupVersionKind{
-		Group:   "migration.projectcalico.org",
-		Version: "v1beta1",
-		Kind:    "DatastoreMigration",
-	})
-	obj.SetName(name)
+func migrationCR(name, phase string) *DatastoreMigration {
+	obj := &DatastoreMigration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "DatastoreMigration",
+			APIVersion: "migration.projectcalico.org/v1beta1",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
 	if phase != "" {
-		obj.Object["status"] = map[string]any{"phase": phase}
+		obj.Status.Phase = phase
 	}
 	return obj
 }
@@ -49,7 +54,7 @@ func migrationCR(name, phase string) *unstructured.Unstructured {
 func TestGetPhaseAndExists(t *testing.T) {
 	tests := []struct {
 		name      string
-		objects   []runtime.Object
+		objects   []*DatastoreMigration
 		nilClient bool
 		wantPhase string
 		wantExist bool
@@ -67,25 +72,25 @@ func TestGetPhaseAndExists(t *testing.T) {
 		},
 		{
 			name:      "CR with no status",
-			objects:   []runtime.Object{migrationCR("default", "")},
+			objects:   []*DatastoreMigration{migrationCR("default", "")},
 			wantPhase: "",
 			wantExist: true,
 		},
 		{
 			name:      "CR in Migrating phase",
-			objects:   []runtime.Object{migrationCR("default", PhaseMigrating)},
+			objects:   []*DatastoreMigration{migrationCR("default", PhaseMigrating)},
 			wantPhase: PhaseMigrating,
 			wantExist: true,
 		},
 		{
 			name:      "CR in Converged phase",
-			objects:   []runtime.Object{migrationCR("default", PhaseConverged)},
+			objects:   []*DatastoreMigration{migrationCR("default", PhaseConverged)},
 			wantPhase: PhaseConverged,
 			wantExist: true,
 		},
 		{
 			name:      "CR in Complete phase",
-			objects:   []runtime.Object{migrationCR("default", PhaseComplete)},
+			objects:   []*DatastoreMigration{migrationCR("default", PhaseComplete)},
 			wantPhase: PhaseComplete,
 			wantExist: true,
 		},
@@ -96,22 +101,14 @@ func TestGetPhaseAndExists(t *testing.T) {
 			g := NewWithT(t)
 
 			if tt.nilClient {
-				phase, err := GetPhase(nil)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(phase).To(Equal(tt.wantPhase))
-				exists, err := Exists(nil)
-				g.Expect(err).NotTo(HaveOccurred())
-				g.Expect(exists).To(Equal(tt.wantExist))
+				g.Expect(GetPhase(nil)).To(Equal(tt.wantPhase))
+				g.Expect(Exists(nil)).To(Equal(tt.wantExist))
 				return
 			}
 
-			dc := newFakeClient(tt.objects...)
-			phase, err := GetPhase(dc)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(phase).To(Equal(tt.wantPhase))
-			exists, err := Exists(dc)
-			g.Expect(err).NotTo(HaveOccurred())
-			g.Expect(exists).To(Equal(tt.wantExist))
+			c := newFakeClient(t, tt.objects...)
+			g.Expect(GetPhase(c)).To(Equal(tt.wantPhase))
+			g.Expect(Exists(c)).To(Equal(tt.wantExist))
 		})
 	}
 }

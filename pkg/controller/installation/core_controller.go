@@ -44,7 +44,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
@@ -284,7 +283,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// This is a deferred watch since the CRD may not be installed.
-	go datastoremigration.WaitForWatchAndAdd(opts.ShutdownContext, c, opts.K8sClientset)
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	})
 
 	return nil
 }
@@ -322,16 +325,10 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
 	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
-	dc, err := dynamic.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
-	}
-
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
 		client:               mgr.GetClient(),
 		clientset:            opts.K8sClientset,
-		dynamicClient:        dc,
 		scheme:               mgr.GetScheme(),
 		shutdownContext:      opts.ShutdownContext,
 		watches:              make(map[runtime.Object]struct{}),
@@ -343,6 +340,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
+		migrationWatchReady:  &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
@@ -388,7 +386,6 @@ type ReconcileInstallation struct {
 	config                        *rest.Config
 	client                        client.Client
 	clientset                     *kubernetes.Clientset
-	dynamicClient                 dynamic.Interface
 	scheme                        *runtime.Scheme
 	shutdownContext               context.Context
 	watches                       map[runtime.Object]struct{}
@@ -402,6 +399,7 @@ type ReconcileInstallation struct {
 	clusterDomain                 string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
+	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
 
@@ -1138,12 +1136,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Reconcile the migration RBAC ClusterRole/ClusterRoleBinding. We do this
 	// early so kube-controllers can start the migration without waiting for
-	// the rest of this reconcile to complete.
+	// the rest of this reconcile to complete. Only check migration state once
+	// the watch is established to ensure we use the cache.
+	migrationExists := r.migrationWatchReady.IsReady() && datastoremigration.Exists(r.client)
 	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
-	migrationExists, err := datastoremigration.Exists(r.dynamicClient)
-	if err != nil {
-		reqLogger.Info("Failed to check DatastoreMigration existence", "error", err)
-	}
 	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationExists), nil); err != nil {
 		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}

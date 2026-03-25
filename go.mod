@@ -57,8 +57,11 @@ require (
 	sigs.k8s.io/yaml v1.6.0
 )
 
+require github.com/google/cel-go v0.26.0
+
 require (
 	al.essio.dev/pkg/shellescape v1.5.1 // indirect
+	cel.dev/expr v0.24.0 // indirect
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
@@ -67,6 +70,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Masterminds/squirrel v1.5.4 // indirect
 	github.com/ProtonMail/go-crypto v0.0.0-20230217124315-7d5c6f04bbb8 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.20 // indirect
@@ -168,6 +172,7 @@ require (
 	github.com/spf13/cast v1.7.1 // indirect
 	github.com/spf13/cobra v1.10.1 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
+	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/vbatts/tar-split v0.12.1 // indirect
 	github.com/vmihailenco/msgpack v4.0.4+incompatible // indirect
@@ -179,6 +184,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	golang.org/x/exp v0.0.0-20250718183923-645b1fa84792 // indirect
 	golang.org/x/mod v0.32.0 // indirect
 	golang.org/x/oauth2 v0.33.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
@@ -189,6 +195,7 @@ require (
 	golang.org/x/tools v0.41.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.5.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250728155136-f173205681a0 // indirect
 	google.golang.org/grpc v1.75.1 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect

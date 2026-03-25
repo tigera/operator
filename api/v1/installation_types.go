@@ -694,7 +694,7 @@ type CalicoNetworkSpec struct {
 // can be used. If no detection option is specified, then IP auto detection will be disabled for this address family and IPs
 // must be specified directly on the Node resource.
 //
-// +kubebuilder:validation:XValidation:rule="[has(self.firstFound) && self.firstFound == true, has(self.kubernetes), self.interface != '', self.skipInterface != '', self.canReach != '', size(self.cidrs) > 0].filter(x, x).size() <= 1",message="no more than one autodetection method can be specified"
+// +kubebuilder:validation:XValidation:rule="[has(self.firstFound) && self.firstFound == true, has(self.kubernetes), size(self.interface) > 0, size(self.skipInterface) > 0, size(self.canReach) > 0, size(self.cidrs) > 0].filter(x, x).size() <= 1",message="no more than one autodetection method can be specified"
 type NodeAddressAutodetection struct {
 	// FirstFound uses default interface matching parameters to select an interface, performing best-effort
 	// filtering based on well-known interface names.

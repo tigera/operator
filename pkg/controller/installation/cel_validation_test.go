@@ -15,68 +15,126 @@
 package installation
 
 import (
-	"github.com/google/cel-go/cel"
+	"context"
+	"path/filepath"
+	"runtime"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
-// The CEL expression from the NodeAddressAutodetection XValidation marker.
-// Keep this in sync with the marker in api/v1/installation_types.go.
-const autodetectCELRule = `[has(self.firstFound) && self.firstFound == true, has(self.kubernetes), size(self.interface) > 0, size(self.skipInterface) > 0, size(self.canReach) > 0, size(self.cidrs) > 0].filter(x, x).size() <= 1`
-
-var _ = Describe("NodeAddressAutodetection CEL validation", func() {
-	var prg cel.Program
+var _ = Describe("Installation CRD CEL validation", Serial, func() {
+	var (
+		testEnv   *envtest.Environment
+		dynClient dynamic.Interface
+		instGVR   schema.GroupVersionResource
+	)
 
 	BeforeEach(func() {
-		env, err := cel.NewEnv(
-			cel.Variable("self", cel.MapType(cel.StringType, cel.DynType)),
-		)
+		_, thisFile, _, ok := runtime.Caller(0)
+		Expect(ok).To(BeTrue())
+		crdDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "config", "crd", "bases")
+
+		testEnv = &envtest.Environment{
+			CRDDirectoryPaths:     []string{crdDir},
+			ErrorIfCRDPathMissing: true,
+		}
+		cfg, err := testEnv.Start()
 		Expect(err).NotTo(HaveOccurred())
-		ast, iss := env.Compile(autodetectCELRule)
-		Expect(iss.Err()).NotTo(HaveOccurred())
-		prg, err = env.Program(ast)
+		DeferCleanup(func() { _ = testEnv.Stop() })
+
+		dynClient, err = dynamic.NewForConfig(cfg)
 		Expect(err).NotTo(HaveOccurred())
+
+		instGVR = schema.GroupVersionResource{
+			Group:    "operator.tigera.io",
+			Version:  "v1",
+			Resource: "installations",
+		}
 	})
 
-	eval := func(obj map[string]any) bool {
-		// String fields default to "" in CRD schemas.
-		withDefaults := map[string]any{
-			"interface":     "",
-			"skipInterface": "",
-			"canReach":      "",
-			"cidrs":         []any{},
+	createInstallation := func(v4 map[string]any) error {
+		obj := &unstructured.Unstructured{
+			Object: map[string]any{
+				"apiVersion": "operator.tigera.io/v1",
+				"kind":       "Installation",
+				"metadata":   map[string]any{"name": "default"},
+				"spec": map[string]any{
+					"calicoNetwork": map[string]any{
+						"nodeAddressAutodetectionV4": v4,
+					},
+				},
+			},
 		}
-		for k, v := range obj {
-			withDefaults[k] = v
-		}
-		out, _, err := prg.Eval(map[string]any{"self": withDefaults})
-		Expect(err).NotTo(HaveOccurred())
-		result, ok := out.Value().(bool)
-		Expect(ok).To(BeTrue())
-		return result
+		_, err := dynClient.Resource(instGVR).Create(context.Background(), obj, metav1.CreateOptions{})
+		return err
 	}
 
-	DescribeTable("should allow single or no methods",
-		func(obj map[string]any) { Expect(eval(obj)).To(BeTrue()) },
-		Entry("empty", map[string]any{}),
-		Entry("firstFound", map[string]any{"firstFound": true}),
-		Entry("firstFound false", map[string]any{"firstFound": false}),
-		Entry("interface", map[string]any{"interface": "eth0"}),
-		Entry("skipInterface", map[string]any{"skipInterface": "docker.*"}),
-		Entry("canReach", map[string]any{"canReach": "8.8.8.8"}),
-		Entry("cidrs", map[string]any{"cidrs": []any{"10.0.0.0/8"}}),
-		Entry("kubernetes", map[string]any{"kubernetes": "NodeInternalIP"}),
-		Entry("firstFound false + interface", map[string]any{"firstFound": false, "interface": "eth0"}),
-		Entry("empty strings", map[string]any{"interface": "", "canReach": ""}),
-		Entry("empty cidrs", map[string]any{"cidrs": []any{}}),
-	)
+	deleteInstallation := func() {
+		_ = dynClient.Resource(instGVR).Delete(context.Background(), "default", metav1.DeleteOptions{})
+	}
 
-	DescribeTable("should reject multiple methods",
-		func(obj map[string]any) { Expect(eval(obj)).To(BeFalse()) },
-		Entry("firstFound + interface", map[string]any{"firstFound": true, "interface": "eth0"}),
-		Entry("interface + canReach", map[string]any{"interface": "eth0", "canReach": "8.8.8.8"}),
-		Entry("kubernetes + cidrs", map[string]any{"kubernetes": "NodeInternalIP", "cidrs": []any{"10.0.0.0/8"}}),
-		Entry("three methods", map[string]any{"firstFound": true, "interface": "eth0", "canReach": "8.8.8.8"}),
-		Entry("skipInterface + canReach", map[string]any{"skipInterface": "docker.*", "canReach": "8.8.8.8"}),
-	)
+	patchAutodetection := func(v4 map[string]any) error {
+		patch := &unstructured.Unstructured{
+			Object: map[string]any{
+				"spec": map[string]any{
+					"calicoNetwork": map[string]any{
+						"nodeAddressAutodetectionV4": v4,
+					},
+				},
+			},
+		}
+		data, err := patch.MarshalJSON()
+		Expect(err).NotTo(HaveOccurred())
+		_, err = dynClient.Resource(instGVR).Patch(context.Background(), "default", types.MergePatchType, data, metav1.PatchOptions{})
+		return err
+	}
+
+	Describe("NodeAddressAutodetection", func() {
+		AfterEach(func() {
+			deleteInstallation()
+		})
+
+		DescribeTable("should allow single or no methods",
+			func(v4 map[string]any) {
+				Expect(createInstallation(v4)).To(Succeed())
+			},
+			Entry("empty", map[string]any{}),
+			Entry("firstFound", map[string]any{"firstFound": true}),
+			Entry("interface", map[string]any{"interface": "eth0"}),
+			Entry("skipInterface", map[string]any{"skipInterface": "docker.*"}),
+			Entry("canReach", map[string]any{"canReach": "8.8.8.8"}),
+			Entry("cidrs", map[string]any{"cidrs": []any{"10.0.0.0/8"}}),
+			Entry("kubernetes", map[string]any{"kubernetes": "NodeInternalIP"}),
+		)
+
+		DescribeTable("should reject multiple methods",
+			func(v4 map[string]any) {
+				err := createInstallation(v4)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("no more than one autodetection method"))
+			},
+			Entry("firstFound + interface", map[string]any{"firstFound": true, "interface": "eth0"}),
+			Entry("interface + canReach", map[string]any{"interface": "eth0", "canReach": "8.8.8.8"}),
+			Entry("kubernetes + cidrs", map[string]any{"kubernetes": "NodeInternalIP", "cidrs": []any{"10.0.0.0/8"}}),
+			Entry("three methods", map[string]any{"firstFound": true, "interface": "eth0", "canReach": "8.8.8.8"}),
+			Entry("skipInterface + canReach", map[string]any{"skipInterface": "docker.*", "canReach": "8.8.8.8"}),
+		)
+
+		It("should reject a merge patch that adds a second method", func() {
+			Expect(createInstallation(map[string]any{"firstFound": true})).To(Succeed())
+
+			// Merge patch adds interface alongside firstFound — this is
+			// the exact scenario that motivated the CEL rule.
+			err := patchAutodetection(map[string]any{"interface": "eth0"})
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("no more than one autodetection method"))
+		})
+	})
 })

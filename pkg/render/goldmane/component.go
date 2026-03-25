@@ -59,6 +59,7 @@ const (
 	GoldmaneConfigFilePath     = "/config"
 	GoldmaneConfigFileName     = "config.json"
 	GoldmaneMetricsServiceName = "goldmane-metrics"
+	GoldmaneHealthPort         = 8080
 )
 
 func Goldmane(cfg *Configuration) render.Component {
@@ -242,30 +243,47 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		MountPath: GoldmaneConfigFilePath,
 	})
 
-	container := corev1.Container{
+	readinessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+			Command: []string{"/health", "-ready"},
+		}},
+	}
+	livenessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+			Command: []string{"/health", "-live"},
+		}},
+	}
+
+	var containerCommand []string
+	if c.uberImage {
+		containerCommand = []string{"calico", "goldmane"}
+		readinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/readiness",
+				Port: intstr.FromInt(GoldmaneHealthPort),
+			}},
+		}
+		livenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+				Host: "localhost",
+				Path: "/liveness",
+				Port: intstr.FromInt(GoldmaneHealthPort),
+			}},
+		}
+	}
+
+	return corev1.Container{
 		Name:            GoldmaneContainerName,
 		Image:           c.goldmaneImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
+		Command:         containerCommand,
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-				Command: []string{"/health", "-ready"},
-			}},
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/health", "-live"},
-				},
-			},
-		},
-		VolumeMounts: volumeMounts,
+		ReadinessProbe:  readinessProbe,
+		LivenessProbe:   livenessProbe,
+		VolumeMounts:    volumeMounts,
 	}
-	if c.uberImage {
-		container.Command = []string{"calico", "goldmane"}
-	}
-	return container
 }
 
 func (c *Component) goldmaneService() *corev1.Service {

@@ -38,7 +38,9 @@ var branchCommand = &cli.Command{
 	Flags: []cli.Flag{
 		streamFlag,
 		calicoRefFlag,
+		calicoGitRepoFlag,
 		enterpriseRefFlag,
+		enterpriseGitRepoFlag,
 		releaseBranchPrefixFlag,
 		devTagSuffixFlag,
 		calicoDirFlag,
@@ -86,6 +88,49 @@ var branchContextValuesFunc = func(ctx context.Context, c *cli.Command) (context
 	}
 	if enterpriseRef := c.String(enterpriseRefFlag.Name); enterpriseRef != "" {
 		ctx = context.WithValue(ctx, enterpriseConfigVersionCtxKey, enterpriseRef)
+	}
+	return ctx, nil
+}
+
+// validateBranchRefs validates that the required ref flags are set for branch creation.
+//   - check that the operator branch does not already exist
+//   - check that both calico and enterprise refs are provided
+//   - check that the provided calico and enterprise refs exist as a branch or tag in the remote repository
+var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	// check that the operator branch does not already exist
+	remote := c.String(gitRemoteFlag.Name)
+	branchName := ctx.Value(branchNameCtxKey).(string)
+	out, err := git("ls-remote", "--heads", remote, branchName)
+	if err != nil {
+		return ctx, fmt.Errorf("checking if branch %s exists in remote %s: %w", branchName, remote, err)
+	}
+	if out != "" {
+		return ctx, fmt.Errorf("branch %s already exists in remote %s, please choose a different name or delete the existing branch", branchName, remote)
+	}
+
+	// check that both calico and enterprise refs are provided
+	calicoRef := c.String(calicoRefFlag.Name)
+	enterpriseRef := c.String(enterpriseRefFlag.Name)
+	if calicoRef == "" || enterpriseRef == "" {
+		return ctx, fmt.Errorf("both --%s and --%s are required for branch creation", calicoRefFlag.Name, enterpriseRefFlag.Name)
+	}
+
+	// check that the provided calico and enterprise refs exist as a branch or tag in the remote repository
+	for _, check := range []struct {
+		ref  string
+		repo string
+		flag string
+	}{
+		{calicoRef, calicoGitRepoFlag.Value, calicoRefFlag.Name},
+		{enterpriseRef, enterpriseGitRepoFlag.Value, enterpriseRefFlag.Name},
+	} {
+		out, err := git("ls-remote", "--branches", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.ref)
+		if err != nil {
+			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.ref, check.repo, err)
+		}
+		if !strings.Contains(out, check.ref) {
+			return ctx, fmt.Errorf("ref %q not found as a branch or tag in %s", check.ref, check.repo)
+		}
 	}
 	return ctx, nil
 }

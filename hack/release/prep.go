@@ -55,8 +55,10 @@ to point to local repositories for Calico and Enterprise respectively.`,
 		versionFlag,
 		calicoVersionFlag,
 		calicoDirFlag,
+		calicoGitRepoFlag,
 		enterpriseVersionFlag,
 		enterpriseDirFlag,
+		enterpriseGitRepoFlag,
 		enterpriseRegistryFlag,
 		skipValidationFlag,
 		skipMilestoneFlag,
@@ -69,9 +71,65 @@ to point to local repositories for Calico and Enterprise respectively.`,
 	After:  branchAfter,
 }
 
-// validatePrepRefs checks that at least one of calico/enterprise version is set for prep.
+// validatePrepRefs checks the required refs for release prep:
+//   - check that at least one of calico or enterprise version is provided
+//   - if calico version is not provided, check that the version in calico_versions.yml is a released version
+//   - check that the provided calico and enterprise refs exist as a tag in the remote repository (if local directory not provided)
 var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	return checkAtLeastOneOfFlags(ctx, c, calicoVersionFlag.Name, enterpriseVersionFlag.Name)
+	// check that at least one of calico/enterprise version is set for prep
+	ctx, err := checkAtLeastOneOfFlags(ctx, c, calicoVersionFlag.Name, enterpriseVersionFlag.Name)
+	if err != nil {
+		return ctx, err
+	}
+
+	// If Calico is not passed in, check the version in calico_versions.yml is a released version.
+	// An operator release must always include a released Calico version.
+	calicoVersion := c.String(calicoVersionFlag.Name)
+	if calicoVersion != "" {
+		return ctx, nil
+	}
+	dir, err := gitDir()
+	if err != nil {
+		return ctx, fmt.Errorf("error getting git directory: %w", err)
+	}
+	versions, err := calicoConfigVersions(dir, calicoConfig)
+	if err != nil {
+		return ctx, fmt.Errorf("error retrieving Calico version: %w", err)
+	}
+	calicoVersion = versions.Title
+	if valid, err := isReleaseVersionFormat(calicoVersion); err != nil {
+		return ctx, fmt.Errorf("error validating Calico version format: %w", err)
+	} else if !valid {
+		return ctx, fmt.Errorf("every release must contain a released Calico version, but found %s in %s", calicoVersion, calicoConfig)
+	}
+
+	// check that the ref for calico and/or enterprise provided exists as a tag in the specified remote repository
+	// unless a local directory is provided for the respective component, in which case we assume the version exists since it is being pulled from the local repo
+	for _, check := range []struct {
+		repo     string
+		tag      string
+		flag     string
+		localDir string
+	}{
+		{tag: calicoVersion, repo: c.String(calicoGitRepoFlag.Name), localDir: c.String(calicoDirFlag.Name), flag: calicoVersionFlag.Name},
+		{tag: c.String(enterpriseVersionFlag.Name), repo: c.String(enterpriseGitRepoFlag.Name), localDir: c.String(enterpriseDirFlag.Name), flag: enterpriseVersionFlag.Name},
+	} {
+		if check.tag == "" {
+			continue
+		}
+		if check.localDir != "" {
+			logrus.Warnf("Local directory provided for %s, skipping remote ref validation", check.flag)
+			continue
+		}
+		out, err := git("ls-remote", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.tag)
+		if err != nil {
+			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.tag, check.repo, err)
+		}
+		if !strings.Contains(out, check.tag) {
+			return ctx, fmt.Errorf("ref %q not found as a tag in %s", check.tag, check.repo)
+		}
+	}
+	return ctx, nil
 }
 
 // prepContextValuesFunc sets context values for the prep command based on CLI flags.
@@ -108,26 +166,6 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
 	}
 
-	// If Calico is not passed in, check the version in calico_versions.yml is a released version.
-	// An operator release must always include a released Calico version.
-	calicoVersion := c.String(calicoVersionFlag.Name)
-	if calicoVersion != "" {
-		return ctx, nil
-	}
-	dir, err := gitDir()
-	if err != nil {
-		return ctx, fmt.Errorf("error getting git directory: %w", err)
-	}
-	versions, err := calicoConfigVersions(dir, calicoConfig)
-	if err != nil {
-		return ctx, fmt.Errorf("error retrieving Calico version: %w", err)
-	}
-	calicoVersion = versions.Title
-	if valid, err := isReleaseVersionFormat(calicoVersion); err != nil {
-		return ctx, fmt.Errorf("error validating Calico version format: %w", err)
-	} else if !valid {
-		return ctx, fmt.Errorf("every release must contain a released Calico version, but found %s in %s", calicoVersion, calicoConfig)
-	}
 	return ctx, nil
 })
 

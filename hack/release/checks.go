@@ -91,15 +91,3 @@ var checkAtLeastOneOfFlags = func(ctx context.Context, c *cli.Command, flagNames
 	}
 	return ctx, fmt.Errorf("at least one of the following flags must be set: %s", strings.Join(flagNames, ", "))
 }
-
-// validateBranchRefs validates that the required ref flags are set for branch creation.
-// By default, both calico-ref and enterprise-ref are required.
-// Override via init() for different products (e.g., operator-cloud).
-var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	calicoRef := c.String(calicoRefFlag.Name)
-	enterpriseRef := c.String(enterpriseRefFlag.Name)
-	if calicoRef == "" || enterpriseRef == "" {
-		return ctx, fmt.Errorf("both --%s and --%s are required for branch creation", calicoRefFlag.Name, enterpriseRefFlag.Name)
-	}
-	return ctx, nil
-}

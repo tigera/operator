@@ -16,27 +16,30 @@ package installation
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"runtime"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	operator "github.com/tigera/operator/api/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes/scheme"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
 
 var _ = Describe("Installation CRD CEL validation", Serial, func() {
 	var (
-		testEnv   *envtest.Environment
-		dynClient dynamic.Interface
-		instGVR   schema.GroupVersionResource
+		testEnv *envtest.Environment
+		c       client.Client
+		ctx     context.Context
 	)
 
 	BeforeEach(func() {
+		ctx = context.Background()
+
 		_, thisFile, _, ok := runtime.Caller(0)
 		Expect(ok).To(BeTrue())
 		crdDir := filepath.Join(filepath.Dir(thisFile), "..", "..", "..", "config", "crd", "bases")
@@ -49,90 +52,91 @@ var _ = Describe("Installation CRD CEL validation", Serial, func() {
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { _ = testEnv.Stop() })
 
-		dynClient, err = dynamic.NewForConfig(cfg)
+		Expect(operator.AddToScheme(scheme.Scheme)).To(Succeed())
+		c, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 		Expect(err).NotTo(HaveOccurred())
-
-		instGVR = schema.GroupVersionResource{
-			Group:    "operator.tigera.io",
-			Version:  "v1",
-			Resource: "installations",
-		}
 	})
 
-	createInstallation := func(v4 map[string]any) error {
-		obj := &unstructured.Unstructured{
-			Object: map[string]any{
-				"apiVersion": "operator.tigera.io/v1",
-				"kind":       "Installation",
-				"metadata":   map[string]any{"name": "default"},
-				"spec": map[string]any{
-					"calicoNetwork": map[string]any{
-						"nodeAddressAutodetectionV4": v4,
-					},
+	newInstallation := func(v4 *operator.NodeAddressAutodetection) *operator.Installation {
+		return &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					NodeAddressAutodetectionV4: v4,
 				},
 			},
 		}
-		_, err := dynClient.Resource(instGVR).Create(context.Background(), obj, metav1.CreateOptions{})
-		return err
 	}
 
-	deleteInstallation := func() {
-		_ = dynClient.Resource(instGVR).Delete(context.Background(), "default", metav1.DeleteOptions{})
-	}
-
-	patchAutodetection := func(v4 map[string]any) error {
-		patch := &unstructured.Unstructured{
-			Object: map[string]any{
-				"spec": map[string]any{
-					"calicoNetwork": map[string]any{
-						"nodeAddressAutodetectionV4": v4,
-					},
-				},
-			},
-		}
-		data, err := patch.MarshalJSON()
-		Expect(err).NotTo(HaveOccurred())
-		_, err = dynClient.Resource(instGVR).Patch(context.Background(), "default", types.MergePatchType, data, metav1.PatchOptions{})
-		return err
-	}
+	boolPtr := func(b bool) *bool { return &b }
+	k8sMethod := operator.NodeInternalIP
 
 	Describe("NodeAddressAutodetection", func() {
 		AfterEach(func() {
-			deleteInstallation()
+			inst := &operator.Installation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			_ = c.Delete(ctx, inst)
 		})
 
 		DescribeTable("should allow single or no methods",
-			func(v4 map[string]any) {
-				Expect(createInstallation(v4)).To(Succeed())
+			func(v4 *operator.NodeAddressAutodetection) {
+				Expect(c.Create(ctx, newInstallation(v4))).To(Succeed())
 			},
-			Entry("empty", map[string]any{}),
-			Entry("firstFound", map[string]any{"firstFound": true}),
-			Entry("interface", map[string]any{"interface": "eth0"}),
-			Entry("skipInterface", map[string]any{"skipInterface": "docker.*"}),
-			Entry("canReach", map[string]any{"canReach": "8.8.8.8"}),
-			Entry("cidrs", map[string]any{"cidrs": []any{"10.0.0.0/8"}}),
-			Entry("kubernetes", map[string]any{"kubernetes": "NodeInternalIP"}),
+			Entry("empty", &operator.NodeAddressAutodetection{}),
+			Entry("nil", nil),
+			Entry("firstFound", &operator.NodeAddressAutodetection{FirstFound: boolPtr(true)}),
+			Entry("interface", &operator.NodeAddressAutodetection{Interface: "eth0"}),
+			Entry("skipInterface", &operator.NodeAddressAutodetection{SkipInterface: "docker.*"}),
+			Entry("canReach", &operator.NodeAddressAutodetection{CanReach: "8.8.8.8"}),
+			Entry("cidrs", &operator.NodeAddressAutodetection{CIDRS: []string{"10.0.0.0/8"}}),
+			Entry("kubernetes", &operator.NodeAddressAutodetection{Kubernetes: &k8sMethod}),
 		)
 
 		DescribeTable("should reject multiple methods",
-			func(v4 map[string]any) {
-				err := createInstallation(v4)
+			func(v4 *operator.NodeAddressAutodetection) {
+				err := c.Create(ctx, newInstallation(v4))
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("no more than one autodetection method"))
 			},
-			Entry("firstFound + interface", map[string]any{"firstFound": true, "interface": "eth0"}),
-			Entry("interface + canReach", map[string]any{"interface": "eth0", "canReach": "8.8.8.8"}),
-			Entry("kubernetes + cidrs", map[string]any{"kubernetes": "NodeInternalIP", "cidrs": []any{"10.0.0.0/8"}}),
-			Entry("three methods", map[string]any{"firstFound": true, "interface": "eth0", "canReach": "8.8.8.8"}),
-			Entry("skipInterface + canReach", map[string]any{"skipInterface": "docker.*", "canReach": "8.8.8.8"}),
+			Entry("firstFound + interface", &operator.NodeAddressAutodetection{
+				FirstFound: boolPtr(true),
+				Interface:  "eth0",
+			}),
+			Entry("interface + canReach", &operator.NodeAddressAutodetection{
+				Interface: "eth0",
+				CanReach:  "8.8.8.8",
+			}),
+			Entry("kubernetes + cidrs", &operator.NodeAddressAutodetection{
+				Kubernetes: &k8sMethod,
+				CIDRS:      []string{"10.0.0.0/8"},
+			}),
+			Entry("three methods", &operator.NodeAddressAutodetection{
+				FirstFound: boolPtr(true),
+				Interface:  "eth0",
+				CanReach:   "8.8.8.8",
+			}),
+			Entry("skipInterface + canReach", &operator.NodeAddressAutodetection{
+				SkipInterface: "docker.*",
+				CanReach:      "8.8.8.8",
+			}),
 		)
 
 		It("should reject a merge patch that adds a second method", func() {
-			Expect(createInstallation(map[string]any{"firstFound": true})).To(Succeed())
+			inst := newInstallation(&operator.NodeAddressAutodetection{FirstFound: boolPtr(true)})
+			Expect(c.Create(ctx, inst)).To(Succeed())
 
-			// Merge patch adds interface alongside firstFound — this is
-			// the exact scenario that motivated the CEL rule.
-			err := patchAutodetection(map[string]any{"interface": "eth0"})
+			// Merge patch adds interface alongside firstFound — the exact
+			// scenario that motivated this CEL rule.
+			patch, err := json.Marshal(map[string]any{
+				"spec": map[string]any{
+					"calicoNetwork": map[string]any{
+						"nodeAddressAutodetectionV4": map[string]any{
+							"interface": "eth0",
+						},
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			err = c.Patch(ctx, inst, client.RawPatch(types.MergePatchType, patch))
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("no more than one autodetection method"))
 		})

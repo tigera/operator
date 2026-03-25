@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
@@ -68,13 +69,13 @@ var _ = Describe("Installation CRD CEL validation", Serial, func() {
 		}
 	}
 
-	boolPtr := func(b bool) *bool { return &b }
-	k8sMethod := operator.NodeInternalIP
-
 	Describe("NodeAddressAutodetection", func() {
 		AfterEach(func() {
 			inst := &operator.Installation{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-			_ = c.Delete(ctx, inst)
+			err := c.Delete(ctx, inst)
+			if err != nil {
+				GinkgoLogr.Error(err, "Failed to delete Installation in AfterEach")
+			}
 		})
 
 		DescribeTable("should allow single or no methods",
@@ -83,12 +84,12 @@ var _ = Describe("Installation CRD CEL validation", Serial, func() {
 			},
 			Entry("empty", &operator.NodeAddressAutodetection{}),
 			Entry("nil", nil),
-			Entry("firstFound", &operator.NodeAddressAutodetection{FirstFound: boolPtr(true)}),
+			Entry("firstFound", &operator.NodeAddressAutodetection{FirstFound: ptr.To(true)}),
 			Entry("interface", &operator.NodeAddressAutodetection{Interface: "eth0"}),
 			Entry("skipInterface", &operator.NodeAddressAutodetection{SkipInterface: "docker.*"}),
 			Entry("canReach", &operator.NodeAddressAutodetection{CanReach: "8.8.8.8"}),
 			Entry("cidrs", &operator.NodeAddressAutodetection{CIDRS: []string{"10.0.0.0/8"}}),
-			Entry("kubernetes", &operator.NodeAddressAutodetection{Kubernetes: &k8sMethod}),
+			Entry("kubernetes", &operator.NodeAddressAutodetection{Kubernetes: ptr.To(operator.NodeInternalIP)}),
 		)
 
 		DescribeTable("should reject multiple methods",
@@ -98,7 +99,7 @@ var _ = Describe("Installation CRD CEL validation", Serial, func() {
 				Expect(err.Error()).To(ContainSubstring("no more than one autodetection method"))
 			},
 			Entry("firstFound + interface", &operator.NodeAddressAutodetection{
-				FirstFound: boolPtr(true),
+				FirstFound: ptr.To(true),
 				Interface:  "eth0",
 			}),
 			Entry("interface + canReach", &operator.NodeAddressAutodetection{
@@ -106,11 +107,11 @@ var _ = Describe("Installation CRD CEL validation", Serial, func() {
 				CanReach:  "8.8.8.8",
 			}),
 			Entry("kubernetes + cidrs", &operator.NodeAddressAutodetection{
-				Kubernetes: &k8sMethod,
+				Kubernetes: ptr.To(operator.NodeInternalIP),
 				CIDRS:      []string{"10.0.0.0/8"},
 			}),
 			Entry("three methods", &operator.NodeAddressAutodetection{
-				FirstFound: boolPtr(true),
+				FirstFound: ptr.To(true),
 				Interface:  "eth0",
 				CanReach:   "8.8.8.8",
 			}),
@@ -121,7 +122,7 @@ var _ = Describe("Installation CRD CEL validation", Serial, func() {
 		)
 
 		It("should reject a merge patch that adds a second method", func() {
-			inst := newInstallation(&operator.NodeAddressAutodetection{FirstFound: boolPtr(true)})
+			inst := newInstallation(&operator.NodeAddressAutodetection{FirstFound: ptr.To(true)})
 			Expect(c.Create(ctx, inst)).To(Succeed())
 
 			// Merge patch adds interface alongside firstFound — the exact

@@ -68,6 +68,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -279,6 +280,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
+	// migration state changes (e.g., Converged → triggers env var injection on components).
+	// This is a deferred watch since the CRD may not be installed.
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	})
+
 	return nil
 }
 
@@ -330,6 +340,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
+		migrationWatchReady:  &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
@@ -355,6 +366,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.MigrationClusterRoleName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
@@ -387,6 +399,7 @@ type ReconcileInstallation struct {
 	clusterDomain                 string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
+	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
 
@@ -1119,6 +1132,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Reconcile the migration RBAC ClusterRole/ClusterRoleBinding. We do this
+	// early so kube-controllers can start the migration without waiting for
+	// the rest of this reconcile to complete. Only check migration state once
+	// the watch is established to ensure we use the cache.
+	migrationExists := r.migrationWatchReady.IsReady() && datastoremigration.Exists(r.client)
+	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationExists), nil); err != nil {
+		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If

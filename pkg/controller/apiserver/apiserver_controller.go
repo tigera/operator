@@ -25,7 +25,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -42,6 +41,7 @@ import (
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -65,11 +65,12 @@ var log = logf.Log.WithName("controller_apiserver")
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileAPIServer{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
-		tierWatchReady: &utils.ReadyFlag{},
-		opts:           opts,
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		tierWatchReady:      &utils.ReadyFlag{},
+		migrationWatchReady: &utils.ReadyFlag{},
+		opts:                opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -182,6 +183,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
+	// to migration phase changes (e.g., goes hands-off during Migrating).
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	})
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -193,11 +202,12 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client         client.Client
-	scheme         *runtime.Scheme
-	status         status.StatusManager
-	tierWatchReady *utils.ReadyFlag
-	opts           options.ControllerOptions
+	client              client.Client
+	scheme              *runtime.Scheme
+	status              status.StatusManager
+	tierWatchReady      *utils.ReadyFlag
+	migrationWatchReady *utils.ReadyFlag
+	opts                options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -208,6 +218,28 @@ type ReconcileAPIServer struct {
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(2).Info("Reconciling APIServer")
+
+	// Check if a datastore migration is in progress. If so, the migration controller
+	// owns the APIService and we should not reconcile to avoid fighting over it.
+	// Only query migration state once the watch is established to ensure we use the cache.
+	var migrationPhase string
+	if r.migrationWatchReady.IsReady() {
+		migrationPhase = datastoremigration.GetPhase(r.client)
+	}
+	if migrationPhase == datastoremigration.PhaseMigrating {
+		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	if migrationPhase == datastoremigration.PhaseConverged && !r.opts.UseV3CRDs {
+		// Migration has converged but the operator is still running in v1 mode.
+		// Trigger a restart by updating our own deployment with the CALICO_API_GROUP env var.
+		reqLogger.Info("DatastoreMigration converged, triggering operator restart to switch to v3 CRD mode")
+		if err := r.setAPIGroupEnvVar(ctx); err != nil {
+			reqLogger.Error(err, "Failed to trigger operator restart")
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		return reconcile.Result{}, nil
+	}
 
 	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
@@ -563,6 +595,41 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		if err != nil {
 			return fmt.Errorf("APIServer spec.CalicoWebhooksDeployment is not valid: %w", err)
 		}
+	}
+	return nil
+}
+
+// setAPIGroupEnvVar updates the operator's own Deployment to add the
+// CALICO_API_GROUP env var, which triggers a rolling restart. On restart,
+// UseV3CRDS() picks up the env var and the operator starts in v3 CRD mode.
+func (r *ReconcileAPIServer) setAPIGroupEnvVar(ctx context.Context) error {
+	dep := &v1.Deployment{}
+	key := types.NamespacedName{Name: "tigera-operator", Namespace: common.OperatorNamespace()}
+	if err := r.client.Get(ctx, key, dep); err != nil {
+		return fmt.Errorf("failed to get operator deployment: %w", err)
+	}
+
+	envVar := corev1.EnvVar{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}
+	changed := false
+	for i, c := range dep.Spec.Template.Spec.Containers {
+		hasVar := false
+		for _, e := range c.Env {
+			if e.Name == "CALICO_API_GROUP" {
+				hasVar = true
+				break
+			}
+		}
+		if !hasVar {
+			dep.Spec.Template.Spec.Containers[i].Env = append(dep.Spec.Template.Spec.Containers[i].Env, envVar)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+
+	if err := r.client.Update(ctx, dep); err != nil {
+		return fmt.Errorf("failed to update operator deployment: %w", err)
 	}
 	return nil
 }

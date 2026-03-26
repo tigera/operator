@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [master, release-v1.41, release-v1.40, release-v1.38]
+        branch: [master, release-v1.42, release-v1.41, release-v1.40, release-v1.38]
     steps:
       - uses: actions/checkout@v4
         with:

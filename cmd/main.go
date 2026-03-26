@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -83,6 +84,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
+	utilruntime.Must(datastoremigration.AddToScheme(scheme))
 }
 
 func printVersion() {
@@ -212,7 +214,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	v3CRDs, err := apis.UseV3CRDS(cs)
+	v3CRDs, err := apis.UseV3CRDS(cfg)
 	if err != nil {
 		log.Error(err, "Failed to determine CRD version to use")
 		os.Exit(1)

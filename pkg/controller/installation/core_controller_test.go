@@ -196,6 +196,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				tierWatchReady:       ready,
+				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler:  utils.NewComponentHandler,
 			}
 
@@ -816,6 +817,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				clusterDomain:        dns.DefaultClusterDomain,
 				tierWatchReady:       ready,
+				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler:  utils.NewComponentHandler,
 			}
 			r.typhaAutoscaler.start(ctx)
@@ -1036,6 +1038,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				tierWatchReady:       ready,
+				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler:  utils.NewComponentHandler,
 			}
 
@@ -2260,6 +2263,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				clusterDomain:        dns.DefaultClusterDomain,
 				tierWatchReady:       ready,
+				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler:  utils.NewComponentHandler,
 			}
 			r.typhaAutoscaler.start(ctx)
@@ -2395,6 +2399,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
 				tierWatchReady:       ready,
+				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 					return componentHandler
 				},

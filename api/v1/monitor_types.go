@@ -175,6 +175,11 @@ type AlertManager struct {
 	AlertManagerSpec *AlertManagerSpec `json:"spec,omitempty"`
 }
 type AlertManagerSpec struct {
+	// Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
+	// Default: 0
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// Define resources requests and limits for single Pods.
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }

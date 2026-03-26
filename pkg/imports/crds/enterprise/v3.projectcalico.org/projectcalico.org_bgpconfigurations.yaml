@@ -108,6 +108,7 @@ spec:
                         items:
                           type: string
                         type: array
+                        x-kubernetes-list-type: atomic
                     type: object
                     x-kubernetes-map-type: atomic
                   type: array

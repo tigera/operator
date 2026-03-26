@@ -22,7 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-
 // Phase constants for DatastoreMigration status.
 const (
 	PhasePending                      = "Pending"

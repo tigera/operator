@@ -274,6 +274,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	var certLoader *dynamicCertLoader
 	if metricsTLSEnabled() {
 		certLoader = newDynamicCertLoader()
+		metricsOpts.SecureServing = true
 		metricsOpts.TLSOpts = []func(*tls.Config){
 			func(cfg *tls.Config) {
 				cfg.GetCertificate = certLoader.GetCertificate

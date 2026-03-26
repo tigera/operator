@@ -1328,6 +1328,14 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 		})
 	}
 
+	if cfg.OperatorMetricsEnabled {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(cfg.OperatorNamespace, OperatorMetricsServiceName),
+		})
+	}
+
 	typhaMetricsPort := cfg.Installation.TyphaMetricsPort
 	if typhaMetricsPort != nil {
 		egressRules = append(egressRules, v3.Rule{

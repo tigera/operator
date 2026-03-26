@@ -53,7 +53,7 @@ func (in *DatastoreMigration) DeepCopyObject() runtime.Object {
 		return nil
 	}
 	out := new(DatastoreMigration)
-	in.ObjectMeta.DeepCopyInto(&out.ObjectMeta)
+	in.DeepCopyInto(&out.ObjectMeta)
 	out.TypeMeta = in.TypeMeta
 	out.Status = in.Status
 	return out
@@ -72,7 +72,7 @@ func (in *DatastoreMigrationList) DeepCopyObject() runtime.Object {
 	}
 	out := new(DatastoreMigrationList)
 	out.TypeMeta = in.TypeMeta
-	in.ListMeta.DeepCopyInto(&out.ListMeta)
+	in.DeepCopyInto(&out.ListMeta)
 	if in.Items != nil {
 		out.Items = make([]DatastoreMigration, len(in.Items))
 		for i := range in.Items {

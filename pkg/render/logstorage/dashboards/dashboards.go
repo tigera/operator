@@ -92,6 +92,9 @@ type Config struct {
 
 	// Credentials are used to provide annotations for elastic search users
 	Credentials []*corev1.Secret
+
+	// KibanaEnabled indicates whether Kibana is being rendered.
+	KibanaEnabled bool
 }
 
 func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
@@ -124,7 +127,7 @@ func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objsToDelete = append(objsToDelete,
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("dashboards-installer", d.cfg.Namespace),
 	)
-	if d.cfg.IsManaged {
+	if d.cfg.IsManaged || !d.cfg.KibanaEnabled {
 		objsToDelete = append(objsToDelete, d.resources()...)
 	} else {
 		objsToCreate = append(objsToCreate, d.resources()...)

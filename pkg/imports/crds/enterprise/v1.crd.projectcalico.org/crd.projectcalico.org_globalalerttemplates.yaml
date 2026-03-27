@@ -30,6 +30,7 @@ spec:
                   items:
                     type: string
                   type: array
+                  x-kubernetes-list-type: atomic
                 condition:
                   type: string
                 dataSet:
@@ -64,10 +65,12 @@ spec:
                         items:
                           type: string
                         type: array
+                        x-kubernetes-list-type: atomic
                     required:
                       - name
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
                 summary:
                   type: string
                 threshold:

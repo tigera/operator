@@ -69,7 +69,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	reqLogger.Info("Reconciling LogStorage - Conditions")
 
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	if err := r.client.Get(ctx, key, ls); err != nil {
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, nil

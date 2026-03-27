@@ -65,7 +65,7 @@ var _ = Describe("ComponentRendering", func() {
 			&whisker.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
-					Variant:            operatorv1.TigeraSecureEnterprise,
+					Variant:            operatorv1.CalicoEnterprise,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,

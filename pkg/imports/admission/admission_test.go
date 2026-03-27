@@ -45,7 +45,7 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 	})
 
 	It("returns Enterprise MAPs when v3=true", func() {
-		objs := GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, true)
+		objs := GetMutatingAdmissionPolicies(opv1.CalicoEnterprise, true)
 		Expect(objs).To(HaveLen(4), "Expected 4 admission objects, got %d", len(objs))
 
 		var mapCount, mapbCount int
@@ -64,7 +64,7 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 
 	It("returns empty when v3=false", func() {
 		Expect(GetMutatingAdmissionPolicies(opv1.Calico, false)).To(BeEmpty(), "Expected no admission objects when v3=false")
-		Expect(GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, false)).To(BeEmpty(), "Expected no admission objects when v3=false")
+		Expect(GetMutatingAdmissionPolicies(opv1.CalicoEnterprise, false)).To(BeEmpty(), "Expected no admission objects when v3=false")
 	})
 
 	It("parses MAP names correctly", func() {

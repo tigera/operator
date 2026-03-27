@@ -120,14 +120,14 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			&operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
+					Variant:  operatorv1.CalicoEnterprise,
 					Registry: "some.registry.org/",
 					ImagePullSecrets: []corev1.LocalObjectReference{{
 						Name: "tigera-pull-secret",
 					}},
 				},
 				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
+					Variant: operatorv1.CalicoEnterprise,
 					Computed: &operatorv1.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.
@@ -530,7 +530,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -556,7 +556,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -601,7 +601,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -663,7 +663,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))

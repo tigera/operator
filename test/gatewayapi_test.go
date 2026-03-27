@@ -75,7 +75,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		cleanupResources(c)
 
 		By("Verifying CRDs are installed")
-		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
+		verifyCRDsExist(c, operator.CalicoEnterprise)
 
 		By("Creating the tigera-operator namespace, if it doesn't exist")
 		ns := &corev1.Namespace{
@@ -150,7 +150,7 @@ var _ = Describe("GatewayAPI tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operator.InstallationSpec{
 				Registry: "myregistry.io/",
-				Variant:  operator.TigeraSecureEnterprise,
+				Variant:  operator.CalicoEnterprise,
 			},
 		}
 		err := c.Create(shutdownContext, instance)
@@ -161,7 +161,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Update the status to set variant to Enterprise.
-		instance.Status.Variant = operator.TigeraSecureEnterprise
+		instance.Status.Variant = operator.CalicoEnterprise
 		err = c.Status().Update(shutdownContext, instance)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -190,7 +190,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("tigera-gateway-class:tigera-gateway-class"))
 
 		By("Now configuring two custom classes")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-class-1",
@@ -204,7 +204,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("custom-class-1:custom-class-1", "custom-class-2:custom-class-2"))
 
 		By("Deconfiguring one of the custom classes")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-class-1",
@@ -216,7 +216,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("custom-class-1:custom-class-1"))
 
 		By("Reverting to the default GatewayAPI")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = nil
 		err = c.Update(shutdownContext, gatewayAPI)
@@ -233,7 +233,7 @@ var _ = Describe("GatewayAPI tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operator.InstallationSpec{
 				Registry: "myregistry.io/",
-				Variant:  operator.TigeraSecureEnterprise,
+				Variant:  operator.CalicoEnterprise,
 			},
 		}
 		err := c.Create(shutdownContext, instance)
@@ -244,7 +244,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Update the status to set variant to Enterprise.
-		instance.Status.Variant = operator.TigeraSecureEnterprise
+		instance.Status.Variant = operator.CalicoEnterprise
 		err = c.Status().Update(shutdownContext, instance)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -278,7 +278,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		}, "10s").ShouldNot(HaveOccurred())
 
 		By("Updating GatewayAPI with that custom EnvoyProxy")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-gc",
@@ -321,7 +321,7 @@ var _ = Describe("GatewayAPI tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operator.InstallationSpec{
 				Registry: "myregistry.io/",
-				Variant:  operator.TigeraSecureEnterprise,
+				Variant:  operator.CalicoEnterprise,
 			},
 		}
 		err := c.Create(shutdownContext, instance)
@@ -332,7 +332,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Update the status to set variant to Enterprise.
-		instance.Status.Variant = operator.TigeraSecureEnterprise
+		instance.Status.Variant = operator.CalicoEnterprise
 		err = c.Status().Update(shutdownContext, instance)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -416,7 +416,7 @@ var _ = Describe("GatewayAPI tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operator.InstallationSpec{
 				Registry: "myregistry.io/",
-				Variant:  operator.TigeraSecureEnterprise,
+				Variant:  operator.CalicoEnterprise,
 			},
 		}
 		err := c.Create(shutdownContext, instance)
@@ -427,7 +427,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Update the status to set variant to Enterprise.
-		instance.Status.Variant = operator.TigeraSecureEnterprise
+		instance.Status.Variant = operator.CalicoEnterprise
 		err = c.Status().Update(shutdownContext, instance)
 		Expect(err).NotTo(HaveOccurred())
 

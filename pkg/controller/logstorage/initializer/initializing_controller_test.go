@@ -106,12 +106,12 @@ var _ = Describe("LogStorage Initializing controller", func() {
 					Name: "default",
 				},
 				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
+					Variant:  operatorv1.CalicoEnterprise,
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
 					ControlPlaneReplicas: &replicas,
-					Variant:              operatorv1.TigeraSecureEnterprise,
+					Variant:              operatorv1.CalicoEnterprise,
 					ImagePullSecrets: []corev1.LocalObjectReference{{
 						Name: "tigera-pull-secret",
 					}},

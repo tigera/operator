@@ -245,7 +245,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Verify the cluster doesn't also have the ManagementCluster CRD installed.
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant.IsEnterprise() {
 		managementCluster, err := utils.GetManagementCluster(ctx, r.cli)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -306,7 +306,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var guardianKeyPair certificatemanagement.KeyPairInterface
-	if variant != operatorv1.TigeraSecureEnterprise {
+	if !variant.IsEnterprise() {
 		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.clusterDomain)
 		guardianCertificateNames = append(guardianCertificateNames, "localhost", "127.0.0.1")
 		guardianKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, render.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
@@ -409,7 +409,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying clusterInformation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant.IsEnterprise() {
 		managedClusterVersion = clusterInformation.Spec.CNXVersion
 	} else {
 		managedClusterVersion = clusterInformation.Spec.CalicoVersion
@@ -422,7 +422,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var includeEgressNetworkPolicy bool
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant.IsEnterprise() {
 		// Ensure the license can support enterprise policy, before rendering any network policies within it.
 		if license, err := utils.FetchLicenseKey(ctx, r.cli); err == nil {
 			if utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
@@ -522,7 +522,7 @@ func fillDefaults(cr *operatorv1.ManagementClusterConnection, variant operatorv1
 	if cr.Spec.TLS.CA == "" {
 		cr.Spec.TLS.CA = operatorv1.CATypeTigera
 	}
-	if variant == operatorv1.TigeraSecureEnterprise && cr.Spec.Impersonation == nil {
+	if variant.IsEnterprise() && cr.Spec.Impersonation == nil {
 		cr.Spec.Impersonation = &operatorv1.Impersonation{
 			Users:           []string{},
 			Groups:          []string{},

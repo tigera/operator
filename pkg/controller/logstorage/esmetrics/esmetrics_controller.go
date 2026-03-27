@@ -134,7 +134,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	logStorage := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err = r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {

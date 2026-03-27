@@ -184,7 +184,7 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.CNI.Type = operator.PluginCalico
 		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.Variant = operator.CalicoEnterprise
 		err = validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 	})
@@ -344,7 +344,7 @@ var _ = Describe("Installation validation tests", func() {
 	It("should not error if CalicoNetwork is provided on EKS", func() {
 		instance := &operator.Installation{}
 		instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginCalico}
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.Variant = operator.CalicoEnterprise
 		instance.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 		instance.Spec.KubernetesProvider = operator.ProviderEKS
 
@@ -1271,8 +1271,8 @@ var _ = Describe("Installation validation tests", func() {
 
 			Entry("Product: Calico FipsMode: Disabled", operator.Calico, operator.FIPSModeDisabled, false),
 			Entry("Product: Calico FipsMode: Enabled", operator.Calico, operator.FIPSModeEnabled, false),
-			Entry("Product: TigeraSecureEnterprise FipsMode: Disabled", operator.TigeraSecureEnterprise, operator.FIPSModeDisabled, false),
-			Entry("Product: TigeraSecureEnterprise FipsMode: Enabled", operator.TigeraSecureEnterprise, operator.FIPSModeEnabled, true),
+			Entry("Product: CalicoEnterprise FipsMode: Disabled", operator.CalicoEnterprise, operator.FIPSModeDisabled, false),
+			Entry("Product: CalicoEnterprise FipsMode: Enabled", operator.CalicoEnterprise, operator.FIPSModeEnabled, true),
 		)
 	})
 })

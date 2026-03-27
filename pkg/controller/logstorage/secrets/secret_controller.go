@@ -178,7 +178,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 
 	// Get LogStorage resource.
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -544,7 +544,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 func (r *SecretSubController) isEKSLogForwardingEnabled(install *operatorv1.InstallationSpec) bool {
 	if install.KubernetesProvider.IsEKS() {
 		instance := &operatorv1.LogCollector{}
-		err := r.client.Get(context.Background(), utils.DefaultTSEEInstanceKey, instance)
+		err := r.client.Get(context.Background(), utils.DefaultEnterpriseInstanceKey, instance)
 		if err != nil {
 			log.Error(err, "Error loading logcollector, Unable to check whether EKS Log Forwarding is enabled")
 			return false

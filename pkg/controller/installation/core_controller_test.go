@@ -217,12 +217,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				&operator.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operator.InstallationSpec{
-						Variant:               operator.TigeraSecureEnterprise,
+						Variant:               operator.CalicoEnterprise,
 						Registry:              "some.registry.org/",
 						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 					},
 					Status: operator.InstallationStatus{
-						Variant: operator.TigeraSecureEnterprise,
+						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
 							Registry: "my-reg",
 							// The test is provider agnostic.
@@ -825,11 +825,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:  operator.TigeraSecureEnterprise,
+					Variant:  operator.CalicoEnterprise,
 					Registry: "some.registry.org/",
 				},
 				Status: operator.InstallationStatus{
-					Variant: operator.TigeraSecureEnterprise,
+					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.
@@ -1065,7 +1065,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:               operator.TigeraSecureEnterprise,
+					Variant:               operator.CalicoEnterprise,
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 					ImagePullSecrets: []corev1.LocalObjectReference{{
@@ -2271,7 +2271,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:            operator.TigeraSecureEnterprise,
+					Variant:            operator.CalicoEnterprise,
 					Registry:           "some.registry.org/",
 					KubernetesProvider: operator.ProviderEKS,
 					CNI: &operator.CNISpec{
@@ -2282,7 +2282,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 				Status: operator.InstallationStatus{
-					Variant: operator.TigeraSecureEnterprise,
+					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.
@@ -2422,12 +2422,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				&operator.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operator.InstallationSpec{
-						Variant:               operator.TigeraSecureEnterprise,
+						Variant:               operator.CalicoEnterprise,
 						Registry:              "some.registry.org/",
 						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 					},
 					Status: operator.InstallationStatus{
-						Variant: operator.TigeraSecureEnterprise,
+						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
 							Registry: "my-reg",
 							// The test is provider agnostic.
@@ -2757,7 +2757,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		installation.Spec.Variant = operator.TigeraSecureEnterprise
+		installation.Spec.Variant = operator.CalicoEnterprise
 
 		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())

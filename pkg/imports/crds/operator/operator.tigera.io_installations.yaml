@@ -1475,6 +1475,7 @@ spec:
                             the given regex.
                           type: string
                       type: object
+                      x-kubernetes-map-type: atomic
                       x-kubernetes-validations:
                         - message: no more than one autodetection method can be specified
                           rule:
@@ -1523,6 +1524,7 @@ spec:
                             the given regex.
                           type: string
                       type: object
+                      x-kubernetes-map-type: atomic
                       x-kubernetes-validations:
                         - message: no more than one autodetection method can be specified
                           rule:
@@ -10314,6 +10316,7 @@ spec:
                                 the given regex.
                               type: string
                           type: object
+                          x-kubernetes-map-type: atomic
                           x-kubernetes-validations:
                             - message: no more than one autodetection method can be specified
                               rule:
@@ -10362,6 +10365,7 @@ spec:
                                 the given regex.
                               type: string
                           type: object
+                          x-kubernetes-map-type: atomic
                           x-kubernetes-validations:
                             - message: no more than one autodetection method can be specified
                               rule:

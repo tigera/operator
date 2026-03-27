@@ -190,7 +190,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("tigera-gateway-class:tigera-gateway-class"))
 
 		By("Now configuring two custom classes")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-class-1",
@@ -204,7 +204,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("custom-class-1:custom-class-1", "custom-class-2:custom-class-2"))
 
 		By("Deconfiguring one of the custom classes")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-class-1",
@@ -216,7 +216,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		Eventually(getGatewayClassNames, "10s").Should(ConsistOf("custom-class-1:custom-class-1"))
 
 		By("Reverting to the default GatewayAPI")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = nil
 		err = c.Update(shutdownContext, gatewayAPI)
@@ -278,7 +278,7 @@ var _ = Describe("GatewayAPI tests", func() {
 		}, "10s").ShouldNot(HaveOccurred())
 
 		By("Updating GatewayAPI with that custom EnvoyProxy")
-		err = c.Get(shutdownContext, utils.DefaultTSEEInstanceKey, gatewayAPI)
+		err = c.Get(shutdownContext, utils.DefaultEnterpriseInstanceKey, gatewayAPI)
 		Expect(err).NotTo(HaveOccurred())
 		gatewayAPI.Spec.GatewayClasses = []operator.GatewayClassSpec{{
 			Name: "custom-gc",

@@ -260,8 +260,8 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	if variant != operatorv1.TigeraSecureEnterprise {
-		degradedMsg := fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise)
+	if !variant.IsEnterprise() {
+		degradedMsg := "Waiting for network to be an enterprise variant"
 		reqLogger.Error(err, degradedMsg)
 		r.status.SetDegraded(operatorv1.ResourceNotReady, degradedMsg, nil, reqLogger)
 		for _, egw := range egwsToReconcile {

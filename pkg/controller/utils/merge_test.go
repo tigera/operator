@@ -55,7 +55,7 @@ var _ = Describe("Installation merge tests", func() {
 		Entry("Main only set", &opv1.Calico, nil, &opv1.Calico),
 		Entry("Second only set", nil, &opv1.Calico, &opv1.Calico),
 		Entry("Both set equal", &opv1.Calico, &opv1.Calico, &opv1.Calico),
-		Entry("Both set not matching", &opv1.Calico, &opv1.TigeraSecureEnterprise, &opv1.TigeraSecureEnterprise),
+		Entry("Both set not matching", &opv1.Calico, &opv1.CalicoEnterprise, &opv1.CalicoEnterprise),
 	)
 
 	DescribeTable("merge Registry", func(main, second, expect string) {
@@ -428,7 +428,7 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Both set equal", map[string]string{"a": "1"}, map[string]string{"a": "1"}, map[string]string{"a": "1"}),
 			Entry("Both set not matching", map[string]string{"a": "1"}, map[string]string{"b": "2"}, map[string]string{"b": "2"}),
 		)
-		//TODO: Have some test that have different fields set and they merge.
+		// TODO: Have some test that have different fields set and they merge.
 
 		DescribeTable("merge multiple CalicoNetwork fields", func(main, second, expect *opv1.CalicoNetworkSpec) {
 			m := opv1.InstallationSpec{}
@@ -482,7 +482,8 @@ var _ = Describe("Installation merge tests", func() {
 			{
 				Key:   "net.ipv4.tcp_keepalive_intvl",
 				Value: "15",
-			}, {
+			},
+			{
 				Key:   "net.ipv4.tcp_keepalive_probes",
 				Value: "6",
 			},
@@ -514,7 +515,6 @@ var _ = Describe("Installation merge tests", func() {
 			Entry("Both set equal", _sysctlTuningA, _sysctlTuningA, _sysctlTuningA),
 			Entry("Both set not matching", _sysctlTuningA, _sysctlTuningB, _sysctlTuningB),
 		)
-
 	})
 
 	DescribeTable("merge NodeMetricsPort", func(main, second, expect *int32) {
@@ -640,7 +640,7 @@ var _ = Describe("Installation merge tests", func() {
 			[]opv1.ComponentResource{_typhaComp}),
 	)
 
-	var metadataTests = []TableEntry{
+	metadataTests := []TableEntry{
 		Entry("Both unset", nil, nil, nil),
 		Entry("Main only set (labels only)", &opv1.Metadata{Labels: map[string]string{"a": "1"}}, nil, &opv1.Metadata{Labels: map[string]string{"a": "1"}}),
 		Entry("Main only set (annots only)", &opv1.Metadata{Annotations: map[string]string{"a": "1"}}, nil, &opv1.Metadata{Annotations: map[string]string{"a": "1"}}),
@@ -691,7 +691,6 @@ var _ = Describe("Installation merge tests", func() {
 					},
 				},
 			}
-
 		})
 
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
@@ -985,7 +984,6 @@ var _ = Describe("Installation merge tests", func() {
 					},
 				},
 			}
-
 		})
 
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {
@@ -1279,7 +1277,6 @@ var _ = Describe("Installation merge tests", func() {
 					},
 				},
 			}
-
 		})
 
 		DescribeTable("merge metadata", func(main, second, expect *opv1.Metadata) {

@@ -162,7 +162,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 	It("should terminate early on managed cluster", func() {
 		mgmtClusterConnection := &operatorv1.ManagementClusterConnection{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: utils.DefaultTSEEInstanceKey.Name,
+				Name: utils.DefaultEnterpriseInstanceKey.Name,
 			},
 		}
 

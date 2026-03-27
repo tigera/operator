@@ -239,8 +239,8 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		r.status.SetDegraded(oprv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if variant != oprv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(oprv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", oprv1.TigeraSecureEnterprise), nil, reqLogger)
+	if !variant.IsEnterprise() {
+		r.status.SetDegraded(oprv1.ResourceNotReady, "Waiting for network to be an enterprise variant", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

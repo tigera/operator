@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -378,7 +378,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
 		if err != nil {
 			return err

@@ -52,6 +52,7 @@ spec:
                       - type
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
           required:
             - metadata

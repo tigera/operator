@@ -45,6 +45,15 @@ spec:
                             - RequestedServicesOnly
                           type: string
                       type: object
+                    migration:
+                      properties:
+                        policyNameMigrator:
+                          default: Enabled
+                          enum:
+                            - Disabled
+                            - Enabled
+                          type: string
+                      type: object
                     namespace:
                       properties:
                         reconcilerPeriod:
@@ -82,6 +91,7 @@ spec:
                                     type: string
                                 type: object
                               type: array
+                              x-kubernetes-list-type: atomic
                           type: object
                         leakGracePeriod:
                           type: string
@@ -96,15 +106,6 @@ spec:
                     policy:
                       properties:
                         reconcilerPeriod:
-                          type: string
-                      type: object
-                    policyMigration:
-                      properties:
-                        enabled:
-                          default: Enabled
-                          enum:
-                            - Disabled
-                            - Enabled
                           type: string
                       type: object
                     serviceAccount:
@@ -172,6 +173,15 @@ spec:
                                 - RequestedServicesOnly
                               type: string
                           type: object
+                        migration:
+                          properties:
+                            policyNameMigrator:
+                              default: Enabled
+                              enum:
+                                - Disabled
+                                - Enabled
+                              type: string
+                          type: object
                         namespace:
                           properties:
                             reconcilerPeriod:
@@ -209,6 +219,7 @@ spec:
                                         type: string
                                     type: object
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               type: object
                             leakGracePeriod:
                               type: string
@@ -223,15 +234,6 @@ spec:
                         policy:
                           properties:
                             reconcilerPeriod:
-                              type: string
-                          type: object
-                        policyMigration:
-                          properties:
-                            enabled:
-                              default: Enabled
-                              enum:
-                                - Disabled
-                                - Enabled
                               type: string
                           type: object
                         serviceAccount:

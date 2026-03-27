@@ -87,6 +87,9 @@ spec:
                       - type
                     type: object
                   type: array
+                  x-kubernetes-list-map-keys:
+                    - type
+                  x-kubernetes-list-type: map
                 expiry:
                   format: date-time
                   nullable: true
@@ -95,6 +98,7 @@ spec:
                   items:
                     type: string
                   type: array
+                  x-kubernetes-list-type: atomic
                 gracePeriod:
                   type: string
                 maxnodes:

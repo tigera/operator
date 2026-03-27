@@ -46,6 +46,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: atomic
                           namespaceSelector:
                             type: string
                           nets:
@@ -57,6 +58,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: set
                           notPorts:
                             items:
                               anyOf:
@@ -65,6 +67,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           notSelector:
                             type: string
                           ports:
@@ -75,6 +78,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           selector:
                             type: string
                           serviceAccounts:
@@ -108,17 +112,20 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               required:
                                 - header
                                 - operator
                                 - values
                               type: object
                             type: array
+                            x-kubernetes-list-type: atomic
                           methods:
                             items:
                               type: string
                             maxItems: 20
                             type: array
+                            x-kubernetes-list-type: atomic
                           paths:
                             items:
                               properties:
@@ -131,6 +138,7 @@ spec:
                               type: object
                             maxItems: 20
                             type: array
+                            x-kubernetes-list-type: atomic
                         type: object
                       icmp:
                         properties:
@@ -192,6 +200,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: atomic
                           namespaceSelector:
                             type: string
                           nets:
@@ -203,6 +212,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: set
                           notPorts:
                             items:
                               anyOf:
@@ -211,6 +221,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           notSelector:
                             type: string
                           ports:
@@ -221,6 +232,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           selector:
                             type: string
                           serviceAccounts:
@@ -261,6 +273,7 @@ spec:
                           == 0) && (!has(self.destination.notPorts) || size(self.destination.notPorts)
                           == 0)"
                   type: array
+                  x-kubernetes-list-type: atomic
                 ingress:
                   items:
                     properties:
@@ -277,6 +290,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: atomic
                           namespaceSelector:
                             type: string
                           nets:
@@ -288,6 +302,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: set
                           notPorts:
                             items:
                               anyOf:
@@ -296,6 +311,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           notSelector:
                             type: string
                           ports:
@@ -306,6 +322,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           selector:
                             type: string
                           serviceAccounts:
@@ -339,17 +356,20 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               required:
                                 - header
                                 - operator
                                 - values
                               type: object
                             type: array
+                            x-kubernetes-list-type: atomic
                           methods:
                             items:
                               type: string
                             maxItems: 20
                             type: array
+                            x-kubernetes-list-type: atomic
                           paths:
                             items:
                               properties:
@@ -362,6 +382,7 @@ spec:
                               type: object
                             maxItems: 20
                             type: array
+                            x-kubernetes-list-type: atomic
                         type: object
                       icmp:
                         properties:
@@ -423,6 +444,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: atomic
                           namespaceSelector:
                             type: string
                           nets:
@@ -434,6 +456,7 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: set
                           notPorts:
                             items:
                               anyOf:
@@ -442,6 +465,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           notSelector:
                             type: string
                           ports:
@@ -452,6 +476,7 @@ spec:
                               pattern: ^.*
                               x-kubernetes-int-or-string: true
                             type: array
+                            x-kubernetes-list-type: atomic
                           selector:
                             type: string
                           serviceAccounts:
@@ -492,6 +517,7 @@ spec:
                           == 0) && (!has(self.destination.notPorts) || size(self.destination.notPorts)
                           == 0)"
                   type: array
+                  x-kubernetes-list-type: atomic
                 namespaceSelector:
                   type: string
                 order:
@@ -502,6 +528,7 @@ spec:
                       - AssumeNeededOnEveryNode
                     type: string
                   type: array
+                  x-kubernetes-list-type: set
                 preDNAT:
                   type: boolean
                 selector:

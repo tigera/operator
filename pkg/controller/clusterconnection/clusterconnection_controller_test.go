@@ -151,12 +151,12 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 		installation = &operatorv1.Installation{
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Registry: "some.registry.org/",
 			},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Status: operatorv1.InstallationStatus{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				Variant: operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{
 					Registry:           "my-reg",
 					KubernetesProvider: operatorv1.ProviderNone,

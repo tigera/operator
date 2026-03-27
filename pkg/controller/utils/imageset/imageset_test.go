@@ -47,7 +47,7 @@ var _ = Describe("imageset tests", func() {
 			Expect(e).To(BeNil())
 		})
 		It("should not error for Enterprise", func() {
-			e := ApplyImageSet(context.Background(), c, operator.TigeraSecureEnterprise)
+			e := ApplyImageSet(context.Background(), c, operator.CalicoEnterprise)
 			Expect(e).To(BeNil())
 		})
 	})
@@ -108,7 +108,7 @@ var _ = Describe("imageset tests", func() {
 			Expect(err.Error()).To(ContainSubstring("bad digest images"))
 		},
 			Entry("Calico variant", operator.Calico),
-			Entry("Enterprise variant", operator.TigeraSecureEnterprise),
+			Entry("Enterprise variant", operator.CalicoEnterprise),
 		)
 	})
 
@@ -205,7 +205,7 @@ var _ = Describe("imageset tests", func() {
 			Expect(ApplyImageSet(context.Background(), c, v)).To(BeNil())
 		},
 			Entry("Calico variant", operator.Calico),
-			Entry("Enterprise variant", operator.TigeraSecureEnterprise),
+			Entry("Enterprise variant", operator.CalicoEnterprise),
 		)
 	})
 })

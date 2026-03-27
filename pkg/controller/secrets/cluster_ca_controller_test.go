@@ -145,7 +145,7 @@ var _ = Describe("ClusterCA controller", func() {
 				Name: "overlay",
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				Variant: operatorv1.CalicoEnterprise,
 			},
 		}
 		Expect(cli.Create(ctx, &install)).ShouldNot(HaveOccurred())

@@ -255,7 +255,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		}
 
 		if opts.ManageCRDs {
-			if err = addCRDWatches(c, operatorv1.TigeraSecureEnterprise, opts.UseV3CRDs); err != nil {
+			if err = addCRDWatches(c, operatorv1.CalicoEnterprise, opts.UseV3CRDs); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
 			}
 		}

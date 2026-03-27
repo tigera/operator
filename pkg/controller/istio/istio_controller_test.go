@@ -742,8 +742,8 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should create expected Istio resources for Enterprise variant", func() {
-			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
-			installation.Status.Variant = operatorv1.TigeraSecureEnterprise
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
+			installation.Status.Variant = operatorv1.CalicoEnterprise
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
@@ -773,8 +773,8 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should handle ImageSet application for Enterprise variant", func() {
-			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
-			installation.Status.Variant = operatorv1.TigeraSecureEnterprise
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
+			installation.Status.Variant = operatorv1.CalicoEnterprise
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
 
 			// Create ImageSet with all required Istio images for Enterprise

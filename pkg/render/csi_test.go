@@ -295,7 +295,7 @@ var _ = Describe("CSI rendering tests", func() {
 	})
 
 	It("should use private images when Variant = enterprise", func() {
-		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.Installation.Variant = operatorv1.CalicoEnterprise
 		comp := render.CSI(&cfg)
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, _ := comp.Objects()

@@ -637,7 +637,7 @@ var _ = Describe("Node rendering tests", func() {
 				}
 			})
 
-			It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
+			It("should render all resources for a default configuration using CalicoEnterprise", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -655,7 +655,7 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 
 				component := render.Node(&cfg)
@@ -740,7 +740,7 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true", func() {
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixPrometheusMetricsEnabled = true
 
@@ -1625,7 +1625,7 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, true, false)
 			})
 
-			It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
+			It("should render all resources when variant is CalicoEnterprise and running on openshift", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -1644,7 +1644,7 @@ var _ = Describe("Node rendering tests", func() {
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
 				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
@@ -1730,7 +1730,7 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, true, true)
 			})
 
-			It("should render all resources when variant is TigeraSecureEnterprise and running on RKE2", func() {
+			It("should render all resources when variant is CalicoEnterprise and running on RKE2", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -1749,7 +1749,7 @@ var _ = Describe("Node rendering tests", func() {
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
 				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
 				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
@@ -2087,7 +2087,7 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.NodeMetricsPort = nil
 				cfg.NodeReporterMetricsPort = 9081
 
@@ -2110,7 +2110,7 @@ var _ = Describe("Node rendering tests", func() {
 
 			It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
 				var nodeMetricsPort int32 = 1234
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.NodeMetricsPort = &nodeMetricsPort
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2865,7 +2865,7 @@ var _ = Describe("Node rendering tests", func() {
 					}
 
 					if isEnterprise {
-						defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+						defaultInstance.Variant = operatorv1.CalicoEnterprise
 					}
 
 					defaultInstance.CalicoNetwork.BGP = &bgpOption

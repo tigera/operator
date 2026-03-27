@@ -33,14 +33,6 @@ var excludedComponentsPatterns = []string{
 	`^eck-.*`,
 }
 
-var changedFiles = []string{
-	calicoConfig,
-	enterpriseConfig,
-	"pkg/components",
-	"pkg/imports/crds",
-	"pkg/imports/admission",
-}
-
 // Command to prepare repo for a new release.
 var prepCommand = &cli.Command{
 	Name:  "prep",
@@ -62,6 +54,7 @@ to point to local repositories for Calico and Enterprise respectively.`,
 		enterpriseRegistryFlag,
 		skipValidationFlag,
 		skipMilestoneFlag,
+		skipBranchCheckFlag,
 		skipRepoCheckFlag,
 		githubTokenFlag,
 		localFlag,
@@ -75,6 +68,7 @@ to point to local repositories for Calico and Enterprise respectively.`,
 //   - check that at least one of calico or enterprise version is provided
 //   - if calico version is not provided, check that the version in calico_versions.yml is a released version
 //   - check that the provided calico and enterprise refs exist as a tag in the remote repository (if local directory not provided)
+//   - check that the base branch is a release branch (if not skipped)
 var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	// check that at least one of calico/enterprise version is set for prep
 	ctx, err := checkAtLeastOneOfFlags(ctx, c, calicoVersionFlag.Name, enterpriseVersionFlag.Name)
@@ -129,13 +123,33 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 			return ctx, fmt.Errorf("ref %q not found as a tag in %s", check.tag, check.repo)
 		}
 	}
+
+	// check operator base branch is a release branch unless skipped
+	if c.Bool(skipBranchCheckFlag.Name) {
+		logrus.Warnf("Skipping branch validation as requested.")
+		return ctx, nil
+	}
+	baseBranch := ctx.Value(baseBranchCtxKey).(string)
+	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), baseBranch)
+	if err != nil {
+		return ctx, fmt.Errorf("validating current branch: %w", err)
+	}
+	if !releaseBranch {
+		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", baseBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
+	}
 	return ctx, nil
 }
 
 // prepContextValuesFunc sets context values for the prep command based on CLI flags.
 var prepContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	baseBranch, err := git("branch", "--show-current")
+	if err != nil {
+		return ctx, fmt.Errorf("getting current branch: %w", err)
+	}
+	ctx = context.WithValue(ctx, baseBranchCtxKey, baseBranch)
+
 	// Extract repo information from CLI repo flag into context
-	ctx, err := addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
+	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {
 		return ctx, err
 	}
@@ -171,10 +185,7 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 
 // Action executed for release prep command.
 var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	baseBranch, err := git("branch", "--show-current")
-	if err != nil {
-		return fmt.Errorf("error getting current branch: %w", err)
-	}
+	baseBranch := ctx.Value(baseBranchCtxKey).(string)
 	version := ctx.Value(versionCtxKey).(string)
 	prepBranch := ctx.Value(branchNameCtxKey).(string)
 	repoRootDir, err := branchActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
@@ -192,7 +203,8 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	// Push branch to remote
 	gitRemote := c.String(gitRemoteFlag.Name)
 	logrus.Debugf("Pushing branch %s to %s", prepBranch, gitRemote)
-	if _, err := git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
+	if out, err := git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
+		logrus.Error(out)
 		return fmt.Errorf("error pushing branch %s to remote %s: %w", prepBranch, gitRemote, err)
 	}
 

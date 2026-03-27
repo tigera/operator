@@ -64,7 +64,7 @@ var (
 	}
 	skipMilestoneFlag = &cli.BoolFlag{
 		Name:     "skip-milestone",
-		Category: githubFlagCategory,
+		Category: developmentFlagCategory,
 		Usage:    "Skip updating GitHub milestones (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_MILESTONE"),
 		Value:    false,
@@ -227,13 +227,6 @@ var localFlag = &cli.BoolFlag{
 	Name:    "local",
 	Usage:   "Run the release process locally",
 	Sources: cli.EnvVars("LOCAL"),
-	Value:   false,
-}
-
-var skipValidationFlag = &cli.BoolFlag{
-	Name:    "skip-validation",
-	Usage:   "Skip various validation steps (development and testing purposes only)",
-	Sources: cli.EnvVars("SKIP_VALIDATION"),
 	Value:   false,
 }
 
@@ -468,9 +461,28 @@ var (
 	}
 )
 
-var skipRepoCheckFlag = &cli.BoolFlag{
-	Name:    "skip-repo-check",
-	Usage:   fmt.Sprintf("Skip checking that the git repository is %s (development and testing purposes only)", mainRepo),
-	Sources: cli.EnvVars("SKIP_REPO_CHECK"),
-	Value:   false,
-}
+// General development and testing flags
+var (
+	developmentFlagCategory = "Development Options"
+	skipValidationFlag      = &cli.BoolFlag{
+		Name:     "skip-validation",
+		Category: developmentFlagCategory,
+		Usage:    "Skip various validation steps (development and testing purposes only)",
+		Sources:  cli.EnvVars("SKIP_VALIDATION"),
+		Value:    false,
+	}
+	skipRepoCheckFlag = &cli.BoolFlag{
+		Name:     "skip-repo-check",
+		Category: developmentFlagCategory,
+		Usage:    fmt.Sprintf("Skip checking that the git repository is %s (development and testing purposes only)", mainRepo),
+		Sources:  cli.EnvVars("SKIP_REPO_CHECK"),
+		Value:    false,
+	}
+	skipBranchCheckFlag = &cli.BoolFlag{
+		Name:     "skip-branch-check",
+		Category: developmentFlagCategory,
+		Usage:    "Skip checking that the current git branch is main (development and testing purposes only)",
+		Sources:  cli.EnvVars("SKIP_BRANCH_CHECK"),
+		Value:    false,
+	}
+)

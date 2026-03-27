@@ -109,7 +109,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	reqLogger.Info("Reconciling LogStorage")
 
 	ls := &operatorv1.LogStorage{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
+	err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err

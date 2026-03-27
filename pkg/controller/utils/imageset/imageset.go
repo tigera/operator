@@ -53,7 +53,7 @@ func AddImageSetWatch(c ctrlruntime.Controller) error {
 }
 
 func variantPrefix(v operator.ProductVariant) string {
-	if v == operator.TigeraSecureEnterprise {
+	if v.IsEnterprise() {
 		return enterprisePrefix
 	}
 	return calicoPrefix
@@ -61,7 +61,7 @@ func variantPrefix(v operator.ProductVariant) string {
 
 func getSetName(v operator.ProductVariant) string {
 	variantVersion := components.CalicoRelease
-	if v == operator.TigeraSecureEnterprise {
+	if v.IsEnterprise() {
 		variantVersion = components.EnterpriseRelease
 	}
 	return fmt.Sprintf("%s-%s", variantPrefix(v), variantVersion)

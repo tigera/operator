@@ -143,7 +143,7 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
 	} else {
 		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
@@ -163,7 +163,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Enterprise-specific RBAC and settings
 		objs = append(objs,
 			c.secretsRole(),
@@ -202,7 +202,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		ports = append(ports,
 			corev1.ServicePort{
 				Name: "elasticsearch",
@@ -247,7 +247,7 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	var policyRules []rbacv1.PolicyRule
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		impersonation := c.cfg.ManagementClusterConnection.Spec.Impersonation
 		if impersonation != nil {
 			if impersonation.Users != nil {
@@ -473,7 +473,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 	}
 	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -582,7 +582,7 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 }
 
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
-	if cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+	if !cfg.Installation.Variant.IsEnterprise() {
 		return ossNetworkPolicy(), nil
 	}
 
@@ -702,7 +702,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
 	networkpolicyHelper := networkpolicy.DefaultHelper()
 	var ingressRules []v3.Rule
-	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if cfg.Installation.Variant.IsEnterprise() {
 		ingressRules = append(ingressRules, []v3.Rule{
 			{
 				Action:      v3.Allow,

@@ -178,7 +178,7 @@ type ReconcileLogCollector struct {
 func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCollector, error) {
 	// Fetch the instance. We only support a single instance named "tigera-secure".
 	instance := &operatorv1.LogCollector{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	err := cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}

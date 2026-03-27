@@ -155,7 +155,7 @@ var _ = Describe("Gateway API controller tests", func() {
 
 				if gwapi.Spec.CRDManagement == nil {
 					By("checking that CRDManagement field has been updated to PreferExisting")
-					Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)).NotTo(HaveOccurred())
+					Expect(c.Get(ctx, utils.DefaultEnterpriseInstanceKey, gwapi)).NotTo(HaveOccurred())
 					Expect(gwapi.Spec.CRDManagement).NotTo(BeNil())
 					Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.CRDManagementPreferExisting))
 				}
@@ -611,7 +611,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("re-reading the GatewayAPI")
-		err = c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)
+		err = c.Get(ctx, utils.DefaultEnterpriseInstanceKey, gwapi)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("checking default GatewayClasses")

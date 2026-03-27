@@ -181,7 +181,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
-	err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, logStorage)
+	err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, logStorage)
 	if err != nil {
 		// Not finding the LogStorage CR is not an error, as a Managed cluster will not have this CR available but
 		// there are still "LogStorage" related items that need to be set up

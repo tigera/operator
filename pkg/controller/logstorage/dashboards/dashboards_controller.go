@@ -240,7 +240,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err = d.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {

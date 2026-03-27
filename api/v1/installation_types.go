@@ -47,10 +47,11 @@ type Installation struct {
 
 // InstallationSpec defines configuration for a Calico or Calico Enterprise installation.
 type InstallationSpec struct {
-	// Variant is the product to install - one of Calico or TigeraSecureEnterprise
+	// Variant is the product to install - one of Calico or CalicoEnterprise.
+	// TigeraSecureEnterprise is also accepted as a deprecated alias for CalicoEnterprise.
 	// Default: Calico
 	// +optional
-	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
+	// +kubebuilder:validation:Enum=Calico;CalicoEnterprise;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
 	// Registry is the default Docker registry used for component Docker images.
@@ -460,13 +461,22 @@ func (p Provider) IsKind() bool {
 
 // ProductVariant represents the variant of the product.
 //
-// One of: Calico, TigeraSecureEnterprise
+// One of: Calico, CalicoEnterprise.
+// TigeraSecureEnterprise is a deprecated alias for CalicoEnterprise.
 type ProductVariant string
 
 var (
-	Calico                 ProductVariant = "Calico"
+	Calico           ProductVariant = "Calico"
+	CalicoEnterprise ProductVariant = "CalicoEnterprise"
+
+	// Deprecated: Use CalicoEnterprise instead.
 	TigeraSecureEnterprise ProductVariant = "TigeraSecureEnterprise"
 )
+
+// IsEnterprise returns true if the variant is an enterprise variant (either CalicoEnterprise or TigeraSecureEnterprise).
+func (v ProductVariant) IsEnterprise() bool {
+	return v == CalicoEnterprise || v == TigeraSecureEnterprise
+}
 
 // NonPrivilegedType specifies whether Calico runs as permissioned or not
 //
@@ -979,8 +989,9 @@ type CNISpec struct {
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {
-	// Variant is the most recently observed installed variant - one of Calico or TigeraSecureEnterprise
-	// +kubebuilder:validation:Enum=Calico;TigeraSecureEnterprise
+	// Variant is the most recently observed installed variant - one of Calico or CalicoEnterprise.
+	// TigeraSecureEnterprise is a deprecated alias for CalicoEnterprise.
+	// +kubebuilder:validation:Enum=Calico;CalicoEnterprise;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
 
 	// MTU is the most recently observed value for pod network MTU. This may be an explicitly

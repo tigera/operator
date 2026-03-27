@@ -334,7 +334,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
 	var nodePrometheusTLS certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {

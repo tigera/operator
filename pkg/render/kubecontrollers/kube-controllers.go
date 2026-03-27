@@ -125,7 +125,7 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDe
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
 	enabledControllers := []string{"node", "loadbalancer"}
-	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if cfg.Installation.Variant.IsEnterprise() {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
@@ -169,7 +169,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	var kubeControllerCalicoSystemPolicy *v3.NetworkPolicy
 	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
 
-	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if cfg.Installation.Variant.IsEnterprise() {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
@@ -236,7 +236,7 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -544,7 +544,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.cfg.Tenant != nil {
 			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
 		}

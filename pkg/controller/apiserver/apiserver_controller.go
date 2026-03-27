@@ -104,7 +104,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if opts.EnterpriseCRDExists {
 		// Watch for changes to ApplicationLayer
-		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch ApplicationLayer resource: %v", err)
 		}
@@ -337,7 +337,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var keyValidatorConfig authentication.KeyValidatorConfig
 	includeV3NetworkPolicy := false
 
-	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
+	if installationSpec.Variant.IsEnterprise() {
 		trustedBundle, err = certificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, r.client,
 			common.OperatorNamespace(), false)
 		if err != nil {

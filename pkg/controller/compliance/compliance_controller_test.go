@@ -320,7 +320,7 @@ var _ = Describe("Compliance controller tests", func() {
 		Expect(c.Create(
 			ctx,
 			&operatorv1.ManagementClusterConnection{
-				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 			})).NotTo(HaveOccurred())
 
 		By("reconciling after the cluster type changes")

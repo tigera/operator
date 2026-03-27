@@ -18,8 +18,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
+	"github.com/blang/semver/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
 )
@@ -27,8 +29,24 @@ import (
 // Context keys for branch/prep commands
 const (
 	branchNameCtxKey              contextKey = "branch-name"
+	baseBranchCtxKey              contextKey = "base-branch"
 	calicoConfigVersionCtxKey     contextKey = "calico-config-version"
 	enterpriseConfigVersionCtxKey contextKey = "enterprise-config-version"
+)
+
+var (
+	// releaseBranchFormat matches release branches with a version suffix (e.g. release-v1.2).
+	releaseBranchFormat = `^(%s-v\d+\.\d+)$`
+
+	defaultBaseBranch = "master"
+
+	changedFiles = []string{
+		calicoConfig,
+		enterpriseConfig,
+		"pkg/components",
+		"pkg/imports/crds",
+		"pkg/imports/admission",
+	}
 )
 
 var branchCommand = &cli.Command{
@@ -46,6 +64,7 @@ var branchCommand = &cli.Command{
 		calicoDirFlag,
 		enterpriseDirFlag,
 		enterpriseRegistryFlag,
+		skipBranchCheckFlag,
 		skipValidationFlag,
 		localFlag,
 		gitRemoteFlag,
@@ -68,6 +87,13 @@ func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func
 		return ctx, err
 	}
 
+	if baseBranch := ctx.Value(baseBranchCtxKey).(string); baseBranch != defaultBaseBranch {
+		logrus.WithFields(logrus.Fields{
+			"base":     baseBranch,
+			"expected": defaultBaseBranch,
+		}).Warn("Current branch is not the default base branch")
+	}
+
 	if c.Bool(skipValidationFlag.Name) {
 		logrus.Warnf("Skipping %s validations as requested.", c.Name)
 		return ctx, nil
@@ -82,6 +108,11 @@ func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func
 
 // branchContextValuesFunc sets branch cutting context values based on CLI flags
 var branchContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	currentBranch, err := git("branch", "--show-current")
+	if err != nil {
+		return ctx, fmt.Errorf("getting current branch: %w", err)
+	}
+	ctx = context.WithValue(ctx, baseBranchCtxKey, currentBranch)
 	ctx = context.WithValue(ctx, branchNameCtxKey, fmt.Sprintf("%s-%s", c.String(releaseBranchPrefixFlag.Name), c.String(streamFlag.Name)))
 	if calicoRef := c.String(calicoRefFlag.Name); calicoRef != "" {
 		ctx = context.WithValue(ctx, calicoConfigVersionCtxKey, calicoRef)
@@ -92,10 +123,19 @@ var branchContextValuesFunc = func(ctx context.Context, c *cli.Command) (context
 	return ctx, nil
 }
 
+var isReleaseBranch = func(releaseBranchPrefix, branch string) (bool, error) {
+	branchRegex, err := regexp.Compile(fmt.Sprintf(releaseBranchFormat, releaseBranchPrefix))
+	if err != nil {
+		return false, fmt.Errorf("compiling release branch format regex: %w", err)
+	}
+	return branchRegex.MatchString(branch), nil
+}
+
 // validateBranchRefs validates that the required ref flags are set for branch creation.
 //   - check that the operator branch does not already exist
 //   - check that both calico and enterprise refs are provided
 //   - check that the provided calico and enterprise refs exist as a branch or tag in the remote repository
+//   - check that the base operator branch is either a release branch (or master) (if not skipping branch check)
 var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	// check that the operator branch does not already exist
 	remote := c.String(gitRemoteFlag.Name)
@@ -121,10 +161,10 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 		repo string
 		flag string
 	}{
-		{calicoRef, calicoGitRepoFlag.Value, calicoRefFlag.Name},
-		{enterpriseRef, enterpriseGitRepoFlag.Value, enterpriseRefFlag.Name},
+		{calicoRef, c.String(calicoGitRepoFlag.Name), calicoRefFlag.Name},
+		{enterpriseRef, c.String(enterpriseGitRepoFlag.Name), enterpriseRefFlag.Name},
 	} {
-		out, err := git("ls-remote", "--branches", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.ref)
+		out, err := git("ls-remote", "--heads", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.ref)
 		if err != nil {
 			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.ref, check.repo, err)
 		}
@@ -132,6 +172,21 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 			return ctx, fmt.Errorf("ref %q not found as a branch or tag in %s", check.ref, check.repo)
 		}
 	}
+
+	// check operator base branch is either the default base branch or a release branch (if not skipping branch check)
+	currBranch := ctx.Value(baseBranchCtxKey).(string)
+	if c.Bool(skipBranchCheckFlag.Name) {
+		logrus.Warnf("Skipping branch validation as requested.")
+		return ctx, nil
+	}
+	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), currBranch)
+	if err != nil {
+		return ctx, fmt.Errorf("validating current branch: %w", err)
+	}
+	if currBranch != defaultBaseBranch && !releaseBranch {
+		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", currBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
+	}
+
 	return ctx, nil
 }
 
@@ -143,48 +198,73 @@ var branchBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (con
 // Action for branch command.
 var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	stream := c.String(streamFlag.Name)
-	branchName := ctx.Value(branchNameCtxKey).(string)
 	remote := c.String(gitRemoteFlag.Name)
+	baseBranch := ctx.Value(baseBranchCtxKey).(string)
+	branchName := ctx.Value(branchNameCtxKey).(string)
+	refs := []string{branchName}
 
 	if _, err := branchActionCommon(ctx, c, fmt.Sprintf("build: update config for %s", stream)); err != nil {
 		return err
 	}
-	// We are now on the release branch with config changes committed.
+	logrus.WithField("newBranch", branchName).Info("Created new branch")
 
-	// Switch back to master to create the dev tag.
-	// The dev tag goes on an empty commit on master so that git describe --tags
-	// produces sensible versions for subsequent master commits.
-	if _, err := git("switch", "master"); err != nil {
-		return fmt.Errorf("error switching back to master: %w", err)
+	// If this was not branched off a release branch, switch back to baseBranch branch to create the dev tag.
+	// The dev tag goes on an empty commit on the baseBranch branch so that git describe --tags
+	// produces sensible versions for subsequent baseBranch branch commits.
+	var nextDevTag string
+	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), baseBranch)
+	if err != nil {
+		return fmt.Errorf("checking if base branch is a release branch: %w", err)
 	}
-	version := fmt.Sprintf("%s.0", stream)
-	devTag := fmt.Sprintf("%s-%s", version, c.String(devTagSuffixFlag.Name))
-	if _, err := git("commit", "--allow-empty", "-m", fmt.Sprintf("Start development on %s", stream)); err != nil {
-		return fmt.Errorf("error creating empty commit on master: %w", err)
+	version, err := semver.Parse(fmt.Sprintf("%s.0", strings.TrimPrefix(stream, "v")))
+	if err != nil {
+		logrus.WithField("stream", stream).Warn("Cannot create a valid semver off stream")
+	} else if !releaseBranch {
+		refs = append(refs, baseBranch)
+		if err := version.IncrementMinor(); err != nil {
+			return fmt.Errorf("incrementing minor version: %w", err)
+		}
+		nextDevTag = fmt.Sprintf("v%s-%s", version.String(), c.String(devTagSuffixFlag.Name))
+		refs = append(refs, nextDevTag)
+		if out, err := git("switch", baseBranch); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("switching back to %s: %w", baseBranch, err)
+		}
+		if out, err := git("commit", "--allow-empty", "-m", fmt.Sprintf("Start development on v%d.%d", version.Major, version.Minor)); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("creating empty commit on %s: %w", baseBranch, err)
+		}
+		if out, err := git("tag", nextDevTag, "-m", fmt.Sprintf("%s development", version)); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("creating git tag %s: %w", nextDevTag, err)
+		}
+		logrus.WithField("devTag", nextDevTag).Infof("Created dev tag on %s", baseBranch)
 	}
-	if _, err := git("tag", devTag); err != nil {
-		return fmt.Errorf("error creating git tag %s: %w", devTag, err)
-	}
-	logrus.Infof("Created branch %s and tagged master with %s", branchName, devTag)
 
 	if c.Bool(localFlag.Name) {
-		logrus.Warnf("Local flag is set, skipping pushing to remote")
+		logrus.WithFields(logrus.Fields{
+			"remote":     remote,
+			"baseBranch": baseBranch,
+			"newBranch":  branchName,
+			"newDevTag":  nextDevTag,
+		}).Warn("Local flag is set, skipping pushing to remote")
 		return nil
 	}
 
-	// Push release branch, master (with empty commit), and dev tag to remote
-	if _, err := git("push", remote, branchName); err != nil {
-		return fmt.Errorf("error pushing %s to remote: %w", branchName, err)
+	// Push refs to remote - release branch, base branch (with empty commit), and dev tag
+	for _, ref := range refs {
+		if ref == "" {
+			continue
+		}
+		if out, err := git("push", remote, ref); err != nil {
+			logrus.Error(out)
+			return fmt.Errorf("pushing %s to remote: %w", ref, err)
+		}
+		logrus.WithFields(logrus.Fields{
+			"ref":    ref,
+			"remote": remote,
+		}).Infof("Pushed to %s", remote)
 	}
-	logrus.Infof("Pushed %s to remote", branchName)
-	if _, err := git("push", remote, "HEAD:master"); err != nil {
-		return fmt.Errorf("error pushing master to remote: %w", err)
-	}
-	logrus.Info("Pushed master with dev commit to remote")
-	if _, err := git("push", remote, devTag); err != nil {
-		return fmt.Errorf("error pushing tag %s to remote: %w", devTag, err)
-	}
-	logrus.Infof("Pushed tag %s to remote", devTag)
 	return nil
 })
 
@@ -197,19 +277,18 @@ var branchAfter = cli.AfterFunc(func(_ context.Context, _ *cli.Command) error {
 	return nil
 })
 
-func switchBranch(branchName string) error {
+func switchBranch(ctx context.Context, branchName string) error {
 	// get current branch to switch back to later
-	baseBranch, err := git("branch", "--show-current")
-	if err != nil {
-		return fmt.Errorf("error getting current branch: %w", err)
-	}
+	baseBranch := ctx.Value(baseBranchCtxKey).(string)
 	branchCleanupFns = append(branchCleanupFns, func() {
-		if _, err := git("switch", "-f", baseBranch); err != nil {
+		if out, err := git("switch", "-f", baseBranch); err != nil {
+			logrus.Error(out)
 			logrus.WithError(err).Errorf("Failed to reset to %q branch", baseBranch)
 		}
 	})
-	if _, err := git("switch", "-C", branchName); err != nil {
-		return fmt.Errorf("error creating and switching to branch %s: %w", branchName, err)
+	if out, err := git("switch", "-C", branchName); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("creating and switching to branch %s: %w", branchName, err)
 	}
 	return nil
 }
@@ -219,18 +298,18 @@ func switchBranch(branchName string) error {
 // It returns the repo root directory for subsequent operations.
 func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (string, error) {
 	branchName := ctx.Value(branchNameCtxKey).(string)
-	if err := switchBranch(branchName); err != nil {
+	if err := switchBranch(ctx, branchName); err != nil {
 		return "", err
 	}
 	repoRootDir, err := gitDir()
 	if err != nil {
-		return "", fmt.Errorf("error getting git directory: %w", err)
+		return "", fmt.Errorf("getting git directory: %w", err)
 	}
 	if err := modifyConfigVersions(ctx, c, repoRootDir); err != nil {
-		return "", fmt.Errorf("error modifying config versions: %w", err)
+		return "", fmt.Errorf("modifying config versions: %w", err)
 	}
 	if err := commitConfigChanges(repoRootDir, commitMsg); err != nil {
-		return "", fmt.Errorf("error committing config changes: %w", err)
+		return "", fmt.Errorf("committing config changes: %w", err)
 	}
 	return repoRootDir, nil
 }
@@ -245,7 +324,7 @@ func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir strin
 	if calicoVersion != "" {
 		makeTargets = append(makeTargets, "gen-versions-calico")
 		if err := updateConfigVersions(repoRootDir, calicoConfig, calicoVersion); err != nil {
-			return fmt.Errorf("error modifying Calico config: %w", err)
+			return fmt.Errorf("modifying Calico config: %w", err)
 		}
 		// Set CALICO_CRDS_DIR if specified
 		if crdsDir := c.String(calicoDirFlag.Name); crdsDir != "" {
@@ -256,13 +335,13 @@ func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir strin
 	if enterpriseVersion != "" {
 		makeTargets = append(makeTargets, "gen-versions-enterprise")
 		if err := updateConfigVersions(repoRootDir, enterpriseConfig, enterpriseVersion); err != nil {
-			return fmt.Errorf("error modifying Enterprise config: %w", err)
+			return fmt.Errorf("modifying Enterprise config: %w", err)
 		}
 		// Update registry for Enterprise
 		if eRegistry := c.String(enterpriseRegistryFlag.Name); eRegistry != "" {
 			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
 			if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, eRegistry); err != nil {
-				return fmt.Errorf("error modifying Enterprise registry config: %w", err)
+				return fmt.Errorf("modifying Enterprise registry config: %w", err)
 			}
 		}
 		// Set ENTERPRISE_CRDS_DIR if specified
@@ -273,18 +352,21 @@ func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir strin
 	}
 
 	// Run make target to ensure files are formatted correctly and generated files are up to date.
-	if _, err := makeInDir(repoRootDir, strings.Join(makeTargets, " "), env...); err != nil {
-		return fmt.Errorf("error running \"make %s\": %w", strings.Join(makeTargets, " "), err)
+	if out, err := makeInDir(repoRootDir, strings.Join(makeTargets, " "), env...); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("running \"make %s\": %w", strings.Join(makeTargets, " "), err)
 	}
 	return nil
 }
 
 func commitConfigChanges(repoRootDir, msg string) error {
-	if _, err := gitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
-		return fmt.Errorf("error staging git changes: %w", err)
+	if out, err := gitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("staging git changes: %w", err)
 	}
-	if _, err := git("commit", "-m", msg); err != nil {
-		return fmt.Errorf("error committing git changes: %w", err)
+	if out, err := git("commit", "-m", msg); err != nil {
+		logrus.Error(out)
+		return fmt.Errorf("committing git changes: %w", err)
 	}
 	return nil
 }

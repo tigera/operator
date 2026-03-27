@@ -847,13 +847,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	reqLogger.V(2).Info("Loaded config", "installation", instance)
 
-	// Warn users if they are using the deprecated TigeraSecureEnterprise variant name.
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		r.status.SetWarning("variant-deprecated", "Installation variant 'TigeraSecureEnterprise' is deprecated, please use 'CalicoEnterprise' instead")
-	} else {
-		r.status.ClearWarning("variant-deprecated")
-	}
-
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)

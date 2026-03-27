@@ -530,7 +530,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -556,7 +556,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -601,7 +601,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -663,7 +663,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
 			instance := &operatorv1.IntrusionDetection{}
-			err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+			err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))

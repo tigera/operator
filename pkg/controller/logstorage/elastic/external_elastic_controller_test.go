@@ -174,7 +174,7 @@ var _ = Describe("External ES Controller", func() {
 		Expect(cli.Create(
 			ctx,
 			&operatorv1.ManagementCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 			})).NotTo(HaveOccurred())
 
 		Expect(cli.Create(ctx,

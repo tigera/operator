@@ -252,7 +252,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	// Get LogStorage resource.
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -290,8 +290,8 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+	if !variant.IsEnterprise() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for network to be an enterprise variant", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

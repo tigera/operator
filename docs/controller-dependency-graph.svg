@@ -30,7 +30,7 @@
 <title>apiserver&#45;&gt;clusterconnection</title>
 <path fill="none" stroke="black" stroke-dasharray="5,2" d="M340.18,-200.81C344.11,-190.42 350.22,-177.43 358.75,-168 362.47,-163.88 366.57,-159.97 370.91,-156.27"/>
 <polygon fill="black" stroke="black" points="373.33,-158.81 378.94,-149.83 368.95,-153.35 373.33,-158.81"/>
-<text text-anchor="middle" x="378.75" y="-171.8" font-family="Times,serif" font-size="14.00">TSEE</text>
+<text text-anchor="middle" x="378.75" y="-171.8" font-family="Times,serif" font-size="14.00">Enterprise</text>
 </g>
 <!-- installation -->
 <g id="node6" class="node">

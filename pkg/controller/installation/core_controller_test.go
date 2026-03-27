@@ -855,7 +855,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
 
 			// Configure ourselves as a management cluster.
-			Expect(c.Create(ctx, &operator.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &operator.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}})).NotTo(HaveOccurred())
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")

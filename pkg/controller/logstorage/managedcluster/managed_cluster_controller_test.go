@@ -98,7 +98,7 @@ var _ = Describe("LogStorageManagedCluster controller", func() {
 	Context("Managed Cluster", func() {
 		Context("LogStorage is nil", func() {
 			BeforeEach(func() {
-				Expect(cli.Create(ctx, &operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}})).NotTo(HaveOccurred())
+				Expect(cli.Create(ctx, &operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}})).NotTo(HaveOccurred())
 			})
 
 			Context("LogStorage exists", func() {

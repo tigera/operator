@@ -3340,7 +3340,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			// Calico CNI image should have -fips suffix when FIPS mode is enabled.
 			cniImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)
 		}
-		if instance.Variant == operatorv1.TigeraSecureEnterprise {
+		if instance.Variant.IsEnterprise() {
 			cniImage = components.TigeraRegistry + "tigera/cni:" + components.ComponentTigeraCNI.Version
 		}
 		Expect(cniContainer.Image).To(Equal(cniImage))
@@ -3374,7 +3374,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 				},
 			},
 		}
-		if instance.Variant == operatorv1.TigeraSecureEnterprise {
+		if instance.Variant.IsEnterprise() {
 			if instance.CalicoNetwork != nil && instance.CalicoNetwork.MultiInterfaceMode != nil {
 				expectedCNIEnv = append(expectedCNIEnv, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: instance.CalicoNetwork.MultiInterfaceMode.Value()})
 			}
@@ -3397,7 +3397,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		// Calico Node image should have -fips suffix when FIPS mode is enabled.
 		ebpfImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 	}
-	if instance.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Variant.IsEnterprise() {
 		ebpfImage = components.TigeraRegistry + "tigera/node:" + components.ComponentTigeraNode.Version
 	}
 	Expect(ebpfBootstrap.Image).To(Equal(ebpfImage))
@@ -3427,7 +3427,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	flexvolContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 	if instance.FlexVolumePath != "None" {
 		Expect(flexvolContainer).NotTo(BeNil())
-		if instance.Variant == operatorv1.TigeraSecureEnterprise {
+		if instance.Variant.IsEnterprise() {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraFlexVolume.Image, components.ComponentTigeraFlexVolume.Version)))
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))

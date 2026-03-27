@@ -130,11 +130,11 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				Name: "default",
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				Variant: operatorv1.CalicoEnterprise,
 			},
 		}
 		Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -162,7 +162,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 	It("should terminate early on managed cluster", func() {
 		mgmtClusterConnection := &operatorv1.ManagementClusterConnection{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: utils.DefaultTSEEInstanceKey.Name,
+				Name: utils.DefaultEnterpriseInstanceKey.Name,
 			},
 		}
 

@@ -430,7 +430,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 	prefix := pr.cfg.Installation.ImagePrefix
 
 	var err error
-	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if pr.cfg.Installation.Variant.IsEnterprise() {
 		pr.envoyGatewayImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyGateway, reg, path, prefix, is)
 		if err != nil {
 			return err
@@ -529,7 +529,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 
 	// Add WAF HTTP Filter RBAC resources for Enterprise variant
-	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if pr.cfg.Installation.Variant.IsEnterprise() {
 		objs = append(objs,
 			pr.wafHttpFilterServiceAccount(),
 			pr.wafHttpFilterClusterRole(),
@@ -761,7 +761,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
 
 	// Setup WAF HTTP Filter and l7 Log collector on Enterprise.
-	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if pr.cfg.Installation.Variant.IsEnterprise() {
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {

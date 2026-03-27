@@ -223,7 +223,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateCriticalAddonsAndControlPlane))
 	})
 
-	It("should render all calico kube-controllers resources for a default configuration (standalone) using TigeraSecureEnterprise", func() {
+	It("should render all calico kube-controllers resources for a default configuration (standalone) using CalicoEnterprise", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -238,7 +238,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.MetricsPort = 9094
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -272,7 +272,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
 	})
 
-	It("should render all calico kube-controllers resources using TigeraSecureEnterprise on Openshift", func() {
+	It("should render all calico kube-controllers resources using CalicoEnterprise on Openshift", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -288,7 +288,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: "calico-kube-controllers-endpoint-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		instance.KubernetesProvider = operatorv1.ProviderOpenShift
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -300,7 +300,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
-	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using TigeraSecureEnterprise when logstorage and secrets exist", func() {
+	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using CalicoEnterprise when logstorage and secrets exist", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -317,7 +317,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
@@ -368,7 +368,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			}))
 	})
 
-	It("should render all calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
+	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -385,7 +385,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// Override configuration to match expected Enterprise config.
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.MetricsPort = 9094
 
@@ -415,7 +415,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 	})
-	It("should render all calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise", func() {
+	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise", func() {
 		var defaultMode int32 = 420
 		var kubeControllerTLS certificatemanagement.KeyPairInterface
 		expectedResources := []struct {
@@ -476,7 +476,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Override configuration to match expected Enterprise config.
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.MetricsPort = 9094
 		cfg.MetricsServerTLS = kubeControllerTLS
 
@@ -507,7 +507,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
 	})
 
-	It("should render all es-calico-kube-controllers resources for a default configuration using TigeraSecureEnterprise and ClusterType is Management", func() {
+	It("should render all es-calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -526,7 +526,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// Override configuration to match expected Enterprise config.
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.LogStorageExists = true
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
@@ -606,7 +606,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.ControlPlaneNodeSelector = map[string]string{"nodeName": "control01"}
 
 		// Simulate enterprise config.
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.MetricsPort = 0
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -695,7 +695,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add the OIDC prefix env variables", func() {
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.LogStorageExists = true
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
@@ -962,7 +962,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
-			instance.Variant = operatorv1.TigeraSecureEnterprise
+			instance.Variant = operatorv1.CalicoEnterprise
 			cfg.LogStorageExists = true
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
@@ -1019,7 +1019,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should add prometheus annotations to metrics service", func() {
-		for _, variant := range []operatorv1.ProductVariant{operatorv1.Calico, operatorv1.TigeraSecureEnterprise} {
+		for _, variant := range []operatorv1.ProductVariant{operatorv1.Calico, operatorv1.CalicoEnterprise} {
 			cfg.Installation.Variant = variant
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1047,7 +1047,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				} else {
 					cfg.ManagementClusterConnection = nil
 				}
-				instance.Variant = operatorv1.TigeraSecureEnterprise
+				instance.Variant = operatorv1.CalicoEnterprise
 				defaultDenyPolicy := &v3.NetworkPolicy{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "default-deny",
@@ -1119,7 +1119,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				} else {
 					cfg.ManagementClusterConnection = nil
 				}
-				instance.Variant = operatorv1.TigeraSecureEnterprise
+				instance.Variant = operatorv1.CalicoEnterprise
 				cfg.LogStorageExists = true
 				cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 
@@ -1138,7 +1138,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render init containers when certificate management is enabled", func() {
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.MetricsPort = 9094
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block

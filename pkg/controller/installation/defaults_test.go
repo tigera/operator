@@ -69,7 +69,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
 	})
 
-	It("should properly fill defaults on an empty TigeraSecureEnterprise instance", func() {
+	It("should properly fill defaults on an empty CalicoEnterprise instance", func() {
 		// IP pools are defaulted by the IP pool controller, and passed in as input to the defaulting
 		// performed in the Installation controller. For the purposes of this test,
 		// define them here.
@@ -82,12 +82,12 @@ var _ = Describe("Defaulting logic tests", func() {
 		}
 
 		instance := &operator.Installation{}
-		instance.Spec.Variant = operator.TigeraSecureEnterprise
+		instance.Spec.Variant = operator.CalicoEnterprise
 		err := fillDefaults(instance, &currentPools)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
-		Expect(instance.Spec.Variant).To(Equal(operator.TigeraSecureEnterprise))
+		Expect(instance.Spec.Variant).To(Equal(operator.CalicoEnterprise))
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
@@ -218,7 +218,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		hpEnabled := operator.HostPortsEnabled
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				Variant:  operator.TigeraSecureEnterprise,
+				Variant:  operator.CalicoEnterprise,
 				Registry: "test-reg/",
 				ImagePullSecrets: []v1.LocalObjectReference{
 					{

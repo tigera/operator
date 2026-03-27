@@ -255,7 +255,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		}
 
 		if opts.ManageCRDs {
-			if err = addCRDWatches(c, operatorv1.TigeraSecureEnterprise, opts.UseV3CRDs); err != nil {
+			if err = addCRDWatches(c, operatorv1.CalicoEnterprise, opts.UseV3CRDs); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
 			}
 		}
@@ -847,6 +847,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	reqLogger.V(2).Info("Loaded config", "installation", instance)
 
+	// Warn users if they are using the deprecated TigeraSecureEnterprise variant name.
+	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+		r.status.SetWarning("variant-deprecated", "Installation variant 'TigeraSecureEnterprise' is deprecated, please use 'CalicoEnterprise' instead")
+	} else {
+		r.status.ClearWarning("variant-deprecated")
+	}
+
 	// Validate the configuration.
 	if err := validateCustomResource(instance); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
@@ -996,10 +1003,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
-	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
-	if !r.enterpriseCRDsExist && instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
+	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
+	// If we are switching from this mode to one that enables enterprise, we need to restart the operator to enable the other controllers.
+	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
+		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
 		b, err := utils.RequiresTigeraSecure(r.clientset)
 		if b {
@@ -1086,7 +1093,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
@@ -1208,7 +1215,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
 
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
@@ -1265,7 +1272,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Secure calico kube controller metrics.
 	var kubeControllerTLS certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 		// Create or Get TLS certificates for kube controller.
 		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -1367,7 +1374,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Check if non-cluster host feature is enabled.
 	var nonclusterhost *operatorv1.NonClusterHost
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
@@ -1987,7 +1994,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		}
 	}
 
-	if install.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if install.Spec.Variant.IsEnterprise() {
 		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
 		dnsService := ""
 		switch install.Spec.KubernetesProvider {

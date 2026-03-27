@@ -440,13 +440,13 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 
 		// Default resource doesn't exist. Check for the legacy (enterprise only) CR.
-		err = client.Get(ctx, utils.DefaultTSEEInstanceKey, resource)
+		err = client.Get(ctx, utils.DefaultEnterpriseInstanceKey, resource)
 		if err != nil {
 			return nil, "failed to get GatewayAPI 'tigera-secure'", err
 		}
 	} else {
 		// Assert there is no legacy "tigera-secure" resource present.
-		err = client.Get(ctx, utils.DefaultTSEEInstanceKey, resource)
+		err = client.Get(ctx, utils.DefaultEnterpriseInstanceKey, resource)
 		if err == nil {
 			return nil,
 				"Duplicate configuration detected",

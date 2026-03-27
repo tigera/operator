@@ -196,7 +196,7 @@ type ReconcileMonitor struct {
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
 	instance := &operatorv1.Monitor{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}

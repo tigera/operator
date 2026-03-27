@@ -169,8 +169,8 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for Installation variant to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+	if !variant.IsEnterprise() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation variant to be an enterprise variant", nil, reqLogger)
 		return reconcile.Result{}, err
 	}
 

@@ -111,7 +111,7 @@ func (r *LogStorageManagedClusterController) Reconcile(ctx context.Context, requ
 		}
 		return reconcile.Result{}, err
 	}
-	if variant != operatorv1.TigeraSecureEnterprise {
+	if !variant.IsEnterprise() {
 		return reconcile.Result{}, nil
 	}
 

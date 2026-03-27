@@ -484,7 +484,7 @@ var _ = Describe("Typha rendering tests", func() {
 	})
 
 	It("should not enable prometheus metrics if TyphaMetricsPort is nil", func() {
-		installation.Variant = operatorv1.TigeraSecureEnterprise
+		installation.Variant = operatorv1.CalicoEnterprise
 		installation.TyphaMetricsPort = nil
 		component := render.Typha(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -500,7 +500,7 @@ var _ = Describe("Typha rendering tests", func() {
 
 	It("should set TYPHA_PROMETHEUSMETRICSPORT with a custom value if TyphaMetricsPort is set", func() {
 		var typhaMetricsPort int32 = 1234
-		installation.Variant = operatorv1.TigeraSecureEnterprise
+		installation.Variant = operatorv1.CalicoEnterprise
 		installation.TyphaMetricsPort = &typhaMetricsPort
 		component := render.Typha(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

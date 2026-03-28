@@ -92,7 +92,7 @@ type typhaComponent struct {
 
 	// Generated internal config, built from the given configuration.
 	typhaImage string
-	uberImage  bool
+	combinedImage  bool
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -107,7 +107,7 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
 		} else {
 			c.typhaImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-			c.uberImage = true
+			c.combinedImage = true
 		}
 	}
 	if err != nil {
@@ -582,7 +582,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		ReadinessProbe:  rp,
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
-	if c.uberImage {
+	if c.combinedImage {
 		container.Command = []string{"calico", "typha"}
 	}
 	return container

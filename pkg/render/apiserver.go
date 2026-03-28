@@ -157,7 +157,7 @@ type apiServerComponent struct {
 	l7AdmissionControllerImage      string
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
-	uberImage                       bool
+	combinedImage                       bool
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -201,7 +201,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
-			c.uberImage = true
+			c.combinedImage = true
 		}
 	}
 
@@ -1178,7 +1178,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
 	var apiServerCommand []string
-	if c.uberImage {
+	if c.combinedImage {
 		apiServerCommand = []string{"calico", "apiserver"}
 	}
 

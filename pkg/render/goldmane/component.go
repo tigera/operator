@@ -84,7 +84,7 @@ type Component struct {
 	cfg *Configuration
 
 	goldmaneImage string
-	uberImage     bool
+	combinedImage     bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -98,7 +98,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
 	} else {
 		c.goldmaneImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-		c.uberImage = true
+		c.combinedImage = true
 	}
 	if err != nil {
 		return err
@@ -255,7 +255,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	}
 
 	var containerCommand []string
-	if c.uberImage {
+	if c.combinedImage {
 		containerCommand = []string{"calico", "goldmane"}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

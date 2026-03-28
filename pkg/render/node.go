@@ -170,7 +170,7 @@ type nodeComponent struct {
 	cniImage     string
 	flexvolImage string
 	nodeImage    string
-	uberImage    bool
+	combinedImage    bool
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -198,7 +198,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalico, reg, path, prefix, is))
 			c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalico, reg, path, prefix, is))
 			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
-			c.uberImage = true
+			c.combinedImage = true
 		}
 	}
 
@@ -1191,7 +1191,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	}
 
 	cniCommand := []string{"/opt/cni/bin/install"}
-	if c.uberImage {
+	if c.combinedImage {
 		cniCommand = []string{"calico", "cni", "install"}
 	}
 
@@ -1214,7 +1214,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	}
 
 	var flexvolCommand []string
-	if c.uberImage {
+	if c.combinedImage {
 		flexvolCommand = []string{"calico", "flexvol"}
 	}
 

@@ -93,7 +93,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		rtest.ExpectResources(resources, expectedResources)
 
-		// Verify the Calico (non-enterprise, non-FIPS) variant uses the uber calico/calico image with Command set.
+		// Verify the Calico (non-enterprise, non-FIPS) variant uses the combined calico/calico image with Command set.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(

@@ -1256,16 +1256,12 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 		},
 	}
 
-	image := c.nodeImage
+	// The init container uses the node image (needs privileged base for BPF mount).
+	// calico-node uses cobra subcommands when the combined image layout is active.
 	command := []string{CalicoNodeObjectName, "-init"}
 	if c.combinedImage {
-		image = c.cniImage // cniImage is set to the combined calico/calico image
-		command = []string{"calico", "node", "init"}
+		command = []string{"/bin/calico-node", "init"}
 	}
-	// If BPF is not enabled, then we run the init container in best-effort mode.
-	// This means that it will not fail if the BPF filesystem is not mounted, but
-	// it will still attempt to mount it if it is available. This is useful when we
-	// are running calico in test environments like KinD or K3s.
 	if !c.cfg.Installation.BPFEnabled() {
 		if c.combinedImage {
 			command = append(command, "--best-effort")
@@ -1738,9 +1734,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 // nodeLifecycle creates the node's postStart and preStop hooks.
 func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
+	// calico-node uses cobra subcommands when the combined image layout is active.
 	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
 	if c.combinedImage {
-		preStopCmd = []string{"calico", "node", "shutdown"}
+		preStopCmd = []string{"/bin/calico-node", "shutdown"}
 	}
 	lc := &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
@@ -1754,13 +1751,16 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	livenessPort := intstr.FromInt(c.cfg.FelixHealthPort)
 	var readinessCmd []string
 
+	// The readiness probe runs inside the node container (calico/node image), which
+	// has calico-node. When using the combined image layout, calico-node uses cobra
+	// subcommands; otherwise it uses the legacy flag syntax.
 	if c.combinedImage {
-		readinessCmd = []string{"calico", "node", "health", "--bird-ready", "--felix-ready"}
+		readinessCmd = []string{"/bin/calico-node", "health", "--bird-ready", "--felix-ready"}
 		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 			readinessCmd = append(readinessCmd, "--bgp-metrics-ready")
 		}
 		if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
-			readinessCmd = []string{"calico", "node", "health", "--felix-ready"}
+			readinessCmd = []string{"/bin/calico-node", "health", "--felix-ready"}
 		}
 	} else {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}

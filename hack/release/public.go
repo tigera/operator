@@ -35,13 +35,11 @@ var publicCommand = &cli.Command{
 		githubTokenFlag,
 		skipValidationFlag,
 	},
-	Before: publicBefore,
+	Before: middleware.WithLogging(publicBefore),
 	Action: publicAction,
 }
 
 var publicBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	middleware.ConfigureLogging(c)
-
 	var err error
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {

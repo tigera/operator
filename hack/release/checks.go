@@ -81,3 +81,13 @@ var checkVersion = func(ctx context.Context, c *cli.Command) (context.Context, e
 	}
 	return checkVersionMatchesGitVersion(ctx, c)
 }
+
+// check that at least one of the given flags is set to a non-empty value.
+var checkAtLeastOneOfFlags = func(ctx context.Context, c *cli.Command, flagNames ...string) (context.Context, error) {
+	for _, flag := range flagNames {
+		if c.String(flag) != "" {
+			return ctx, nil
+		}
+	}
+	return ctx, fmt.Errorf("at least one of the following flags must be set: %s", strings.Join(flagNames, ", "))
+}

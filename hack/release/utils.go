@@ -68,6 +68,15 @@ const (
 
 type contextKey string
 
+// contextString extracts a string value from context, returning an error if the key is not set.
+func contextString(ctx context.Context, key contextKey) (string, error) {
+	v, ok := ctx.Value(key).(string)
+	if !ok {
+		return "", fmt.Errorf("required context value %q not set", string(key))
+	}
+	return v, nil
+}
+
 type Component struct {
 	Version string `yaml:"version"`
 	Image   string `yaml:"image,omitempty"`

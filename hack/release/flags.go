@@ -64,7 +64,7 @@ var (
 	}
 	skipMilestoneFlag = &cli.BoolFlag{
 		Name:     "skip-milestone",
-		Category: githubFlagCategory,
+		Category: developmentFlagCategory,
 		Usage:    "Skip updating GitHub milestones (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_MILESTONE"),
 		Value:    false,
@@ -116,7 +116,7 @@ var (
 		Category: operatorFlagCategory,
 		Usage:    "The suffix used to denote development tags",
 		Sources:  cli.EnvVars("DEV_TAG_SUFFIX"),
-		Value:    "0-dev",
+		Value:    "0.dev",
 	}
 	versionFlag = &cli.StringFlag{
 		Name:     "version",
@@ -136,6 +136,21 @@ var (
 			}
 			return nil
 		},
+	}
+	streamFlag = &cli.StringFlag{
+		Name:     "stream",
+		Aliases:  []string{"release-stream"},
+		Category: operatorFlagCategory,
+		Usage:    "The release stream for the release branch name (e.g. vX.Y). The full branch name will be <release-branch-prefix>-<stream>",
+		Sources:  cli.EnvVars("RELEASE_STREAM", "STREAM"),
+		Required: true,
+	}
+	releaseBranchPrefixFlag = &cli.StringFlag{
+		Name:     "release-branch-prefix",
+		Category: operatorFlagCategory,
+		Usage:    "The prefix to use for the release branch name. The full branch name will be <prefix>-<stream>",
+		Sources:  cli.EnvVars("RELEASE_BRANCH_PREFIX"),
+		Value:    "release",
 	}
 	baseOperatorFlag = &cli.StringFlag{
 		Name:     "base-version",
@@ -209,13 +224,6 @@ var localFlag = &cli.BoolFlag{
 	Value:   false,
 }
 
-var skipValidationFlag = &cli.BoolFlag{
-	Name:    "skip-validation",
-	Usage:   "Skip various validation steps (development and testing purposes only)",
-	Sources: cli.EnvVars("SKIP_VALIDATION"),
-	Value:   false,
-}
-
 // Flag Action to check value is a valid directory.
 func dirFlagCheck(_ context.Context, _ *cli.Command, path string) error {
 	if path == "" {
@@ -268,6 +276,12 @@ var (
 			}
 			return nil
 		},
+	}
+	calicoRefFlag = &cli.StringFlag{
+		Name:     "calico-ref",
+		Category: calicoFlagCategory,
+		Usage:    "The Calico git ref (branch or tag) to use for version config (e.g. release-vX.Y)",
+		Sources:  cli.EnvVars("CALICO_REF"),
 	}
 	exceptCalicoFlag = &cli.StringSliceFlag{
 		Name:     "except-calico",
@@ -358,6 +372,12 @@ var (
 			return nil
 		},
 	}
+	enterpriseRefFlag = &cli.StringFlag{
+		Name:     "enterprise-ref",
+		Category: enterpriseFlagCategory,
+		Usage:    "The Enterprise git ref (branch or tag) to use for version config (e.g. release-calient-vX.Y-1)",
+		Sources:  cli.EnvVars("ENTERPRISE_REF"),
+	}
 	enterpriseRegistryFlag = &cli.StringFlag{
 		Name:     "enterprise-registry",
 		Category: enterpriseFlagCategory,
@@ -435,9 +455,28 @@ var (
 	}
 )
 
-var skipRepoCheckFlag = &cli.BoolFlag{
-	Name:    "skip-repo-check",
-	Usage:   fmt.Sprintf("Skip checking that the git repository is %s (development and testing purposes only)", mainRepo),
-	Sources: cli.EnvVars("SKIP_REPO_CHECK"),
-	Value:   false,
-}
+// General development and testing flags
+var (
+	developmentFlagCategory = "Development Options"
+	skipValidationFlag      = &cli.BoolFlag{
+		Name:     "skip-validation",
+		Category: developmentFlagCategory,
+		Usage:    "Skip various validation steps (development and testing purposes only)",
+		Sources:  cli.EnvVars("SKIP_VALIDATION"),
+		Value:    false,
+	}
+	skipRepoCheckFlag = &cli.BoolFlag{
+		Name:     "skip-repo-check",
+		Category: developmentFlagCategory,
+		Usage:    fmt.Sprintf("Skip checking that the git repository is %s (development and testing purposes only)", mainRepo),
+		Sources:  cli.EnvVars("SKIP_REPO_CHECK"),
+		Value:    false,
+	}
+	skipBranchCheckFlag = &cli.BoolFlag{
+		Name:     "skip-branch-check",
+		Category: developmentFlagCategory,
+		Usage:    "Skip checking that the current git branch is main (development and testing purposes only)",
+		Sources:  cli.EnvVars("SKIP_BRANCH_CHECK"),
+		Value:    false,
+	}
+)

@@ -24,7 +24,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -155,17 +154,13 @@ var _ = Describe("ComponentRendering", func() {
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									ReadinessProbe: &corev1.Probe{
-										ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
-											Host: "localhost",
-											Path: "/readiness",
-											Port: intstr.FromInt(goldmane.GoldmaneHealthPort),
+										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+											Command: []string{"calico", "goldmane-check", "--ready"},
 										}},
 									},
 									LivenessProbe: &corev1.Probe{
-										ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
-											Host: "localhost",
-											Path: "/liveness",
-											Port: intstr.FromInt(goldmane.GoldmaneHealthPort),
+										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+											Command: []string{"calico", "goldmane-check", "--live"},
 										}},
 									},
 									VolumeMounts: append(

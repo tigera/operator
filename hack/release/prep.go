@@ -45,6 +45,7 @@ Otherwise, use the environment variables "CALICO_CRDS_DIR" and "ENTERPRISE_CRDS_
 to point to local repositories for Calico and Enterprise respectively.`,
 	Flags: []cli.Flag{
 		versionFlag,
+		releaseBranchPrefixFlag,
 		calicoVersionFlag,
 		calicoDirFlag,
 		calicoGitRepoFlag,
@@ -119,7 +120,7 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 		if err != nil {
 			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.tag, check.repo, err)
 		}
-		if !strings.Contains(out, check.tag) {
+		if !refExistsInRemote(out, check.tag) {
 			return ctx, fmt.Errorf("ref %q not found as a tag in %s", check.tag, check.repo)
 		}
 	}
@@ -129,13 +130,16 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 		logrus.Warnf("Skipping branch validation as requested.")
 		return ctx, nil
 	}
-	baseBranch := ctx.Value(baseBranchCtxKey).(string)
+	baseBranch, err := contextString(ctx, baseBranchCtxKey)
+	if err != nil {
+		return ctx, err
+	}
 	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), baseBranch)
 	if err != nil {
 		return ctx, fmt.Errorf("validating current branch: %w", err)
 	}
 	if !releaseBranch {
-		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", baseBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
+		return ctx, fmt.Errorf("current branch %s is not a release branch", baseBranch)
 	}
 	return ctx, nil
 }
@@ -185,9 +189,18 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 
 // Action executed for release prep command.
 var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	baseBranch := ctx.Value(baseBranchCtxKey).(string)
-	version := ctx.Value(versionCtxKey).(string)
-	prepBranch := ctx.Value(branchNameCtxKey).(string)
+	baseBranch, err := contextString(ctx, baseBranchCtxKey)
+	if err != nil {
+		return err
+	}
+	version, err := contextString(ctx, versionCtxKey)
+	if err != nil {
+		return err
+	}
+	prepBranch, err := contextString(ctx, branchNameCtxKey)
+	if err != nil {
+		return err
+	}
 	repoRootDir, err := branchActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
 	if err != nil {
 		return err
@@ -215,8 +228,14 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}
 	githubUser := strings.Split(remoteURL[strings.Index(remoteURL, "git@github.com:")+len("git@github.com:"):strings.LastIndex(remoteURL, ".git")], "/")[0]
 
-	githubOrg := ctx.Value(githubOrgCtxKey).(string)
-	githubRepo := ctx.Value(githubRepoCtxKey).(string)
+	githubOrg, err := contextString(ctx, githubOrgCtxKey)
+	if err != nil {
+		return err
+	}
+	githubRepo, err := contextString(ctx, githubRepoCtxKey)
+	if err != nil {
+		return err
+	}
 	headBranch := prepBranch
 	if githubUser != githubOrg {
 		// Forked repo, need to specify head as user:branch

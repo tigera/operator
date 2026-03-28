@@ -630,8 +630,8 @@ endif
 release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-one-of-CALICO_VERSION-ENTERPRISE_VERSION
 	@REPO=$(REPO) hack/bin/release prep
 
-create-release-branch: hack/bin/release var-require-all-STREAM-CALICO_REF-ENTERPRISE_REF
-	RELEASE_STREAM=$(STREAM) hack/bin/release branch
+create-release-branch: hack/bin/release var-require-all-CALICO_REF-ENTERPRISE_REF var-require-one-of-STREAM-RELEASE_STREAM
+	hack/bin/release branch
 
 ###############################################################################
 # Utilities

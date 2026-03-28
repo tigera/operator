@@ -89,5 +89,9 @@ var checkAtLeastOneOfFlags = func(ctx context.Context, c *cli.Command, flagNames
 			return ctx, nil
 		}
 	}
-	return ctx, fmt.Errorf("at least one of the following flags must be set: %s", strings.Join(flagNames, ", "))
+	formatted := make([]string, len(flagNames))
+	for i, name := range flagNames {
+		formatted[i] = "--" + name
+	}
+	return ctx, fmt.Errorf("at least one of the following flags must be set: %s", strings.Join(formatted, ", "))
 }

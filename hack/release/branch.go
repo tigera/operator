@@ -38,6 +38,9 @@ var (
 	// releaseBranchFormat matches release branches with a version suffix (e.g. release-v1.2).
 	releaseBranchFormat = `^(%s-v\d+\.\d+)$`
 
+	// streamFormat validates the stream flag value (e.g. v1.43).
+	streamFormat = `^v\d+\.\d+$`
+
 	defaultBaseBranch = "master"
 
 	changedFiles = []string{
@@ -50,9 +53,13 @@ var (
 )
 
 var branchCommand = &cli.Command{
-	Name:        "branch",
-	Usage:       "Create a new branch for the release",
-	Description: "This command creates a new branch for the release.",
+	Name:  "branch",
+	Usage: "Create a new branch for the release",
+	Description: `The branch command creates a new branch for the release off of the current branch (which should be master or a release branch).
+	The new branch name is in the format <release-branch-prefix>-<stream> (e.g. release-v1.43).
+
+	The config versions are updated based on the provided Calico and Enterprise refs, which should point to branches or tags in the respective repositories.
+	If the base branch is not a release branch, an empty commit and dev tag are also created on the base branch to allow for proper versioning of future commits on the base branch.`,
 	Flags: []cli.Flag{
 		streamFlag,
 		calicoRefFlag,
@@ -87,11 +94,15 @@ func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func
 		return ctx, err
 	}
 
-	if baseBranch := ctx.Value(baseBranchCtxKey).(string); baseBranch != defaultBaseBranch {
-		logrus.WithFields(logrus.Fields{
-			"base":     baseBranch,
-			"expected": defaultBaseBranch,
-		}).Warn("Current branch is not the default base branch")
+	// Only warn about non-default base branch for the branch command;
+	// prep is expected to run from a release branch.
+	if c.Name == "branch" {
+		if baseBranch, ok := ctx.Value(baseBranchCtxKey).(string); ok && baseBranch != defaultBaseBranch {
+			logrus.WithFields(logrus.Fields{
+				"base":     baseBranch,
+				"expected": defaultBaseBranch,
+			}).Warn("Current branch is not the default base branch")
+		}
 	}
 
 	if c.Bool(skipValidationFlag.Name) {
@@ -123,23 +134,67 @@ var branchContextValuesFunc = func(ctx context.Context, c *cli.Command) (context
 	return ctx, nil
 }
 
-var isReleaseBranch = func(releaseBranchPrefix, branch string) (bool, error) {
-	branchRegex, err := regexp.Compile(fmt.Sprintf(releaseBranchFormat, releaseBranchPrefix))
+var isValidStream = func(stream string) (bool, error) {
+	matched, err := regexp.MatchString(streamFormat, stream)
 	if err != nil {
-		return false, fmt.Errorf("compiling release branch format regex: %w", err)
+		return false, fmt.Errorf("validating stream format: %w", err)
 	}
-	return branchRegex.MatchString(branch), nil
+	return matched, nil
+}
+
+var isReleaseBranch = func(releaseBranchPrefix, branch string) (bool, error) {
+	matched, err := regexp.MatchString(fmt.Sprintf(releaseBranchFormat, regexp.QuoteMeta(releaseBranchPrefix)), branch)
+	if err != nil {
+		return false, fmt.Errorf("validating release branch format: %w", err)
+	}
+	return matched, nil
+}
+
+// refExistsInRemote checks if a ref exists in the ls-remote output by matching the full ref name.
+func refExistsInRemote(lsRemoteOutput, ref string) bool {
+	for _, line := range strings.Split(lsRemoteOutput, "\n") {
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		// ls-remote output format: <hash>\trefs/heads/<name> or refs/tags/<name>
+		remoteRef := parts[1]
+		// Strip known prefixes to get the full ref name (preserving slashes in ref names)
+		name := remoteRef
+		for _, prefix := range []string{"refs/heads/", "refs/tags/"} {
+			if trimmed, ok := strings.CutPrefix(remoteRef, prefix); ok {
+				name = trimmed
+				break
+			}
+		}
+		if name == ref {
+			return true
+		}
+	}
+	return false
 }
 
 // validateBranchRefs validates that the required ref flags are set for branch creation.
+//   - check that the stream flag is in the correct format
 //   - check that the operator branch does not already exist
 //   - check that both calico and enterprise refs are provided
 //   - check that the provided calico and enterprise refs exist as a branch or tag in the remote repository
 //   - check that the base operator branch is either a release branch (or master) (if not skipping branch check)
 var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	// check that the stream format is valid
+	stream := c.String(streamFlag.Name)
+	if valid, err := isValidStream(stream); err != nil {
+		return ctx, err
+	} else if !valid {
+		return ctx, fmt.Errorf("stream %q is not valid, expected format: vX.Y (e.g., v1.43)", stream)
+	}
+
 	// check that the operator branch does not already exist
 	remote := c.String(gitRemoteFlag.Name)
-	branchName := ctx.Value(branchNameCtxKey).(string)
+	branchName, err := contextString(ctx, branchNameCtxKey)
+	if err != nil {
+		return ctx, err
+	}
 	out, err := git("ls-remote", "--heads", remote, branchName)
 	if err != nil {
 		return ctx, fmt.Errorf("checking if branch %s exists in remote %s: %w", branchName, remote, err)
@@ -168,23 +223,26 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 		if err != nil {
 			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.ref, check.repo, err)
 		}
-		if !strings.Contains(out, check.ref) {
+		if !refExistsInRemote(out, check.ref) {
 			return ctx, fmt.Errorf("ref %q not found as a branch or tag in %s", check.ref, check.repo)
 		}
 	}
 
 	// check operator base branch is either the default base branch or a release branch (if not skipping branch check)
-	currBranch := ctx.Value(baseBranchCtxKey).(string)
+	baseBranch, err := contextString(ctx, baseBranchCtxKey)
+	if err != nil {
+		return ctx, err
+	}
 	if c.Bool(skipBranchCheckFlag.Name) {
 		logrus.Warnf("Skipping branch validation as requested.")
 		return ctx, nil
 	}
-	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), currBranch)
+	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), baseBranch)
 	if err != nil {
 		return ctx, fmt.Errorf("validating current branch: %w", err)
 	}
-	if currBranch != defaultBaseBranch && !releaseBranch {
-		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", currBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
+	if baseBranch != defaultBaseBranch && !releaseBranch {
+		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", baseBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
 	}
 
 	return ctx, nil
@@ -199,8 +257,14 @@ var branchBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (con
 var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	stream := c.String(streamFlag.Name)
 	remote := c.String(gitRemoteFlag.Name)
-	baseBranch := ctx.Value(baseBranchCtxKey).(string)
-	branchName := ctx.Value(branchNameCtxKey).(string)
+	baseBranch, err := contextString(ctx, baseBranchCtxKey)
+	if err != nil {
+		return err
+	}
+	branchName, err := contextString(ctx, branchNameCtxKey)
+	if err != nil {
+		return err
+	}
 	refs := []string{branchName}
 
 	if _, err := branchActionCommon(ctx, c, fmt.Sprintf("build: update config for %s", stream)); err != nil {
@@ -279,7 +343,10 @@ var branchAfter = cli.AfterFunc(func(_ context.Context, _ *cli.Command) error {
 
 func switchBranch(ctx context.Context, branchName string) error {
 	// get current branch to switch back to later
-	baseBranch := ctx.Value(baseBranchCtxKey).(string)
+	baseBranch, err := contextString(ctx, baseBranchCtxKey)
+	if err != nil {
+		return err
+	}
 	branchCleanupFns = append(branchCleanupFns, func() {
 		if out, err := git("switch", "-f", baseBranch); err != nil {
 			logrus.Error(out)
@@ -297,7 +364,10 @@ func switchBranch(ctx context.Context, branchName string) error {
 // It reads the branch name and calico/enterprise versions from context (set by Before functions).
 // It returns the repo root directory for subsequent operations.
 func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (string, error) {
-	branchName := ctx.Value(branchNameCtxKey).(string)
+	branchName, err := contextString(ctx, branchNameCtxKey)
+	if err != nil {
+		return "", err
+	}
 	if err := switchBranch(ctx, branchName); err != nil {
 		return "", err
 	}

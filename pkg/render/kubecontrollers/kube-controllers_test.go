@@ -195,9 +195,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		))
 
 		// Verify command and probes use the uber image entrypoint with generic health check.
-		Expect(ds.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"calico", "kube-controllers", "--health-port=9094"}))
-		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command).To(Equal([]string{"calico", "health", "--port=9094", "--type=readiness"}))
-		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe.Exec.Command).To(Equal([]string{"calico", "health", "--port=9094", "--type=liveness"}))
+		Expect(ds.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"calico", "kube-controllers", "--health-port=9440"}))
+		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command).To(Equal([]string{"calico", "health", "--port=9440", "--type=readiness"}))
+		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe.Exec.Command).To(Equal([]string{"calico", "health", "--port=9440", "--type=liveness"}))
 
 		// Verify env
 		expectedEnv := []corev1.EnvVar{

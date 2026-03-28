@@ -611,11 +611,11 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 	var containerCommand []string
 	if c.uberImage {
-		containerCommand = []string{"calico", "kube-controllers", "--health-port=9094"}
+		containerCommand = []string{"calico", "kube-controllers", "--health-port=9440"}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"calico", "health", "--port=9094", "--type=readiness"},
+					Command: []string{"calico", "health", "--port=9440", "--type=readiness"},
 				},
 			},
 			TimeoutSeconds: 10,
@@ -623,7 +623,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		livenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"calico", "health", "--port=9094", "--type=liveness"},
+					Command: []string{"calico", "health", "--port=9440", "--type=liveness"},
 				},
 			},
 			FailureThreshold:    6,

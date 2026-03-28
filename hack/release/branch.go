@@ -91,12 +91,12 @@ var branchCutCommand = &cli.Command{
 		localFlag,
 		gitRemoteFlag,
 	},
-	Before: branchCutBefore,
-	Action: middleware.WithLogging(middleware.WithSummary("branch-cut", func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+	Before: middleware.WithLogging(branchCutBefore),
+	Action: middleware.WithSummary("branch-cut", func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
 		stream := c.String(streamFlag.Name)
 		outputs, err := branchCutAction(ctx, c)
 		return stream, outputs, err
-	})),
+	}),
 	After: branchCutAfter,
 }
 
@@ -463,8 +463,8 @@ var branchValidateCommand = &cli.Command{
 		},
 		githubTokenFlag,
 	},
-	Before: branchValidateBefore,
-	Action: middleware.WithLogging(middleware.WithSummary("branch-validate", branchValidateAction)),
+	Before: middleware.WithLogging(branchValidateBefore),
+	Action: middleware.WithSummary("branch-validate", branchValidateAction),
 }
 
 var branchValidateBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {

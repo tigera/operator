@@ -40,13 +40,11 @@ Otherwise, use --local flag to generate release notes based on local versions fi
 		skipValidationFlag,
 	},
 	Before: releaseNotesBefore,
-	Action: releaseNotesAction,
+	Action: middleware.WithLogging(releaseNotesAction),
 }
 
 // Pre-action for "release notes" command.
 var releaseNotesBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	middleware.ConfigureLogging(c)
-
 	var err error
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
 	if err != nil {

@@ -48,14 +48,12 @@ var publishCommand = &cli.Command{
 		draftGithubReleaseFlag,
 	},
 	Before: publishBefore,
-	Action: publishAction,
+	Action: middleware.WithLogging(middleware.WithSummary("release-publish", publishAction)),
 }
 
 // Pre-action for publish command.
 // It configures logging and performs validations.
 var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	middleware.ConfigureLogging(c)
-
 	var err error
 
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
@@ -91,29 +89,33 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 })
 
 // Action for publish command.
-var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
+var publishAction = func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+	version := c.String(versionFlag.Name)
 	repoRootDir, err := command.GitDir()
 	if err != nil {
-		return fmt.Errorf("getting git directory: %w", err)
+		return version, nil, fmt.Errorf("getting git directory: %w", err)
 	}
 
 	// Publish images
 	if err := publishImages(c, repoRootDir); err != nil {
-		return err
+		return version, nil, err
 	}
 
 	// Only images are published for hashrelease builds.
 	if c.Bool(hashreleaseFlag.Name) {
-		return nil
+		return version, nil, nil
 	}
 
 	// Publish GitHub release if requested
 	if !c.Bool(createGithubReleaseFlag.Name) {
 		logrus.Warnf("Skipping GitHub release creation. Either use %q to create a GitHub release or create manually.", publicCommand.FullName())
-		return nil
+		return version, nil, nil
 	}
-	return publishGithubRelease(ctx, c, repoRootDir)
-})
+	if err := publishGithubRelease(ctx, c, repoRootDir); err != nil {
+		return version, nil, err
+	}
+	return version, nil, nil
+}
 
 // publishImages publishes the operator images to the specified registry.
 // If the images are already published, it skips publishing.

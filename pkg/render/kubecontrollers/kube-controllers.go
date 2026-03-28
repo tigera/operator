@@ -591,13 +591,45 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	sc.RunAsUser = ptr.Int64ToPtr(999)
 	sc.RunAsGroup = ptr.Int64ToPtr(0)
 
-	readinessCmd := []string{"/usr/bin/check-status", "-r"}
-	livenessCmd := []string{"/usr/bin/check-status", "-l"}
+	readinessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"/usr/bin/check-status", "-r"},
+			},
+		},
+		TimeoutSeconds: 10,
+	}
+	livenessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{"/usr/bin/check-status", "-l"},
+			},
+		},
+		FailureThreshold:    6,
+		InitialDelaySeconds: 10,
+		TimeoutSeconds:      10,
+	}
 	var containerCommand []string
 	if c.uberImage {
-		containerCommand = []string{"calico", "kube-controllers"}
-		readinessCmd = []string{"calico", "check-status", "-r"}
-		livenessCmd = []string{"calico", "check-status", "-l"}
+		containerCommand = []string{"calico", "kube-controllers", "--health-port=9094"}
+		readinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"calico", "health", "--port=9094", "--type=readiness"},
+				},
+			},
+			TimeoutSeconds: 10,
+		}
+		livenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"calico", "health", "--port=9094", "--type=liveness"},
+				},
+			},
+			FailureThreshold:    6,
+			InitialDelaySeconds: 10,
+			TimeoutSeconds:      10,
+		}
 	}
 
 	container := corev1.Container{
@@ -607,24 +639,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
 		Resources:       c.kubeControllersResources(),
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: readinessCmd,
-				},
-			},
-			TimeoutSeconds: 10,
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: livenessCmd,
-				},
-			},
-			FailureThreshold:    6,
-			InitialDelaySeconds: 10,
-			TimeoutSeconds:      10,
-		},
+		ReadinessProbe:  readinessProbe,
+		LivenessProbe:   livenessProbe,
 		SecurityContext: sc,
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}

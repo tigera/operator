@@ -258,13 +258,15 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	if c.uberImage {
 		containerCommand = []string{"calico", "goldmane"}
 		readinessProbe = &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-				Command: []string{"calico", "goldmane-check", "--ready"},
+			ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+				Path: "/readiness",
+				Port: intstr.FromInt(GoldmaneHealthPort),
 			}},
 		}
 		livenessProbe = &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-				Command: []string{"calico", "goldmane-check", "--live"},
+			ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{
+				Path: "/liveness",
+				Port: intstr.FromInt(GoldmaneHealthPort),
 			}},
 		}
 	}

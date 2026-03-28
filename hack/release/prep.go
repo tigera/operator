@@ -33,14 +33,6 @@ var excludedComponentsPatterns = []string{
 	`^eck-.*`,
 }
 
-var changedFiles = []string{
-	calicoConfig,
-	enterpriseConfig,
-	"pkg/components",
-	"pkg/imports/crds",
-	"pkg/imports/admission",
-}
-
 // Command to prepare repo for a new release.
 var prepCommand = &cli.Command{
 	Name:  "prep",
@@ -55,49 +47,33 @@ to point to local repositories for Calico and Enterprise respectively.`,
 		versionFlag,
 		calicoVersionFlag,
 		calicoDirFlag,
+		calicoGitRepoFlag,
 		enterpriseVersionFlag,
 		enterpriseDirFlag,
+		enterpriseGitRepoFlag,
 		enterpriseRegistryFlag,
 		skipValidationFlag,
 		skipMilestoneFlag,
+		skipBranchCheckFlag,
 		skipRepoCheckFlag,
 		githubTokenFlag,
 		localFlag,
 	},
 	Before: prepBefore,
 	Action: prepAction,
+	After:  branchAfter,
 }
 
-// Pre-action for release prep command.
-var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	configureLogging(c)
-
-	// Extract repo information from CLI repo flag into context
-	var err error
-	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
+// validatePrepRefs checks the required refs for release prep:
+//   - check that at least one of calico or enterprise version is provided
+//   - if calico version is not provided, check that the version in calico_versions.yml is a released version
+//   - check that the provided calico and enterprise refs exist as a tag in the remote repository (if local directory not provided)
+//   - check that the base branch is a release branch (if not skipped)
+var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	// check that at least one of calico/enterprise version is set for prep
+	ctx, err := checkAtLeastOneOfFlags(ctx, c, calicoVersionFlag.Name, enterpriseVersionFlag.Name)
 	if err != nil {
 		return ctx, err
-	}
-
-	// Skip validations if requested
-	if c.Bool(skipValidationFlag.Name) {
-		logrus.Warnf("Skipping %s validation as requested.", c.Name)
-		return ctx, nil
-	}
-
-	// Ensure that git working tree is clean
-	ctx, err = checkGitClean(ctx)
-	if err != nil {
-		return ctx, err
-	}
-
-	if token := c.String(githubTokenFlag.Name); token == "" && !c.Bool(localFlag.Name) {
-		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
-	}
-
-	// One of Calico or Enterprise version must be specified.
-	if c.String(calicoVersionFlag.Name) == "" && c.String(enterpriseVersionFlag.Name) == "" {
-		return ctx, fmt.Errorf("at least one of %s or %s must be specified", calicoVersionFlag.Name, enterpriseVersionFlag.Name)
 	}
 
 	// If Calico is not passed in, check the version in calico_versions.yml is a released version.
@@ -120,81 +96,101 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 	} else if !valid {
 		return ctx, fmt.Errorf("every release must contain a released Calico version, but found %s in %s", calicoVersion, calicoConfig)
 	}
+
+	// check that the ref for calico and/or enterprise provided exists as a tag in the specified remote repository
+	// unless a local directory is provided for the respective component, in which case we assume the version exists since it is being pulled from the local repo
+	for _, check := range []struct {
+		repo     string
+		tag      string
+		flag     string
+		localDir string
+	}{
+		{tag: calicoVersion, repo: c.String(calicoGitRepoFlag.Name), localDir: c.String(calicoDirFlag.Name), flag: calicoVersionFlag.Name},
+		{tag: c.String(enterpriseVersionFlag.Name), repo: c.String(enterpriseGitRepoFlag.Name), localDir: c.String(enterpriseDirFlag.Name), flag: enterpriseVersionFlag.Name},
+	} {
+		if check.tag == "" {
+			continue
+		}
+		if check.localDir != "" {
+			logrus.Warnf("Local directory provided for %s, skipping remote ref validation", check.flag)
+			continue
+		}
+		out, err := git("ls-remote", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.tag)
+		if err != nil {
+			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.tag, check.repo, err)
+		}
+		if !strings.Contains(out, check.tag) {
+			return ctx, fmt.Errorf("ref %q not found as a tag in %s", check.tag, check.repo)
+		}
+	}
+
+	// check operator base branch is a release branch unless skipped
+	if c.Bool(skipBranchCheckFlag.Name) {
+		logrus.Warnf("Skipping branch validation as requested.")
+		return ctx, nil
+	}
+	baseBranch := ctx.Value(baseBranchCtxKey).(string)
+	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), baseBranch)
+	if err != nil {
+		return ctx, fmt.Errorf("validating current branch: %w", err)
+	}
+	if !releaseBranch {
+		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", baseBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
+	}
+	return ctx, nil
+}
+
+// prepContextValuesFunc sets context values for the prep command based on CLI flags.
+var prepContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	baseBranch, err := git("branch", "--show-current")
+	if err != nil {
+		return ctx, fmt.Errorf("getting current branch: %w", err)
+	}
+	ctx = context.WithValue(ctx, baseBranchCtxKey, baseBranch)
+
+	// Extract repo information from CLI repo flag into context
+	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
+	if err != nil {
+		return ctx, err
+	}
+
+	// Set branch cutting context values based on CLI flags
+	version := c.String(versionFlag.Name)
+	ctx = context.WithValue(ctx, versionCtxKey, version)
+	ctx = context.WithValue(ctx, branchNameCtxKey, fmt.Sprintf("build-%s", version))
+	if calicoVer := c.String(calicoVersionFlag.Name); calicoVer != "" {
+		ctx = context.WithValue(ctx, calicoConfigVersionCtxKey, calicoVer)
+	}
+	if epVer := c.String(enterpriseVersionFlag.Name); epVer != "" {
+		ctx = context.WithValue(ctx, enterpriseConfigVersionCtxKey, epVer)
+	}
+	return ctx, nil
+}
+
+// Pre-action for release prep command.
+var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	var err error
+
+	ctx, err = branchBeforeCommon(ctx, c, prepContextValuesFunc, validatePrepRefs)
+	if err != nil {
+		return ctx, err
+	}
+
+	if token := c.String(githubTokenFlag.Name); token == "" && !c.Bool(localFlag.Name) {
+		return ctx, fmt.Errorf("GitHub token must be provided via --%s flag or GITHUB_TOKEN environment variable", githubTokenFlag.Name)
+	}
+
 	return ctx, nil
 })
 
 // Action executed for release prep command.
 var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	// get current branch to switch back to later
-	baseBranch, err := git("branch", "--show-current")
+	baseBranch := ctx.Value(baseBranchCtxKey).(string)
+	version := ctx.Value(versionCtxKey).(string)
+	prepBranch := ctx.Value(branchNameCtxKey).(string)
+	repoRootDir, err := branchActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
 	if err != nil {
-		return fmt.Errorf("error getting current branch: %w", err)
-	}
-	defer func() {
-		if _, err := git("switch", "-f", baseBranch); err != nil {
-			logrus.WithError(err).Errorf("Failed to reset to %q branch", baseBranch)
-		}
-	}()
-
-	makeTargets := []string{"fix"}
-	prepEnv := os.Environ()
-
-	repoRootDir, err := gitDir()
-	if err != nil {
-		return fmt.Errorf("error getting git directory: %w", err)
-	}
-	version := c.String(versionFlag.Name)
-	ctx = context.WithValue(ctx, versionCtxKey, version)
-
-	// Create and switch to new branch using "switch -C" to avoid issues if the branch already exists
-	prepBranch := fmt.Sprintf("build-%s", version)
-	if _, err := git("switch", "-C", prepBranch); err != nil {
-		return fmt.Errorf("error creating and switching to branch %s: %w", prepBranch, err)
-	}
-
-	// Modify config versions files
-	if calico := c.String(calicoVersionFlag.Name); calico != "" {
-		makeTargets = append(makeTargets, "gen-versions-calico")
-		if err := updateConfigVersions(repoRootDir, calicoConfig, calico); err != nil {
-			return fmt.Errorf("error modifying Calico config: %w", err)
-		}
-		// Set CALICO_CRDS_DIR if specified
-		if crdsDir := c.String(calicoDirFlag.Name); crdsDir != "" {
-			logrus.Warnf("Using local Calico CRDs from %s", crdsDir)
-			prepEnv = append(prepEnv, fmt.Sprintf("CALICO_CRDS_DIR=%s", crdsDir))
-		}
-	}
-	enterprise := c.String(enterpriseVersionFlag.Name)
-	if enterprise != "" {
-		makeTargets = append(makeTargets, "gen-versions-enterprise")
-		if err := updateConfigVersions(repoRootDir, enterpriseConfig, enterprise); err != nil {
-			return fmt.Errorf("error modifying Enterprise config: %w", err)
-		}
-		// Update registry for Enterprise
-		if eRegistry := c.String(enterpriseRegistryFlag.Name); eRegistry != "" {
-			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
-			if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, eRegistry); err != nil {
-				return err
-			}
-		}
-		// Set ENTERPRISE_CRDS_DIR if specified
-		if crdsDir := c.String(enterpriseDirFlag.Name); crdsDir != "" {
-			logrus.Warnf("Using local Enterprise CRDs from %s", crdsDir)
-			prepEnv = append(prepEnv, fmt.Sprintf("ENTERPRISE_CRDS_DIR=%s", crdsDir))
-		}
-	}
-
-	// Run make target to ensure files are formatted correctly and generated files are up to date.
-	if _, err := makeInDir(repoRootDir, strings.Join(makeTargets, " "), prepEnv...); err != nil {
-		return fmt.Errorf("error running \"make fix gen-versions\": %w", err)
-	}
-
-	// Commit changes
-	if _, err := gitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
-		return fmt.Errorf("error staging git changes: %w", err)
-	}
-	if _, err := git("commit", "-m", fmt.Sprintf("build: %s release", version)); err != nil {
-		return fmt.Errorf("error committing git changes: %w", err)
+		return err
 	}
 
 	// If local flag is set, skip pushing prep branch and creating PR
@@ -207,7 +203,8 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	// Push branch to remote
 	gitRemote := c.String(gitRemoteFlag.Name)
 	logrus.Debugf("Pushing branch %s to %s", prepBranch, gitRemote)
-	if _, err := git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
+	if out, err := git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
+		logrus.Error(out)
 		return fmt.Errorf("error pushing branch %s to remote %s: %w", prepBranch, gitRemote, err)
 	}
 

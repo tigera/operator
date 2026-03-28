@@ -95,6 +95,7 @@ type Component struct {
 
 	whiskerImage        string
 	whiskerBackendImage string
+	uberImage           bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -109,7 +110,12 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
-	c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise || operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+		c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
+	} else {
+		c.whiskerBackendImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
+		c.uberImage = true
+	}
 	if err != nil {
 		return err
 	}
@@ -199,7 +205,7 @@ func (c *Component) whiskerService() *corev1.Service {
 }
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            WhiskerBackendContainerName,
 		Image:           c.whiskerBackendImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
@@ -215,6 +221,10 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
+	if c.uberImage {
+		container.Command = []string{"calico", "whisker-backend"}
+	}
+	return container
 }
 
 func (c *Component) deployment() *appsv1.Deployment {

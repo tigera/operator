@@ -1750,9 +1750,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	}
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
-		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
-		// This timeout should be less than the PeriodSeconds (30s in controller/utils/component.go).
-		TimeoutSeconds: 10,
+		// Use a shorter period than the global default (30s) so that calico-node is
+		// marked ready promptly after startup. The global default is too slow for
+		// calico-node, which typically becomes ready within ~10s of container start.
+		PeriodSeconds:  10,
+		TimeoutSeconds: 5,
 	}
 	return lp, rp
 }

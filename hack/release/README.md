@@ -150,32 +150,32 @@ release branch --stream <vX.Y> --calico-ref <git-ref> --enterprise-ref <git-ref>
 
 If the `--local` flag is specified, the branch and tag are created locally without pushing to the remote.
 
-| Flag | Env var | Description |
-|------|---------|-------------|
-| `--stream` | `RELEASE_STREAM` | Release stream (e.g., `v1.43`). Required. |
-| `--calico-ref` | `CALICO_REF` | Calico git ref (branch or tag). Required. |
-| `--enterprise-ref` | `ENTERPRISE_REF` | Enterprise git ref (branch or tag). Required. |
-| `--release-branch-prefix` | `RELEASE_BRANCH_PREFIX` | Branch name prefix (default: `release`). |
-| `--local` | `LOCAL` | Skip pushing to remote. |
+| Flag                      | Env var                 | Description                                   |
+| ------------------------- | ----------------------- | --------------------------------------------- |
+| `--stream`                | `RELEASE_STREAM`        | Release stream (e.g., `v1.43`). Required.     |
+| `--calico-ref`            | `CALICO_REF`            | Calico git ref (branch or tag). Required.     |
+| `--enterprise-ref`        | `ENTERPRISE_REF`        | Enterprise git ref (branch or tag). Required. |
+| `--release-branch-prefix` | `RELEASE_BRANCH_PREFIX` | Branch name prefix (default: `release`).      |
+| `--local`                 | `LOCAL`                 | Skip pushing to remote.                       |
 
 There is also a Makefile target:
 
 ```sh
-make create-release-branch STREAM=vX.Y CALICO_REF=<ref> ENTERPRISE_REF=<ref>
+make create-release-branch RELEASE_STREAM=vX.Y CALICO_REF=<ref> ENTERPRISE_REF=<ref>
 ```
 
 #### Examples
 
-1. To create a release branch for operator v1.43 with Calico v3.32 and Enterprise v3.22
+1. To create a release branch for operator v1.42 with Calico v3.32 and Enterprise v3.22
 
     ```sh
-    release branch --stream v1.43 --calico-ref release-v3.32 --enterprise-ref release-calient-v3.22
+    release branch --stream v1.42 --calico-ref release-v3.32 --enterprise-ref release-calient-v3.22
     ```
 
-1. To create a release branch locally without pushing
+1. To perform the same action as above but only locally without pushing to the remote
 
     ```sh
-    release branch --stream v1.43 --calico-ref release-v3.32 --enterprise-ref release-calient-v3.22 --local
+    release branch --stream v1.42 --calico-ref release-v3.32 --enterprise-ref release-calient-v3.22 --local
     ```
 
 ### release build

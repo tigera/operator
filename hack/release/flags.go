@@ -139,17 +139,11 @@ var (
 	}
 	streamFlag = &cli.StringFlag{
 		Name:     "stream",
+		Aliases:  []string{"release-stream"},
 		Category: operatorFlagCategory,
 		Usage:    "The release stream for the release branch name (e.g. vX.Y). The full branch name will be <release-branch-prefix>-<stream>",
-		Sources:  cli.EnvVars("RELEASE_STREAM"),
+		Sources:  cli.EnvVars("RELEASE_STREAM", "STREAM"),
 		Required: true,
-		Action: func(ctx context.Context, c *cli.Command, s string) error {
-			// Validate stream is in the format vX.Y
-			if !regexp.MustCompile(`^v\d+\.\d+$`).MatchString(s) {
-				return fmt.Errorf("stream must be in the format vX.Y, got %q", s)
-			}
-			return nil
-		},
 	}
 	releaseBranchPrefixFlag = &cli.StringFlag{
 		Name:     "release-branch-prefix",

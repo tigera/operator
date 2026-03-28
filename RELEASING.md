@@ -7,7 +7,7 @@ and a GitHub milestone for the next release. The `create-release-branch` Makefil
 the branch and dev tag; you will create the milestone manually in a later step:
 
 ```sh
-make create-release-branch STREAM=vX.Y CALICO_REF=<calico-git-ref> ENTERPRISE_REF=<enterprise-git-ref>
+make create-release-branch RELEASE_STREAM=vX.Y CALICO_REF=<calico-git-ref> ENTERPRISE_REF=<enterprise-git-ref>
 ```
 
 This command:
@@ -21,12 +21,11 @@ This command:
 
 **Flags / environment variables:**
 
-| Env var                                | Flag                      | Description                                                       |
-| -------------------------------------- | ------------------------- | ----------------------------------------------------------------- |
-| `STREAM` / `RELEASE_STREAM` (required) | `--stream`                | Release stream, e.g., `v1.43`                                     |
-| `CALICO_REF` (required)                | `--calico-ref`            | Calico git ref (branch or tag), e.g., `release-v3.32`             |
-| `ENTERPRISE_REF` (required)            | `--enterprise-ref`        | Enterprise git ref (branch or tag), e.g., `release-calient-v3.22` |
-| `RELEASE_BRANCH_PREFIX`                | `--release-branch-prefix` | Branch name prefix (default: `release`)                           |
+| Env var                                | Flag               | Description                                                       |
+| -------------------------------------- | ------------------ | ----------------------------------------------------------------- |
+| `STREAM` / `RELEASE_STREAM` (required) | `--stream`         | Release stream, e.g., `v1.43`                                     |
+| `CALICO_REF` (required)                | `--calico-ref`     | Calico git ref (branch or tag), e.g., `release-v3.32`             |
+| `ENTERPRISE_REF` (required)            | `--enterprise-ref` | Enterprise git ref (branch or tag), e.g., `release-calient-v3.22` |
 
 After the branch is created, create the next minor release's first milestone at
 https://github.com/tigera/operator/milestones (e.g., if `release-v1.43` was created,
@@ -34,7 +33,7 @@ create milestone `v1.44.0`).
 
 ## Preparing for the release
 
-Checkout the branch from which you want to release. Ensure that you are using the correct
+Checkout the release branch from which you want to release. Ensure that you are using the correct
 operator version for the version of Calico or Enterprise that you are releasing. If in doubt,
 check [the releases page](https://github.com/tigera/operator/releases) to find the most
 recent Operator release for your Calico or Enterprise minor version.
@@ -42,28 +41,35 @@ recent Operator release for your Calico or Enterprise minor version.
 Run the following command:
 
 ```sh
-make release-prep VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> ENTERPRISE_VERSION=<ENTERPRISE_VERSION>
+make release-prep VERSION=<OPERATOR_VERSION> [CALICO_VERSION=<CALICO_VERSION>] [ENTERPRISE_VERSION=<ENTERPRISE_VERSION>]
 ```
 
-The command does the following:
+At least one of `CALICO_VERSION` or `ENTERPRISE_VERSION` must be provided. The versions must
+exist as tags in their respective GitHub repositories.
 
-- It updates the image version and the title field with the appropriate versions in the
-format `vX.Y.Z` for each of the following files:
-  1. `config/calico_versions.yml` (Calico OSS version)
-  2. `config/enterprise_versions.yml` (Calico Enterprise version)
+This command:
 
-- It updates the registry reference to `quay.io` from `gcr.io` in the following files:
+- Validates that the current branch is a release branch (e.g. `release-v1.43`)
+- Validates that the provided Calico/Enterprise versions exist as tags in their remote repositories
+- Updates `config/calico_versions.yml` and/or `config/enterprise_versions.yml` with the specified versions
+- Updates the Enterprise registry if needed
+- Runs `make fix gen-versions` to regenerate component files
+- Commits the changes to a new `build-<VERSION>` branch
+- Pushes the branch and creates a PR against the release branch
+- Manages GitHub milestones for the release stream (creates next patch milestone, closes current)
 
-  1. `TigeraRegistry` in `pkg/components/images.go`
+**Flags / environment variables:**
 
-- It ensures `make gen-versions` is run and the resulting updates committed.
-- It creates a PR with all the changes
-- It manages the milestones on GitHub for the release stream associated with the new release,
-  which involves creating a new milestone for the next patch version and closing the current milestone
-  for the release version. All open issues and pull requests associated with the current milestone
-  are moved to the new milestone.
+| Env var               | Flag                    | Description                                                   |
+| --------------------- | ----------------------- | ------------------------------------------------------------- |
+| `VERSION` (required)  | `--version`             | Operator version to release, e.g., `v1.43.2`                  |
+| `CALICO_VERSION`      | `--calico-version`      | Calico version tag, e.g., `v3.30.2`                           |
+| `ENTERPRISE_VERSION`  | `--enterprise-version`  | Enterprise version tag, e.g., `v3.22.0-1.0`                   |
+| `ENTERPRISE_REGISTRY` | `--enterprise-registry` | Override Enterprise image registry                            |
+| `CALICO_DIR`          | `--calico-dir`          | Local Calico CRDs directory (skips remote ref validation)     |
+| `ENTERPRISE_DIR`      | `--enterprise-dir`      | Local Enterprise CRDs directory (skips remote ref validation) |
 
-Go to the PR created and it is reviewed and merged.
+Once the PR is created, get it reviewed and merged.
 
 ## Releasing
 

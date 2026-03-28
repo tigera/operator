@@ -75,7 +75,7 @@ var buildCommand = &cli.Command{
 		extensionTimeoutFlag,
 	},
 	Before: buildBefore,
-	Action: buildAction,
+	Action: middleware.WithSummary("release-build", buildAction),
 	After:  buildAfter,
 }
 
@@ -183,13 +183,13 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 })
 
 // Action for release build command.
-var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
+var buildAction = func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+	version := c.String(versionFlag.Name)
 	repoRootDir, err := command.GitDir()
 	if err != nil {
-		return fmt.Errorf("getting git directory: %w", err)
+		return version, nil, fmt.Errorf("getting git directory: %w", err)
 	}
 
-	version := c.String(versionFlag.Name)
 	buildLog := logrus.WithField("version", version)
 
 	// For hashrelease builds, skip if image is already published.
@@ -198,7 +198,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 			buildLog.WithError(err).Warn("Failed to check if image is already published, proceeding with build")
 		} else if published {
 			buildLog.Warn("Image is already published, skipping build")
-			return nil
+			return version, nil, nil
 		}
 	}
 
@@ -231,7 +231,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 			return nil
 		})
 		if err := setupHashreleaseBuild(ctx, c, repoRootDir); err != nil {
-			return fmt.Errorf("preparing hashrelease build environment: %w", err)
+			return version, nil, fmt.Errorf("preparing hashrelease build environment: %w", err)
 		}
 	} else {
 		buildLog = buildLog.WithField("release", true)
@@ -242,14 +242,14 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 	buildLog.Info("Building Operator")
 	if out, err := command.MakeInDir(repoRootDir, "release-build", buildEnv...); err != nil {
 		buildLog.Error(out)
-		return fmt.Errorf("building Operator: %w", err)
+		return version, nil, fmt.Errorf("building Operator: %w", err)
 	}
 	if err := assertOperatorImageVersion(registry, image, version); err != nil {
-		return fmt.Errorf("asserting operator image version: %w", err)
+		return version, nil, fmt.Errorf("asserting operator image version: %w", err)
 	}
 	listImages(registry, image, version)
-	return nil
-})
+	return version, nil, nil
+}
 
 // runBuildCleanup runs all registered cleanup functions in reverse order (LIFO),
 // logging each failure individually. It returns the joined errors and resets the slice.

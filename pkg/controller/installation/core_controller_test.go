@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -56,7 +57,6 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/imports/admission"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -1171,7 +1171,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Endpoints: []discoveryv1.Endpoint{
 							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 						},
-						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 					})
 			}
 
@@ -1307,7 +1307,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							Endpoints: []discoveryv1.Endpoint{
 								{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 							},
-							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 						})).NotTo(HaveOccurred())
 					Expect(c.Create(
 						ctx,
@@ -1317,7 +1317,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							Endpoints: []discoveryv1.Endpoint{
 								{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
 							},
-							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 						})).NotTo(HaveOccurred())
 
 					By("r.Reconcile()")

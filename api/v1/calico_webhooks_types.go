@@ -1,4 +1,4 @@
-// Copyright (c) 2026 Tigera, Inc. All rights reserved.
+// Copyright (c) 2026-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,16 @@ type CalicoWebhooksDeploymentContainer struct {
 	// If omitted, the calico-webhooks Deployment will use its default value for this container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 
 	// Ports allows customization of the calico-webhooks container's ports.
 	// If specified, this overrides the default container port configuration.

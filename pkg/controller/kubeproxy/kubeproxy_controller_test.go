@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -37,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -81,7 +81,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 			Endpoints: []discoveryv1.Endpoint{
 				{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 			},
-			Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+			Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 		}
 
 		mockStatus = &status.MockStatus{}
@@ -137,7 +137,7 @@ var _ = Describe("kube-proxy controller tests", func() {
 		createResource(&v3.FelixConfiguration{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: v3.FelixConfigurationSpec{
-				BPFEnabled: ptr.BoolToPtr(bpfEnabled),
+				BPFEnabled: ptr.To(bpfEnabled),
 			},
 		})
 	}

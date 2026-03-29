@@ -25,7 +25,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -38,6 +37,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -777,7 +777,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					"-socketPath",
 					"/var/run/waf-http-filter/extproc.sock",
 				},
-				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      wafFilterName,
@@ -815,7 +815,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					OwningGatewayNameEnvVar,
 					OwningGatewayNamespaceEnvVar,
 				},
-				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      "access-logs",
@@ -902,7 +902,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
 						Path: "/var/log/calico",
-						Type: ptr.ToPtr(corev1.HostPathDirectoryOrCreate),
+						Type: ptr.To(corev1.HostPathDirectoryOrCreate),
 					},
 				},
 				Name: "var-log-calico",
@@ -1013,7 +1013,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						},
 					},
 					Format: &envoyapi.ProxyAccessLogFormat{
-						Type: ptr.ToPtr(envoyapi.ProxyAccessLogFormatTypeJSON),
+						Type: ptr.To(envoyapi.ProxyAccessLogFormatTypeJSON),
 						JSON: map[string]string{
 							"reporter":                         "gateway",
 							"start_time":                       "%START_TIME%",

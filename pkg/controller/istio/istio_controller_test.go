@@ -452,7 +452,7 @@ var _ = Describe("Istio controller tests", func() {
 					},
 				},
 				Spec: v3.FelixConfigurationSpec{
-					IstioAmbientMode: ptr.To[v3.IstioAmbientMode]("Disabled"),
+					IstioAmbientMode: ptr.To(v3.IstioAmbientMode("Disabled")),
 				},
 			}
 			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())

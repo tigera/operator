@@ -225,6 +225,16 @@ type GatewayControllerDeploymentContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the controller's "envoy-gateway"
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
@@ -283,6 +293,16 @@ type GatewayCertgenJobContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the job's "envoy-gateway-certgen"
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
@@ -361,6 +381,16 @@ type GatewayDeploymentContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the deployment's "envoy"
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
@@ -434,6 +464,16 @@ type GatewayDaemonSetContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the daemonset's "envoy"
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`

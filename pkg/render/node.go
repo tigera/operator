@@ -1270,7 +1270,7 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	}
 	return corev1.Container{
 		Name:            "ebpf-bootstrap",
-		Image:           image,
+		Image:           c.nodeImage,
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.bpffsEnvvars(),
 		Command:         command,

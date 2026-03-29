@@ -263,6 +263,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 					Command: []string{"calico", "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=readiness"},
 				},
 			},
+			PeriodSeconds: 10,
 		}
 		livenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -270,6 +271,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 					Command: []string{"calico", "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=liveness"},
 				},
 			},
+			PeriodSeconds: 10,
 		}
 	}
 

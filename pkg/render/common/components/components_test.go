@@ -21,10 +21,11 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	v1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/ptr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	"github.com/tigera/operator/test"
 )
@@ -363,7 +364,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.CalicoNodeDaemonSetSpec{
 						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
 							Spec: &v1.CalicoNodeDaemonSetPodSpec{
-								DNSPolicy: ptr.ToPtr(corev1.DNSClusterFirstWithHostNet),
+								DNSPolicy: ptr.To(corev1.DNSClusterFirstWithHostNet),
 							},
 						},
 					},
@@ -1166,7 +1167,7 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.TyphaDeploymentSpec{
 						Template: &v1.TyphaDeploymentPodTemplateSpec{
 							Spec: &v1.TyphaDeploymentPodSpec{
-								TerminationGracePeriodSeconds: ptr.Int64ToPtr(3),
+								TerminationGracePeriodSeconds: ptr.To(int64(3)),
 							},
 						},
 					},
@@ -1183,8 +1184,8 @@ var _ = Describe("Common components render tests", func() {
 					Spec: &v1.TyphaDeploymentSpec{
 						Strategy: &v1.TyphaDeploymentStrategy{
 							RollingUpdate: &appsv1.RollingUpdateDeployment{
-								MaxUnavailable: ptr.IntOrStrPtr("0"),
-								MaxSurge:       ptr.IntOrStrPtr("100%"),
+								MaxUnavailable: ptr.To(intstr.FromString("0")),
+								MaxSurge:       ptr.To(intstr.FromString("100%")),
 							},
 						},
 					},
@@ -1194,8 +1195,8 @@ var _ = Describe("Common components render tests", func() {
 				Expect(result.Spec.Strategy).To(Equal(appsv1.DeploymentStrategy{
 					Type: appsv1.RollingUpdateDeploymentStrategyType,
 					RollingUpdate: &appsv1.RollingUpdateDeployment{
-						MaxUnavailable: ptr.IntOrStrPtr("0"),
-						MaxSurge:       ptr.IntOrStrPtr("100%"),
+						MaxUnavailable: ptr.To(intstr.FromString("0")),
+						MaxSurge:       ptr.To(intstr.FromString("100%")),
 					},
 				}))
 			}),

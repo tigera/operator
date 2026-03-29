@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,15 +108,54 @@ func GetContainers(overrides any) []corev1.Container {
 	return valueToContainers(value)
 }
 
-func valueToContainers(value reflect.Value) []corev1.Container {
-	cs := make([]corev1.Container, 0, value.Len())
+// GetContainerOverrides returns the full container overrides including probe timing.
+func GetContainerOverrides(overrides any) []containerOverride {
+	value := getField(overrides, "Spec", "Template", "Spec", "Containers")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return valueToContainerOverrides(value)
+}
+
+// containerOverride holds override values extracted from a container override struct.
+type containerOverride struct {
+	Name           string
+	Resources      *corev1.ResourceRequirements
+	ReadinessProbe *operator.ProbeOverride
+	LivenessProbe  *operator.ProbeOverride
+}
+
+func valueToContainerOverrides(value reflect.Value) []containerOverride {
+	cs := make([]containerOverride, 0, value.Len())
 	for _, v := range value.Seq2() {
 		name := v.FieldByName("Name")
-		resources := v.FieldByName("Resources")
-		if !resources.IsNil() {
+		co := containerOverride{Name: name.String()}
+
+		if resources := v.FieldByName("Resources"); resources.IsValid() && !resources.IsNil() {
+			co.Resources = resources.Interface().(*corev1.ResourceRequirements)
+		}
+		if rp := v.FieldByName("ReadinessProbe"); rp.IsValid() && !rp.IsNil() {
+			co.ReadinessProbe = rp.Interface().(*operator.ProbeOverride)
+		}
+		if lp := v.FieldByName("LivenessProbe"); lp.IsValid() && !lp.IsNil() {
+			co.LivenessProbe = lp.Interface().(*operator.ProbeOverride)
+		}
+
+		if co.Resources != nil || co.ReadinessProbe != nil || co.LivenessProbe != nil {
+			cs = append(cs, co)
+		}
+	}
+	return cs
+}
+
+// valueToContainers converts override structs to corev1.Container for backward compat.
+func valueToContainers(value reflect.Value) []corev1.Container {
+	cs := make([]corev1.Container, 0, value.Len())
+	for _, co := range valueToContainerOverrides(value) {
+		if co.Resources != nil {
 			cs = append(cs, corev1.Container{
-				Name:      name.String(),
-				Resources: *(resources.Interface().(*corev1.ResourceRequirements)),
+				Name:      co.Name,
+				Resources: *co.Resources,
 			})
 		}
 	}
@@ -262,11 +301,10 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	}
 
 	// If `overrides` has a Spec.Template.Spec.Containers field, and it includes containers with
-	// the same name as those in `r.podTemplateSpec.Spec.InitContainers`, and with non-nil
-	// `Resources`, those resources replace those for the corresponding container in
-	// `r.podTemplateSpec.Spec.Containers`.
-	if containers := GetContainers(overrides); containers != nil {
-		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
+	// the same name as those in `r.podTemplateSpec.Spec.Containers`, resources and probe timing
+	// overrides are applied to the corresponding container.
+	if cos := GetContainerOverrides(overrides); cos != nil {
+		mergeContainerOverrides(r.podTemplateSpec.Spec.Containers, cos)
 	}
 
 	// If `overrides` has a Spec.Template.Spec.Affinity field, and it's non-nil, it sets
@@ -481,7 +519,8 @@ func ApplyPrometheusOverrides(prom *monitoringv1.Prometheus, overrides *operator
 }
 
 // mergeContainers copies the ResourceRequirements from the provided containers
-// to the current corev1.Containers.
+// to the current corev1.Containers. Used for init containers which only support
+// resource overrides.
 func mergeContainers(current []corev1.Container, provided []corev1.Container) {
 	providedMap := make(map[string]corev1.Container)
 	for _, c := range provided {
@@ -494,6 +533,47 @@ func mergeContainers(current []corev1.Container, provided []corev1.Container) {
 		} else {
 			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}
+	}
+}
+
+// mergeContainerOverrides applies resource and probe timing overrides from the
+// Installation API to the rendered containers. This is the main container
+// override path — init containers use mergeContainers instead.
+func mergeContainerOverrides(current []corev1.Container, overrides []containerOverride) {
+	overrideMap := make(map[string]containerOverride)
+	for _, co := range overrides {
+		overrideMap[co.Name] = co
+	}
+
+	for i, c := range current {
+		co, ok := overrideMap[c.Name]
+		if !ok {
+			continue
+		}
+		if co.Resources != nil {
+			current[i].Resources = *co.Resources
+		}
+		if co.ReadinessProbe != nil && current[i].ReadinessProbe != nil {
+			applyProbeOverride(current[i].ReadinessProbe, co.ReadinessProbe)
+		}
+		if co.LivenessProbe != nil && current[i].LivenessProbe != nil {
+			applyProbeOverride(current[i].LivenessProbe, co.LivenessProbe)
+		}
+	}
+}
+
+func applyProbeOverride(probe *corev1.Probe, override *operator.ProbeOverride) {
+	if override.PeriodSeconds != nil {
+		probe.PeriodSeconds = *override.PeriodSeconds
+	}
+	if override.TimeoutSeconds != nil {
+		probe.TimeoutSeconds = *override.TimeoutSeconds
+	}
+	if override.FailureThreshold != nil {
+		probe.FailureThreshold = *override.FailureThreshold
+	}
+	if override.InitialDelaySeconds != nil {
+		probe.InitialDelaySeconds = *override.InitialDelaySeconds
 	}
 }
 

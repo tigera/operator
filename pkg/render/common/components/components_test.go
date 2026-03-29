@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -573,6 +573,40 @@ var _ = Describe("Common components render tests", func() {
 				Expect(expected.Spec.Template.Spec.Containers).To(HaveLen(2))
 				expected.Spec.Template.Spec.Containers[0].Resources = resources1
 				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
+				Expect(result).To(Equal(expected))
+			}),
+		Entry("container probe overrides",
+			defaultedDaemonSet,
+			func() *v1.CalicoNodeDaemonSet {
+				period := int32(10)
+				timeout := int32(2)
+				return &v1.CalicoNodeDaemonSet{
+					Spec: &v1.CalicoNodeDaemonSetSpec{
+						Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
+							Spec: &v1.CalicoNodeDaemonSetPodSpec{
+								Containers: []v1.CalicoNodeDaemonSetContainer{
+									{
+										Name: "not-zero1",
+										ReadinessProbe: &v1.ProbeOverride{
+											PeriodSeconds:  &period,
+											TimeoutSeconds: &timeout,
+										},
+										LivenessProbe: &v1.ProbeOverride{
+											PeriodSeconds: &period,
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+			},
+			func(result appsv1.DaemonSet) {
+				expected := defaultedDaemonSet()
+				Expect(expected.Spec.Template.Spec.Containers).To(HaveLen(2))
+				expected.Spec.Template.Spec.Containers[0].ReadinessProbe.PeriodSeconds = 10
+				expected.Spec.Template.Spec.Containers[0].ReadinessProbe.TimeoutSeconds = 2
+				expected.Spec.Template.Spec.Containers[0].LivenessProbe.PeriodSeconds = 10
 				Expect(result).To(Equal(expected))
 			}),
 		Entry("empty containers",

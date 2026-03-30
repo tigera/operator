@@ -282,6 +282,15 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
+{{ with index .Components.calico }}
+	ComponentCalico = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
 
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
@@ -314,5 +323,6 @@ var (
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
 		ComponentCalicoWebhooks,
+		ComponentCalico,
 	}
 )

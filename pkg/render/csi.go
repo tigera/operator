@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -53,6 +53,7 @@ type csiComponent struct {
 
 	csiImage          string
 	csiRegistrarImage string
+	combinedImage     bool
 }
 
 func CSI(cfg *CSIConfiguration) Component {
@@ -138,9 +139,14 @@ func (c *csiComponent) csiAffinities() *corev1.Affinity {
 
 func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
+	var csiCommand []string
+	if c.combinedImage {
+		csiCommand = []string{"calico", "component", "csi"}
+	}
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
 		Image:           c.csiImage,
+		Command:         csiCommand,
 		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
@@ -393,11 +399,11 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			}
 			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, is)
 		} else {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
+			c.csiImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
 			if err != nil {
 				return err
 			}
-
+			c.combinedImage = true
 			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
 		}
 	}

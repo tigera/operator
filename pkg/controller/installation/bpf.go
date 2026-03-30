@@ -15,41 +15,34 @@
 package installation
 
 import (
-	"errors"
 	"reflect"
 	"strconv"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/operator/pkg/controller/utils"
 
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/fieldowner"
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
-// bpfValidateAnnotations validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
-func bpfValidateAnnotations(fc *v3.FelixConfiguration) error {
-	var annotationValue *bool
-	if fc.Annotations[render.BPFOperatorAnnotation] != "" {
-		v, err := strconv.ParseBool(fc.Annotations[render.BPFOperatorAnnotation])
-		annotationValue = &v
-		if err != nil {
-			return err
-		}
+const installationControllerName = "installation"
+
+func setBPFEnabledOnFelixConfiguration(fc *v3.FelixConfiguration, bpfEnabled bool) error {
+	t := fieldowner.ForObject(installationControllerName, fc)
+	t.MigrateAnnotation(fc, "BPFEnabled", render.BPFOperatorAnnotation)
+
+	desired := strconv.FormatBool(bpfEnabled)
+	shouldSet, err := t.Manage("BPFEnabled", fieldowner.FormatValue(fc.Spec.BPFEnabled), desired, fieldowner.ConflictError)
+	if err != nil {
+		return err
 	}
-
-	// The values are considered matching if one of the following is true:
-	// - Both values are nil
-	// - Neither are nil and they have the same value.
-	// Otherwise, the we consider the annotation to not match the spec field.
-	match := annotationValue == nil && fc.Spec.BPFEnabled == nil
-	match = match || annotationValue != nil && fc.Spec.BPFEnabled != nil && *annotationValue == *fc.Spec.BPFEnabled
-
-	if !match {
-		return errors.New(`unable to set bpfEnabled: FelixConfiguration "default" has been modified by someone else, refusing to override potential user configuration`)
+	if shouldSet {
+		fc.Spec.BPFEnabled = &bpfEnabled
 	}
-
+	t.Flush(fc)
 	return nil
 }
 
@@ -71,7 +64,6 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 
 	for _, volume := range ds.Spec.Template.Spec.Volumes {
 		if volume.Name == render.BPFVolumeName {
-			// return ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable
 			if ds.Status.CurrentNumberScheduled == ds.Status.UpdatedNumberScheduled && ds.Status.CurrentNumberScheduled == ds.Status.NumberAvailable {
 				return true
 			} else {
@@ -80,28 +72,6 @@ func isRolloutCompleteWithBPFVolumes(ds *appsv1.DaemonSet) bool {
 		}
 	}
 	return false
-}
-
-func setBPFEnabledOnFelixConfiguration(fc *v3.FelixConfiguration, bpfEnabled bool) error {
-	err := bpfValidateAnnotations(fc)
-	if err != nil {
-		return err
-	}
-
-	text := strconv.FormatBool(bpfEnabled)
-
-	// Add an annotation matching the field value. This allows the operator to compare the annotation to the field
-	// when performing an update to determine if another entity has modified the value since the last write.
-	var fcAnnotations map[string]string
-	if fc.Annotations == nil {
-		fcAnnotations = make(map[string]string)
-	} else {
-		fcAnnotations = fc.Annotations
-	}
-	fcAnnotations[render.BPFOperatorAnnotation] = text
-	fc.SetAnnotations(fcAnnotations)
-	fc.Spec.BPFEnabled = &bpfEnabled
-	return nil
 }
 
 func bpfEnabledOnDaemonsetWithEnvVar(ds *appsv1.DaemonSet) (bool, error) {

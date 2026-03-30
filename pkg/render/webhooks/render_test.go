@@ -101,7 +101,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 				components.CalicoImagePath,
 				components.ComponentCalico.Image,
 				components.ComponentCalico.Version)))
-		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"calico", "webhooks"}))
+		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"calico", "component", "webhooks"}))
 
 		// Verify the ClusterRole includes expected rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)

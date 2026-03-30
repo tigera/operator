@@ -84,7 +84,7 @@ type Component struct {
 	cfg *Configuration
 
 	goldmaneImage string
-	combinedImage     bool
+	combinedImage bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -256,7 +256,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 
 	var containerCommand []string
 	if c.combinedImage {
-		containerCommand = []string{"calico", "goldmane"}
+		containerCommand = []string{"calico", "component", "goldmane"}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

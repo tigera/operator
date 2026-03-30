@@ -91,8 +91,8 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage string
-	combinedImage  bool
+	typhaImage    string
+	combinedImage bool
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -583,7 +583,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
 	if c.combinedImage {
-		container.Command = []string{"calico", "typha"}
+		container.Command = []string{"calico", "component", "typha"}
 	}
 	return container
 }

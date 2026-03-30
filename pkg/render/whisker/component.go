@@ -95,7 +95,7 @@ type Component struct {
 
 	whiskerImage        string
 	whiskerBackendImage string
-	combinedImage           bool
+	combinedImage       bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -222,7 +222,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
 	if c.combinedImage {
-		container.Command = []string{"calico", "whisker-backend"}
+		container.Command = []string{"calico", "component", "whisker-backend"}
 	}
 	return container
 }

@@ -140,7 +140,7 @@ var _ = Describe("ComponentRendering", func() {
 								{
 									Name:            whisker.WhiskerBackendContainerName,
 									Image:           "quay.io/calico/calico:master",
-									Command:         []string{"calico", "whisker-backend"},
+									Command:         []string{"calico", "component", "whisker-backend"},
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},

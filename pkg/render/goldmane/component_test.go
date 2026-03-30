@@ -142,7 +142,7 @@ var _ = Describe("ComponentRendering", func() {
 								{
 									Name:            goldmane.GoldmaneContainerName,
 									Image:           "quay.io/calico/calico:master",
-									Command:         []string{"calico", "goldmane"},
+									Command:         []string{"calico", "component", "goldmane"},
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},

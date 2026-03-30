@@ -167,10 +167,10 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage     string
-	flexvolImage string
-	nodeImage    string
-	combinedImage    bool
+	cniImage      string
+	flexvolImage  string
+	nodeImage     string
+	combinedImage bool
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -1192,7 +1192,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 
 	cniCommand := []string{"/opt/cni/bin/install"}
 	if c.combinedImage {
-		cniCommand = []string{"calico", "cni", "install"}
+		cniCommand = []string{"calico", "component", "cni", "install"}
 	}
 
 	return corev1.Container{
@@ -1215,7 +1215,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 
 	var flexvolCommand []string
 	if c.combinedImage {
-		flexvolCommand = []string{"calico", "flexvol"}
+		flexvolCommand = []string{"calico", "component", "flexvol"}
 	}
 
 	return corev1.Container{
@@ -1259,7 +1259,7 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	// The node image includes the combined calico binary at /usr/bin/calico.
 	command := []string{CalicoNodeObjectName, "-init"}
 	if c.combinedImage {
-		command = []string{"/usr/bin/calico", "node", "init"}
+		command = []string{"/usr/bin/calico", "component", "node", "init"}
 	}
 	if !c.cfg.Installation.BPFEnabled() {
 		if c.combinedImage {
@@ -1736,7 +1736,7 @@ func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	// The node image includes both calico-node (legacy) and calico (combined binary).
 	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
 	if c.combinedImage {
-		preStopCmd = []string{"/usr/bin/calico", "node", "shutdown"}
+		preStopCmd = []string{"/usr/bin/calico", "component", "node", "shutdown"}
 	}
 	lc := &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
@@ -1752,12 +1752,12 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 
 	// The node image includes the combined calico binary at /usr/bin/calico.
 	if c.combinedImage {
-		readinessCmd = []string{"/usr/bin/calico", "node", "health", "--bird-ready", "--felix-ready"}
+		readinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--bird-ready", "--felix-ready"}
 		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
 			readinessCmd = append(readinessCmd, "--bgp-metrics-ready")
 		}
 		if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
-			readinessCmd = []string{"/usr/bin/calico", "node", "health", "--felix-ready"}
+			readinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--felix-ready"}
 		}
 	} else {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}

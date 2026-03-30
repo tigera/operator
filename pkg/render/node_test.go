@@ -3336,7 +3336,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		rtest.ExpectEnv(cniContainer.Env, "CNI_CONF_NAME", "10-calico.conflist")
 		rtest.ExpectEnv(cniContainer.Env, "SLEEP", "false")
 		cniImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)
-		expectedCNICommand := []string{"calico", "cni", "install"}
+		expectedCNICommand := []string{"calico", "component", "cni", "install"}
 		if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
 			// Calico CNI image should have -fips suffix when FIPS mode is enabled.
 			cniImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)
@@ -3439,7 +3439,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)))
-			Expect(flexvolContainer.Command).To(Equal([]string{"calico", "flexvol"}))
+			Expect(flexvolContainer.Command).To(Equal([]string{"calico", "component", "flexvol"}))
 		}
 
 		Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())

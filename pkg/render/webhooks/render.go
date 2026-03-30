@@ -71,7 +71,7 @@ type component struct {
 
 	// Images.
 	webhooksImage string
-	combinedImage     bool
+	combinedImage bool
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -185,7 +185,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.combinedImage {
-		dep.Spec.Template.Spec.Containers[0].Command = []string{"calico", "webhooks"}
+		dep.Spec.Template.Spec.Containers[0].Command = []string{"calico", "component", "webhooks"}
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {

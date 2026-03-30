@@ -157,7 +157,7 @@ type apiServerComponent struct {
 	l7AdmissionControllerImage      string
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
-	combinedImage                       bool
+	combinedImage                   bool
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -1179,7 +1179,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	var apiServerCommand []string
 	if c.combinedImage {
-		apiServerCommand = []string{"calico", "apiserver"}
+		apiServerCommand = []string{"calico", "component", "apiserver"}
 	}
 
 	apiServer := corev1.Container{

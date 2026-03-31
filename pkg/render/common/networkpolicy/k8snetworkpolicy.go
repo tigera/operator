@@ -19,8 +19,8 @@ import (
 	netv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render/common/selector"
 )
 
@@ -78,7 +78,7 @@ func K8sDNSEgressRules(openShift bool) []netv1.NetworkPolicyEgressRule {
 
 func NewK8sPolicyPort(protocol corev1.Protocol, port int32) netv1.NetworkPolicyPort {
 	return netv1.NetworkPolicyPort{
-		Protocol: ptr.ToPtr(protocol),
-		Port:     ptr.ToPtr(intstr.FromInt32(port)),
+		Protocol: ptr.To(protocol),
+		Port:     ptr.To(intstr.FromInt32(port)),
 	}
 }

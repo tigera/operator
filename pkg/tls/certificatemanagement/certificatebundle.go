@@ -192,7 +192,7 @@ func (t *trustedBundle) ConfigMap(namespace string) *corev1.ConfigMap {
 		return certs[i].GetName() < certs[j].GetName()
 	})
 	for _, cert := range certs {
-		pemBuf.WriteString(fmt.Sprintf("# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM())))
+		fmt.Fprintf(&pemBuf, "# certificate name: %s/%s\n%s\n\n", cert.GetNamespace(), cert.GetName(), string(cert.GetCertificatePEM()))
 	}
 
 	pemStr := pemBuf.String()

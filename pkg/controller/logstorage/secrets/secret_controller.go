@@ -216,7 +216,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Get Installation resource.
-	_, install, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -251,7 +251,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	var operatorSigner, cm certificatemanager.CertificateManager
 
 	// Create a cluster-scoped certificate manager from the tigera-operator CA, used for signing KeyPairs for use by Elasticsearch.
-	operatorSigner, err = certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	operatorSigner, err = certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)
 		return reconcile.Result{}, err
@@ -301,7 +301,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	if r.multiTenant {
 		// Override with a tenant-scoped certificate manager which uses the CA in the tenant's namespace.
 		opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger), certificatemanager.WithTenant(tenant)}
-		cm, err = certificatemanager.Create(r.client, install, r.clusterDomain, helper.InstallNamespace(), opts...)
+		cm, err = certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.InstallNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)
 			return reconcile.Result{}, err
@@ -310,7 +310,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Create secrets for Tigera components.
-	keyPairs, err := r.generateSecrets(reqLogger, helper, cm, managementCluster, install)
+	keyPairs, err := r.generateSecrets(reqLogger, helper, cm, managementCluster, installationSpec)
 	if err != nil {
 		// Status manager is handled already, so we can just return
 		return reconcile.Result{}, err

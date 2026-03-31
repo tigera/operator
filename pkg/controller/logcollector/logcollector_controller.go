@@ -328,7 +328,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -338,7 +338,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -363,7 +363,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, installation, r.opts.ClusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -533,7 +533,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	var eksConfig *render.EksCloudwatchLogConfig
 	var esClusterConfig *relasticsearch.ClusterConfig
 	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
-	if installation.KubernetesProvider.IsEKS() {
+	if installationSpec.KubernetesProvider.IsEKS() {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
@@ -596,7 +596,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Filters:                filters,
 		EKSConfig:              eksConfig,
 		PullSecrets:            pullSecrets,
-		Installation:           installation,
+		Installation:           installationSpec,
 		ClusterDomain:          r.opts.ClusterDomain,
 		OSType:                 rmeta.OSTypeLinux,
 		FluentdKeyPair:         fluentdKeyPair,
@@ -622,7 +622,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle: trustedBundle,
 	}
 
-	if installation.KubernetesProvider.IsEKS() {
+	if installationSpec.KubernetesProvider.IsEKS() {
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
 				certificateComponent.ServiceAccounts = append(certificateComponent.ServiceAccounts, render.EKSLogForwarderName)
@@ -633,7 +633,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	setUp := render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
-		Installation:    installation,
+		Installation:    installationSpec,
 		PullSecrets:     pullSecrets,
 		Namespace:       render.LogCollectorNamespace,
 		PSS:             render.PSSPrivileged,
@@ -672,7 +672,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			Filters:                filters,
 			EKSConfig:              eksConfig,
 			PullSecrets:            pullSecrets,
-			Installation:           installation,
+			Installation:           installationSpec,
 			ClusterDomain:          r.opts.ClusterDomain,
 			OSType:                 rmeta.OSTypeWindows,
 			TrustedBundle:          trustedBundle,

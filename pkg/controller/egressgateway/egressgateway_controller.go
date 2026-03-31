@@ -241,7 +241,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.Error(err, "Installation not found")
@@ -285,7 +285,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		reqLogger.Error(err, "Error retrieving pull secrets")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -315,7 +315,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installation, namespaceAndNames)
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, variant, fc, pullSecrets, installationSpec, namespaceAndNames)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -342,11 +342,11 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw *operatorv1.EgressGateway, reqLogger logr.Logger,
 	variant operatorv1.ProductVariant, fc *v3.FelixConfiguration, pullSecrets []*v1.Secret,
-	installation *operatorv1.InstallationSpec, namespaceAndNames []string,
+	installationSpec *operatorv1.InstallationSpec, namespaceAndNames []string,
 ) error {
 	preDefaultPatchFrom := client.MergeFrom(egw.DeepCopy())
 	// update the EGW resource with default values.
-	fillDefaults(egw, installation)
+	fillDefaults(egw, installationSpec)
 	// Validate the EGW resource.
 	err := validateEgressGateway(ctx, r.client, egw)
 	if err != nil {
@@ -384,7 +384,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 
 	config := &egressgateway.Config{
 		PullSecrets:       pullSecrets,
-		Installation:      installation,
+		Installation:      installationSpec,
 		OSType:            rmeta.OSTypeLinux,
 		EgressGW:          egw,
 		VXLANPort:         egwVXLANPort,
@@ -511,7 +511,7 @@ func getOpenShiftSCC(ctx context.Context, cli client.Client) (*ocsv1.SecurityCon
 }
 
 // fillDefaults sets the default values of the EGW resource.
-func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.InstallationSpec) {
+func fillDefaults(egw *operatorv1.EgressGateway, installationSpec *operatorv1.InstallationSpec) {
 	defaultAWSNativeIP := operatorv1.NativeIPDisabled
 
 	// Default value of Native IP is Disabled.
@@ -550,7 +550,7 @@ func fillDefaults(egw *operatorv1.EgressGateway, installation *operatorv1.Instal
 			},
 		},
 	}
-	switch installation.KubernetesProvider {
+	switch installationSpec.KubernetesProvider {
 	case operatorv1.ProviderAKS:
 		defAffinity.NodeAffinity = &v1.NodeAffinity{
 			RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{

@@ -219,7 +219,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -234,7 +234,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -267,7 +267,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
 		PullSecrets:                 pullSecrets,
-		Installation:                installation,
+		Installation:                installationSpec,
 		OsType:                      rmeta.OSTypeLinux,
 		PerHostWAFEnabled:           r.isWAFEnabled(&instance.Spec),
 		PerHostLogsEnabled:          r.isLogsCollectionEnabled(&instance.Spec),

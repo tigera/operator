@@ -284,7 +284,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Query for the installation object.
-	variant, network, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -294,7 +294,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -322,7 +322,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	opts = append(opts, certificatemanager.WithTenant(tenant), certificatemanager.WithLogger(reqLogger))
 
-	certificateManager, err := certificatemanager.Create(r.client, network, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -433,7 +433,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 
 	setUp := render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
-		Installation:    network,
+		Installation:    installationSpec,
 		PullSecrets:     pullSecrets,
 		Namespace:       helper.InstallNamespace(),
 		PSS:             render.PSSPrivileged,
@@ -444,7 +444,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 	openshift := r.opts.DetectedProvider.IsOpenShift()
 	complianceCfg := &render.ComplianceConfiguration{
 		TrustedBundle:               trustedBundle,
-		Installation:                network,
+		Installation:                installationSpec,
 		ServerKeyPair:               complianceServerKeyPair,
 		ControllerKeyPair:           controllerKeyPair.Interface,
 		BenchmarkerKeyPair:          benchmarkerKeyPair.Interface,

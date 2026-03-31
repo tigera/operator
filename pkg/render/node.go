@@ -184,7 +184,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
@@ -234,7 +234,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	var objsToDelete []client.Object
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Include Service for exposing node metrics.
 		objs = append(objs, c.nodeMetricsService())
 	}
@@ -558,7 +558,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Calico Enterprise needs to be able to read additional resources.
@@ -1104,7 +1104,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	// Override with Tigera-specific config.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add volume for calico logs.
 		calicoLogVol := corev1.Volume{
 			Name:         "var-log-calico",
@@ -1318,7 +1318,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 
 	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars()...)
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
@@ -1368,7 +1368,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		extraNodeMounts := []corev1.VolumeMount{
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
@@ -1622,7 +1622,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -1729,7 +1729,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
 
 	// Want to check for BGP metrics server if this is enterprise
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 	}
 

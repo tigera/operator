@@ -175,7 +175,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	mgmtClusterConnectionCR, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultTSEEInstanceKey, r.cli)
+	mgmtClusterConnectionCR, err := utils.GetIfExists[operatorv1.ManagementClusterConnection](ctx, utils.DefaultEnterpriseInstanceKey, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying ManagementClusterConnection CR", err, reqLogger)
 		return reconcile.Result{}, err

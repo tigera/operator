@@ -27,7 +27,7 @@ def main():
     # This is still a manual process at the moment.
     # [APIServer] --> [ClusterConnection]
     # [APIServer] -> [Installation]
-    graph.add_edge(Edge('apiserver', 'clusterconnection', label='TSEE', style='dashed'))
+    graph.add_edge(Edge('apiserver', 'clusterconnection', label='Enterprise', style='dashed'))
     graph.add_edge(Edge('apiserver', 'installation'))
     # [ApplicationLayer] -> [Installation]
     graph.add_edge(Edge('applicationlayer', 'installation'))

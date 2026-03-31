@@ -36,7 +36,7 @@ var _ = Describe("test crds pkg", func() {
 		})
 
 		It("can get all CRDS used with Enterprise", func() {
-			Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+			Expect(func() { Expect(GetCRDs(opv1.CalicoEnterprise, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
 		})
 
 		It("can parse Enterprise CRDs", func() {
@@ -49,7 +49,7 @@ var _ = Describe("test crds pkg", func() {
 	})
 
 	It("can parse Operator CRDs used with Enterprise", func() {
-		Expect(func() { Expect(getOperatorCRDSource(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
+		Expect(func() { Expect(getOperatorCRDSource(opv1.CalicoEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
 
 	It("installs GatewayAPI CRD with Calico OSS", func() {

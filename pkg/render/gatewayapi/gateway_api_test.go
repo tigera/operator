@@ -411,7 +411,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		installation := &operatorv1.InstallationSpec{
 			Registry:         "myregistry.io/",
 			ImagePullSecrets: pullSecretRefs,
-			Variant:          operatorv1.TigeraSecureEnterprise,
+			Variant:          operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -495,7 +495,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 	It("honours gateway controller customizations", func() {
 		installation := &operatorv1.InstallationSpec{
 			Registry: "myregistry.io/",
-			Variant:  operatorv1.TigeraSecureEnterprise,
+			Variant:  operatorv1.CalicoEnterprise,
 		}
 		threeReplicas := int32(3)
 		topologySpreadConstraints := []corev1.TopologySpreadConstraint{{
@@ -570,7 +570,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 	It("honours GatewayClass and EnvoyProxy customizations", func() {
 		installation := &operatorv1.InstallationSpec{
 			Registry: "myregistry.io/",
-			Variant:  operatorv1.TigeraSecureEnterprise,
+			Variant:  operatorv1.CalicoEnterprise,
 		}
 		twoReplicas := int32(2)
 		topologySpreadConstraints := []corev1.TopologySpreadConstraint{{
@@ -829,7 +829,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should deploy waf-http-filter for Enterprise", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -902,7 +902,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -1047,7 +1047,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should set owning gateway environment variables in l7-log-collector for Enterprise", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -1104,7 +1104,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should set owning gateway environment variables in l7-log-collector when using custom proxy", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -1210,7 +1210,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should not set owning gateway env vars in l7-log-collector for DaemonSet deployments", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		daemonSet := operatorv1.GatewayKindDaemonSet
 		gatewayAPI := &operatorv1.GatewayAPI{
@@ -1239,7 +1239,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should create correct RBAC for L7 log collector enrichment", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{

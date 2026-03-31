@@ -79,7 +79,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		instance = &operatorv1.InstallationSpec{
 			ControlPlaneReplicas: ptr.To[int32](2),
 			Registry:             "testregistry.com/",
-			Variant:              operatorv1.TigeraSecureEnterprise,
+			Variant:              operatorv1.CalicoEnterprise,
 		}
 		apiserver = &operatorv1.APIServerSpec{}
 		dnsNames = dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, clusterDomain)
@@ -489,7 +489,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
-		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.Installation.Variant = operatorv1.CalicoEnterprise
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2402,7 +2402,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			cfg.Installation = &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: ptr.To[int32](2),
 				Registry:             "testregistry.com/",
-				Variant:              operatorv1.TigeraSecureEnterprise,
+				Variant:              operatorv1.CalicoEnterprise,
 			}
 		})
 

@@ -196,7 +196,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	needsCSRRole := instance.Spec.CertificateManagement != nil
 	if !needsCSRRole && r.enterpriseCRDExists {
 		monitorCR := &operatorv1.Monitor{}
-		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, monitorCR); err != nil {
+		if err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, monitorCR); err != nil {
 			if apierrors.IsNotFound(err) {
 				return reconcile.Result{}, nil
 			}

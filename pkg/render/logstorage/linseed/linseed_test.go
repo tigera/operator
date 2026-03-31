@@ -608,10 +608,10 @@ var _ = Describe("Linseed rendering tests", func() {
 			})
 			It("should set LINSEED_PRODUCT_VARIANT to enterprise", func() {
 				cfg.ManagementCluster = true
-				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.TigeraSecureEnterprise
+				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.CalicoEnterprise
 				resources, _ := Linseed(cfg).Objects()
 				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
-				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.TigeraSecureEnterprise)}))
+				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.CalicoEnterprise)}))
 			})
 			It("should not panic if ManagedClusterVariant is not set", func() {
 				cfg.ManagementCluster = true

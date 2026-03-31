@@ -93,12 +93,12 @@ var _ = Describe("apiserver controller tests", func() {
 				Generation: 2,
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
-				Variant:              operatorv1.TigeraSecureEnterprise,
+				Variant:              operatorv1.CalicoEnterprise,
 				Registry:             "some.registry.org/",
 			},
 		}
@@ -468,7 +468,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 		It("should create the cert secrets in the correct namespace when migrating from calico to enterprise", func() {
 			Expect(netv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
 			installation.Status.Variant = operatorv1.Calico
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())

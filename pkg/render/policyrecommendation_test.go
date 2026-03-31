@@ -408,7 +408,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cfg.ManagementCluster = true
 		cfg.Tenant = &operatorv1.Tenant{
 			Spec: operatorv1.TenantSpec{
-				ManagedClusterVariant: ptr.ToPtr(operatorv1.TigeraSecureEnterprise),
+				ManagedClusterVariant: ptr.ToPtr(operatorv1.CalicoEnterprise),
 			},
 		}
 		component := render.PolicyRecommendation(cfg)

@@ -211,7 +211,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	reqLogger.Info("Reconciling LogStorage")
 
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if errors.IsNotFound(err) {
 		r.status.OnCRNotFound()
@@ -237,7 +237,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Check if there is a management cluster connection. ManagementClusterConnection is a managed cluster only resource.
-	if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
+	if err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
 		// LogStorage isn't valid for managed clusters.
 		r.setConditionDegraded(ctx, ls, reqLogger)
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "LogStorage is not valid for a managed cluster", nil, reqLogger)

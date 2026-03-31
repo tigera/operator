@@ -284,7 +284,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	_, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -323,7 +323,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	certificateManager.AddToStatusManager(r.status, render.APIServerNamespace)
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installationSpec, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err

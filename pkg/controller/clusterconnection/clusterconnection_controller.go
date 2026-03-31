@@ -206,7 +206,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(2).Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
-	variant, instl, err := utils.GetInstallation(ctx, r.cli)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
 		return result, err
 	}
@@ -265,13 +265,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	if err = validate(managementClusterConnection, instl.Variant); err != nil {
+	if err = validate(managementClusterConnection, installationSpec.Variant); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
-	fillDefaults(managementClusterConnection, instl.Variant)
+	fillDefaults(managementClusterConnection, installationSpec.Variant)
 	if err = r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 	}
@@ -283,7 +283,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 
-	certificateManager, err := certificatemanager.Create(r.cli, instl, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.cli, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -317,7 +317,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedBundle.AddCertificates(guardianKeyPair)
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.cli)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return result, err
@@ -450,7 +450,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		TunnelCAType:                managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.provider.IsOpenShift(),
-		Installation:                instl,
+		Installation:                installationSpec,
 		TunnelSecret:                tunnelSecret,
 		TrustedCertBundle:           trustedBundle,
 		ManagementClusterConnection: managementClusterConnection,

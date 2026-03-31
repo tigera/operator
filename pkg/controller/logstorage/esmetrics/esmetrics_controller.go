@@ -180,7 +180,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, nil
 	}
 
-	variant, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -190,13 +190,13 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -229,7 +229,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, logStorage.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 	esMetricsCfg := &esmetrics.Config{
-		Installation:         install,
+		Installation:         installationSpec,
 		PullSecrets:          pullSecrets,
 		ESConfig:             clusterConfig,
 		ESMetricsCredsSecret: esMetricsSecret,

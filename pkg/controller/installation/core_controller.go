@@ -1018,7 +1018,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err

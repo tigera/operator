@@ -297,7 +297,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Query for the installation object.
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -307,7 +307,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve pull secrets", err, logc)
 		return reconcile.Result{}, err
@@ -356,7 +356,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			certificatemanager.WithLogger(logc),
 			certificatemanager.WithTenant(tenant),
 		}
-		certificateManager, err := certificatemanager.Create(r.client, installation, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
+		certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 			return reconcile.Result{}, err
@@ -443,7 +443,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 
 	policyRecommendationCfg := &render.PolicyRecommendationConfiguration{
 		ClusterDomain:                  r.opts.ClusterDomain,
-		Installation:                   installation,
+		Installation:                   installationSpec,
 		ManagedCluster:                 isManagedCluster,
 		ManagementCluster:              managementCluster != nil,
 		PullSecrets:                    pullSecrets,

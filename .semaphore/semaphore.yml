@@ -121,7 +121,7 @@ blocks:
           execution_time_limit:
             minutes: 30
           commands:
-            - make ut 2>&1 | tee ut.log
+            - set -o pipefail; make ut 2>&1 | tee ut.log
             - make dirty-check
       epilogue:
         always:
@@ -141,7 +141,7 @@ blocks:
           execution_time_limit:
             minutes: 60
           commands:
-            - make fv 2>&1 | tee fv.log
+            - set -o pipefail; make fv 2>&1 | tee fv.log
             - make dirty-check
       epilogue:
         always:

@@ -410,10 +410,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Create operator TLS keypair for mTLS metrics if metrics are enabled.
+	// Create operator TLS keypair only when mTLS is enabled (METRICS_SCHEME=https).
+	// The Service and ServiceMonitor are created whenever metrics are enabled.
 	operatorMetricsEnabled := metricsEnabled()
 	var operatorTLSSecret certificatemanagement.KeyPairInterface
-	if operatorMetricsEnabled {
+	if metricsTLSEnabled() {
 		operatorMetricsServiceName := common.OperatorName() + "-metrics"
 		operatorTLSDNSNames := dns.GetServiceDNSNames(operatorMetricsServiceName, common.OperatorNamespace(), r.clusterDomain)
 		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorMetricsSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
@@ -621,4 +622,9 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 // metricsEnabled returns true when the operator metrics endpoint is enabled.
 func metricsEnabled() bool {
 	return strings.EqualFold(os.Getenv("METRICS_ENABLED"), "true")
+}
+
+// metricsTLSEnabled returns true when the operator metrics endpoint should use mTLS.
+func metricsTLSEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_SCHEME"), "https")
 }

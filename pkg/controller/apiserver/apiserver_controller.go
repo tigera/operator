@@ -17,6 +17,7 @@ package apiserver
 import (
 	"context"
 	"fmt"
+	"time"
 
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -25,11 +26,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -185,11 +188,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
-		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-		},
-	})
+	// We use a custom predicate instead of WaitToAddResourceWatch because the
+	// default predicate filters on generation changes, but migration progress
+	// is in .status.phase which doesn't bump generation.
+	go waitToAddMigrationWatch(c, opts.K8sClientset, r.migrationWatchReady)
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
@@ -632,6 +634,46 @@ func (r *ReconcileAPIServer) setAPIGroupEnvVar(ctx context.Context) error {
 		return fmt.Errorf("failed to update operator deployment: %w", err)
 	}
 	return nil
+}
+
+// waitToAddMigrationWatch polls until the DatastoreMigration CRD is available,
+// then establishes a watch with a predicate that fires on any resource version
+// change (not just generation changes). This is necessary because migration
+// phase transitions are status-only updates that don't bump generation.
+func waitToAddMigrationWatch(c ctrlruntime.Controller, k8s kubernetes.Interface, flag *utils.ReadyFlag) {
+	obj := &datastoremigration.DatastoreMigration{
+		TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+	}
+	gvk := obj.GetObjectKind().GroupVersionKind()
+
+	maxDuration := 30 * time.Second
+	duration := 1 * time.Second
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+	for range ticker.C {
+		duration = duration * 2
+		if duration >= maxDuration {
+			duration = maxDuration
+		}
+		ticker.Reset(duration)
+
+		if ok, err := utils.IsResourceReady(k8s, gvk); err != nil {
+			log.V(2).Info("DatastoreMigration CRD not ready yet", "error", err)
+			continue
+		} else if !ok {
+			log.V(2).Info("DatastoreMigration CRD not ready yet")
+			continue
+		}
+
+		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}, predicate.ResourceVersionChangedPredicate{}); err != nil {
+			log.Info("Failed to watch DatastoreMigration, will retry", "error", err)
+			continue
+		}
+
+		log.V(2).Info("Successfully watching DatastoreMigration")
+		flag.MarkAsReady()
+		return
+	}
 }
 
 // maintainFinalizer manages this controller's finalizer on the Installation resource.

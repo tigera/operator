@@ -709,7 +709,7 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 			objLog := resourcesToWatch[obj].logger
 			predicateFn := resourcesToWatch[obj].predicate
 			gvk := obj.GetObjectKind().GroupVersionKind()
-			if ok, err := isResourceReady(c, gvk); err != nil {
+			if ok, err := IsResourceReady(c, gvk); err != nil {
 				msg := "Failed to check if resource is ready - will retry"
 				if errors.IsNotFound(err) {
 					objLog.WithValues("Error", err).V(2).Info(msg)
@@ -735,8 +735,8 @@ func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Inte
 	}
 }
 
-// isResourceReady checks if the specified resource is available.
-func isResourceReady(client kubernetes.Interface, gvk schema.GroupVersionKind) (bool, error) {
+// IsResourceReady checks if the specified resource is available.
+func IsResourceReady(client kubernetes.Interface, gvk schema.GroupVersionKind) (bool, error) {
 	gv := gvk.GroupVersion()
 	if gv.Empty() {
 		// Default to the Calico group and version if not specified so existing callers that only

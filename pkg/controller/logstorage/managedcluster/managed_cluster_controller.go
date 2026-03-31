@@ -104,7 +104,7 @@ func (r *LogStorageManagedClusterController) Reconcile(ctx context.Context, requ
 	reqLogger.Info("Reconciling ManagedCluster resources for log storage")
 
 	// Make sure this is an Enterprise cluster.
-	variant, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return reconcile.Result{}, err
@@ -136,7 +136,7 @@ func (r *LogStorageManagedClusterController) Reconcile(ctx context.Context, requ
 	// Create the component and install it.
 	cfg := &render.ManagedClusterLogStorageConfiguration{
 		ClusterDomain: r.clusterDomain,
-		Installation:  install,
+		Installation:  installationSpec,
 	}
 	component := render.NewManagedClusterLogStorage(cfg)
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, managementClusterConnection)

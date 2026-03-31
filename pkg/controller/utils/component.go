@@ -817,7 +817,7 @@ func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) e
 		return nil
 	}
 
-	_, installationSpec, err := GetInstallation(ctx, c)
+	_, installationSpec, err := GetInstallationSpec(ctx, c)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil

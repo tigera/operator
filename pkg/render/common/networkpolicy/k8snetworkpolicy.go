@@ -54,8 +54,13 @@ func K8sDNSEgressRules(openShift bool) []netv1.NetworkPolicyEgressRule {
 				To: []netv1.NetworkPolicyPeer{
 					{
 						PodSelector: &metav1.LabelSelector{
-							MatchLabels: map[string]string{
-								"k8s-app": "kube-dns",
+							MatchExpressions: []metav1.LabelSelectorRequirement{
+								{
+									Key:      "k8s-app",
+									Operator: metav1.LabelSelectorOpIn,
+									// In most Kubernetes distros the label is for kube-dns, but in Canonical it is for coredns.
+									Values: []string{"kube-dns", "coredns"},
+								},
 							},
 						},
 						NamespaceSelector: &metav1.LabelSelector{

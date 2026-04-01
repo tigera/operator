@@ -21,7 +21,6 @@ import (
 	v1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/ptr"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
@@ -32,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -523,7 +523,7 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 								VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 									{
 										Spec: corev1.PersistentVolumeClaimSpec{
-											StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+											StorageClassName: ptr.To("tigera-elasticsearch"),
 										},
 									},
 								},

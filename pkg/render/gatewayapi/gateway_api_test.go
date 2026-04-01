@@ -23,7 +23,6 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -932,7 +932,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 							InitContainers: []corev1.Container{
 								{
 									Name:          "some-other-sidecar",
-									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      "some-other-volume",
@@ -1134,7 +1134,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 							InitContainers: []corev1.Container{
 								{
 									Name:          "some-other-sidecar",
-									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 									Env: []corev1.EnvVar{
 										{
 											Name:  "OTHER_VAR",

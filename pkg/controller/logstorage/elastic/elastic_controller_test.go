@@ -20,8 +20,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/ptr"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 
 	"github.com/stretchr/testify/mock"
 
@@ -781,7 +781,7 @@ var _ = Describe("LogStorage controller", func() {
 									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 										{
 											Spec: corev1.PersistentVolumeClaimSpec{
-												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+												StorageClassName: ptr.To("tigera-elasticsearch"),
 											},
 										},
 									},
@@ -916,7 +916,7 @@ var _ = Describe("LogStorage controller", func() {
 										VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 											{
 												Spec: corev1.PersistentVolumeClaimSpec{
-													StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+													StorageClassName: ptr.To("tigera-elasticsearch"),
 												},
 											},
 										},
@@ -982,7 +982,7 @@ var _ = Describe("LogStorage controller", func() {
 									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 										{
 											Spec: corev1.PersistentVolumeClaimSpec{
-												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+												StorageClassName: ptr.To("tigera-elasticsearch"),
 											},
 										},
 									},
@@ -1366,7 +1366,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 							{
 								Spec: corev1.PersistentVolumeClaimSpec{
-									StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+									StorageClassName: ptr.To("tigera-elasticsearch"),
 								},
 							},
 						},

@@ -185,11 +185,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
-		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-		},
-	})
+	go utils.WaitToAddMigrationWatch(c, opts.K8sClientset, log, r.migrationWatchReady)
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil

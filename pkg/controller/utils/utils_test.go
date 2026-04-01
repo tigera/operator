@@ -37,7 +37,11 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -328,6 +332,32 @@ func (m *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 	return args.Get(0).(*metav1.APIResourceList), nil
 }
 
+// mockController implements ctrlruntime.Controller for testing watch functions.
+type mockController struct {
+	mock.Mock
+}
+
+func (m *mockController) WatchObject(obj client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	args := m.Called(obj, eventhandler, predicates)
+	return args.Error(0)
+}
+
+func (m *mockController) Reconcile(_ context.Context, _ reconcile.Request) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}
+
+func (m *mockController) Watch(_ source.Source) error {
+	return nil
+}
+
+func (m *mockController) Start(_ context.Context) error {
+	return nil
+}
+
+func (m *mockController) GetLogger() logr.Logger {
+	return logr.Discard()
+}
+
 var _ = Describe("CreatePredicateForObject", func() {
 	var objMeta metav1.Object
 
@@ -503,4 +533,96 @@ var _ = Describe("CreatePredicateForObject", func() {
 		Entry("when authentication is not nil and OIDC type is different",
 			&opv1.Authentication{Spec: opv1.AuthenticationSpec{OIDC: &opv1.AuthenticationOIDC{Type: opv1.OIDCTypeDex}}}, true),
 	)
+})
+
+var _ = Describe("WaitToAddMigrationWatch", func() {
+	var (
+		ctrl      *mockController
+		k8sClient fakeClient
+		disc      *fakeDiscovery
+		log       logr.Logger
+	)
+
+	migrationGV := "migration.projectcalico.org/v1beta1"
+
+	BeforeEach(func() {
+		ctrl = new(mockController)
+		disc = new(fakeDiscovery)
+		k8sClient = fakeClient{discovery: disc}
+		log = logf.Log.WithName("migration-watch-test")
+	})
+
+	It("should establish a watch and mark the flag ready when the CRD is available", func() {
+		disc.On("ServerResourcesForGroupVersion", migrationGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "DatastoreMigration"}},
+		})
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		flag := &ReadyFlag{}
+		WaitToAddMigrationWatch(ctrl, k8sClient, log, flag)
+
+		Expect(flag.IsReady()).To(BeTrue())
+		ctrl.AssertExpectations(GinkgoT())
+		disc.AssertExpectations(GinkgoT())
+	})
+
+	It("should use ResourceVersionChangedPredicate, not generation-based", func() {
+		disc.On("ServerResourcesForGroupVersion", migrationGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "DatastoreMigration"}},
+		})
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		flag := &ReadyFlag{}
+		WaitToAddMigrationWatch(ctrl, k8sClient, log, flag)
+
+		// Verify the predicate passed to WatchObject is ResourceVersionChangedPredicate.
+		watchCall := ctrl.Calls[0]
+		predicates := watchCall.Arguments[2].([]predicate.Predicate)
+		Expect(predicates).To(HaveLen(1))
+		Expect(predicates[0]).To(BeAssignableToTypeOf(predicate.ResourceVersionChangedPredicate{}))
+	})
+
+	It("should work with a nil flag", func() {
+		disc.On("ServerResourcesForGroupVersion", migrationGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "DatastoreMigration"}},
+		})
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		// Should not panic with nil flag.
+		WaitToAddMigrationWatch(ctrl, k8sClient, log, nil)
+		ctrl.AssertExpectations(GinkgoT())
+	})
+
+	It("should retry when the CRD is not yet available", func() {
+		// First call: CRD not available. Second call: CRD available.
+		disc.On("ServerResourcesForGroupVersion", migrationGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "SomethingElse"}},
+		}).Once()
+		disc.On("ServerResourcesForGroupVersion", migrationGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "DatastoreMigration"}},
+		}).Once()
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		flag := &ReadyFlag{}
+		WaitToAddMigrationWatch(ctrl, k8sClient, log, flag)
+
+		Expect(flag.IsReady()).To(BeTrue())
+		// Discovery should have been called twice (once miss, once hit).
+		disc.AssertNumberOfCalls(GinkgoT(), "ServerResourcesForGroupVersion", 2)
+	})
+
+	It("should retry when WatchObject fails", func() {
+		disc.On("ServerResourcesForGroupVersion", migrationGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "DatastoreMigration"}},
+		})
+		// First WatchObject call fails, second succeeds.
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("cache not started")).Once()
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+		flag := &ReadyFlag{}
+		WaitToAddMigrationWatch(ctrl, k8sClient, log, flag)
+
+		Expect(flag.IsReady()).To(BeTrue())
+		ctrl.AssertNumberOfCalls(GinkgoT(), "WatchObject", 2)
+	})
 })

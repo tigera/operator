@@ -282,12 +282,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
 	// migration state changes (e.g., Converged → triggers env var injection on components).
-	// This is a deferred watch since the CRD may not be installed.
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
-		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-		},
-	})
+	go utils.WaitToAddMigrationWatch(c, opts.K8sClientset, log, ri.migrationWatchReady)
 
 	return nil
 }

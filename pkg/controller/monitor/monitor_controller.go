@@ -18,9 +18,7 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os"
 	"reflect"
-	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -412,12 +410,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Create operator TLS keypair only when mTLS is enabled (METRICS_SCHEME=https).
 	// The Service and ServiceMonitor are created whenever metrics are enabled.
-	operatorMetricsEnabled := metricsEnabled()
+	operatorMetricsEnabled := common.MetricsEnabled()
 	var operatorTLSSecret certificatemanagement.KeyPairInterface
-	if metricsTLSEnabled() {
+	if common.MetricsTLSEnabled() {
 		operatorMetricsServiceName := common.OperatorName() + "-metrics"
 		operatorTLSDNSNames := dns.GetServiceDNSNames(operatorMetricsServiceName, common.OperatorNamespace(), r.clusterDomain)
-		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorMetricsSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
+		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorTLSSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating operator metrics TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -617,14 +615,4 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	// Alertmanager configuration secret is not found in the tigera-operator or tigera-prometheus namespace (new install).
 	// Operator should create a new default secret and set the owner reference.
 	return defaultConfigSecret, true, nil
-}
-
-// metricsEnabled returns true when the operator metrics endpoint is enabled.
-func metricsEnabled() bool {
-	return strings.EqualFold(os.Getenv("METRICS_ENABLED"), "true")
-}
-
-// metricsTLSEnabled returns true when the operator metrics endpoint should use mTLS.
-func metricsTLSEnabled() bool {
-	return strings.EqualFold(os.Getenv("METRICS_SCHEME"), "https")
 }

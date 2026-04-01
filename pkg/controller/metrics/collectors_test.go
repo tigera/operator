@@ -63,7 +63,7 @@ var _ = Describe("OperatorCollector", func() {
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ts).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			expected := `
 # HELP tigera_operator_component_status TigeraStatus conditions for operator-managed components. 1 = true, 0 = false.
@@ -82,7 +82,7 @@ tigera_operator_component_status{component="calico",condition="degraded"} 0
 				Status:     operatorv1.TigeraStatusStatus{},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ts).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			expected := `
 # HELP tigera_operator_component_status TigeraStatus conditions for operator-managed components. 1 = true, 0 = false.
@@ -117,7 +117,7 @@ tigera_operator_component_status{component="monitor",condition="degraded"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(ts1, ts2).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			// Verify each component's metrics individually
 			count := testutil.CollectAndCount(collector, "tigera_operator_component_status")
@@ -142,7 +142,7 @@ tigera_operator_component_status{component="monitor",condition="degraded"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(secret).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			count := testutil.CollectAndCount(collector, "tigera_operator_tls_certificate_expiry_timestamp_seconds")
 			Expect(count).To(Equal(1))
@@ -159,7 +159,7 @@ tigera_operator_component_status{component="monitor",condition="degraded"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(secret).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			count := testutil.CollectAndCount(collector, "tigera_operator_tls_certificate_expiry_timestamp_seconds")
 			Expect(count).To(Equal(0))
@@ -176,7 +176,7 @@ tigera_operator_component_status{component="monitor",condition="degraded"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(secret).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			count := testutil.CollectAndCount(collector, "tigera_operator_tls_certificate_expiry_timestamp_seconds")
 			Expect(count).To(Equal(0))
@@ -194,7 +194,7 @@ tigera_operator_component_status{component="monitor",condition="degraded"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(license).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, true)
 
 			expiryCount := testutil.CollectAndCount(collector, "tigera_operator_license_expiry_timestamp_seconds")
 			Expect(expiryCount).To(Equal(1))
@@ -213,7 +213,7 @@ tigera_operator_component_status{component="monitor",condition="degraded"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(license).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, true)
 
 			expected := `
 # HELP tigera_operator_license_valid Whether the Tigera license is valid (including grace period). 1 = valid, 0 = invalid.
@@ -226,7 +226,7 @@ tigera_operator_license_valid{package="Enterprise"} 0
 
 		It("should not emit license metrics when license does not exist", func() {
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, false)
 
 			expiryCount := testutil.CollectAndCount(collector, "tigera_operator_license_expiry_timestamp_seconds")
 			Expect(expiryCount).To(Equal(0))
@@ -245,7 +245,7 @@ tigera_operator_license_valid{package="Enterprise"} 0
 				},
 			}
 			cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(license).Build()
-			collector := metrics.NewOperatorCollector(cli)
+			collector := metrics.NewOperatorCollector(cli, true)
 
 			expected := `
 # HELP tigera_operator_license_valid Whether the Tigera license is valid (including grace period). 1 = valid, 0 = invalid.

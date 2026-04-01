@@ -16,6 +16,7 @@ package common
 
 import (
 	"os"
+	"strings"
 
 	"github.com/cloudflare/cfssl/log"
 	"k8s.io/apimachinery/pkg/types"
@@ -58,6 +59,16 @@ func OperatorName() string {
 		name = v
 	}
 	return name
+}
+
+// MetricsEnabled returns true when the operator metrics endpoint is enabled via METRICS_ENABLED=true.
+func MetricsEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_ENABLED"), "true")
+}
+
+// MetricsTLSEnabled returns true when the operator metrics endpoint should use mTLS (METRICS_SCHEME=https).
+func MetricsTLSEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_SCHEME"), "https")
 }
 
 func OperatorKey() types.NamespacedName {

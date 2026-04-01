@@ -115,7 +115,7 @@ var _ = Describe("Tigera License polling test", func() {
 			}},
 		})
 		gvk := schema.GroupVersionKind{Kind: v3.KindLicenseKey}
-		Expect(isResourceReady(client, gvk)).To(BeTrue())
+		Expect(IsResourceReady(client, gvk)).To(BeTrue())
 		discovery.AssertExpectations(GinkgoT())
 	})
 
@@ -126,7 +126,7 @@ var _ = Describe("Tigera License polling test", func() {
 			}},
 		})
 		gvk := schema.GroupVersionKind{Kind: v3.KindLicenseKey}
-		Expect(isResourceReady(client, gvk)).To(BeFalse())
+		Expect(IsResourceReady(client, gvk)).To(BeFalse())
 		discovery.AssertExpectations(GinkgoT())
 	})
 })

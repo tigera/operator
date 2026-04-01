@@ -805,4 +805,70 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(pullSecret.Kind).To(Equal("Tenant"))
 		})
 	})
+
+	Context("threatFeedPullDomains", func() {
+		enabled := v3.ThreatFeedModeEnabled
+		disabled := v3.ThreatFeedModeDisabled
+
+		It("should extract unique hostnames from enabled feeds with HTTP pull URLs", func() {
+			feeds := []v3.GlobalThreatFeed{
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://feeds.example.com/v1/ips"}},
+					},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://intel.threatprovider.io/domains"}},
+					},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Mode: &enabled,
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://feeds.example.com/v2/domains"}},
+					},
+				},
+			}
+			domains := threatFeedPullDomains(feeds)
+			Expect(domains).To(Equal([]string{"feeds.example.com", "intel.threatprovider.io"}))
+		})
+
+		It("should skip disabled feeds", func() {
+			feeds := []v3.GlobalThreatFeed{
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Mode: &disabled,
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://disabled.example.com/ips"}},
+					},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://enabled.example.com/ips"}},
+					},
+				},
+			}
+			domains := threatFeedPullDomains(feeds)
+			Expect(domains).To(Equal([]string{"enabled.example.com"}))
+		})
+
+		It("should skip feeds without HTTP pull configured", func() {
+			feeds := []v3.GlobalThreatFeed{
+				{
+					Spec: v3.GlobalThreatFeedSpec{},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://valid.example.com/ips"}},
+					},
+				},
+			}
+			domains := threatFeedPullDomains(feeds)
+			Expect(domains).To(Equal([]string{"valid.example.com"}))
+		})
+
+		It("should return empty for no feeds", func() {
+			domains := threatFeedPullDomains(nil)
+			Expect(domains).To(BeEmpty())
+		})
+	})
 })

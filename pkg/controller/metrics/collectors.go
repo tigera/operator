@@ -16,24 +16,20 @@ package metrics
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-const (
-	// Label and annotation keys used by the certificate management system.
-	signerLabel      = "certificates.operator.tigera.io/signer"
-	expiryAnnotation = "certificates.operator.tigera.io/expiry"
-
-	// Time format used in expiry annotations.
-	expiryFormat = "2006-01-02T15:04:05Z"
-)
+var log = logf.Log.WithName("metrics_collector")
 
 var (
 	componentStatusDesc = prometheus.NewDesc(
@@ -67,12 +63,14 @@ var (
 
 // OperatorCollector implements prometheus.Collector and exposes custom operator metrics.
 type OperatorCollector struct {
-	client client.Client
+	client           client.Client
+	licenseAvailable bool
 }
 
-// NewOperatorCollector creates a new OperatorCollector.
-func NewOperatorCollector(c client.Client) *OperatorCollector {
-	return &OperatorCollector{client: c}
+// NewOperatorCollector creates a new OperatorCollector. Set licenseAvailable to true
+// when the LicenseKey CRD exists (Calico Enterprise).
+func NewOperatorCollector(c client.Client, licenseAvailable bool) *OperatorCollector {
+	return &OperatorCollector{client: c, licenseAvailable: licenseAvailable}
 }
 
 // Describe implements prometheus.Collector.
@@ -88,7 +86,9 @@ func (c *OperatorCollector) Collect(ch chan<- prometheus.Metric) {
 	ctx := context.Background()
 	c.collectComponentStatus(ctx, ch)
 	c.collectTLSCertExpiry(ctx, ch)
-	c.collectLicense(ctx, ch)
+	if c.licenseAvailable {
+		c.collectLicense(ctx, ch)
+	}
 }
 
 func (c *OperatorCollector) collectComponentStatus(ctx context.Context, ch chan<- prometheus.Metric) {
@@ -124,36 +124,28 @@ func (c *OperatorCollector) collectComponentStatus(ctx context.Context, ch chan<
 }
 
 func conditionLabel(ct operatorv1.StatusConditionType) string {
-	switch ct {
-	case operatorv1.ComponentAvailable:
-		return "available"
-	case operatorv1.ComponentProgressing:
-		return "progressing"
-	case operatorv1.ComponentDegraded:
-		return "degraded"
-	default:
-		return string(ct)
-	}
+	return strings.ToLower(string(ct))
 }
 
 func (c *OperatorCollector) collectTLSCertExpiry(ctx context.Context, ch chan<- prometheus.Metric) {
 	secrets := &corev1.SecretList{}
-	if err := c.client.List(ctx, secrets, client.HasLabels{signerLabel}); err != nil {
+	if err := c.client.List(ctx, secrets, client.HasLabels{certificatemanagement.SignerLabel}); err != nil {
 		return
 	}
 
 	for _, s := range secrets.Items {
-		expiryStr, ok := s.Annotations[expiryAnnotation]
+		expiryStr, ok := s.Annotations[certificatemanagement.ExpiryAnnotation]
 		if !ok {
 			continue
 		}
 
-		expiry, err := time.Parse(expiryFormat, expiryStr)
+		expiry, err := time.Parse(certificatemanagement.ExpiryFormat, expiryStr)
 		if err != nil {
+			log.V(2).Info("Skipping secret with unparseable expiry annotation", "secret", s.Name, "namespace", s.Namespace, "error", err)
 			continue
 		}
 
-		issuer := s.Annotations["certificates.operator.tigera.io/issuer"]
+		issuer := s.Annotations[certificatemanagement.IssuerAnnotation]
 
 		ch <- prometheus.MustNewConstMetric(
 			tlsCertExpiryDesc,

@@ -348,8 +348,8 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusCom := components.ComponentPrometheus
 		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, prometheusCom.Image, prometheusCom.Version)))
 		Expect(prometheusObj.Spec.ServiceAccountName).To(Equal("prometheus"))
-		Expect(prometheusObj.Spec.ServiceMonitorSelector.MatchLabels["team"]).To(Equal("network-operators"))
-		Expect(prometheusObj.Spec.PodMonitorSelector.MatchLabels["team"]).To(Equal("network-operators"))
+		Expect(prometheusObj.Spec.ServiceMonitorSelector).To(Equal(&metav1.LabelSelector{}))
+		Expect(prometheusObj.Spec.PodMonitorSelector).To(Equal(&metav1.LabelSelector{}))
 		Expect(prometheusObj.Spec.Version).To(Equal(components.ComponentCoreOSPrometheus.Version))
 		Expect(prometheusObj.Spec.Retention).To(BeEquivalentTo("24h"))
 		Expect(prometheusObj.Spec.Resources.Requests.Memory().Equal(k8sresource.MustParse("400Mi"))).To(BeTrue())
@@ -451,8 +451,6 @@ var _ = Describe("monitor rendering tests", func() {
 		// PodMonitor
 		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
-		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
-		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(ConsistOf([]metav1.LabelSelectorRequirement{
@@ -488,8 +486,6 @@ var _ = Describe("monitor rendering tests", func() {
 		// ServiceMonitor
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
-		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
-		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(ConsistOf([]metav1.LabelSelectorRequirement{
@@ -928,7 +924,6 @@ var _ = Describe("monitor rendering tests", func() {
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "calico-typha-metrics",
 				Namespace: "tigera-prometheus",
-				Labels:    map[string]string{"team": "network-operators"},
 			},
 			Spec: monitoringv1.ServiceMonitorSpec{
 				Endpoints: []monitoringv1.Endpoint{

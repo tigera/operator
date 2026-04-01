@@ -53,6 +53,13 @@ func migrationRBACObjects() []client.Object {
 					Resources: []string{"customresourcedefinitions"},
 					Verbs:     []string{"get", "list", "delete"},
 				},
+				{
+					// The migration controller watches calico-node to detect when the operator
+					// has set CALICO_API_GROUP and the DaemonSet rollout is complete.
+					APIGroups: []string{"apps"},
+					Resources: []string{"daemonsets"},
+					Verbs:     []string{"list", "watch"},
+				},
 			},
 		},
 		&rbacv1.ClusterRoleBinding{

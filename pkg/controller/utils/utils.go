@@ -55,7 +55,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
@@ -260,49 +259,6 @@ func createPeriodicReconcileChannel(period time.Duration) chan event.GenericEven
 
 func WaitToAddClusterInformationWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
 	WaitToAddResourceWatch(controller, c, log, flag, []client.Object{&v3.ClusterInformation{TypeMeta: metav1.TypeMeta{Kind: v3.KindClusterInformation}}})
-}
-
-// WaitToAddMigrationWatch polls until the DatastoreMigration CRD is available,
-// then establishes a watch with a predicate that fires on any resource version
-// change. This is needed instead of WaitToAddResourceWatch because migration
-// phase transitions are status-only updates that don't bump generation, and
-// the default predicate filters on generation changes.
-func WaitToAddMigrationWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
-	obj := &datastoremigration.DatastoreMigration{
-		TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-	}
-	gvk := obj.GetObjectKind().GroupVersionKind()
-
-	maxDuration := 30 * time.Second
-	duration := 1 * time.Second
-	ticker := time.NewTicker(duration)
-	defer ticker.Stop()
-	for range ticker.C {
-		duration = duration * 2
-		if duration >= maxDuration {
-			duration = maxDuration
-		}
-		ticker.Reset(duration)
-
-		if ok, err := isResourceReady(c, gvk); err != nil {
-			log.V(2).Info("DatastoreMigration CRD not ready yet", "error", err)
-			continue
-		} else if !ok {
-			log.V(2).Info("DatastoreMigration CRD not ready yet")
-			continue
-		}
-
-		if err := controller.WatchObject(obj, &handler.EnqueueRequestForObject{}, predicate.ResourceVersionChangedPredicate{}); err != nil {
-			log.Info("Failed to watch DatastoreMigration, will retry", "error", err)
-			continue
-		}
-
-		log.V(2).Info("Successfully watching DatastoreMigration")
-		if flag != nil {
-			flag.MarkAsReady()
-		}
-		return
-	}
 }
 
 func WaitToAddPolicyRecommendationScopeWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag) {
@@ -727,13 +683,20 @@ type resourceWatchContext struct {
 }
 
 // WaitToAddResourceWatch will check if the required CRD APIs are available and if so, it will add a watch for the
-// resource. The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
+// resource. The completion of this operation will be signaled on a ready channel.
+// An optional predicate can be provided to override the default generation-based predicate for all
+// watched objects. This is useful for resources whose meaningful changes are status-only updates
+// that don't bump generation (e.g., DatastoreMigration phase transitions).
+func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object, predicates ...predicate.Predicate) {
 	// Track resources left to watch and establish their watch context.
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
+		pred := createPredicateForObject(obj)
+		if len(predicates) > 0 {
+			pred = predicate.And(predicates...)
+		}
 		resourcesToWatch[obj] = resourceWatchContext{
-			predicate: createPredicateForObject(obj),
+			predicate: pred,
 			logger:    ContextLoggerForResource(log, obj),
 		}
 	}

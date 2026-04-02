@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -185,7 +186,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
-	go utils.WaitToAddMigrationWatch(c, opts.K8sClientset, log, r.migrationWatchReady)
+	// Uses ResourceVersionChangedPredicate because migration phase transitions
+	// are status-only updates that don't bump generation.
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	}, predicate.ResourceVersionChangedPredicate{})
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil

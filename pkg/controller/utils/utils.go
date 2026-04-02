@@ -683,13 +683,20 @@ type resourceWatchContext struct {
 }
 
 // WaitToAddResourceWatch will check if the required CRD APIs are available and if so, it will add a watch for the
-// resource. The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
+// resource. The completion of this operation will be signaled on a ready channel.
+// An optional predicate can be provided to override the default generation-based predicate for all
+// watched objects. This is useful for resources whose meaningful changes are status-only updates
+// that don't bump generation (e.g., DatastoreMigration phase transitions).
+func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object, predicates ...predicate.Predicate) {
 	// Track resources left to watch and establish their watch context.
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
+		pred := createPredicateForObject(obj)
+		if len(predicates) > 0 {
+			pred = predicate.And(predicates...)
+		}
 		resourcesToWatch[obj] = resourceWatchContext{
-			predicate: createPredicateForObject(obj),
+			predicate: pred,
 			logger:    ContextLoggerForResource(log, obj),
 		}
 	}

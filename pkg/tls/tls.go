@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,8 +18,10 @@
 package tls
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
@@ -40,6 +42,36 @@ func SetServerAuth(x *x509.Certificate) error {
 	}
 	x.ExtKeyUsage = append(x.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 	return nil
+}
+
+// ParseTLSVersion parses a TLS version string and returns the corresponding tls version constant.
+// Accepts: "1.2", "1.3", or empty string (defaults to "1.2").
+func ParseTLSVersion(version string) (uint16, error) {
+	switch version {
+	case "", "1.2":
+		return tls.VersionTLS12, nil
+	case "1.3":
+		return tls.VersionTLS13, nil
+	default:
+		return 0, fmt.Errorf("unsupported TLS version: %s (supported versions: 1.2, 1.3)", version)
+	}
+}
+
+// ParseClientAuthType parses a client auth type string and returns the corresponding tls.ClientAuthType.
+// Accepts: RequireAndVerifyClientCert (default), RequireAnyClientCert, VerifyClientCertIfGiven, NoClientCert.
+func ParseClientAuthType(value string) (tls.ClientAuthType, error) {
+	switch strings.ToLower(value) {
+	case "", "requireandverifyclientcert":
+		return tls.RequireAndVerifyClientCert, nil
+	case "requireanyclientcert":
+		return tls.RequireAnyClientCert, nil
+	case "verifyclientcertifgiven":
+		return tls.VerifyClientCertIfGiven, nil
+	case "noclientcert":
+		return tls.NoClientCert, nil
+	default:
+		return 0, fmt.Errorf("unsupported client auth type: %s (supported: RequireAndVerifyClientCert, RequireAnyClientCert, VerifyClientCertIfGiven, NoClientCert)", value)
+	}
 }
 
 func MakeCA(signerName string) (*crypto.CA, error) {

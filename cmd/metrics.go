@@ -19,7 +19,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/tigera/operator/pkg/common"
 )
@@ -52,34 +51,6 @@ func metricsAddr() string {
 	}
 
 	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
-}
-
-// ParseTLSVersion parses TLS version string and returns the corresponding tls version constant.
-// Accepts: "1.2", "1.3", or empty string (defaults to "1.2").
-func ParseTLSVersion(version string) (uint16, error) {
-	switch version {
-	case "", "1.2":
-		return tls.VersionTLS12, nil
-	case "1.3":
-		return tls.VersionTLS13, nil
-	default:
-		return 0, fmt.Errorf("unsupported TLS version: %s (supported versions: 1.2, 1.3)", version)
-	}
-}
-
-// metricsClientAuth returns the tls.ClientAuthType based on the METRICS_CLIENT_AUTH env var.
-// Default is RequireAndVerifyClientCert.
-func metricsClientAuth() tls.ClientAuthType {
-	switch strings.ToLower(os.Getenv("METRICS_CLIENT_AUTH")) {
-	case "requireanyclientcert":
-		return tls.RequireAnyClientCert
-	case "verifyclientcertifgiven":
-		return tls.VerifyClientCertIfGiven
-	case "noclientcert":
-		return tls.NoClientCert
-	default:
-		return tls.RequireAndVerifyClientCert
-	}
 }
 
 // metricsTLSCertFile returns the path to the TLS certificate file for the metrics endpoint.

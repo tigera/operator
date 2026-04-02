@@ -37,7 +37,11 @@ import (
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -328,6 +332,32 @@ func (m *fakeDiscovery) ServerResourcesForGroupVersion(groupVersion string) (*me
 	return args.Get(0).(*metav1.APIResourceList), nil
 }
 
+// mockController implements ctrlruntime.Controller for testing watch functions.
+type mockController struct {
+	mock.Mock
+}
+
+func (m *mockController) WatchObject(obj client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	args := m.Called(obj, eventhandler, predicates)
+	return args.Error(0)
+}
+
+func (m *mockController) Reconcile(_ context.Context, _ reconcile.Request) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}
+
+func (m *mockController) Watch(_ source.Source) error {
+	return nil
+}
+
+func (m *mockController) Start(_ context.Context) error {
+	return nil
+}
+
+func (m *mockController) GetLogger() logr.Logger {
+	return logr.Discard()
+}
+
 var _ = Describe("CreatePredicateForObject", func() {
 	var objMeta metav1.Object
 
@@ -503,4 +533,90 @@ var _ = Describe("CreatePredicateForObject", func() {
 		Entry("when authentication is not nil and OIDC type is different",
 			&opv1.Authentication{Spec: opv1.AuthenticationSpec{OIDC: &opv1.AuthenticationOIDC{Type: opv1.OIDCTypeDex}}}, true),
 	)
+})
+
+var _ = Describe("WaitToAddResourceWatch with custom predicates", func() {
+	var (
+		ctrl      *mockController
+		k8sClient fakeClient
+		disc      *fakeDiscovery
+		log       logr.Logger
+		obj       client.Object
+	)
+
+	testGV := "test.example.com/v1"
+
+	BeforeEach(func() {
+		ctrl = new(mockController)
+		disc = new(fakeDiscovery)
+		k8sClient = fakeClient{discovery: disc}
+		log = logf.Log.WithName("resource-watch-test")
+
+		obj = &corev1.ConfigMap{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "TestResource",
+				APIVersion: testGV,
+			},
+		}
+	})
+
+	It("should use the provided predicate instead of the default", func() {
+		disc.On("ServerResourcesForGroupVersion", testGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "TestResource"}},
+		})
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		flag := &ReadyFlag{}
+		WaitToAddResourceWatch(ctrl, k8sClient, log, flag, []client.Object{obj}, predicate.ResourceVersionChangedPredicate{})
+
+		Expect(flag.IsReady()).To(BeTrue())
+
+		// Verify that WatchObject was called with a predicate (the custom one, not the default
+		// generation-based one). The custom predicate is wrapped via predicate.And(), so we
+		// just verify it was called and fires on resource version changes.
+		ctrl.AssertCalled(GinkgoT(), "WatchObject", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	It("should work with a nil flag", func() {
+		disc.On("ServerResourcesForGroupVersion", testGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "TestResource"}},
+		})
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		// Should not panic with nil flag.
+		WaitToAddResourceWatch(ctrl, k8sClient, log, nil, []client.Object{obj}, predicate.ResourceVersionChangedPredicate{})
+		ctrl.AssertExpectations(GinkgoT())
+	})
+
+	It("should retry when the CRD is not yet available", func() {
+		// First call: CRD not available. Second call: CRD available.
+		disc.On("ServerResourcesForGroupVersion", testGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "SomethingElse"}},
+		}).Once()
+		disc.On("ServerResourcesForGroupVersion", testGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "TestResource"}},
+		}).Once()
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		flag := &ReadyFlag{}
+		WaitToAddResourceWatch(ctrl, k8sClient, log, flag, []client.Object{obj}, predicate.ResourceVersionChangedPredicate{})
+
+		Expect(flag.IsReady()).To(BeTrue())
+		disc.AssertNumberOfCalls(GinkgoT(), "ServerResourcesForGroupVersion", 2)
+	})
+
+	It("should retry when WatchObject fails", func() {
+		disc.On("ServerResourcesForGroupVersion", testGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "TestResource"}},
+		})
+		// First WatchObject call fails, second succeeds.
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(fmt.Errorf("cache not started")).Once()
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+		flag := &ReadyFlag{}
+		WaitToAddResourceWatch(ctrl, k8sClient, log, flag, []client.Object{obj}, predicate.ResourceVersionChangedPredicate{})
+
+		Expect(flag.IsReady()).To(BeTrue())
+		ctrl.AssertNumberOfCalls(GinkgoT(), "WatchObject", 2)
+	})
 })

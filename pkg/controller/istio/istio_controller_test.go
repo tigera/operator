@@ -39,6 +39,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -696,7 +697,7 @@ var _ = Describe("Istio controller tests", func() {
 			// Create ImageSet with all required Istio images
 			imageSet := &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "calico-master",
+					Name: "calico-" + components.CalicoRelease,
 				},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
@@ -780,7 +781,7 @@ var _ = Describe("Istio controller tests", func() {
 			// Create ImageSet with all required Istio images for Enterprise
 			imageSet := &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "enterprise-master",
+					Name: "enterprise-" + components.EnterpriseRelease,
 				},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{

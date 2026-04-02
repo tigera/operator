@@ -48,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	operatortls "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/version"
 
 	operatortigeraiov1 "github.com/tigera/operator/api/v1"
@@ -267,8 +268,12 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	if common.MetricsTLSEnabled() {
 		metricsOpts.SecureServing = true
-		clientAuth := metricsClientAuth()
-		minVersion, err := ParseTLSVersion(os.Getenv("TLS_MIN_VERSION"))
+		clientAuth, err := operatortls.ParseClientAuthType(os.Getenv("METRICS_CLIENT_AUTH"))
+		if err != nil {
+			setupLog.Error(err, "invalid METRICS_CLIENT_AUTH")
+			os.Exit(1)
+		}
+		minVersion, err := operatortls.ParseTLSVersion(os.Getenv("TLS_MIN_VERSION"))
 		if err != nil {
 			setupLog.Error(err, "invalid TLS_MIN_VERSION")
 			os.Exit(1)

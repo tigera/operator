@@ -161,7 +161,7 @@ func (c *OperatorCollector) collectTLSCertExpiry(ctx context.Context, ch chan<- 
 func (c *OperatorCollector) collectLicense(ctx context.Context, ch chan<- prometheus.Metric) {
 	license, err := utils.FetchLicenseKey(ctx, c.client)
 	if err != nil {
-		// License not available (e.g., Calico OSS). Skip gracefully.
+		// License not yet available or transient read error. Skip gracefully.
 		return
 	}
 

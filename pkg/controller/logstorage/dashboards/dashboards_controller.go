@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -349,7 +350,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		KibanaPort:                 kibanaPort,
 		ExternalKibanaClientSecret: externalKibanaSecret,
 		Credentials:                []*corev1.Secret{&credentials},
-		KibanaEnabled:              kibanaEnabled(logStorage, d.multiTenant),
+		KibanaEnabled:              lscommon.KibanaEnabled(logStorage, d.multiTenant),
 	}
 	dashboardsComponent := dashboards.Dashboards(cfg)
 
@@ -374,17 +375,6 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	d.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
-}
-
-func kibanaEnabled(ls *operatorv1.LogStorage, multiTenant bool) bool {
-	if multiTenant {
-		return false
-	}
-	if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
-		ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
-		return false
-	}
-	return true
 }
 
 func parsePort(port string) (uint16, error) {

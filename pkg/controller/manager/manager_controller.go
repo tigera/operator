@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/compliance"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -664,9 +665,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query LogStorage resource", err, logc)
 				return reconcile.Result{}, err
 			}
-		} else if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
-			ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
-			kibanaEnabled = false
+		} else {
+			kibanaEnabled = lscommon.KibanaEnabled(ls, r.opts.MultiTenant)
 		}
 	}
 

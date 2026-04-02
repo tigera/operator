@@ -12,7 +12,27 @@ permissions:
   pull-requests: write
 
 jobs:
+  discover-branches:
+    runs-on: ubuntu-latest
+    outputs:
+      branches: ${{ steps.branches.outputs.branches }}
+    steps:
+      - name: Discover branches
+        id: branches
+        run: |
+          # Get master + the two most recent release branches (by semver).
+          branches=$(gh api repos/${{ github.repository }}/branches --paginate --jq '
+            [.[] | select(.name | startswith("release-")) | .name]
+            | sort_by(ltrimstr("release-v") | split(".") | map(tonumber))
+            | .[-2:]
+            | ["master"] + .
+          ')
+          echo "branches=${branches}" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
   sync:
+    needs: discover-branches
     runs-on: ubuntu-latest
     concurrency:
       group: sync-versions-${{ matrix.branch }}
@@ -20,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [master, release-v1.42, release-v1.41, release-v1.40, release-v1.38]
+        branch: ${{ fromJson(needs.discover-branches.outputs.branches) }}
     steps:
       - uses: actions/checkout@v4
         with:

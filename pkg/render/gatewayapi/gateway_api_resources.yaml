@@ -4,7 +4,7 @@ kind: Namespace
 metadata:
   name: tigera-gateway
 ---
-# Source: crds/gatewayapi-crds.yaml
+# Source: gateway-helm/crds/gatewayapi-crds.yaml
 # Copyright 2025 The Kubernetes Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20832,7 +20832,7 @@ status:
   storedVersions: null
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_backends.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_backends.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -21311,7 +21311,7 @@ spec:
       status: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_backendtrafficpolicies.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_backendtrafficpolicies.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -24293,7 +24293,7 @@ spec:
       status: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_clienttrafficpolicies.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_clienttrafficpolicies.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -26204,7 +26204,7 @@ spec:
       status: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_envoyextensionpolicies.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_envoyextensionpolicies.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -28374,7 +28374,7 @@ spec:
       status: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_envoypatchpolicies.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_envoypatchpolicies.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -28887,7 +28887,7 @@ spec:
       status: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_envoyproxies.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_envoyproxies.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -45516,7 +45516,7 @@ spec:
       status: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_httproutefilters.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_httproutefilters.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
@@ -45993,7 +45993,7 @@ spec:
     subresources: {}
 
 ---
-# Source: crds/generated/gateway.envoyproxy.io_securitypolicies.yaml
+# Source: gateway-helm/crds/generated/gateway.envoyproxy.io_securitypolicies.yaml
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition

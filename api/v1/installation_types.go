@@ -236,6 +236,12 @@ type InstallationSpec struct {
 	// the cluster (including the API server) are exempt from proxying.
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
+
+	// NetworkPolicyManagement enables or disables the automatic creation of NetworkPolicies
+	// by the operator.
+	// +kubebuilder:default=Enabled
+	// +optional
+	NetworkPolicyManagement *NetworkPolicyManagement `json:"networkPolicyManagement,omitempty"`
 }
 
 // BPFNetworkBootstrapType defines how the initial networking configuration is executed.

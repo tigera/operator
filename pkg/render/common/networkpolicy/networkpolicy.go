@@ -71,7 +71,7 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 			Destination: v3.EntityRule{
 				NamespaceSelector: "projectcalico.org/name == 'kube-system'",
 				// In most Kubernetes distros the label is for kube-dns, but in Canonical it is for coredns.
-				Selector: "k8s-app == 'kube-dns' || k8s-app == 'coredns'",
+				Selector: "k8s-app in { 'kube-dns', 'coredns' }",
 				Ports:    Ports(53),
 			},
 		})

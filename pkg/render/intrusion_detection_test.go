@@ -734,7 +734,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 					Protocol: &networkpolicy.UDPProtocol,
 					Destination: v3.EntityRule{
 						NamespaceSelector: "projectcalico.org/name == 'kube-system'",
-						Selector:          "k8s-app == 'kube-dns' || k8s-app == 'coredns'",
+						Selector:          "k8s-app in { 'kube-dns', 'coredns' }",
 						Ports:             networkpolicy.Ports(53),
 					},
 				},

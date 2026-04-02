@@ -110,6 +110,18 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 	return kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, nil
 }
 
+// KibanaEnabled returns true if Kibana should be enabled based on the LogStorage spec and multi-tenancy mode.
+func KibanaEnabled(ls *operatorv1.LogStorage, multiTenant bool) bool {
+	if multiTenant {
+		return false
+	}
+	if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
+		ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
+		return false
+	}
+	return true
+}
+
 func CalculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {
 	if nodesSpecifications == nil || nodesSpecifications.ResourceRequirements == nil || nodesSpecifications.ResourceRequirements.Requests == nil {
 		return defaultShards

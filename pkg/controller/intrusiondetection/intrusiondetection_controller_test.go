@@ -103,12 +103,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		r = ReconcileIntrusionDetection{
-			client:          c,
-			scheme:          scheme,
-			status:          mockStatus,
-			licenseAPIReady: &utils.ReadyFlag{},
-			dpiAPIReady:     &utils.ReadyFlag{},
-			tierWatchReady:  &utils.ReadyFlag{},
+			client:             c,
+			scheme:             scheme,
+			status:             mockStatus,
+			licenseAPIReady:    &utils.ReadyFlag{},
+			dpiAPIReady:        &utils.ReadyFlag{},
+			tierWatchReady:     &utils.ReadyFlag{},
+			threatFeedAPIReady: &utils.ReadyFlag{},
 			opts: options.ControllerOptions{
 				DetectedProvider: operatorv1.ProviderNone,
 			},
@@ -323,12 +324,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			readyFlag = &utils.ReadyFlag{}
 			readyFlag.MarkAsReady()
 			r = ReconcileIntrusionDetection{
-				client:          c,
-				scheme:          scheme,
-				status:          mockStatus,
-				licenseAPIReady: readyFlag,
-				dpiAPIReady:     readyFlag,
-				tierWatchReady:  readyFlag,
+				client:             c,
+				scheme:             scheme,
+				status:             mockStatus,
+				licenseAPIReady:    readyFlag,
+				dpiAPIReady:        readyFlag,
+				tierWatchReady:     readyFlag,
+				threatFeedAPIReady: readyFlag,
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderNone,
 				},

@@ -17,7 +17,9 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
 	"sort"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -705,10 +707,9 @@ func threatFeedPullDomains(feeds []v3.GlobalThreatFeed) []string {
 		}
 		seen[u.Hostname()] = struct{}{}
 	}
-	domains := make([]string, 0, len(seen))
-	for d := range seen {
-		domains = append(domains, d)
-	}
+	domains := slices.Collect(maps.Keys(seen))
+	// Sorts the domains to ensure no change detected in the network policy
+	// if the order of the domains changes.
 	sort.Strings(domains)
 	return domains
 }

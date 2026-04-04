@@ -51,14 +51,14 @@ func migrationRBACObjects() []client.Object {
 				{
 					APIGroups: []string{"apiextensions.k8s.io"},
 					Resources: []string{"customresourcedefinitions"},
-					Verbs:     []string{"get", "list", "delete"},
+					Verbs:     []string{"get", "list", "watch", "delete"},
 				},
 				{
-					// The migration controller watches calico-node to detect when the operator
-					// has set CALICO_API_GROUP and the DaemonSet rollout is complete.
+					// The migration controller checks calico-node and calico-typha for the
+					// v3 API group env var and monitors their rollout status.
 					APIGroups: []string{"apps"},
-					Resources: []string{"daemonsets"},
-					Verbs:     []string{"list", "watch"},
+					Resources: []string{"daemonsets", "deployments"},
+					Verbs:     []string{"get", "list", "watch"},
 				},
 			},
 		},

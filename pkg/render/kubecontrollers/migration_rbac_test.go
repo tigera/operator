@@ -66,16 +66,16 @@ var _ = Describe("MigrationRBACComponent", func() {
 			Expect(cr.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups: []string{"apiextensions.k8s.io"},
 				Resources: []string{"customresourcedefinitions"},
-				Verbs:     []string{"get", "list", "delete"},
+				Verbs:     []string{"get", "list", "watch", "delete"},
 			}))
 		})
 
-		It("should grant list/watch access to daemonsets", func() {
+		It("should grant access to daemonsets and deployments", func() {
 			cr := rtest.GetResource(toCreate, "calico-kube-controllers-migration", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			Expect(cr.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups: []string{"apps"},
-				Resources: []string{"daemonsets"},
-				Verbs:     []string{"list", "watch"},
+				Resources: []string{"daemonsets", "deployments"},
+				Verbs:     []string{"get", "list", "watch"},
 			}))
 		})
 

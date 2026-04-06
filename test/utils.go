@@ -165,8 +165,15 @@ func (n nodeListWatch) Watch(options metav1.ListOptions) (watch.Interface, error
 	return n.cs.CoreV1().Nodes().Watch(context.Background(), options)
 }
 
-// Mock a cache.ListWatcher for nodes to use in the test as there is no other suitable
-// mock available in the fake packages.
+// IsWatchListSemanticsUnSupported signals to the reflector that this ListerWatcher
+// does not support watch-list semantics. Without this, the reflector in client-go
+// v0.35.0+ hangs waiting for bookmark events that the fake clientset doesn't send.
+func (n nodeListWatch) IsWatchListSemanticsUnSupported() bool {
+	return true
+}
+
+// Mock a cache.ListWatcher for typha deployments to use in the test as there is no
+// other suitable mock available in the fake packages.
 // Ref: https://github.com/kubernetes/client-go/issues/352#issuecomment-614740790
 type typhaListWatch struct {
 	cs kubernetes.Interface
@@ -182,6 +189,12 @@ func (t typhaListWatch) List(options metav1.ListOptions) (runtime.Object, error)
 
 func (t typhaListWatch) Watch(options metav1.ListOptions) (watch.Interface, error) {
 	return t.cs.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
+}
+
+// IsWatchListSemanticsUnSupported signals to the reflector that this ListerWatcher
+// does not support watch-list semantics.
+func (t typhaListWatch) IsWatchListSemanticsUnSupported() bool {
+	return true
 }
 
 func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *corev1.Node {

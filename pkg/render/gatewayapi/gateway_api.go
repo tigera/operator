@@ -297,8 +297,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.namespace == nil {
 				panic("missing Namespace from gateway API YAML")
 			}
-			if len(resources.k8sCRDs) != 11 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 11)", len(resources.k8sCRDs)))
+			if len(resources.k8sCRDs) != 12 {
+				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 12)", len(resources.k8sCRDs)))
 			}
 			if len(resources.envoyCRDs) != 8 {
 				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
@@ -710,7 +710,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
-	envoyProxy.Spec.Provider.Type = envoyapi.ProviderTypeKubernetes
+	envoyProxy.Spec.Provider.Type = envoyapi.EnvoyProxyProviderTypeKubernetes
 	if envoyProxy.Spec.Provider.Kubernetes == nil {
 		envoyProxy.Spec.Provider.Kubernetes = &envoyapi.EnvoyProxyKubernetesProvider{}
 	}
@@ -1013,7 +1013,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						},
 					},
 					Format: &envoyapi.ProxyAccessLogFormat{
-						Type: "JSON",
+						Type: ptr.ToPtr(envoyapi.ProxyAccessLogFormatTypeJSON),
 						JSON: map[string]string{
 							"reporter":                         "gateway",
 							"start_time":                       "%START_TIME%",

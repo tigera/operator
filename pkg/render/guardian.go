@@ -586,10 +586,6 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		return ossNetworkPolicy(), nil
 	}
 
-	if !cfg.IncludeEgressNetworkPolicy {
-		return nil, nil
-	}
-
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -666,6 +662,10 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		}
 		parsedIp := net.ParseIP(host)
 		if parsedIp == nil {
+			// Domain-based egress rules require the EgressAccessControl license feature.
+			if !cfg.IncludeEgressNetworkPolicy {
+				continue
+			}
 			// Assume host is a valid hostname.
 			egressRules = append(egressRules, v3.Rule{
 				Action:   v3.Allow,

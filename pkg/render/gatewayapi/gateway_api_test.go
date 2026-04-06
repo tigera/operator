@@ -64,7 +64,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 			Format: &envoyapi.ProxyAccessLogFormat{
-				Type: envoyapi.ProxyAccessLogFormatTypeJSON,
+				Type: ptr.ToPtr(envoyapi.ProxyAccessLogFormatTypeJSON),
 				JSON: map[string]string{
 					"reporter":                         "gateway",
 					"start_time":                       "%START_TIME%",
@@ -525,7 +525,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			CustomEnvoyGateway: &envoyapi.EnvoyGateway{
 				EnvoyGatewaySpec: envoyapi.EnvoyGatewaySpec{
 					Provider: &envoyapi.EnvoyGatewayProvider{
-						Type: envoyapi.ProviderTypeKubernetes,
+						Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 						Kubernetes: &envoyapi.EnvoyGatewayKubernetesProvider{
 							RateLimitDeployment: &envoyapi.KubernetesDeploymentSpec{
 								Name: &customName,
@@ -715,7 +715,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDaemonSet: &envoyapi.KubernetesDaemonSetSpec{
 							Pod: &envoyapi.KubernetesPodSpec{
@@ -926,7 +926,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
 							InitContainers: []corev1.Container{
@@ -1128,7 +1128,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
 							InitContainers: []corev1.Container{

@@ -319,6 +319,20 @@ func (c *IstioComponent) istiodCalicoSystemPolicy() *v3.NetworkPolicy {
 		},
 	}
 
+	// In BPF mode, CTLB is disabled for Istio ambient compatibility. Without CTLB and
+	// kube-proxy, return traffic (SYN-ACKs) from istiod to ztunnel on remote nodes may not
+	// be matched by conntrack. Allow explicit egress to ztunnel pods to ensure cross-node
+	// ztunnel<->istiod communication works.
+	if c.cfg.Installation.BPFEnabled() {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Selector: networkpolicy.KubernetesAppSelector(IstioZTunnelDaemonSetName),
+			},
+		})
+	}
+
 	// * Port 15012, gRPC, XDS and CA services (TLS and mTLS)
 	//   ztunnel and waypoints connect to it to request certs and dataplane
 	//   info.
@@ -385,6 +399,20 @@ func (c *IstioComponent) ztunnelCalicoSystemPolicy() *v3.NetworkPolicy {
 			Destination: networkpolicy.CreateServiceSelectorEntityRule(c.cfg.IstioNamespace, IstioIstiodServiceName),
 		},
 	}
+
+	// In BPF mode, CTLB is disabled for Istio ambient compatibility. Service-based egress
+	// selectors don't resolve correctly for cross-node traffic without CTLB and kube-proxy.
+	// Add a direct pod-selector rule so ztunnel can reach istiod by pod IP on any node.
+	if c.cfg.Installation.BPFEnabled() {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Selector: networkpolicy.KubernetesAppSelector(IstioIstiodDeploymentName),
+			},
+		})
+	}
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.Installation.KubernetesProvider.IsOpenShift())
 
 	return &v3.NetworkPolicy{

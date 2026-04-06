@@ -95,7 +95,6 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	if guardianAccessPolicy != nil {
 		policies = []client.Object{
 			guardianAccessPolicy,
-			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
 		}
 	}
 

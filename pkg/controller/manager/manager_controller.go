@@ -660,7 +660,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	kibanaEnabled := !r.opts.MultiTenant
 	if kibanaEnabled {
 		ls := &operatorv1.LogStorage{}
-		if err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls); err != nil {
+		if err := r.client.Get(ctx, utils.DefaultInstanceKey, ls); err != nil {
 			if !errors.IsNotFound(err) {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query LogStorage resource", err, logc)
 				return reconcile.Result{}, err

@@ -76,8 +76,6 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
 
-
-
 	Context("without CR found", func() {
 		It("status is not created", func() {
 			sm.updateStatus()

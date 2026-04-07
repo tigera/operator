@@ -980,7 +980,6 @@ func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
 	return currentHash
 }
 
-
 func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {
 		// Never set any conditions unless the status manager is enabled.

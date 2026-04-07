@@ -577,6 +577,118 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 
+		Context("during a rollout with mixed old and new revision pods", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+
+			It("should prioritize new-revision pod failures over old-revision failures", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(2)
+				gen := int64(5)
+
+				// Create the Deployment.
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:  "NS1",
+						Name:       "DP1",
+						UID:        "dp1-uid",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dp1"}},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 2,
+						AvailableReplicas:   0,
+						ReadyReplicas:       0,
+					},
+				})).NotTo(HaveOccurred())
+
+				// Current ReplicaSet.
+				Expect(client.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1-new",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dp1-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dp1"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 1},
+				})).NotTo(HaveOccurred())
+
+				// Old ReplicaSet.
+				Expect(client.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1-old",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dp1-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dp1"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 0},
+				})).NotTo(HaveOccurred())
+
+				// New-revision pod: crash looping.
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "dp1-new-pod",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name:  "c1",
+								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+				// Old-revision pod: also crash looping but with different reason.
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "dp1-old-pod",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name: "c1",
+								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+								LastTerminationState: corev1.ContainerState{
+									Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+								},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(HaveLen(2))
+				// New-revision issue should appear first.
+				Expect(sm.failing[0]).NotTo(ContainSubstring("old revision"))
+				Expect(sm.failing[1]).To(ContainSubstring("old revision"))
+			})
+		})
+
 		It("Should handle basic state changes", func() {
 			// We expect no state to be "True" at boot.
 			Expect(sm.IsAvailable()).To(BeFalse())

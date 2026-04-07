@@ -16,6 +16,8 @@ package status
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
+	"k8s.io/utils/ptr"
 	controllerRuntimeClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -73,7 +76,7 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
 
-	boolPtr := func(b bool) *bool { return &b }
+
 
 	Context("without CR found", func() {
 		It("status is not created", func() {
@@ -614,7 +617,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "DP1-new",
 						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dp1-uid", Controller: boolPtr(true)},
+							{UID: "dp1-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -630,7 +633,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "DP1-old",
 						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dp1-uid", Controller: boolPtr(true)},
+							{UID: "dp1-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -1365,7 +1368,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "dep1-abc123",
 						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dep-uid", Controller: boolPtr(true)},
+							{UID: "dep-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -1380,7 +1383,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "dep1-old999",
 						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dep-uid", Controller: boolPtr(true)},
+							{UID: "dep-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -1416,7 +1419,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "ds1-rev1",
 						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-old"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "ds-uid", Controller: boolPtr(true)},
+							{UID: "ds-uid", Controller: ptr.To(true)},
 						},
 					},
 					Revision: 1,
@@ -1427,7 +1430,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "ds1-rev2",
 						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-new"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "ds-uid", Controller: boolPtr(true)},
+							{UID: "ds-uid", Controller: ptr.To(true)},
 						},
 					},
 					Revision: 2,
@@ -1444,6 +1447,368 @@ var _ = Describe("Status reporting tests", func() {
 				rev := sm.currentDaemonSetRevision(ds)
 				Expect(rev).To(BeEmpty())
 			})
+		})
+	})
+})
+
+// getTigeraStatusCondition returns the condition of the given type from the TigeraStatus, or nil if not found.
+func getTigeraStatusCondition(ts *operator.TigeraStatus, condType operator.StatusConditionType) *operator.TigeraStatusCondition {
+	for _, c := range ts.Status.Conditions {
+		if c.Type == condType {
+			return &c
+		}
+	}
+	return nil
+}
+
+var _ = Describe("Status manager integration tests", Ordered, func() {
+	var cl controllerRuntimeClient.Client
+	var ctx = context.Background()
+
+	BeforeAll(func() {
+		scheme := runtime.NewScheme()
+		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(batchv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		err := apis.AddToScheme(scheme, false)
+		Expect(err).NotTo(HaveOccurred())
+		cl = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+	})
+
+	Describe("degraded message content", func() {
+		It("should include CrashLoopBackOff with termination context in the TigeraStatus", func() {
+			sm := New(cl, "crash-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(1)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep1"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "crash"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 1,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "crash-pod", Labels: map[string]string{"app": "crash"}},
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "main",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "crash-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(operator.ConditionTrue))
+			Expect(degraded.Message).To(ContainSubstring("crash looping container"))
+			Expect(degraded.Message).To(ContainSubstring("OOMKilled, exit code 137"))
+		})
+
+		It("should include 'running but not ready' in the TigeraStatus", func() {
+			sm := New(cl, "notready-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(1)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep2"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep2", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "notready"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 1,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "notready-pod", Labels: map[string]string{"app": "notready"}},
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "notready-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(operator.ConditionTrue))
+			Expect(degraded.Message).To(ContainSubstring("running but not ready"))
+		})
+
+		It("should include pending pod scheduler reason in the TigeraStatus progressing message", func() {
+			sm := New(cl, "pending-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(1)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep3"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep3", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "pending"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 1,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pending-pod", Labels: map[string]string{"app": "pending"}},
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					Conditions: []corev1.PodCondition{
+						{
+							Type:    corev1.PodScheduled,
+							Status:  corev1.ConditionFalse,
+							Message: "0/3 nodes are available: 3 Insufficient memory",
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "pending-test"}, ts)).NotTo(HaveOccurred())
+
+			progressing := getTigeraStatusCondition(ts, operator.ComponentProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(operator.ConditionTrue))
+			Expect(progressing.Message).To(ContainSubstring("Insufficient memory"))
+		})
+
+		It("should report not-found workloads as degraded in TigeraStatus", func() {
+			sm := New(cl, "notfound-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "missing-dep"}})
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "notfound-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(operator.ConditionTrue))
+			Expect(degraded.Message).To(ContainSubstring(`Deployment "ns/missing-dep" not found`))
+		})
+	})
+
+	Describe("deduplication and capping in TigeraStatus", func() {
+		It("should deduplicate identical pod failures and show count", func() {
+			sm := New(cl, "dedup-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(3)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep-dedup"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep-dedup", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dedup"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 3,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			// Create 3 pods all OOMKilled - should be deduplicated into one message.
+			for i := 0; i < 3; i++ {
+				Expect(cl.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      fmt.Sprintf("dedup-pod-%d", i),
+						Labels:    map[string]string{"app": "dedup"},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name:  "main",
+								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+								LastTerminationState: corev1.ContainerState{
+									Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+								},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+			}
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "dedup-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Message).To(ContainSubstring("3 pods affected"))
+		})
+	})
+
+	Describe("rollout revision awareness in TigeraStatus", func() {
+		It("should annotate old-revision failures and prioritize new-revision failures", func() {
+			sm := New(cl, "rollout-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(2)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep-rollout"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep-rollout", UID: "rollout-uid", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 2,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			// Current ReplicaSet.
+			Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "dep-rollout-new",
+					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+					OwnerReferences: []metav1.OwnerReference{
+						{UID: "rollout-uid", Controller: ptr.To(true)},
+					},
+				},
+				Spec:   appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}}},
+				Status: appsv1.ReplicaSetStatus{Replicas: 1},
+			})).NotTo(HaveOccurred())
+
+			// Old ReplicaSet.
+			Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "dep-rollout-old",
+					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+					OwnerReferences: []metav1.OwnerReference{
+						{UID: "rollout-uid", Controller: ptr.To(true)},
+					},
+				},
+				Spec:   appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}}},
+				Status: appsv1.ReplicaSetStatus{Replicas: 0},
+			})).NotTo(HaveOccurred())
+
+			// New-revision pod crash looping.
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "rollout-new-pod",
+					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+				},
+				Spec: corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "main",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: terminationReasonError, ExitCode: 1},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			// Old-revision pod crash looping with different reason.
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "rollout-old-pod",
+					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+				},
+				Spec: corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "main",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "rollout-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+
+			// The message should contain both failures, with the new-revision first.
+			// Messages are newline-joined by degradedMessage().
+			lines := strings.Split(degraded.Message, "\n")
+			Expect(lines).To(HaveLen(2))
+			Expect(lines[0]).NotTo(ContainSubstring("old revision"))
+			Expect(lines[1]).To(ContainSubstring("old revision"))
 		})
 	})
 })

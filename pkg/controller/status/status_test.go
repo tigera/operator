@@ -908,4 +908,67 @@ var _ = Describe("Status reporting tests", func() {
 			Expect(a.key()).NotTo(Equal(b.key()))
 		})
 	})
+
+	Describe("summarizeIssues", func() {
+		It("should deduplicate issues with the same key", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "Pod ns/pod1 has crash looping container: c1", terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "Pod ns/pod2 has crash looping container: c1", terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "Pod ns/pod3 has crash looping container: c1", terminationReason: "OOMKilled", exitCode: 137},
+			}
+			failing, progressing := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(1))
+			Expect(failing[0]).To(ContainSubstring("3 pods affected"))
+			Expect(progressing).To(BeEmpty())
+		})
+
+		It("should cap at 3 unique reasons", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "msg1", terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueImagePull, message: "msg2"},
+				{severity: severityFailing, issueType: issueTerminated, message: "msg3", terminationReason: terminationReasonError, exitCode: 1},
+				{severity: severityFailing, issueType: issuePodFailed, message: "msg4"},
+			}
+			failing, _ := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(3))
+		})
+
+		It("should prioritize new-revision pods over old-revision pods", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "old pod crash", isOldRevision: true, terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "new pod crash", isOldRevision: false, terminationReason: terminationReasonError, exitCode: 1},
+			}
+			failing, _ := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(2))
+			Expect(failing[0]).To(ContainSubstring("new pod crash"))
+			Expect(failing[1]).To(ContainSubstring("old pod crash"))
+			Expect(failing[1]).To(ContainSubstring("old revision"))
+		})
+
+		It("should split failing and progressing", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueNotReady, message: "Pod ns/p1 is running but not ready"},
+				{severity: severityProgressing, issueType: issuePending, message: "Pod ns/p2 is pending: Unschedulable"},
+			}
+			failing, progressing := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(1))
+			Expect(progressing).To(HaveLen(1))
+			Expect(progressing[0]).To(ContainSubstring("pending"))
+		})
+
+		It("should annotate old revision issues", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueNotReady, message: "Pod ns/p1 is running but not ready", isOldRevision: true},
+			}
+			failing, _ := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(1))
+			Expect(failing[0]).To(ContainSubstring("old revision"))
+		})
+
+		It("should return empty slices for no issues", func() {
+			failing, progressing := summarizeIssues(nil)
+			Expect(failing).To(BeEmpty())
+			Expect(progressing).To(BeEmpty())
+		})
+	})
 })

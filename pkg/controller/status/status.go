@@ -91,6 +91,63 @@ func (p podIssue) key() string {
 	return fmt.Sprintf("%d:%s:%d", p.issueType, p.terminationReason, p.exitCode)
 }
 
+const maxIssuesPerWorkload = 3
+
+// summarizeIssues deduplicates, prioritizes, and caps a list of pod issues into
+// human-readable failing and progressing message slices.
+func summarizeIssues(issues []podIssue) (failing []string, progressing []string) {
+	if len(issues) == 0 {
+		return nil, nil
+	}
+
+	// Sort: new-revision first, then by issue type priority (enum order).
+	sort.SliceStable(issues, func(i, j int) bool {
+		if issues[i].isOldRevision != issues[j].isOldRevision {
+			return !issues[i].isOldRevision
+		}
+		return issues[i].issueType < issues[j].issueType
+	})
+
+	// Group by key. First occurrence provides the message; count tracks duplicates.
+	type issueGroup struct {
+		issue podIssue
+		count int
+	}
+	seen := map[string]int{}
+	var groups []issueGroup
+	for _, iss := range issues {
+		k := iss.key()
+		if idx, ok := seen[k]; ok {
+			groups[idx].count++
+			continue
+		}
+		seen[k] = len(groups)
+		groups = append(groups, issueGroup{issue: iss, count: 1})
+	}
+
+	// Cap at maxIssuesPerWorkload unique reasons.
+	if len(groups) > maxIssuesPerWorkload {
+		groups = groups[:maxIssuesPerWorkload]
+	}
+
+	// Format messages.
+	for _, g := range groups {
+		msg := g.issue.message
+		if g.count > 1 {
+			msg += fmt.Sprintf(" (%d pods affected)", g.count)
+		}
+		if g.issue.isOldRevision {
+			msg += " (old revision)"
+		}
+		if g.issue.severity == severityFailing {
+			failing = append(failing, msg)
+		} else {
+			progressing = append(progressing, msg)
+		}
+	}
+	return failing, progressing
+}
+
 // StatusManager manages the status for a single controller and component, and reports the status via
 // a TigeraStatus API object. The status manager uses the following conditions/states to represent the
 // component's current status:

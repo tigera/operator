@@ -36,11 +36,32 @@ var _ = Describe("test crds pkg", func() {
 		})
 
 		It("can get all CRDS used with Enterprise", func() {
-			Expect(func() { Expect(GetCRDs(opv1.TigeraSecureEnterprise, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+			Expect(func() { Expect(GetCRDs(opv1.CalicoEnterprise, v3)).ToNot(BeEmpty()) }).ToNot(Panic())
 		})
 
 		It("can parse Enterprise CRDs", func() {
 			Expect(func() { Expect(getEnterpriseCRDSource(v3)).ToNot(BeEmpty()) }).ToNot(Panic())
+		})
+
+		It(fmt.Sprintf("includes K8s policy CRDs for Calico (v3=%t)", v3), func() {
+			calicoCRDs = nil
+			crds := GetCRDs(opv1.Calico, v3)
+			crdNames := map[string]bool{}
+			for _, crd := range crds {
+				crdNames[crd.Name] = true
+			}
+			Expect(crdNames).To(HaveKey("clusternetworkpolicies.policy.networking.k8s.io"))
+		})
+
+		It(fmt.Sprintf("includes K8s policy CRDs for Enterprise (v3=%t)", v3), func() {
+			enterpriseCRDs = nil
+			crds := GetCRDs(opv1.CalicoEnterprise, v3)
+			crdNames := map[string]bool{}
+			for _, crd := range crds {
+				crdNames[crd.Name] = true
+			}
+			Expect(crdNames).To(HaveKey("adminnetworkpolicies.policy.networking.k8s.io"))
+			Expect(crdNames).To(HaveKey("baselineadminnetworkpolicies.policy.networking.k8s.io"))
 		})
 	}
 
@@ -49,7 +70,7 @@ var _ = Describe("test crds pkg", func() {
 	})
 
 	It("can parse Operator CRDs used with Enterprise", func() {
-		Expect(func() { Expect(getOperatorCRDSource(opv1.TigeraSecureEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
+		Expect(func() { Expect(getOperatorCRDSource(opv1.CalicoEnterprise)).ToNot(BeEmpty()) }).ToNot(Panic())
 	})
 
 	It("installs GatewayAPI CRD with Calico OSS", func() {

@@ -109,7 +109,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	reqLogger.Info("Reconciling LogStorage")
 
 	ls := &operatorv1.LogStorage{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, ls)
+	err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)
 	if err != nil {
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
@@ -119,7 +119,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	}
 	r.status.OnCRFound()
 
-	_, install, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -143,7 +143,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -153,7 +153,7 @@ func (r *ExternalESController) Reconcile(ctx context.Context, request reconcile.
 	clusterConfig := relasticsearch.NewClusterConfig(render.DefaultElasticsearchClusterName, ls.Replicas(), logstoragecommon.DefaultElasticsearchShards, flowShards)
 
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
-	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(install, clusterConfig, pullSecrets, r.opts.MultiTenant)
+	externalElasticsearch := externalelasticsearch.ExternalElasticsearch(installationSpec, clusterConfig, pullSecrets, r.opts.MultiTenant)
 	for _, component := range []render.Component{externalElasticsearch} {
 		if err := hdler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

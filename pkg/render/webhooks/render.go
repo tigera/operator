@@ -79,7 +79,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
 	} else {
 		c.webhooksImage, err = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
@@ -104,7 +104,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// Create the correct security context for the webhook container. By default, it should run as non-root, but in Enterprise
 	// we need to run as root to be able to write audit logs to the host filesystem.
 	securtyContext := securitycontext.NewNonRootContext()
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		securtyContext = securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
 	}
 
@@ -306,7 +306,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
+				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
 			},
 			{
@@ -338,7 +338,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
+				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 			},
 			{
@@ -371,7 +371,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
+				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
 			},
@@ -414,7 +414,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](10),
+				TimeoutSeconds:          ptr.To(int32(10)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
 				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
 			},
@@ -437,7 +437,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
@@ -488,7 +488,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, np)
 	}
 	objs = append(objs, dep, svc, vwc)
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		objs = append(objs, mwc)
 	}
 	objs = append(objs, cr, crb)

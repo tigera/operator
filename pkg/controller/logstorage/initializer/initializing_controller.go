@@ -211,7 +211,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	reqLogger.Info("Reconciling LogStorage")
 
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if errors.IsNotFound(err) {
 		r.status.OnCRNotFound()
@@ -226,7 +226,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	r.status.OnCRFound()
 
 	// Get Installation resource.
-	_, install, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -237,7 +237,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Check if there is a management cluster connection. ManagementClusterConnection is a managed cluster only resource.
-	if err = r.client.Get(ctx, utils.DefaultTSEEInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
+	if err = r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, &operatorv1.ManagementClusterConnection{}); err == nil {
 		// LogStorage isn't valid for managed clusters.
 		r.setConditionDegraded(ctx, ls, reqLogger)
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "LogStorage is not valid for a managed cluster", nil, reqLogger)
@@ -261,7 +261,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -271,7 +271,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, ls)
 	components := []render.Component{render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.provider.IsOpenShift(),
-		Installation:    install,
+		Installation:    installationSpec,
 		PullSecrets:     pullSecrets,
 		Namespace:       render.ElasticsearchNamespace,
 		PSS:             r.elasticsearchPSS(),
@@ -282,7 +282,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	if !r.multiTenant {
 		components = append(components, render.NewSetup(&render.SetUpConfiguration{
 			OpenShift:       r.provider.IsOpenShift(),
-			Installation:    install,
+			Installation:    installationSpec,
 			PullSecrets:     pullSecrets,
 			Namespace:       kibana.Namespace,
 			PSS:             render.PSSBaseline,

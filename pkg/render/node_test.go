@@ -637,7 +637,7 @@ var _ = Describe("Node rendering tests", func() {
 				}
 			})
 
-			It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
+			It("should render all resources for a default configuration using CalicoEnterprise", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -655,7 +655,7 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 
 				component := render.Node(&cfg)
@@ -740,7 +740,7 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true", func() {
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 				cfg.FelixPrometheusMetricsEnabled = true
 
@@ -1625,7 +1625,7 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, true, false)
 			})
 
-			It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
+			It("should render all resources when variant is CalicoEnterprise and running on openshift", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -1644,7 +1644,7 @@ var _ = Describe("Node rendering tests", func() {
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
 				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
@@ -1730,7 +1730,7 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, true, true)
 			})
 
-			It("should render all resources when variant is TigeraSecureEnterprise and running on RKE2", func() {
+			It("should render all resources when variant is CalicoEnterprise and running on RKE2", func() {
 				expectedResources := []struct {
 					name    string
 					ns      string
@@ -1749,7 +1749,7 @@ var _ = Describe("Node rendering tests", func() {
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
 
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
 				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
 				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
@@ -2087,7 +2087,7 @@ var _ = Describe("Node rendering tests", func() {
 			})
 
 			It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.NodeMetricsPort = nil
 				cfg.NodeReporterMetricsPort = 9081
 
@@ -2110,7 +2110,7 @@ var _ = Describe("Node rendering tests", func() {
 
 			It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
 				var nodeMetricsPort int32 = 1234
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				defaultInstance.NodeMetricsPort = &nodeMetricsPort
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
@@ -2865,7 +2865,7 @@ var _ = Describe("Node rendering tests", func() {
 					}
 
 					if isEnterprise {
-						defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+						defaultInstance.Variant = operatorv1.CalicoEnterprise
 					}
 
 					defaultInstance.CalicoNetwork.BGP = &bgpOption
@@ -3224,7 +3224,8 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
 		ProbeHandler:   corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}}},
-		TimeoutSeconds: 10,
+		PeriodSeconds:  10,
+		TimeoutSeconds: 5,
 	}
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
@@ -3340,7 +3341,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			// Calico CNI image should have -fips suffix when FIPS mode is enabled.
 			cniImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoCNI.Image, components.ComponentCalicoCNI.Version)
 		}
-		if instance.Variant == operatorv1.TigeraSecureEnterprise {
+		if instance.Variant.IsEnterprise() {
 			cniImage = components.TigeraRegistry + "tigera/cni:" + components.ComponentTigeraCNI.Version
 		}
 		Expect(cniContainer.Image).To(Equal(cniImage))
@@ -3374,7 +3375,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 				},
 			},
 		}
-		if instance.Variant == operatorv1.TigeraSecureEnterprise {
+		if instance.Variant.IsEnterprise() {
 			if instance.CalicoNetwork != nil && instance.CalicoNetwork.MultiInterfaceMode != nil {
 				expectedCNIEnv = append(expectedCNIEnv, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: instance.CalicoNetwork.MultiInterfaceMode.Value()})
 			}
@@ -3397,7 +3398,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		// Calico Node image should have -fips suffix when FIPS mode is enabled.
 		ebpfImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
 	}
-	if instance.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Variant.IsEnterprise() {
 		ebpfImage = components.TigeraRegistry + "tigera/node:" + components.ComponentTigeraNode.Version
 	}
 	Expect(ebpfBootstrap.Image).To(Equal(ebpfImage))
@@ -3427,7 +3428,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	flexvolContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 	if instance.FlexVolumePath != "None" {
 		Expect(flexvolContainer).NotTo(BeNil())
-		if instance.Variant == operatorv1.TigeraSecureEnterprise {
+		if instance.Variant.IsEnterprise() {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraFlexVolume.Image, components.ComponentTigeraFlexVolume.Version)))
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))

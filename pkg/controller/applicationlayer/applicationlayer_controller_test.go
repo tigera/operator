@@ -69,11 +69,11 @@ var _ = Describe("Application layer controller tests", func() {
 			installation = &operatorv1.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operatorv1.InstallationSpec{
-					Variant:  operatorv1.TigeraSecureEnterprise,
+					Variant:  operatorv1.CalicoEnterprise,
 					Registry: "some.registry.org/",
 				},
 				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
+					Variant: operatorv1.CalicoEnterprise,
 					Computed: &operatorv1.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.

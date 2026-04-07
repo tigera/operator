@@ -24,10 +24,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -80,7 +80,7 @@ var _ = Describe("ComponentRendering", func() {
 			&goldmane.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
-					Variant:            operatorv1.TigeraSecureEnterprise,
+					Variant:            operatorv1.CalicoEnterprise,
 				},
 				TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
 				GoldmaneServerKeyPair: defaultTLSKeyPair,
@@ -124,7 +124,7 @@ var _ = Describe("ComponentRendering", func() {
 					Annotations: map[string]string{"hash.operator.tigera.io/key-pair": "e9e6e60e8b6007cbf14a325c3fa1f1692412315a"},
 				},
 				Spec: appsv1.DeploymentSpec{
-					Replicas: ptr.ToPtr(int32(1)),
+					Replicas: ptr.To(int32(1)),
 					Strategy: appsv1.DeploymentStrategy{
 						Type: appsv1.RecreateDeploymentStrategyType,
 					},

@@ -113,7 +113,7 @@ Then, modify the installation CR (e.g., with `kubectl edit installations`) to in
 
 ```
 spec:
-  variant: TigeraSecureEnterprise
+  variant: CalicoEnterprise
   imagePullSecrets:
   - name: tigera-pull-secret
 ```

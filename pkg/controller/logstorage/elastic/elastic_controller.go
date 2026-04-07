@@ -252,7 +252,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 
 	// Get LogStorage resource.
 	ls := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err := r.client.Get(ctx, key, ls)
 	if err != nil {
 		if !errors.IsNotFound(err) {
@@ -281,7 +281,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Get Installation resource.
-	variant, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -290,8 +290,8 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+	if !variant.IsEnterprise() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for network to be an enterprise variant", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
@@ -329,7 +329,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -342,7 +342,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Get the keypairs we need for rendering components. These are created separately by the ES secrets controller.
-	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
+	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -450,7 +450,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	var unusedTLSSecret *corev1.Secret
-	if install.CertificateManagement != nil {
+	if installationSpec.CertificateManagement != nil {
 		// Eck requires us to provide a TLS secret for Kibana and Elasticsearch. It will also inspect that it has a
 		// certificate and private key. However, when certificate management is enabled, we do not want to use a
 		// private key stored in a secret. For this reason, we mount a dummy that the actual Elasticsearch and Kibana
@@ -458,7 +458,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		unusedTLSSecret, err = utils.GetSecret(ctx, r.client, relasticsearch.UnusedCertSecret, common.OperatorNamespace())
 		if unusedTLSSecret == nil {
 			unusedTLSSecret, err = certificatemanagement.CreateSelfSignedSecret(relasticsearch.UnusedCertSecret, common.OperatorNamespace(), relasticsearch.UnusedCertSecret, []string{})
-			unusedTLSSecret.Data[corev1.TLSCertKey] = install.CertificateManagement.CACert
+			unusedTLSSecret.Data[corev1.TLSCertKey] = installationSpec.CertificateManagement.CACert
 		}
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve secret %s/%s", common.OperatorNamespace(), relasticsearch.UnusedCertSecret), err, reqLogger)
@@ -494,7 +494,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	components := []render.Component{
 		eck.ECK(&eck.Configuration{
 			LogStorage:         ls,
-			Installation:       install,
+			Installation:       installationSpec,
 			ManagementCluster:  managementCluster,
 			PullSecrets:        pullSecrets,
 			Provider:           r.provider,
@@ -502,7 +502,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}),
 		render.LogStorage(&render.ElasticsearchConfiguration{
 			LogStorage:              ls,
-			Installation:            install,
+			Installation:            installationSpec,
 			ManagementCluster:       managementCluster,
 			Elasticsearch:           elasticsearch,
 			ClusterConfig:           clusterConfig,
@@ -518,7 +518,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}),
 		kibana.Kibana(&kibana.Configuration{
 			LogStorage:      ls,
-			Installation:    install,
+			Installation:    installationSpec,
 			Kibana:          kibanaCR,
 			KibanaKeyPair:   kibanaKeyPair,
 			PullSecrets:     pullSecrets,

@@ -51,7 +51,7 @@ func WaitToAddLicenseKeyWatch(controller ctrlruntime.Controller, c kubernetes.In
 }
 
 // FetchLicenseKey returns the license if it has been installed. It's useful
-// to prevent rollout of TSEE components that might require it.
+// to prevent rollout of enterprise components that might require it.
 // It will return an error if the license is not installed/cannot be read
 func FetchLicenseKey(ctx context.Context, cli client.Client) (v3.LicenseKey, error) {
 	instance := &v3.LicenseKey{}

@@ -23,7 +23,6 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -31,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -64,7 +64,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 			Format: &envoyapi.ProxyAccessLogFormat{
-				Type: envoyapi.ProxyAccessLogFormatTypeJSON,
+				Type: ptr.To(envoyapi.ProxyAccessLogFormatTypeJSON),
 				JSON: map[string]string{
 					"reporter":                         "gateway",
 					"start_time":                       "%START_TIME%",
@@ -411,7 +411,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		installation := &operatorv1.InstallationSpec{
 			Registry:         "myregistry.io/",
 			ImagePullSecrets: pullSecretRefs,
-			Variant:          operatorv1.TigeraSecureEnterprise,
+			Variant:          operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -495,7 +495,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 	It("honours gateway controller customizations", func() {
 		installation := &operatorv1.InstallationSpec{
 			Registry: "myregistry.io/",
-			Variant:  operatorv1.TigeraSecureEnterprise,
+			Variant:  operatorv1.CalicoEnterprise,
 		}
 		threeReplicas := int32(3)
 		topologySpreadConstraints := []corev1.TopologySpreadConstraint{{
@@ -570,7 +570,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 	It("honours GatewayClass and EnvoyProxy customizations", func() {
 		installation := &operatorv1.InstallationSpec{
 			Registry: "myregistry.io/",
-			Variant:  operatorv1.TigeraSecureEnterprise,
+			Variant:  operatorv1.CalicoEnterprise,
 		}
 		twoReplicas := int32(2)
 		topologySpreadConstraints := []corev1.TopologySpreadConstraint{{
@@ -715,7 +715,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDaemonSet: &envoyapi.KubernetesDaemonSetSpec{
 							Pod: &envoyapi.KubernetesPodSpec{
@@ -829,7 +829,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should deploy waf-http-filter for Enterprise", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -902,7 +902,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -926,13 +926,13 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
 							InitContainers: []corev1.Container{
 								{
 									Name:          "some-other-sidecar",
-									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 									VolumeMounts: []corev1.VolumeMount{
 										{
 											Name:      "some-other-volume",
@@ -1047,7 +1047,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should set owning gateway environment variables in l7-log-collector for Enterprise", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -1104,7 +1104,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should set owning gateway environment variables in l7-log-collector when using custom proxy", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{
@@ -1128,13 +1128,13 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
 							InitContainers: []corev1.Container{
 								{
 									Name:          "some-other-sidecar",
-									RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+									RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 									Env: []corev1.EnvVar{
 										{
 											Name:  "OTHER_VAR",
@@ -1210,7 +1210,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should not set owning gateway env vars in l7-log-collector for DaemonSet deployments", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		daemonSet := operatorv1.GatewayKindDaemonSet
 		gatewayAPI := &operatorv1.GatewayAPI{
@@ -1239,7 +1239,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should create correct RBAC for L7 log collector enrichment", func() {
 		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.TigeraSecureEnterprise,
+			Variant: operatorv1.CalicoEnterprise,
 		}
 		gatewayAPI := &operatorv1.GatewayAPI{
 			Spec: operatorv1.GatewayAPISpec{

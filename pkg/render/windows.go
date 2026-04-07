@@ -77,7 +77,7 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIWindows, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNodeWindows, reg, path, prefix, is))
 	} else {
@@ -116,7 +116,7 @@ func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 
 	objs := []client.Object{}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Include Service for exposing node metrics.
 		objs = append(objs, c.nodeMetricsService())
 	}
@@ -393,7 +393,7 @@ func (c *windowsComponent) windowsVolumes() []corev1.Volume {
 	}
 
 	// Override with Tigera-specific config.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add volume for calico logs.
 		calicoLogVol := corev1.Volume{
 			Name:         "var-log-calico",
@@ -659,7 +659,7 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 		windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -697,13 +697,13 @@ func (c *windowsComponent) windowsEnvVars() []corev1.EnvVar {
 	// Configure provider specific environment variables here.
 	switch c.cfg.Installation.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.cfg.Installation.Variant.IsEnterprise() {
 			// We need to configure a non-default trusted DNS server, since there's no kube-dns.
 			windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 		}
 	case operatorv1.ProviderRKE2:
 		// For RKE2, configure a non-default trusted DNS server, as the DNS service is not named "kube-dns".
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.cfg.Installation.Variant.IsEnterprise() {
 			windowsEnv = append(windowsEnv, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:kube-system/rke2-coredns-rke2-coredns"})
 		}
 	}
@@ -726,7 +726,7 @@ func (c *windowsComponent) windowsVolumeMounts() []corev1.VolumeMount {
 		corev1.VolumeMount{MountPath: "/var/run/calico", Name: "var-run-calico"},
 		corev1.VolumeMount{MountPath: "/var/lib/calico", Name: "var-lib-calico"})
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		extraNodeMounts := []corev1.VolumeMount{
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}

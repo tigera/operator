@@ -181,7 +181,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			return nil, err
 		}
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
-		if installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if installation.Variant.IsEnterprise() {
 			csrImage, err = components.GetReference(
 				components.ComponentTigeraCSRInitContainer,
 				installation.Registry,

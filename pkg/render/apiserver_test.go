@@ -77,9 +77,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
-			ControlPlaneReplicas: ptr.To[int32](2),
+			ControlPlaneReplicas: ptr.To(int32(2)),
 			Registry:             "testregistry.com/",
-			Variant:              operatorv1.TigeraSecureEnterprise,
+			Variant:              operatorv1.CalicoEnterprise,
 		}
 		apiserver = &operatorv1.APIServerSpec{}
 		dnsNames = dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, clusterDomain)
@@ -489,7 +489,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
-		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.Installation.Variant = operatorv1.CalicoEnterprise
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -1039,7 +1039,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
-		cfg.Installation.ControlPlaneReplicas = ptr.To[int32](1)
+		cfg.Installation.ControlPlaneReplicas = ptr.To(int32(1))
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -1050,7 +1050,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
-		cfg.Installation.ControlPlaneReplicas = ptr.To[int32](2)
+		cfg.Installation.ControlPlaneReplicas = ptr.To(int32(2))
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -1786,7 +1786,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
-			ControlPlaneReplicas: ptr.To[int32](2),
+			ControlPlaneReplicas: ptr.To(int32(2)),
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.Calico,
 		}
@@ -2400,9 +2400,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			cfg.MultiTenant = true
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 			cfg.Installation = &operatorv1.InstallationSpec{
-				ControlPlaneReplicas: ptr.To[int32](2),
+				ControlPlaneReplicas: ptr.To(int32(2)),
 				Registry:             "testregistry.com/",
-				Variant:              operatorv1.TigeraSecureEnterprise,
+				Variant:              operatorv1.CalicoEnterprise,
 			}
 		})
 

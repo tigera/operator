@@ -57,7 +57,7 @@ var _ = Describe("CRD management tests", func() {
 			Scheme: scheme,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
+		verifyCRDsExist(c, operator.CalicoEnterprise)
 
 		// Save the networkpolicies CRD so we can restore it when finished
 		npCRD = &apiextenv1.CustomResourceDefinition{
@@ -186,7 +186,7 @@ var _ = Describe("CRD management tests", func() {
 		})
 		It("Should add tier to networkpolicy CRD", func() {
 			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, EnterpriseCRDsExist)
-			operatorDone = createInstallation(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.TigeraSecureEnterprise})
+			operatorDone = createInstallation(c, mgr, shutdownContext, &operator.InstallationSpec{Variant: operator.CalicoEnterprise})
 
 			By("Checking that the networkpolicies CRD is updated with tier")
 			Eventually(func() error {

@@ -330,7 +330,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for the installation object.
-	variant, network, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -341,7 +341,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(network, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -362,7 +362,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		certificatemanager.WithLogger(reqLogger),
 		certificatemanager.WithTenant(tenant),
 	}
-	certificateManager, err := certificatemanager.Create(r.client, network, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -445,7 +445,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	intrusionDetectionCfg := &render.IntrusionDetectionConfiguration{
 		IntrusionDetection:           instance,
 		LogCollector:                 lc,
-		Installation:                 network,
+		Installation:                 installationSpec,
 		PullSecrets:                  pullSecrets,
 		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 		ClusterDomain:                r.opts.ClusterDomain,
@@ -462,7 +462,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 	setUp := render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
-		Installation:    network,
+		Installation:    installationSpec,
 		PullSecrets:     pullSecrets,
 		Namespace:       helper.InstallNamespace(),
 		PSS:             getPSS(lc),
@@ -520,7 +520,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 		dpiComponent := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: instance,
-			Installation:       network,
+			Installation:       installationSpec,
 			TyphaNodeTLS:       typhaNodeTLS,
 			PullSecrets:        pullSecrets,
 			OpenShift:          r.opts.DetectedProvider.IsOpenShift(),
@@ -548,7 +548,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	} else {
 		dpiComponent := dpi.DPI(&dpi.DPIConfig{
 			IntrusionDetection: instance,
-			Installation:       network,
+			Installation:       installationSpec,
 			PullSecrets:        pullSecrets,
 			OpenShift:          r.opts.DetectedProvider.IsOpenShift(),
 			ManagedCluster:     isManagedCluster,

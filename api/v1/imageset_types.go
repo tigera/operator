@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 /*
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -49,7 +49,7 @@ type Image struct {
 // ImageSet is used to specify image digests for the images that the operator deploys.
 // The name of the ImageSet is expected to be in the format `<variant>-<release>`.
 // The `variant` used is `enterprise` if the InstallationSpec Variant is
-// `TigeraSecureEnterprise` otherwise it is `calico`.
+// `CalicoEnterprise` or `TigeraSecureEnterprise`, otherwise it is `calico`.
 // The `release` must match the version of the variant that the operator is built to deploy,
 // this version can be obtained by passing the `--version` flag to the operator binary.
 type ImageSet struct {

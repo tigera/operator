@@ -178,7 +178,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	if printEnterpriseCRDs != "" {
-		if err := showCRDs(operatortigeraiov1.TigeraSecureEnterprise, printEnterpriseCRDs); err != nil {
+		if err := showCRDs(operatortigeraiov1.CalicoEnterprise, printEnterpriseCRDs); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}

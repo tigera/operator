@@ -25,7 +25,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -38,6 +37,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -297,8 +297,8 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 			if resources.namespace == nil {
 				panic("missing Namespace from gateway API YAML")
 			}
-			if len(resources.k8sCRDs) != 11 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 11)", len(resources.k8sCRDs)))
+			if len(resources.k8sCRDs) != 12 {
+				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 12)", len(resources.k8sCRDs)))
 			}
 			if len(resources.envoyCRDs) != 8 {
 				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
@@ -430,7 +430,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 	prefix := pr.cfg.Installation.ImagePrefix
 
 	var err error
-	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if pr.cfg.Installation.Variant.IsEnterprise() {
 		pr.envoyGatewayImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyGateway, reg, path, prefix, is)
 		if err != nil {
 			return err
@@ -529,7 +529,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 
 	// Add WAF HTTP Filter RBAC resources for Enterprise variant
-	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if pr.cfg.Installation.Variant.IsEnterprise() {
 		objs = append(objs,
 			pr.wafHttpFilterServiceAccount(),
 			pr.wafHttpFilterClusterRole(),
@@ -710,7 +710,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
-	envoyProxy.Spec.Provider.Type = envoyapi.ProviderTypeKubernetes
+	envoyProxy.Spec.Provider.Type = envoyapi.EnvoyProxyProviderTypeKubernetes
 	if envoyProxy.Spec.Provider.Kubernetes == nil {
 		envoyProxy.Spec.Provider.Kubernetes = &envoyapi.EnvoyProxyKubernetesProvider{}
 	}
@@ -761,7 +761,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	applyEnvoyProxyServiceOverrides(envoyProxy, classSpec.GatewayService)
 
 	// Setup WAF HTTP Filter and l7 Log collector on Enterprise.
-	if pr.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if pr.cfg.Installation.Variant.IsEnterprise() {
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
@@ -777,7 +777,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					"-socketPath",
 					"/var/run/waf-http-filter/extproc.sock",
 				},
-				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      wafFilterName,
@@ -815,7 +815,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					OwningGatewayNameEnvVar,
 					OwningGatewayNamespaceEnvVar,
 				},
-				RestartPolicy: ptr.ToPtr[corev1.ContainerRestartPolicy](corev1.ContainerRestartPolicyAlways),
+				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      "access-logs",
@@ -902,7 +902,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 				VolumeSource: corev1.VolumeSource{
 					HostPath: &corev1.HostPathVolumeSource{
 						Path: "/var/log/calico",
-						Type: ptr.ToPtr(corev1.HostPathDirectoryOrCreate),
+						Type: ptr.To(corev1.HostPathDirectoryOrCreate),
 					},
 				},
 				Name: "var-log-calico",
@@ -1013,7 +1013,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						},
 					},
 					Format: &envoyapi.ProxyAccessLogFormat{
-						Type: "JSON",
+						Type: ptr.To(envoyapi.ProxyAccessLogFormatTypeJSON),
 						JSON: map[string]string{
 							"reporter":                         "gateway",
 							"start_time":                       "%START_TIME%",

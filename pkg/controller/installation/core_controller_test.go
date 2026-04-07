@@ -40,6 +40,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -56,7 +57,6 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/imports/admission"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -157,7 +157,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -217,12 +217,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				&operator.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operator.InstallationSpec{
-						Variant:               operator.TigeraSecureEnterprise,
+						Variant:               operator.CalicoEnterprise,
 						Registry:              "some.registry.org/",
 						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 					},
 					Status: operator.InstallationStatus{
-						Variant: operator.TigeraSecureEnterprise,
+						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
 							Registry: "my-reg",
 							// The test is provider agnostic.
@@ -777,7 +777,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -825,11 +825,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:  operator.TigeraSecureEnterprise,
+					Variant:  operator.CalicoEnterprise,
 					Registry: "some.registry.org/",
 				},
 				Status: operator.InstallationStatus{
-					Variant: operator.TigeraSecureEnterprise,
+					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.
@@ -855,7 +855,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, &pool)).NotTo(HaveOccurred())
 
 			// Configure ourselves as a management cluster.
-			Expect(c.Create(ctx, &operator.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &operator.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}})).NotTo(HaveOccurred())
 
 			expectedDNSNames = dns.GetServiceDNSNames(render.ManagerServiceName, render.ManagerNamespace, dns.DefaultClusterDomain)
 			expectedDNSNames = append(expectedDNSNames, "localhost")
@@ -1001,7 +1001,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -1065,7 +1065,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:               operator.TigeraSecureEnterprise,
+					Variant:               operator.CalicoEnterprise,
 					Registry:              "some.registry.org/",
 					CertificateManagement: &operator.CertificateManagement{CACert: cert},
 					ImagePullSecrets: []corev1.LocalObjectReference{{
@@ -1171,7 +1171,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Endpoints: []discoveryv1.Endpoint{
 							{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 						},
-						Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+						Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 					})
 			}
 
@@ -1307,7 +1307,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							Endpoints: []discoveryv1.Endpoint{
 								{Addresses: []string{"5.6.7.8", "5.6.7.9", "5.6.7.10"}},
 							},
-							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 						})).NotTo(HaveOccurred())
 					Expect(c.Create(
 						ctx,
@@ -1317,7 +1317,7 @@ var _ = Describe("Testing core-controller installation", func() {
 							Endpoints: []discoveryv1.Endpoint{
 								{Addresses: []string{"fd00::1", "fd00::2", "fd00::3"}},
 							},
-							Ports: []discoveryv1.EndpointPort{{Port: ptr.Int32ToPtr(6443)}},
+							Ports: []discoveryv1.EndpointPort{{Port: ptr.To(int32(6443))}},
 						})).NotTo(HaveOccurred())
 
 					By("r.Reconcile()")
@@ -2223,7 +2223,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -2271,7 +2271,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operator.InstallationSpec{
-					Variant:            operator.TigeraSecureEnterprise,
+					Variant:            operator.CalicoEnterprise,
 					Registry:           "some.registry.org/",
 					KubernetesProvider: operator.ProviderEKS,
 					CNI: &operator.CNISpec{
@@ -2282,7 +2282,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 				Status: operator.InstallationStatus{
-					Variant: operator.TigeraSecureEnterprise,
+					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
 						Registry: "my-reg",
 						// The test is provider agnostic.
@@ -2360,7 +2360,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -2422,12 +2422,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				&operator.Installation{
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operator.InstallationSpec{
-						Variant:               operator.TigeraSecureEnterprise,
+						Variant:               operator.CalicoEnterprise,
 						Registry:              "some.registry.org/",
 						CertificateManagement: &operator.CertificateManagement{CACert: prometheusTLS.GetCertificatePEM()},
 					},
 					Status: operator.InstallationStatus{
-						Variant: operator.TigeraSecureEnterprise,
+						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
 							Registry: "my-reg",
 							// The test is provider agnostic.
@@ -2757,7 +2757,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			},
 		}
 
-		installation.Spec.Variant = operator.TigeraSecureEnterprise
+		installation.Spec.Variant = operator.CalicoEnterprise
 
 		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
 		Expect(err).NotTo(HaveOccurred())

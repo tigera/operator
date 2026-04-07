@@ -167,7 +167,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Installation, for k8s provider info.
-	variant, installation, err := utils.GetInstallation(ctx, r)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -182,14 +182,14 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// Get the Kubernetes Gateway API CRDs.
-	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installation.KubernetesProvider)
+	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider)
 
 	// Check CRDs are present and only create it if not
 	handler := utils.NewComponentHandler(log, r, r.scheme, nil)
@@ -206,7 +206,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Render resources for Istio support
 	istioCfg := &istio.Configuration{
-		Installation:   installation,
+		Installation:   installationSpec,
 		PullSecrets:    pullSecrets,
 		Istio:          instance,
 		IstioNamespace: istio.IstioNamespace,
@@ -219,7 +219,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Apply the image set
-	if err = imageset.ApplyImageSet(ctx, r.Client, installation.Variant, istioComponent); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.Client, installationSpec.Variant, istioComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}

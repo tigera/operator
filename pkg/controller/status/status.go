@@ -827,6 +827,147 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 	return ""
 }
 
+// diagnosePods lists pods matching the selector and returns a podIssue for each
+// unhealthy pod found. If currentRevision is non-empty, pods not matching that
+// revision are marked as old-revision.
+func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace string, currentRevision string) []podIssue {
+	l := corev1.PodList{}
+	s, err := metav1.LabelSelectorAsMap(selector)
+	if err != nil {
+		panic(err)
+	}
+	err = m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to list pods for diagnosis")
+		return nil
+	}
+
+	var issues []podIssue
+	for _, p := range l.Items {
+		oldRevision := currentRevision != "" && !podMatchesRevision(p, currentRevision)
+
+		if p.Status.Phase == corev1.PodFailed {
+			issues = append(issues, podIssue{
+				severity:      severityFailing,
+				issueType:     issuePodFailed,
+				message:       fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name),
+				isOldRevision: oldRevision,
+			})
+			continue
+		}
+
+		// Check init and regular container statuses for errors.
+		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, oldRevision); len(iss) > 0 {
+			issues = append(issues, iss...)
+			continue
+		}
+		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, oldRevision); len(iss) > 0 {
+			issues = append(issues, iss...)
+			continue
+		}
+
+		// Running but not passing readiness checks.
+		if p.Status.Phase == corev1.PodRunning {
+			for _, cond := range p.Status.Conditions {
+				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
+					issues = append(issues, podIssue{
+						severity:      severityFailing,
+						issueType:     issueNotReady,
+						message:       fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name),
+						isOldRevision: oldRevision,
+					})
+					break
+				}
+			}
+			continue
+		}
+
+		// Pending pod - check for scheduling failures.
+		if p.Status.Phase == corev1.PodPending {
+			msg := fmt.Sprintf("Pod %s/%s is pending", p.Namespace, p.Name)
+			for _, cond := range p.Status.Conditions {
+				if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
+					if cond.Message != "" {
+						msg += fmt.Sprintf(": %s", cond.Message)
+					}
+					break
+				}
+			}
+			issues = append(issues, podIssue{
+				severity:      severityProgressing,
+				issueType:     issuePending,
+				message:       msg,
+				isOldRevision: oldRevision,
+			})
+		}
+	}
+	return issues
+}
+
+// diagnoseContainers checks a list of container statuses for known error states and
+// returns a podIssue for each one found.
+func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevision bool) []podIssue {
+	var issues []podIssue
+	for _, c := range statuses {
+		if c.State.Waiting != nil {
+			switch c.State.Waiting.Reason {
+			case "CrashLoopBackOff":
+				msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
+				var termReason string
+				var exitCode int32
+				if lt := c.LastTerminationState.Terminated; lt != nil {
+					termReason = lt.Reason
+					exitCode = lt.ExitCode
+					if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
+						msg += " (exit code 137, possible liveness probe failure)"
+					} else {
+						msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+					}
+				}
+				issues = append(issues, podIssue{
+					severity:          severityFailing,
+					issueType:         issueCrashLoopBackOff,
+					message:           msg,
+					isOldRevision:     oldRevision,
+					terminationReason: termReason,
+					exitCode:          exitCode,
+				})
+			case "ImagePullBackOff", "ErrImagePull":
+				issues = append(issues, podIssue{
+					severity:      severityFailing,
+					issueType:     issueImagePull,
+					message:       fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name),
+					isOldRevision: oldRevision,
+				})
+			}
+		}
+		if c.State.Terminated != nil {
+			if c.State.Terminated.Reason == terminationReasonError {
+				issues = append(issues, podIssue{
+					severity:      severityFailing,
+					issueType:     issueTerminated,
+					message:       fmt.Sprintf("Pod %s/%s has terminated container: %s", p.Namespace, p.Name, c.Name),
+					isOldRevision: oldRevision,
+				})
+			}
+		}
+	}
+	return issues
+}
+
+// podMatchesRevision checks whether a pod belongs to the given revision.
+// Works for DaemonSets and StatefulSets (controller-revision-hash label)
+// and Deployments (pod-template-hash label).
+func podMatchesRevision(p corev1.Pod, currentRevision string) bool {
+	if hash, ok := p.Labels[appsv1.ControllerRevisionHashLabelKey]; ok {
+		return hash == currentRevision
+	}
+	if hash, ok := p.Labels[appsv1.DefaultDeploymentUniqueLabelKey]; ok {
+		return hash == currentRevision
+	}
+	return true
+}
+
 func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {
 		// Never set any conditions unless the status manager is enabled.

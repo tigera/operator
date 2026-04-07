@@ -55,7 +55,7 @@ var _ = Describe("test crds pkg", func() {
 
 		It(fmt.Sprintf("includes K8s policy CRDs for Enterprise (v3=%t)", v3), func() {
 			enterpriseCRDs = nil
-			crds := GetCRDs(opv1.CalicoEnterprise, v3)
+			crds := GetCRDs(opv1.TigeraSecureEnterprise, v3)
 			crdNames := map[string]bool{}
 			for _, crd := range crds {
 				crdNames[crd.Name] = true

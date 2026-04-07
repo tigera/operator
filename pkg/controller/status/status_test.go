@@ -390,6 +390,155 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 
+		Context("when pod is crash looping", func() {
+			var gen int64
+
+			createCrashLoopPodAndDeployment := func(lastTermination *corev1.ContainerStateTerminated) {
+				sm.ReadyToMonitor()
+				podStatus := corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name: "test-container",
+							State: corev1.ContainerState{
+								Waiting: &corev1.ContainerStateWaiting{
+									Reason: "CrashLoopBackOff",
+								},
+							},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: lastTermination,
+							},
+						},
+					},
+				}
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1pod-crash",
+						Labels:    map[string]string{"dp1Key": "dp1Value"},
+					},
+					Spec:   corev1.PodSpec{},
+					Status: podStatus,
+				})).NotTo(HaveOccurred())
+
+				gen = 5
+				replicas := int32(1)
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:  "NS1",
+						Name:       "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 1,
+						AvailableReplicas:   0,
+						ReadyReplicas:       0,
+					},
+				})).NotTo(HaveOccurred())
+			}
+
+			It("should include OOMKilled reason in degraded message", func() {
+				createCrashLoopPodAndDeployment(&corev1.ContainerStateTerminated{
+					Reason:   "OOMKilled",
+					ExitCode: 137,
+				})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring("(OOMKilled, exit code 137)")))
+			})
+
+			It("should suggest liveness probe failure for exit code 137 with Error reason", func() {
+				createCrashLoopPodAndDeployment(&corev1.ContainerStateTerminated{
+					Reason:   "Error",
+					ExitCode: 137,
+				})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring("possible liveness probe failure")))
+			})
+
+			It("should include exit code for other termination reasons", func() {
+				createCrashLoopPodAndDeployment(&corev1.ContainerStateTerminated{
+					Reason:   "Error",
+					ExitCode: 1,
+				})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring("(Error, exit code 1)")))
+			})
+
+			It("should report crash loop without detail when no last termination state", func() {
+				createCrashLoopPodAndDeployment(nil)
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(And(
+					ContainSubstring("crash looping container"),
+					Not(ContainSubstring("exit code")),
+				)))
+			})
+		})
+
+		Context("when pod is running but not ready", func() {
+			var gen int64
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1pod-notready",
+						Labels: map[string]string{
+							"dp1Key": "dp1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.ContainersReady,
+								Status: corev1.ConditionFalse,
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+				gen = 5
+			})
+			It("should degrade when the deployment does not have the correct pod counts", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 1,
+						AvailableReplicas:   0,
+						ReadyReplicas:       0,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
+			})
+		})
+
 		It("Should handle basic state changes", func() {
 			// We expect no state to be "True" at boot.
 			Expect(sm.IsAvailable()).To(BeFalse())

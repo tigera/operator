@@ -670,7 +670,7 @@ var _ = Describe("Status reporting tests", func() {
 						Phase: corev1.PodRunning,
 						ContainerStatuses: []corev1.ContainerStatus{
 							{
-								Name: "c1",
+								Name:  "c1",
 								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
 								LastTerminationState: corev1.ContainerState{
 									Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},

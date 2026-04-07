@@ -51,7 +51,129 @@ const (
 	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
 	// killer, manual kill) can also produce this code.
 	exitCodeSIGKILL = 137
+
+	// Container waiting reason strings. These are set by the container runtime and
+	// kubelet; Kubernetes does not define constants for them.
+	waitingCrashLoopBackOff = "CrashLoopBackOff"
+	waitingImagePullBackOff = "ImagePullBackOff"
+	waitingErrImagePull     = "ErrImagePull"
+
+	customOverridesAnnotation = "operator.tigera.io/custom-overrides"
 )
+
+// hasOverride checks if the workload has a specific override type configured.
+func hasOverride(annotations map[string]string, overrideType string) bool {
+	val, ok := annotations[customOverridesAnnotation]
+	if !ok {
+		return false
+	}
+	for _, t := range strings.Split(val, ",") {
+		if t == overrideType {
+			return true
+		}
+	}
+	return false
+}
+
+type podIssueSeverity int
+
+const (
+	severityProgressing podIssueSeverity = iota
+	severityFailing
+)
+
+// podIssueType defines the category of a pod issue. The enum order determines display
+// priority when issues compete for the 3-slot cap in summarizeIssues.
+type podIssueType int
+
+const (
+	issueCrashLoopBackOff podIssueType = iota
+	issueImagePull
+	issueTerminated
+	issuePodFailed
+	issueNotReady
+	issuePending
+)
+
+// podIssue represents a single diagnosed problem with a pod.
+type podIssue struct {
+	severity  podIssueSeverity
+	issueType podIssueType
+	message   string
+
+	// isOldRevision is true if the pod belongs to an old revision during a rollout.
+	isOldRevision bool
+
+	// terminationReason and exitCode provide dedup granularity within an issue type.
+	terminationReason string
+	exitCode          int32
+}
+
+// key returns a deduplication key for this issue. Issues with the same key are grouped
+// together in summarizeIssues, so that e.g. 10 pods all OOMKilled produce one message
+// with "(10 pods affected)" rather than 10 separate messages.
+func (p podIssue) key() string {
+	return fmt.Sprintf("%d:%s:%d", p.issueType, p.terminationReason, p.exitCode)
+}
+
+// maxIssuesPerWorkload is the maximum number of distinct issue types reported per workload.
+// Beyond this cap, additional issues are dropped to keep messages concise.
+const maxIssuesPerWorkload = 3
+
+// summarizeIssues deduplicates, prioritizes, and caps a list of pod issues into
+// human-readable failing and progressing message slices.
+func summarizeIssues(issues []podIssue) (failing []string, progressing []string) {
+	if len(issues) == 0 {
+		return nil, nil
+	}
+
+	// Sort: new-revision first, then by issue type priority (enum order).
+	sort.SliceStable(issues, func(i, j int) bool {
+		if issues[i].isOldRevision != issues[j].isOldRevision {
+			return !issues[i].isOldRevision
+		}
+		return issues[i].issueType < issues[j].issueType
+	})
+
+	// Group by key. First occurrence provides the message; count tracks duplicates.
+	type issueGroup struct {
+		issue podIssue
+		count int
+	}
+	seen := map[string]int{}
+	var groups []issueGroup
+	for _, iss := range issues {
+		k := iss.key()
+		if idx, ok := seen[k]; ok {
+			groups[idx].count++
+			continue
+		}
+		seen[k] = len(groups)
+		groups = append(groups, issueGroup{issue: iss, count: 1})
+	}
+
+	// Cap at maxIssuesPerWorkload unique reasons.
+	if len(groups) > maxIssuesPerWorkload {
+		groups = groups[:maxIssuesPerWorkload]
+	}
+
+	// Format messages.
+	for _, g := range groups {
+		msg := g.issue.message
+		if g.count > 1 {
+			msg += fmt.Sprintf(" (%d pods affected)", g.count)
+		}
+		if g.issue.isOldRevision {
+			msg += " (old revision)"
+		}
+		if g.issue.severity == severityFailing {
+			failing = append(failing, msg)
+		} else {
+			progressing = append(progressing, msg)
+		}
+	}
+	return failing, progressing
+}
 
 // StatusManager manages the status for a single controller and component, and reports the status via
 // a TigeraStatus API object. The status manager uses the following conditions/states to represent the
@@ -498,7 +620,11 @@ func (m *statusManager) syncState() {
 		ds := &appsv1.DaemonSet{}
 		err := m.client.Get(context.TODO(), dsnn, ds)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query daemonset")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("DaemonSet %q not found", dsnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query daemonset")
+			}
 			continue
 		}
 		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
@@ -521,22 +647,22 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		// Check if any pods within the daemonset are failing.
-		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "daemonset", dsnn).Info("Failed to check for failing pods")
-			continue
-		}
+		revision := m.currentDaemonSetRevision(ds)
+		issues := m.diagnosePods(ds.Spec.Selector, ds.Namespace, revision, ds.Annotations)
+		f, p := summarizeIssues(issues)
+		failing = append(failing, f...)
+		progressing = append(progressing, p...)
 	}
 
 	for _, depnn := range m.deployments {
 		dep := &appsv1.Deployment{}
 		err := m.client.Get(context.TODO(), depnn, dep)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query deployment")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("Deployment %q not found", depnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query deployment")
+			}
 			continue
 		}
 		if dep.Status.UnavailableReplicas > 0 {
@@ -561,22 +687,22 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "deployment", depnn).Info("Failed to check for failing pods")
-			continue
-		}
+		revision := m.currentDeploymentRevision(dep)
+		issues := m.diagnosePods(dep.Spec.Selector, dep.Namespace, revision, dep.Annotations)
+		f, p := summarizeIssues(issues)
+		failing = append(failing, f...)
+		progressing = append(progressing, p...)
 	}
 
 	for _, depnn := range m.statefulsets {
 		ss := &appsv1.StatefulSet{}
 		err := m.client.Get(context.TODO(), depnn, ss)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query statefulset")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("StatefulSet %q not found", depnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query statefulset")
+			}
 			continue
 		}
 		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
@@ -599,21 +725,20 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "statefuleset", depnn).Info("Failed to check for failing pods")
-			continue
-		}
+		issues := m.diagnosePods(ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision, ss.Annotations)
+		f, p := summarizeIssues(issues)
+		failing = append(failing, f...)
+		progressing = append(progressing, p...)
 	}
 
 	for _, depnn := range m.cronjobs {
 		cj := &batchv1.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
-			log.WithValues("reason", err).Info("Failed to query cronjobs")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("CronJob %q not found", depnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query cronjobs")
+			}
 			continue
 		}
 
@@ -676,9 +801,10 @@ func (m *statusManager) removeTigeraStatus() {
 	}
 }
 
-// podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
-// to be in CrashLoopBackOff state.
-func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) (string, error) {
+// diagnosePods lists pods matching the selector and returns a podIssue for each
+// unhealthy pod found. If currentRevision is non-empty, pods not matching that
+// revision are marked as old-revision.
+func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace string, currentRevision string, workloadAnnotations map[string]string) []podIssue {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
@@ -686,61 +812,200 @@ func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace st
 	}
 	err = m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
 	if err != nil {
-		return "", err
+		log.WithValues("reason", err).Info("Failed to list pods for diagnosis")
+		return nil
 	}
+
+	var issues []podIssue
 	for _, p := range l.Items {
+		oldRevision := currentRevision != "" && !podMatchesRevision(p, currentRevision)
+
 		if p.Status.Phase == corev1.PodFailed {
-			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name), nil
-		}
-		for _, c := range p.Status.InitContainerStatuses {
-			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg, nil
-			}
-		}
-		for _, c := range p.Status.ContainerStatuses {
-			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg, nil
-			}
+			issues = append(issues, podIssue{
+				severity:      severityFailing,
+				issueType:     issuePodFailed,
+				message:       fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name),
+				isOldRevision: oldRevision,
+			})
+			continue
 		}
 
-		// If none of the container-level checks matched, check if the pod is running but
-		// not passing readiness checks.
+		// Check init and regular container statuses for errors.
+		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, oldRevision, workloadAnnotations); len(iss) > 0 {
+			issues = append(issues, iss...)
+			continue
+		}
+		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, oldRevision, workloadAnnotations); len(iss) > 0 {
+			issues = append(issues, iss...)
+			continue
+		}
+
+		// Running but not passing readiness checks.
 		if p.Status.Phase == corev1.PodRunning {
 			for _, cond := range p.Status.Conditions {
 				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
-					return fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name), nil
+					msg := fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name)
+					if hasOverride(workloadAnnotations, "readinessProbe") {
+						msg += "; custom readiness probe configuration is in effect"
+					}
+					issues = append(issues, podIssue{
+						severity:      severityFailing,
+						issueType:     issueNotReady,
+						message:       msg,
+						isOldRevision: oldRevision,
+					})
+					break
 				}
 			}
+			continue
+		}
+
+		// Pending pod - check for scheduling failures.
+		if p.Status.Phase == corev1.PodPending {
+			msg := fmt.Sprintf("Pod %s/%s is pending", p.Namespace, p.Name)
+			for _, cond := range p.Status.Conditions {
+				if cond.Type == corev1.PodScheduled && cond.Status == corev1.ConditionFalse {
+					if cond.Message != "" {
+						msg += fmt.Sprintf(": %s", cond.Message)
+					}
+					break
+				}
+			}
+			issues = append(issues, podIssue{
+				severity:      severityProgressing,
+				issueType:     issuePending,
+				message:       msg,
+				isOldRevision: oldRevision,
+			})
 		}
 	}
-	return "", nil
+	return issues
 }
 
-func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {
-	if c.State.Waiting != nil {
-		// Check well-known error states here and report an appropriate mesage to the end user.
-		switch c.State.Waiting.Reason {
-		case "CrashLoopBackOff":
-			msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
-			if lt := c.LastTerminationState.Terminated; lt != nil {
-				if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
-					msg += " (exit code 137, possible liveness probe failure)"
-				} else {
-					msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+// diagnoseContainers checks a list of container statuses for known error states and
+// returns a podIssue for each one found.
+func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevision bool, workloadAnnotations map[string]string) []podIssue {
+	var issues []podIssue
+	for _, c := range statuses {
+		if c.State.Waiting != nil {
+			switch c.State.Waiting.Reason {
+			case waitingCrashLoopBackOff:
+				msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
+				var termReason string
+				var exitCode int32
+				if lt := c.LastTerminationState.Terminated; lt != nil {
+					termReason = lt.Reason
+					exitCode = lt.ExitCode
+					if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
+						msg += " (exit code 137, possible liveness probe failure)"
+						if hasOverride(workloadAnnotations, "livenessProbe") {
+							msg += "; custom liveness probe configuration is in effect"
+						}
+					} else {
+						msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+						if lt.Reason == "OOMKilled" && hasOverride(workloadAnnotations, "resources") {
+							msg += "; custom resource limits are in effect"
+						}
+					}
 				}
+				issues = append(issues, podIssue{
+					severity:          severityFailing,
+					issueType:         issueCrashLoopBackOff,
+					message:           msg,
+					isOldRevision:     oldRevision,
+					terminationReason: termReason,
+					exitCode:          exitCode,
+				})
+			case waitingImagePullBackOff, waitingErrImagePull:
+				issues = append(issues, podIssue{
+					severity:      severityFailing,
+					issueType:     issueImagePull,
+					message:       fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name),
+					isOldRevision: oldRevision,
+				})
 			}
-			return msg
-		case "ImagePullBackOff", "ErrImagePull":
-			return fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name)
+		}
+		if c.State.Terminated != nil {
+			if c.State.Terminated.Reason == terminationReasonError {
+				issues = append(issues, podIssue{
+					severity:      severityFailing,
+					issueType:     issueTerminated,
+					message:       fmt.Sprintf("Pod %s/%s has terminated container: %s", p.Namespace, p.Name, c.Name),
+					isOldRevision: oldRevision,
+				})
+			}
 		}
 	}
-	if c.State.Terminated != nil {
-		if c.State.Terminated.Reason == terminationReasonError {
-			return fmt.Sprintf("Pod %s/%s has terminated container: %s", p.Namespace, p.Name, c.Name)
+	return issues
+}
+
+// podMatchesRevision checks whether a pod belongs to the given revision.
+// Works for DaemonSets and StatefulSets (controller-revision-hash label)
+// and Deployments (pod-template-hash label).
+func podMatchesRevision(p corev1.Pod, currentRevision string) bool {
+	if hash, ok := p.Labels[appsv1.ControllerRevisionHashLabelKey]; ok {
+		return hash == currentRevision
+	}
+	if hash, ok := p.Labels[appsv1.DefaultDeploymentUniqueLabelKey]; ok {
+		return hash == currentRevision
+	}
+	return true
+}
+
+// currentDeploymentRevision returns the pod-template-hash of the active ReplicaSet
+// for the given Deployment. Returns empty string if it cannot be determined.
+// Only called when the Deployment is unhealthy. The List call goes through
+// the controller-runtime informer cache, not directly to the API server.
+func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string {
+	rsList := &appsv1.ReplicaSetList{}
+	s, err := metav1.LabelSelectorAsMap(dep.Spec.Selector)
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to parse deployment selector for revision lookup")
+		return ""
+	}
+	err = m.client.List(context.TODO(), rsList, client.MatchingLabels(s), client.InNamespace(dep.Namespace))
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to list ReplicaSets for revision lookup")
+		return ""
+	}
+
+	for _, rs := range rsList.Items {
+		if ref := metav1.GetControllerOf(&rs); ref == nil || ref.UID != dep.UID {
+			continue
+		}
+		if rs.Status.Replicas > 0 {
+			return rs.Labels[appsv1.DefaultDeploymentUniqueLabelKey]
 		}
 	}
 	return ""
 }
+
+// currentDaemonSetRevision returns the controller-revision-hash of the most recent
+// ControllerRevision for the given DaemonSet. Returns empty string if it cannot be determined.
+// Only called when the DaemonSet is unhealthy. The List call goes through
+// the controller-runtime informer cache, not directly to the API server.
+func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
+	revList := &appsv1.ControllerRevisionList{}
+	err := m.client.List(context.TODO(), revList, client.InNamespace(ds.Namespace))
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to list ControllerRevisions for revision lookup")
+		return ""
+	}
+
+	var maxRevision int64
+	var currentHash string
+	for _, rev := range revList.Items {
+		if ref := metav1.GetControllerOf(&rev); ref == nil || ref.UID != ds.UID {
+			continue
+		}
+		if rev.Revision > maxRevision {
+			maxRevision = rev.Revision
+			currentHash = rev.Labels[appsv1.ControllerRevisionHashLabelKey]
+		}
+	}
+	return currentHash
+}
+
 
 func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {

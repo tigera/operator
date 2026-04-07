@@ -389,14 +389,40 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		},
 		{
 			// The policy name migrator needs to be able to CRUD Calico NetworkPolicies.
+			// The UpdateTimestamp controller also needs get/list/watch + update on status.
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"networkpolicies",
 				"globalnetworkpolicies",
 				"stagednetworkpolicies",
 				"stagedglobalnetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"networkpolicies/status",
+				"globalnetworkpolicies/status",
+				"stagednetworkpolicies/status",
+				"stagedglobalnetworkpolicies/status",
+				"stagedkubernetesnetworkpolicies/status",
 			},
 			Verbs: []string{"get", "list", "watch", "create", "update", "delete"},
+		},
+		{
+			// Tiered policy pseudo-kinds required by the Calico apiserver for
+			// the UpdateTimestamp controller to list/watch/update policies.
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"tier.networkpolicies",
+				"tier.globalnetworkpolicies",
+				"tier.stagednetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"tier.stagedkubernetesnetworkpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "update", "patch"},
+		},
+		{
+			// The UpdateTimestamp controller needs to read and annotate K8s native NetworkPolicies.
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"networkpolicies"},
+			Verbs:     []string{"get", "list", "watch", "update", "patch"},
 		},
 		{
 			// The IPAM GC controller uses informers to list/watch KubeVirt VMs/VMIs for IP garbage collection.

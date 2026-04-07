@@ -16,6 +16,7 @@ package utils
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"maps"
 	"reflect"
@@ -48,6 +49,10 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
+
+// errObjectIgnored is returned by createOrUpdateObject when an existing object has the
+// unsupported.operator.tigera.io/ignore annotation.
+var errObjectIgnored = fmt.Errorf("object has unsupported ignore annotation")
 
 const TLS_CIPHERS_ENV_VAR_NAME = "TLS_CIPHER_SUITES"
 
@@ -313,7 +318,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// The object exists. Update it, unless the user has marked it as "ignored".
 	if IgnoreObject(cur) {
 		logCtx.Info("Ignoring annotated object")
-		return nil
+		return errObjectIgnored
 	}
 	logCtx.V(2).Info("Resource already exists, update it")
 
@@ -464,7 +469,19 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	conflictRetry:
 		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
 		if err != nil {
-			if errors.IsAlreadyExists(err) {
+			if stderrors.Is(err, errObjectIgnored) {
+				if status != nil {
+					kind := obj.GetObjectKind().GroupVersionKind().Kind
+					if kind == "" {
+						kind = reflect.TypeOf(obj).Elem().Name()
+					}
+					warningKey := fmt.Sprintf("ignore-%s-%s", kind, key)
+					status.SetWarning(warningKey, fmt.Sprintf(
+						"%s %q has the unsupported ignore annotation; the operator is not managing this resource",
+						kind, key,
+					))
+				}
+			} else if errors.IsAlreadyExists(err) {
 				// Remember that we've had an "already exists" error, but otherwise
 				// carry on.
 				alreadyExistsErr = err
@@ -489,6 +506,16 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 			statefulsets = append(statefulsets, key)
 		case *batchv1.CronJob:
 			cronJobs = append(cronJobs, key)
+		}
+
+		// Object updated normally - clear any stale ignore warning.
+		if err == nil && status != nil {
+			kind := obj.GetObjectKind().GroupVersionKind().Kind
+			if kind == "" {
+				kind = reflect.TypeOf(obj).Elem().Name()
+			}
+			warningKey := fmt.Sprintf("ignore-%s-%s", kind, key)
+			status.ClearWarning(warningKey)
 		}
 
 		continue

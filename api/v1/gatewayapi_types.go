@@ -225,6 +225,9 @@ type GatewayControllerDeploymentContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the controller's "envoy-gateway"
+	// container.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 
 	// ReadinessProbe allows customization of the readiness probe timing parameters.
 	// The probe handler is set by the operator and cannot be overridden.
@@ -235,9 +238,6 @@ type GatewayControllerDeploymentContainer struct {
 	// The probe handler is set by the operator and cannot be overridden.
 	// +optional
 	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
-	// container.
-	// +optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // GatewayCertgenJob allows customization of the gateway certgen job.
@@ -293,6 +293,9 @@ type GatewayCertgenJobContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the job's "envoy-gateway-certgen"
+	// container.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 
 	// ReadinessProbe allows customization of the readiness probe timing parameters.
 	// The probe handler is set by the operator and cannot be overridden.
@@ -303,9 +306,6 @@ type GatewayCertgenJobContainer struct {
 	// The probe handler is set by the operator and cannot be overridden.
 	// +optional
 	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
-	// container.
-	// +optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Deployment;DaemonSet
@@ -381,6 +381,9 @@ type GatewayDeploymentContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the deployment's "envoy"
+	// container.
+	// +optional
+	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 
 	// ReadinessProbe allows customization of the readiness probe timing parameters.
 	// The probe handler is set by the operator and cannot be overridden.
@@ -391,9 +394,6 @@ type GatewayDeploymentContainer struct {
 	// The probe handler is set by the operator and cannot be overridden.
 	// +optional
 	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
-	// container.
-	// +optional
-	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
 }
 
 // GatewayDeploymentStrategy allows customization of the deployment strategy for gateway

@@ -1192,7 +1192,9 @@ spec:
                                             type: integer
                                         type: object
                                       resources:
-                                        description: container.
+                                        description: |-
+                                          If non-nil, Resources sets the ResourceRequirements of the job's "envoy-gateway-certgen"
+                                          container.
                                         properties:
                                           claims:
                                             description: |-
@@ -3929,7 +3931,9 @@ spec:
                                                   type: integer
                                               type: object
                                             resources:
-                                              description: container.
+                                              description: |-
+                                                If non-nil, Resources sets the ResourceRequirements of the deployment's "envoy"
+                                                container.
                                               properties:
                                                 claims:
                                                   description: |-
@@ -5411,7 +5415,9 @@ spec:
                                             type: integer
                                         type: object
                                       resources:
-                                        description: container.
+                                        description: |-
+                                          If non-nil, Resources sets the ResourceRequirements of the controller's "envoy-gateway"
+                                          container.
                                         properties:
                                           claims:
                                             description: |-

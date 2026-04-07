@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,6 +56,7 @@ var _ = Describe("Status reporting tests", func() {
 		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(batchv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		client = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
@@ -70,6 +72,8 @@ var _ = Describe("Status reporting tests", func() {
 		oldVersionSm = New(oldVersionClient, "test-component", &common.VersionInfo{Major: 1, Minor: 18}).(*statusManager)
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
+
+	boolPtr := func(b bool) *bool { return &b }
 
 	Context("without CR found", func() {
 		It("status is not created", func() {
@@ -539,6 +543,152 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 
+		Context("when a monitored workload is not found", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+
+			It("should report degraded when a DaemonSet is not found", func() {
+				sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "missing-ds"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`DaemonSet "NS1/missing-ds" not found`)))
+			})
+
+			It("should report degraded when a Deployment is not found", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "missing-dep"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`Deployment "NS1/missing-dep" not found`)))
+			})
+
+			It("should report degraded when a StatefulSet is not found", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "missing-ss"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`StatefulSet "NS1/missing-ss" not found`)))
+			})
+
+			It("should report degraded when a CronJob is not found", func() {
+				sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "missing-cj"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`CronJob "NS1/missing-cj" not found`)))
+			})
+		})
+
+		Context("during a rollout with mixed old and new revision pods", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+
+			It("should prioritize new-revision pod failures over old-revision failures", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(2)
+				gen := int64(5)
+
+				// Create the Deployment.
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:  "NS1",
+						Name:       "DP1",
+						UID:        "dp1-uid",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dp1"}},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 2,
+						AvailableReplicas:   0,
+						ReadyReplicas:       0,
+					},
+				})).NotTo(HaveOccurred())
+
+				// Current ReplicaSet.
+				Expect(client.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1-new",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dp1-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dp1"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 1},
+				})).NotTo(HaveOccurred())
+
+				// Old ReplicaSet.
+				Expect(client.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1-old",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dp1-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dp1"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 0},
+				})).NotTo(HaveOccurred())
+
+				// New-revision pod: crash looping.
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "dp1-new-pod",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name:  "c1",
+								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+				// Old-revision pod: also crash looping but with different reason.
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "dp1-old-pod",
+						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name:  "c1",
+								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+								LastTerminationState: corev1.ContainerState{
+									Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+								},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(HaveLen(2))
+				// New-revision issue should appear first.
+				Expect(sm.failing[0]).NotTo(ContainSubstring("old revision"))
+				Expect(sm.failing[1]).To(ContainSubstring("old revision"))
+			})
+		})
+
 		It("Should handle basic state changes", func() {
 			// We expect no state to be "True" at boot.
 			Expect(sm.IsAvailable()).To(BeFalse())
@@ -879,5 +1029,421 @@ var _ = Describe("Status reporting tests", func() {
 					{ObjectMeta: metav1.ObjectMeta{Name: "csr2", Labels: labels}},
 				}, false, true),
 		)
+	})
+
+	Describe("podIssue", func() {
+		It("should produce distinct keys for different crash reasons", func() {
+			oom := podIssue{
+				issueType:         issueCrashLoopBackOff,
+				terminationReason: "OOMKilled",
+				exitCode:          137,
+			}
+			errExit1 := podIssue{
+				issueType:         issueCrashLoopBackOff,
+				terminationReason: terminationReasonError,
+				exitCode:          1,
+			}
+			Expect(oom.key()).NotTo(Equal(errExit1.key()))
+		})
+
+		It("should produce the same key for same issue type with no termination context", func() {
+			a := podIssue{issueType: issueNotReady}
+			b := podIssue{issueType: issueNotReady}
+			Expect(a.key()).To(Equal(b.key()))
+		})
+
+		It("should produce distinct keys for different issue types", func() {
+			a := podIssue{issueType: issueCrashLoopBackOff}
+			b := podIssue{issueType: issueImagePull}
+			Expect(a.key()).NotTo(Equal(b.key()))
+		})
+	})
+
+	Describe("summarizeIssues", func() {
+		It("should deduplicate issues with the same key", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "Pod ns/pod1 has crash looping container: c1", terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "Pod ns/pod2 has crash looping container: c1", terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "Pod ns/pod3 has crash looping container: c1", terminationReason: "OOMKilled", exitCode: 137},
+			}
+			failing, progressing := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(1))
+			Expect(failing[0]).To(ContainSubstring("3 pods affected"))
+			Expect(progressing).To(BeEmpty())
+		})
+
+		It("should cap at 3 unique reasons", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "msg1", terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueImagePull, message: "msg2"},
+				{severity: severityFailing, issueType: issueTerminated, message: "msg3", terminationReason: terminationReasonError, exitCode: 1},
+				{severity: severityFailing, issueType: issuePodFailed, message: "msg4"},
+			}
+			failing, _ := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(3))
+		})
+
+		It("should prioritize new-revision pods over old-revision pods", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "old pod crash", isOldRevision: true, terminationReason: "OOMKilled", exitCode: 137},
+				{severity: severityFailing, issueType: issueCrashLoopBackOff, message: "new pod crash", isOldRevision: false, terminationReason: terminationReasonError, exitCode: 1},
+			}
+			failing, _ := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(2))
+			Expect(failing[0]).To(ContainSubstring("new pod crash"))
+			Expect(failing[1]).To(ContainSubstring("old pod crash"))
+			Expect(failing[1]).To(ContainSubstring("old revision"))
+		})
+
+		It("should split failing and progressing", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueNotReady, message: "Pod ns/p1 is running but not ready"},
+				{severity: severityProgressing, issueType: issuePending, message: "Pod ns/p2 is pending: Unschedulable"},
+			}
+			failing, progressing := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(1))
+			Expect(progressing).To(HaveLen(1))
+			Expect(progressing[0]).To(ContainSubstring("pending"))
+		})
+
+		It("should annotate old revision issues", func() {
+			issues := []podIssue{
+				{severity: severityFailing, issueType: issueNotReady, message: "Pod ns/p1 is running but not ready", isOldRevision: true},
+			}
+			failing, _ := summarizeIssues(issues)
+			Expect(failing).To(HaveLen(1))
+			Expect(failing[0]).To(ContainSubstring("old revision"))
+		})
+
+		It("should return empty slices for no issues", func() {
+			failing, progressing := summarizeIssues(nil)
+			Expect(failing).To(BeEmpty())
+			Expect(progressing).To(BeEmpty())
+		})
+	})
+
+	Describe("diagnosePods", func() {
+		var sm *statusManager
+		var cl controllerRuntimeClient.Client
+		var ctx = context.Background()
+
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			err := apis.AddToScheme(scheme, false)
+			Expect(err).NotTo(HaveOccurred())
+			cl = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			sm = New(cl, "test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+		})
+
+		selector := &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}}
+		podMeta := metav1.ObjectMeta{Namespace: "ns", Name: "pod1", Labels: map[string]string{"app": "test"}}
+
+		It("should detect CrashLoopBackOff with OOMKilled context", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issueCrashLoopBackOff))
+			Expect(issues[0].severity).To(Equal(severityFailing))
+			Expect(issues[0].terminationReason).To(Equal("OOMKilled"))
+			Expect(issues[0].exitCode).To(BeEquivalentTo(137))
+			Expect(issues[0].message).To(ContainSubstring("OOMKilled"))
+		})
+
+		It("should detect CrashLoopBackOff with possible liveness probe failure", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: terminationReasonError, ExitCode: exitCodeSIGKILL},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].message).To(ContainSubstring("possible liveness probe failure"))
+		})
+
+		It("should detect ImagePullBackOff", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "ImagePullBackOff"}},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issueImagePull))
+			Expect(issues[0].severity).To(Equal(severityFailing))
+		})
+
+		It("should detect terminated container with Error", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Terminated: &corev1.ContainerStateTerminated{Reason: terminationReasonError}},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issueTerminated))
+		})
+
+		It("should detect pod in Failed phase", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status:     corev1.PodStatus{Phase: corev1.PodFailed},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issuePodFailed))
+			Expect(issues[0].severity).To(Equal(severityFailing))
+		})
+
+		It("should detect running but not ready", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issueNotReady))
+			Expect(issues[0].severity).To(Equal(severityFailing))
+		})
+
+		It("should detect pending unschedulable pod with scheduler reason", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					Conditions: []corev1.PodCondition{
+						{
+							Type:    corev1.PodScheduled,
+							Status:  corev1.ConditionFalse,
+							Message: "0/3 nodes are available: 3 Insufficient memory",
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issuePending))
+			Expect(issues[0].severity).To(Equal(severityProgressing))
+			Expect(issues[0].message).To(ContainSubstring("Insufficient memory"))
+		})
+
+		It("should detect pending pod without scheduler condition", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status:     corev1.PodStatus{Phase: corev1.PodPending},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].issueType).To(Equal(issuePending))
+			Expect(issues[0].severity).To(Equal(severityProgressing))
+		})
+
+		It("should report multiple issues from different pods", func() {
+			pod1 := podMeta.DeepCopy()
+			pod1.Name = "pod-crash"
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: *pod1,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			pod2 := podMeta.DeepCopy()
+			pod2.Name = "pod-pending"
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: *pod2,
+				Spec:       corev1.PodSpec{},
+				Status:     corev1.PodStatus{Phase: corev1.PodPending},
+			})).NotTo(HaveOccurred())
+
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(HaveLen(2))
+		})
+
+		It("should return no issues for healthy pods", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionTrue},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods(selector, "ns", "")
+			Expect(issues).To(BeEmpty())
+		})
+	})
+
+	Describe("currentRevision helpers", func() {
+		var sm *statusManager
+		var cl controllerRuntimeClient.Client
+		var ctx = context.Background()
+
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			err := apis.AddToScheme(scheme, false)
+			Expect(err).NotTo(HaveOccurred())
+			cl = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			sm = New(cl, "test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+		})
+
+		Describe("currentDeploymentRevision", func() {
+			It("should return the pod-template-hash of the newest ReplicaSet", func() {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", UID: "dep-uid"},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+				}
+				// Current ReplicaSet.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "dep1-abc123",
+						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 1},
+				})).NotTo(HaveOccurred())
+				// Old ReplicaSet.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "dep1-old999",
+						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 0},
+				})).NotTo(HaveOccurred())
+
+				rev := sm.currentDeploymentRevision(dep)
+				Expect(rev).To(Equal("abc123"))
+			})
+
+			It("should return empty string when no ReplicaSets exist", func() {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", UID: "dep-uid"},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+				}
+				rev := sm.currentDeploymentRevision(dep)
+				Expect(rev).To(BeEmpty())
+			})
+		})
+
+		Describe("currentDaemonSetRevision", func() {
+			It("should return the hash of the highest-revision ControllerRevision", func() {
+				ds := &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "ds1", UID: "ds-uid"},
+				}
+				Expect(cl.Create(ctx, &appsv1.ControllerRevision{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "ds1-rev1",
+						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-old"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "ds-uid", Controller: boolPtr(true)},
+						},
+					},
+					Revision: 1,
+				})).NotTo(HaveOccurred())
+				Expect(cl.Create(ctx, &appsv1.ControllerRevision{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "ds1-rev2",
+						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-new"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "ds-uid", Controller: boolPtr(true)},
+						},
+					},
+					Revision: 2,
+				})).NotTo(HaveOccurred())
+
+				rev := sm.currentDaemonSetRevision(ds)
+				Expect(rev).To(Equal("hash-new"))
+			})
+
+			It("should return empty string when no ControllerRevisions exist", func() {
+				ds := &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "ds1", UID: "ds-uid"},
+				}
+				rev := sm.currentDaemonSetRevision(ds)
+				Expect(rev).To(BeEmpty())
+			})
+		})
 	})
 })

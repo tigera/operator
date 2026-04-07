@@ -497,6 +497,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs: []string{"get", "list", "watch", "update"},
 			},
 			{
+				// calico/node updates the status subresource of caliconodestatus objects.
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{
+					"caliconodestatuses/status",
+				},
+				Verbs: []string{"update"},
+			},
+			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},

@@ -336,11 +336,14 @@ UT_DIR?=./pkg
 FV_DIR?=./test
 GINKGO_ARGS?= -v -trace -r
 GINKGO_FOCUS?=.*
+ENVTEST_K8S_VERSION?=1.34.x
 
 .PHONY: ut
 ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
+	export KUBEBUILDER_ASSETS=$$(setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir /tmp/envtest-bins -p path) && \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
@@ -373,7 +376,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 FV_IMAGE_REGISTRY := docker.io
-VERSION_TAG := release-v1.42
+VERSION_TAG := release-v3.32
 NODE_IMAGE := calico/node
 APISERVER_IMAGE := calico/apiserver
 CNI_IMAGE := calico/cni

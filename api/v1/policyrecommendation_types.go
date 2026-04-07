@@ -75,6 +75,16 @@ type PolicyRecommendationDeploymentContainer struct {
 	// If omitted, the PolicyRecommendation Deployment will use its default value for this container's resources.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 
 // PolicyRecommendationDeploymentInitContainer is a PolicyRecommendation Deployment init container.

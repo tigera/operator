@@ -163,6 +163,50 @@ func GetDNSConfig(overrides any) *corev1.PodDNSConfig {
 	return value.Interface().(*corev1.PodDNSConfig)
 }
 
+// containerOverride holds override values extracted from a container override struct,
+// including probe timing overrides that can't be represented in corev1.Container.
+type containerOverride struct {
+	Name           string
+	Resources      *corev1.ResourceRequirements
+	Ports          []corev1.ContainerPort
+	ReadinessProbe *operator.ProbeOverride
+	LivenessProbe  *operator.ProbeOverride
+}
+
+// GetContainerOverrides returns the full container overrides including probe timing.
+func GetContainerOverrides(overrides any) []containerOverride {
+	value := getField(overrides, "Spec", "Template", "Spec", "Containers")
+	if !value.IsValid() || value.IsNil() {
+		return nil
+	}
+	return valueToContainerOverrides(value)
+}
+
+func valueToContainerOverrides(value reflect.Value) []containerOverride {
+	cs := make([]containerOverride, 0, value.Len())
+	for _, v := range value.Seq2() {
+		name := v.FieldByName("Name")
+		co := containerOverride{Name: resolveContainerName(name.String())}
+
+		if resources := v.FieldByName("Resources"); resources.IsValid() && !resources.IsNil() {
+			r := resources.Interface().(*corev1.ResourceRequirements)
+			co.Resources = r
+		}
+		co.Ports = valueToContainerPorts(v)
+		if rp := v.FieldByName("ReadinessProbe"); rp.IsValid() && !rp.IsNil() {
+			co.ReadinessProbe = rp.Interface().(*operator.ProbeOverride)
+		}
+		if lp := v.FieldByName("LivenessProbe"); lp.IsValid() && !lp.IsNil() {
+			co.LivenessProbe = lp.Interface().(*operator.ProbeOverride)
+		}
+
+		if co.Resources != nil || co.Ports != nil || co.ReadinessProbe != nil || co.LivenessProbe != nil {
+			cs = append(cs, co)
+		}
+	}
+	return cs
+}
+
 func valueToContainers(value reflect.Value) []corev1.Container {
 	cs := make([]corev1.Container, 0, value.Len())
 	for _, v := range value.Seq2() {
@@ -348,11 +392,10 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	}
 
 	// If `overrides` has a Spec.Template.Spec.Containers field, and it includes containers with
-	// the same name as those in `r.podTemplateSpec.Spec.Containers`, and with non-nil
-	// `Resources` or non-nil `Ports`, those attributes replace those for the corresponding container in
-	// `r.podTemplateSpec.Spec.Containers`.
-	if containers := GetContainers(overrides); containers != nil {
-		mergeContainers(r.podTemplateSpec.Spec.Containers, containers)
+	// the same name as those in `r.podTemplateSpec.Spec.Containers`, resources, ports, and
+	// probe timing overrides are applied to the corresponding container.
+	if cos := GetContainerOverrides(overrides); cos != nil {
+		mergeContainerOverrides(r.podTemplateSpec.Spec.Containers, cos)
 	}
 
 	// If `overrides` has a Spec.Template.Spec.Affinity field, and it's non-nil, it sets
@@ -605,6 +648,49 @@ func mergeContainers(current []corev1.Container, provided []corev1.Container) {
 		} else {
 			log.V(1).Info(fmt.Sprintf("WARNING: the container %q was provided for an override and passed CRD validation but the container does not currently exist", c.Name))
 		}
+	}
+}
+
+// mergeContainerOverrides applies resource, port, and probe timing overrides
+// from the Installation API to the rendered containers.
+func mergeContainerOverrides(current []corev1.Container, overrides []containerOverride) {
+	overrideMap := make(map[string]containerOverride)
+	for _, co := range overrides {
+		overrideMap[co.Name] = co
+	}
+
+	for i, c := range current {
+		co, ok := overrideMap[c.Name]
+		if !ok {
+			continue
+		}
+		if co.Resources != nil {
+			current[i].Resources = *co.Resources
+		}
+		if len(co.Ports) > 0 {
+			current[i].Ports = co.Ports
+		}
+		if co.ReadinessProbe != nil && current[i].ReadinessProbe != nil {
+			applyProbeOverride(current[i].ReadinessProbe, co.ReadinessProbe)
+		}
+		if co.LivenessProbe != nil && current[i].LivenessProbe != nil {
+			applyProbeOverride(current[i].LivenessProbe, co.LivenessProbe)
+		}
+	}
+}
+
+func applyProbeOverride(probe *corev1.Probe, override *operator.ProbeOverride) {
+	if override.PeriodSeconds != nil {
+		probe.PeriodSeconds = *override.PeriodSeconds
+	}
+	if override.TimeoutSeconds != nil {
+		probe.TimeoutSeconds = *override.TimeoutSeconds
+	}
+	if override.FailureThreshold != nil {
+		probe.FailureThreshold = *override.FailureThreshold
+	}
+	if override.InitialDelaySeconds != nil {
+		probe.InitialDelaySeconds = *override.InitialDelaySeconds
 	}
 }
 

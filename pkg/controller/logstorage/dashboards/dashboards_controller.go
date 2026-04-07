@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -349,6 +350,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		KibanaPort:                 kibanaPort,
 		ExternalKibanaClientSecret: externalKibanaSecret,
 		Credentials:                []*corev1.Secret{&credentials},
+		KibanaEnabled:              lscommon.KibanaEnabled(logStorage, d.multiTenant),
 	}
 	dashboardsComponent := dashboards.Dashboards(cfg)
 

@@ -968,6 +968,66 @@ func podMatchesRevision(p corev1.Pod, currentRevision string) bool {
 	return true
 }
 
+// currentDeploymentRevision returns the pod-template-hash of the active ReplicaSet
+// for the given Deployment. Returns empty string if it cannot be determined.
+func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string {
+	rsList := &appsv1.ReplicaSetList{}
+	s, err := metav1.LabelSelectorAsMap(dep.Spec.Selector)
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to parse deployment selector for revision lookup")
+		return ""
+	}
+	err = m.client.List(context.TODO(), rsList, client.MatchingLabels(s), client.InNamespace(dep.Namespace))
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to list ReplicaSets for revision lookup")
+		return ""
+	}
+
+	// Find the ReplicaSet that is owned by this Deployment and has active replicas.
+	for _, rs := range rsList.Items {
+		if !isOwnedBy(rs.OwnerReferences, dep.UID) {
+			continue
+		}
+		if rs.Status.Replicas > 0 {
+			return rs.Labels[appsv1.DefaultDeploymentUniqueLabelKey]
+		}
+	}
+	return ""
+}
+
+// currentDaemonSetRevision returns the controller-revision-hash of the most recent
+// ControllerRevision for the given DaemonSet. Returns empty string if it cannot be determined.
+func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
+	revList := &appsv1.ControllerRevisionList{}
+	err := m.client.List(context.TODO(), revList, client.InNamespace(ds.Namespace))
+	if err != nil {
+		log.WithValues("reason", err).Info("Failed to list ControllerRevisions for revision lookup")
+		return ""
+	}
+
+	var maxRevision int64
+	var currentHash string
+	for _, rev := range revList.Items {
+		if !isOwnedBy(rev.OwnerReferences, ds.UID) {
+			continue
+		}
+		if rev.Revision > maxRevision {
+			maxRevision = rev.Revision
+			currentHash = rev.Labels[appsv1.ControllerRevisionHashLabelKey]
+		}
+	}
+	return currentHash
+}
+
+func isOwnedBy(refs []metav1.OwnerReference, uid types.UID) bool {
+	for _, ref := range refs {
+		if ref.UID == uid && ref.Controller != nil && *ref.Controller {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {
 		// Never set any conditions unless the status manager is enabled.

@@ -71,6 +71,8 @@ var _ = Describe("Status reporting tests", func() {
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
 
+	boolPtr := func(b bool) *bool { return &b }
+
 	Context("without CR found", func() {
 		It("status is not created", func() {
 			sm.updateStatus()
@@ -1182,6 +1184,118 @@ var _ = Describe("Status reporting tests", func() {
 			})).NotTo(HaveOccurred())
 			issues := sm.diagnosePods(selector, "ns", "")
 			Expect(issues).To(BeEmpty())
+		})
+	})
+
+	Describe("currentRevision helpers", func() {
+		var sm *statusManager
+		var cl controllerRuntimeClient.Client
+		var ctx = context.Background()
+
+		BeforeEach(func() {
+			scheme := runtime.NewScheme()
+			Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+			err := apis.AddToScheme(scheme, false)
+			Expect(err).NotTo(HaveOccurred())
+			cl = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+			sm = New(cl, "test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+		})
+
+		Describe("currentDeploymentRevision", func() {
+			It("should return the pod-template-hash of the newest ReplicaSet", func() {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", UID: "dep-uid"},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+				}
+				// Current ReplicaSet.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "dep1-abc123",
+						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 1},
+				})).NotTo(HaveOccurred())
+				// Old ReplicaSet.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "dep1-old999",
+						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: boolPtr(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 0},
+				})).NotTo(HaveOccurred())
+
+				rev := sm.currentDeploymentRevision(dep)
+				Expect(rev).To(Equal("abc123"))
+			})
+
+			It("should return empty string when no ReplicaSets exist", func() {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", UID: "dep-uid"},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+				}
+				rev := sm.currentDeploymentRevision(dep)
+				Expect(rev).To(BeEmpty())
+			})
+		})
+
+		Describe("currentDaemonSetRevision", func() {
+			It("should return the hash of the highest-revision ControllerRevision", func() {
+				ds := &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "ds1", UID: "ds-uid"},
+				}
+				Expect(cl.Create(ctx, &appsv1.ControllerRevision{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "ds1-rev1",
+						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-old"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "ds-uid", Controller: boolPtr(true)},
+						},
+					},
+					Revision: 1,
+				})).NotTo(HaveOccurred())
+				Expect(cl.Create(ctx, &appsv1.ControllerRevision{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      "ds1-rev2",
+						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-new"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "ds-uid", Controller: boolPtr(true)},
+						},
+					},
+					Revision: 2,
+				})).NotTo(HaveOccurred())
+
+				rev := sm.currentDaemonSetRevision(ds)
+				Expect(rev).To(Equal("hash-new"))
+			})
+
+			It("should return empty string when no ControllerRevisions exist", func() {
+				ds := &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "ds1", UID: "ds-uid"},
+				}
+				rev := sm.currentDaemonSetRevision(ds)
+				Expect(rev).To(BeEmpty())
+			})
 		})
 	})
 })

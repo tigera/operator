@@ -593,7 +593,11 @@ func (m *statusManager) syncState() {
 		ds := &appsv1.DaemonSet{}
 		err := m.client.Get(context.TODO(), dsnn, ds)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query daemonset")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("DaemonSet %q not found", dsnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query daemonset")
+			}
 			continue
 		}
 		if ds.Status.UpdatedNumberScheduled < ds.Status.DesiredNumberScheduled {
@@ -616,22 +620,22 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		// Check if any pods within the daemonset are failing.
-		if f, err := m.podsFailing(ds.Spec.Selector, ds.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "daemonset", dsnn).Info("Failed to check for failing pods")
-			continue
-		}
+		revision := m.currentDaemonSetRevision(ds)
+		issues := m.diagnosePods(ds.Spec.Selector, ds.Namespace, revision)
+		f, p := summarizeIssues(issues)
+		failing = append(failing, f...)
+		progressing = append(progressing, p...)
 	}
 
 	for _, depnn := range m.deployments {
 		dep := &appsv1.Deployment{}
 		err := m.client.Get(context.TODO(), depnn, dep)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query deployment")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("Deployment %q not found", depnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query deployment")
+			}
 			continue
 		}
 		if dep.Status.UnavailableReplicas > 0 {
@@ -656,22 +660,22 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(dep.Spec.Selector, dep.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "deployment", depnn).Info("Failed to check for failing pods")
-			continue
-		}
+		revision := m.currentDeploymentRevision(dep)
+		issues := m.diagnosePods(dep.Spec.Selector, dep.Namespace, revision)
+		f, p := summarizeIssues(issues)
+		failing = append(failing, f...)
+		progressing = append(progressing, p...)
 	}
 
 	for _, depnn := range m.statefulsets {
 		ss := &appsv1.StatefulSet{}
 		err := m.client.Get(context.TODO(), depnn, ss)
 		if err != nil {
-			log.WithValues("reason", err).Info("Failed to query statefulset")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("StatefulSet %q not found", depnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query statefulset")
+			}
 			continue
 		}
 		if *ss.Spec.Replicas != ss.Status.CurrentReplicas {
@@ -694,21 +698,20 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		// Check if any pods within the deployment are failing.
-		if f, err := m.podsFailing(ss.Spec.Selector, ss.Namespace); err == nil {
-			if f != "" {
-				failing = append(failing, f)
-			}
-		} else {
-			log.WithValues("reason", err, "statefuleset", depnn).Info("Failed to check for failing pods")
-			continue
-		}
+		issues := m.diagnosePods(ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision)
+		f, p := summarizeIssues(issues)
+		failing = append(failing, f...)
+		progressing = append(progressing, p...)
 	}
 
 	for _, depnn := range m.cronjobs {
 		cj := &batchv1.CronJob{}
 		if err := m.client.Get(context.TODO(), depnn, cj); err != nil {
-			log.WithValues("reason", err).Info("Failed to query cronjobs")
+			if errors.IsNotFound(err) {
+				failing = append(failing, fmt.Sprintf("CronJob %q not found", depnn.String()))
+			} else {
+				log.WithValues("reason", err).Info("Failed to query cronjobs")
+			}
 			continue
 		}
 
@@ -769,62 +772,6 @@ func (m *statusManager) removeTigeraStatus() {
 		// CR no longer exists.
 		m.crExists = false
 	}
-}
-
-// podsFailing takes a selector and returns if any of the pods that match it are failing. Failing pods are defined
-// to be in CrashLoopBackOff state.
-func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace string) (string, error) {
-	l := corev1.PodList{}
-	s, err := metav1.LabelSelectorAsMap(selector)
-	if err != nil {
-		panic(err)
-	}
-	err = m.client.List(context.TODO(), &l, client.MatchingLabels(s), client.InNamespace(namespace))
-	if err != nil {
-		return "", err
-	}
-	for _, p := range l.Items {
-		if p.Status.Phase == corev1.PodFailed {
-			return fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name), nil
-		}
-		for _, c := range p.Status.InitContainerStatuses {
-			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg, nil
-			}
-		}
-		for _, c := range p.Status.ContainerStatuses {
-			if msg := m.containerErrorMessage(p, c); msg != "" {
-				return msg, nil
-			}
-		}
-	}
-	return "", nil
-}
-
-func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {
-	if c.State.Waiting != nil {
-		// Check well-known error states here and report an appropriate mesage to the end user.
-		switch c.State.Waiting.Reason {
-		case "CrashLoopBackOff":
-			msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
-			if lt := c.LastTerminationState.Terminated; lt != nil {
-				if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
-					msg += " (exit code 137, possible liveness probe failure)"
-				} else {
-					msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
-				}
-			}
-			return msg
-		case "ImagePullBackOff", "ErrImagePull":
-			return fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name)
-		}
-	}
-	if c.State.Terminated != nil {
-		if c.State.Terminated.Reason == terminationReasonError {
-			return fmt.Sprintf("Pod %s/%s has terminated container: %s", p.Namespace, p.Name, c.Name)
-		}
-	}
-	return ""
 }
 
 // diagnosePods lists pods matching the selector and returns a podIssue for each

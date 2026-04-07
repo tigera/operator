@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -55,6 +56,7 @@ var _ = Describe("Status reporting tests", func() {
 		err := apis.AddToScheme(scheme, false)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(batchv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		client = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
@@ -538,6 +540,40 @@ var _ = Describe("Status reporting tests", func() {
 				sm.updateStatus()
 				Expect(sm.IsDegraded()).To(BeTrue())
 				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
+			})
+		})
+
+		Context("when a monitored workload is not found", func() {
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+			})
+
+			It("should report degraded when a DaemonSet is not found", func() {
+				sm.AddDaemonsets([]types.NamespacedName{{Namespace: "NS1", Name: "missing-ds"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`DaemonSet "NS1/missing-ds" not found`)))
+			})
+
+			It("should report degraded when a Deployment is not found", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "missing-dep"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`Deployment "NS1/missing-dep" not found`)))
+			})
+
+			It("should report degraded when a StatefulSet is not found", func() {
+				sm.AddStatefulSets([]types.NamespacedName{{Namespace: "NS1", Name: "missing-ss"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`StatefulSet "NS1/missing-ss" not found`)))
+			})
+
+			It("should report degraded when a CronJob is not found", func() {
+				sm.AddCronJobs([]types.NamespacedName{{Namespace: "NS1", Name: "missing-cj"}})
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring(`CronJob "NS1/missing-cj" not found`)))
 			})
 		})
 

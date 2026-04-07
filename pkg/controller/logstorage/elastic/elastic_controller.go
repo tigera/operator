@@ -364,6 +364,10 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	kibanaEnabled := !r.multiTenant
+	if kibanaEnabled && ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
+		ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
+		kibanaEnabled = false
+	}
 
 	// Wait for dependencies to exist.
 	if elasticKeyPair == nil {

@@ -349,6 +349,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		KibanaPort:                 kibanaPort,
 		ExternalKibanaClientSecret: externalKibanaSecret,
 		Credentials:                []*corev1.Secret{&credentials},
+		KibanaEnabled:              kibanaEnabled(logStorage, d.multiTenant),
 	}
 	dashboardsComponent := dashboards.Dashboards(cfg)
 
@@ -373,6 +374,17 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	d.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+func kibanaEnabled(ls *operatorv1.LogStorage, multiTenant bool) bool {
+	if multiTenant {
+		return false
+	}
+	if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
+		ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
+		return false
+	}
+	return true
 }
 
 func parsePort(port string) (uint16, error) {

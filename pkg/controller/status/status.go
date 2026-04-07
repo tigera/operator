@@ -43,6 +43,17 @@ import (
 
 var log = logf.Log.WithName("status_manager")
 
+const (
+	// terminationReasonError is the reason string the container runtime sets on
+	// ContainerStateTerminated when the container exits with a non-zero exit code.
+	terminationReasonError = "Error"
+
+	// exitCodeSIGKILL is the exit code for a container killed by SIGKILL (128 + 9).
+	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
+	// killer, manual kill) can also produce this code.
+	exitCodeSIGKILL = 137
+)
+
 // StatusManager manages the status for a single controller and component, and reports the status via
 // a TigeraStatus API object. The status manager uses the following conditions/states to represent the
 // component's current status:
@@ -688,6 +699,16 @@ func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace st
 				return msg, nil
 			}
 		}
+
+		// If none of the container-level checks matched, check if the pod is running but
+		// not passing readiness checks.
+		if p.Status.Phase == corev1.PodRunning {
+			for _, cond := range p.Status.Conditions {
+				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
+					return fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name), nil
+				}
+			}
+		}
 	}
 	return "", nil
 }
@@ -695,14 +716,23 @@ func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace st
 func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerStatus) string {
 	if c.State.Waiting != nil {
 		// Check well-known error states here and report an appropriate mesage to the end user.
-		if c.State.Waiting.Reason == "CrashLoopBackOff" {
-			return fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
-		} else if c.State.Waiting.Reason == "ImagePullBackOff" || c.State.Waiting.Reason == "ErrImagePull" {
+		switch c.State.Waiting.Reason {
+		case "CrashLoopBackOff":
+			msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
+			if lt := c.LastTerminationState.Terminated; lt != nil {
+				if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
+					msg += " (exit code 137, possible liveness probe failure)"
+				} else {
+					msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+				}
+			}
+			return msg
+		case "ImagePullBackOff", "ErrImagePull":
 			return fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name)
 		}
 	}
 	if c.State.Terminated != nil {
-		if c.State.Terminated.Reason == "Error" {
+		if c.State.Terminated.Reason == terminationReasonError {
 			return fmt.Sprintf("Pod %s/%s has terminated container: %s", p.Namespace, p.Name, c.Name)
 		}
 	}

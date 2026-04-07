@@ -112,7 +112,6 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, promethe
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
 	})
 
@@ -241,6 +240,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Track alertmanager statefulset health only when it has replicas.
+	alertmanagerSS := types.NamespacedName{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)}
+	if instance.Spec.AlertManager != nil && instance.Spec.AlertManager.AlertManagerSpec != nil &&
+		instance.Spec.AlertManager.AlertManagerSpec.Replicas != nil && *instance.Spec.AlertManager.AlertManagerSpec.Replicas > 0 {
+		r.status.AddStatefulSets([]types.NamespacedName{alertmanagerSS})
+	} else {
+		r.status.RemoveStatefulSets(alertmanagerSS)
 	}
 	if instance.Spec.ExternalPrometheus != nil {
 		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
@@ -514,6 +522,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {
+	if instance.Spec.AlertManager == nil {
+		instance.Spec.AlertManager = &operatorv1.AlertManager{}
+	}
+	if instance.Spec.AlertManager.AlertManagerSpec == nil {
+		instance.Spec.AlertManager.AlertManagerSpec = &operatorv1.AlertManagerSpec{}
+	}
+	if instance.Spec.AlertManager.AlertManagerSpec.Replicas == nil {
+		var replicas int32 = 0
+		instance.Spec.AlertManager.AlertManagerSpec.Replicas = &replicas
+	}
+
 	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
 
 		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {

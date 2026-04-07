@@ -117,25 +117,35 @@ func Monitor(cfg *Config) render.Component {
 }
 
 func MonitorPolicy(cfg *Config) render.Component {
-	return render.NewPassthrough(
-		[]client.Object{
+	toCreate := []client.Object{
+		calicoSystemPrometheusPolicy(cfg),
+		calicoSystemPrometheusAPIPolicy(cfg),
+		calicoSystemPrometheusOperatorPolicy(cfg),
+		networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
+	}
+	toDelete := []client.Object{
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
+	}
+
+	if alertmanagerReplicasFromConfig(cfg) > 0 {
+		toCreate = append(toCreate,
 			calicoSystemAlertManagerPolicy(cfg),
 			calicoSystemAlertManagerMeshPolicy(cfg),
-			calicoSystemPrometheusPolicy(cfg),
-			calicoSystemPrometheusAPIPolicy(cfg),
-			calicoSystemPrometheusOperatorPolicy(cfg),
-			networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
-		},
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
-		},
-	)
+		)
+	} else {
+		toDelete = append(toDelete,
+			calicoSystemAlertManagerPolicy(cfg),
+			calicoSystemAlertManagerMeshPolicy(cfg),
+		)
+	}
+
+	return render.NewPassthrough(toCreate, toDelete)
 }
 
 // Config contains all the config information needed to render the Monitor component.
@@ -228,7 +238,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 
 	toCreate = append(toCreate,
 		mc.prometheusOperatorServiceAccount(),
@@ -238,8 +247,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusClusterRole(),
 		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
-		mc.alertmanagerService(),
-		mc.alertmanager(),
 		mc.prometheusServiceService(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
@@ -247,6 +254,23 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	var toDelete []client.Object
+
+	if mc.alertmanagerReplicas() > 0 {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
+		toCreate = append(toCreate,
+			mc.alertmanagerService(),
+			mc.alertmanager(),
+		)
+	} else {
+		toDelete = append(toDelete,
+			mc.alertmanager(),
+			mc.alertmanagerService(),
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name:      "alertmanager-" + CalicoNodeAlertmanager,
+				Namespace: common.TigeraPrometheusNamespace,
+			}},
+		)
+	}
 
 	serviceMonitors := []client.Object{
 		mc.serviceMonitorCalicoNode(),
@@ -457,6 +481,19 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
+func alertmanagerReplicasFromConfig(cfg *Config) int32 {
+	if cfg.Monitor.AlertManager != nil &&
+		cfg.Monitor.AlertManager.AlertManagerSpec != nil &&
+		cfg.Monitor.AlertManager.AlertManagerSpec.Replicas != nil {
+		return *cfg.Monitor.AlertManager.AlertManagerSpec.Replicas
+	}
+	return 0
+}
+
+func (mc *monitorComponent) alertmanagerReplicas() int32 {
+	return alertmanagerReplicasFromConfig(mc.cfg)
+}
+
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
@@ -482,7 +519,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
-			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
+			Replicas:           mc.cfg.Monitor.AlertManager.AlertManagerSpec.Replicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        tolerations,
@@ -579,8 +616,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
-	promNamespace := common.TigeraPrometheusNamespace
-
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -649,27 +684,31 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				VolumeMounts:           volumeMounts,
 				Volumes:                volumes,
 			},
-			Alerting: &monitoringv1.AlertingSpec{
-				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
-					{
-						Name:      CalicoNodeAlertmanager,
-						Namespace: &promNamespace,
-						Port:      intstr.FromString("web"),
-						RelabelConfigs: []monitoringv1.RelabelConfig{
-							{
-								TargetLabel: "__scheme__",
-								Replacement: ptr.To("http"),
-							},
-						},
-					},
-				},
-			},
 			Retention: "24h",
 			RuleSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
 				"prometheus": CalicoNodePrometheus,
 				"role":       "tigera-prometheus-rules",
 			}},
 		},
+	}
+
+	if mc.alertmanagerReplicas() > 0 {
+		promNamespace := common.TigeraPrometheusNamespace
+		prometheus.Spec.Alerting = &monitoringv1.AlertingSpec{
+			Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
+				{
+					Name:      CalicoNodeAlertmanager,
+					Namespace: &promNamespace,
+					Port:      intstr.FromString("web"),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("http"),
+						},
+					},
+				},
+			},
+		}
 	}
 
 	if overrides := mc.cfg.Monitor.Prometheus; overrides != nil {

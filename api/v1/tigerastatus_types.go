@@ -33,6 +33,12 @@ type TigeraStatusStatus struct {
 	// Conditions represents the latest observed set of conditions for this component. A component may be one or more of
 	// Available, Progressing, or Degraded.
 	Conditions []TigeraStatusCondition `json:"conditions"`
+
+	// Message is a human-readable summary of the component's current state. It shows the most
+	// actionable information: the degraded reason if degraded, the progressing reason if progressing,
+	// or warnings if available with caveats. Empty when fully healthy with no warnings.
+	// +optional
+	Message string `json:"message,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -45,7 +51,7 @@ type TigeraStatusStatus struct {
 // +kubebuilder:printcolumn:name="Progressing",type="string",JSONPath=".status.conditions[?(@.type=='Progressing')].status",description="Whether the component is processing changes."
 // +kubebuilder:printcolumn:name="Degraded",type="string",JSONPath=".status.conditions[?(@.type=='Degraded')].status",description="Whether the component is degraded."
 // +kubebuilder:printcolumn:name="Since",type="date",JSONPath=".status.conditions[?(@.type=='Available')].lastTransitionTime",description="The time the component's Available status last changed."
-// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.conditions[?(@.type=='Degraded')].message",description="Error message when the component is degraded.",priority=0
+// +kubebuilder:printcolumn:name="Message",type="string",JSONPath=".status.message",description="Human-readable summary of the component's current state."
 type TigeraStatus struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

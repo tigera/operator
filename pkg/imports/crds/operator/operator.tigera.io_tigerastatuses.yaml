@@ -30,8 +30,8 @@ spec:
           jsonPath: .status.conditions[?(@.type=='Available')].lastTransitionTime
           name: Since
           type: date
-        - description: Error message when the component is degraded.
-          jsonPath: .status.conditions[?(@.type=='Degraded')].message
+        - description: Human-readable summary of the component's current state.
+          jsonPath: .status.message
           name: Message
           type: string
       name: v1
@@ -110,6 +110,12 @@ spec:
                       - type
                     type: object
                   type: array
+                message:
+                  description: |-
+                    Message is a human-readable summary of the component's current state. It shows the most
+                    actionable information: the degraded reason if degraded, the progressing reason if progressing,
+                    or warnings if available with caveats. Empty when fully healthy with no warnings.
+                  type: string
               required:
                 - conditions
               type: object

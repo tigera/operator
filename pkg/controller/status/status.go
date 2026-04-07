@@ -527,6 +527,12 @@ func (m *statusManager) ClearWarning(key string) {
 func (m *statusManager) warningMessage() string {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+	return m.warningMessageLocked()
+}
+
+// warningMessageLocked returns the warning message without acquiring the lock.
+// The caller must hold m.lock.
+func (m *statusManager) warningMessageLocked() string {
 	if len(m.warnings) == 0 {
 		return ""
 	}
@@ -1049,8 +1055,11 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 		}
 	}
 
+	// Set the top-level Message field based on the most actionable condition.
+	ts.Status.Message = m.statusMessage(ts.Status.Conditions)
+
 	// If nothing has changed, we don't need to update in the API.
-	if reflect.DeepEqual(ts.Status.Conditions, old.Status.Conditions) {
+	if reflect.DeepEqual(ts.Status.Conditions, old.Status.Conditions) && ts.Status.Message == old.Status.Message {
 		return
 	}
 
@@ -1156,6 +1165,25 @@ func (m *statusManager) degradedMessage() string {
 	}
 	msgs = append(msgs, m.failing...)
 	return strings.Join(msgs, "\n")
+}
+
+// statusMessage returns the most actionable message for the top-level Message field,
+// based on the current conditions. Priority: degraded > progressing > warnings > empty.
+func (m *statusManager) statusMessage(conditions []operator.TigeraStatusCondition) string {
+	for _, c := range conditions {
+		if c.Type == operator.ComponentDegraded && c.Status == operator.ConditionTrue {
+			return c.Message
+		}
+	}
+	for _, c := range conditions {
+		if c.Type == operator.ComponentProgressing && c.Status == operator.ConditionTrue {
+			return c.Message
+		}
+	}
+	if w := m.warningMessageLocked(); w != "" {
+		return w
+	}
+	return ""
 }
 
 // This function should only be called if we are in a degraded state.

@@ -880,4 +880,32 @@ var _ = Describe("Status reporting tests", func() {
 				}, false, true),
 		)
 	})
+
+	Describe("podIssue", func() {
+		It("should produce distinct keys for different crash reasons", func() {
+			oom := podIssue{
+				issueType:         issueCrashLoopBackOff,
+				terminationReason: "OOMKilled",
+				exitCode:          137,
+			}
+			errExit1 := podIssue{
+				issueType:         issueCrashLoopBackOff,
+				terminationReason: terminationReasonError,
+				exitCode:          1,
+			}
+			Expect(oom.key()).NotTo(Equal(errExit1.key()))
+		})
+
+		It("should produce the same key for same issue type with no termination context", func() {
+			a := podIssue{issueType: issueNotReady}
+			b := podIssue{issueType: issueNotReady}
+			Expect(a.key()).To(Equal(b.key()))
+		})
+
+		It("should produce distinct keys for different issue types", func() {
+			a := podIssue{issueType: issueCrashLoopBackOff}
+			b := podIssue{issueType: issueImagePull}
+			Expect(a.key()).NotTo(Equal(b.key()))
+		})
+	})
 })

@@ -53,6 +53,44 @@ const (
 	exitCodeSIGKILL = 137
 )
 
+type podIssueSeverity int
+
+const (
+	severityProgressing podIssueSeverity = iota
+	severityFailing
+)
+
+// podIssueType defines the category of a pod issue. The enum order determines display
+// priority when issues compete for the 3-slot cap in summarizeIssues.
+type podIssueType int
+
+const (
+	issueCrashLoopBackOff podIssueType = iota
+	issueImagePull
+	issueTerminated
+	issuePodFailed
+	issueNotReady
+	issuePending
+)
+
+// podIssue represents a single diagnosed problem with a pod.
+type podIssue struct {
+	severity  podIssueSeverity
+	issueType podIssueType
+	message   string
+
+	// isOldRevision is true if the pod belongs to an old revision during a rollout.
+	isOldRevision bool
+
+	// terminationReason and exitCode provide dedup granularity within an issue type.
+	terminationReason string
+	exitCode          int32
+}
+
+func (p podIssue) key() string {
+	return fmt.Sprintf("%d:%s:%d", p.issueType, p.terminationReason, p.exitCode)
+}
+
 // StatusManager manages the status for a single controller and component, and reports the status via
 // a TigeraStatus API object. The status manager uses the following conditions/states to represent the
 // component's current status:

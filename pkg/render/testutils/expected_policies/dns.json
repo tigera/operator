@@ -30,7 +30,7 @@
         "destination": {}
       }
     ],
-    "selector": "k8s-app == 'kube-dns'",
+    "selector": "k8s-app in { 'kube-dns', 'coredns' }",
     "types": [
       "Ingress",
       "Egress"

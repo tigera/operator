@@ -190,13 +190,13 @@ func tlsSecretMetadata(certPEM []byte) (labels map[string]string, annotations ma
 	}
 
 	// --- labels ---
-	labels["certificates.operator.tigera.io/signer"] = signerLabelValue(cert.Issuer.CommonName)
+	labels[SignerLabel] = signerLabelValue(cert.Issuer.CommonName)
 
 	// --- annotations ---
 	issuerCN := cert.Issuer.CommonName
-	annotations["certificates.operator.tigera.io/issuer"] = issuerCN
-	annotations["certificates.operator.tigera.io/signer"] = issuerCN
-	annotations["certificates.operator.tigera.io/expiry"] = cert.NotAfter.UTC().Format("2006-01-02T15:04:05Z")
+	annotations[IssuerAnnotation] = issuerCN
+	annotations[SignerLabel] = issuerCN
+	annotations[ExpiryAnnotation] = cert.NotAfter.UTC().Format(ExpiryFormat)
 
 	if len(cert.DNSNames) > 0 {
 		annotations["certificates.operator.tigera.io/dns-names"] = strings.Join(cert.DNSNames, ",")

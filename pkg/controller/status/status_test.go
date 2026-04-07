@@ -391,6 +391,59 @@ var _ = Describe("Status reporting tests", func() {
 			})
 		})
 
+		Context("when pod is running but not ready", func() {
+			var gen int64
+			BeforeEach(func() {
+				sm.ReadyToMonitor()
+				Expect(client.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1",
+						Name:      "DP1pod-notready",
+						Labels: map[string]string{
+							"dp1Key": "dp1Value",
+						},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						Conditions: []corev1.PodCondition{
+							{
+								Type:   corev1.ContainersReady,
+								Status: corev1.ConditionFalse,
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+				gen = 5
+			})
+			It("should degrade when the deployment does not have the correct pod counts", func() {
+				sm.AddDeployments([]types.NamespacedName{{Namespace: "NS1", Name: "DP1"}})
+				replicas := int32(1)
+
+				Expect(client.Create(ctx, &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "NS1", Name: "DP1",
+						Generation: gen,
+					},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"dp1Key": "dp1Value"},
+						},
+						Replicas: &replicas,
+					},
+					Status: appsv1.DeploymentStatus{
+						ObservedGeneration:  gen,
+						UnavailableReplicas: 1,
+						AvailableReplicas:   0,
+						ReadyReplicas:       0,
+					},
+				})).NotTo(HaveOccurred())
+				sm.updateStatus()
+				Expect(sm.IsDegraded()).To(BeTrue())
+				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
+			})
+		})
+
 		It("Should handle basic state changes", func() {
 			// We expect no state to be "True" at boot.
 			Expect(sm.IsAvailable()).To(BeFalse())

@@ -116,37 +116,6 @@ func getEnterpriseCRDSource(v3 bool) map[string][]byte {
 	return ret
 }
 
-func getK8sPolicyCRDSource(variant opv1.ProductVariant) map[string][]byte {
-	ret := map[string][]byte{}
-	var fs embed.FS
-	var dir string
-	if variant == opv1.Calico {
-		fs = calicoCRDFiles
-		dir = "calico/policy.networking.k8s.io"
-	} else {
-		fs = enterpriseCRDFiles
-		dir = "enterprise/policy.networking.k8s.io"
-	}
-	entries, err := fs.ReadDir(dir)
-	if err != nil {
-		panic(fmt.Sprintf("Failed to read K8s policy CRDs: %v", err))
-	}
-
-	for _, entry := range entries {
-		b, err := fs.ReadFile(path.Join(dir, entry.Name()))
-		if err != nil {
-			panic(fmt.Sprintf("Failed to read K8s policy CRD %s: %v", entry.Name(), err))
-		}
-
-		crds := bytes.Split(b, []byte("\n---"))
-		for i, crd := range crds {
-			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = crd
-		}
-	}
-
-	return ret
-}
-
 func getOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
 	ret := map[string][]byte{}
 	entries, err := operatorCRDFiles.ReadDir("operator")
@@ -199,12 +168,12 @@ func GetCRDs(variant opv1.ProductVariant, v3 bool) []*apiextenv1.CustomResourceD
 	var crds []*apiextenv1.CustomResourceDefinition
 	if variant == opv1.Calico {
 		if len(calicoCRDs) == 0 {
-			calicoCRDs = convertYamlsToCRDs(getCalicoCRDSource(v3), getK8sPolicyCRDSource(variant), getOperatorCRDSource(variant))
+			calicoCRDs = convertYamlsToCRDs(getCalicoCRDSource(v3), getOperatorCRDSource(variant))
 		}
 		crds = calicoCRDs
 	} else {
 		if len(enterpriseCRDs) == 0 {
-			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(v3), getK8sPolicyCRDSource(variant), getOperatorCRDSource(variant))
+			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(v3), getOperatorCRDSource(variant))
 		}
 		crds = enterpriseCRDs
 	}

@@ -408,6 +408,21 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Create operator TLS keypair only when mTLS is enabled (METRICS_SCHEME=https).
+	// The Service and ServiceMonitor are created whenever metrics are enabled.
+	operatorMetricsEnabled := common.MetricsEnabled()
+	var operatorTLSSecret certificatemanagement.KeyPairInterface
+	if common.MetricsTLSEnabled() {
+		operatorMetricsServiceName := common.OperatorName() + "-metrics"
+		operatorTLSDNSNames := dns.GetServiceDNSNames(operatorMetricsServiceName, common.OperatorNamespace(), r.clusterDomain)
+		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorTLSSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating operator metrics TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		trustedBundle.AddCertificates(operatorTLSSecret)
+	}
+
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,
 		Installation:                  installationSpec,
@@ -422,6 +437,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		LicenseExpired:                licenseExpired,
+		OperatorMetricsEnabled:        operatorMetricsEnabled,
+		OperatorNamespace:             common.OperatorNamespace(),
+		OperatorName:                  common.OperatorName(),
+		OperatorTLSSecret:             operatorTLSSecret,
 	}
 
 	// Render prometheus component
@@ -433,6 +452,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(operatorTLSSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),

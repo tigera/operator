@@ -691,6 +691,16 @@ func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace st
 				return msg, nil
 			}
 		}
+
+		// If none of the container-level checks matched, check if the pod is running but
+		// not passing readiness checks.
+		if p.Status.Phase == corev1.PodRunning {
+			for _, cond := range p.Status.Conditions {
+				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
+					return fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name), nil
+				}
+			}
+		}
 	}
 	return "", nil
 }

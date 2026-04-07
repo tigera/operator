@@ -51,7 +51,23 @@ const (
 	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
 	// killer, manual kill) can also produce this code.
 	exitCodeSIGKILL = 137
+
+	customOverridesAnnotation = "operator.tigera.io/custom-overrides"
 )
+
+// hasOverride checks if the workload has a specific override type configured.
+func hasOverride(annotations map[string]string, overrideType string) bool {
+	val, ok := annotations[customOverridesAnnotation]
+	if !ok {
+		return false
+	}
+	for _, t := range strings.Split(val, ",") {
+		if t == overrideType {
+			return true
+		}
+	}
+	return false
+}
 
 type podIssueSeverity int
 
@@ -621,7 +637,7 @@ func (m *statusManager) syncState() {
 		}
 
 		revision := m.currentDaemonSetRevision(ds)
-		issues := m.diagnosePods(ds.Spec.Selector, ds.Namespace, revision)
+		issues := m.diagnosePods(ds.Spec.Selector, ds.Namespace, revision, ds.Annotations)
 		f, p := summarizeIssues(issues)
 		failing = append(failing, f...)
 		progressing = append(progressing, p...)
@@ -661,7 +677,7 @@ func (m *statusManager) syncState() {
 		}
 
 		revision := m.currentDeploymentRevision(dep)
-		issues := m.diagnosePods(dep.Spec.Selector, dep.Namespace, revision)
+		issues := m.diagnosePods(dep.Spec.Selector, dep.Namespace, revision, dep.Annotations)
 		f, p := summarizeIssues(issues)
 		failing = append(failing, f...)
 		progressing = append(progressing, p...)
@@ -698,7 +714,7 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		issues := m.diagnosePods(ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision)
+		issues := m.diagnosePods(ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision, ss.Annotations)
 		f, p := summarizeIssues(issues)
 		failing = append(failing, f...)
 		progressing = append(progressing, p...)
@@ -777,7 +793,7 @@ func (m *statusManager) removeTigeraStatus() {
 // diagnosePods lists pods matching the selector and returns a podIssue for each
 // unhealthy pod found. If currentRevision is non-empty, pods not matching that
 // revision are marked as old-revision.
-func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace string, currentRevision string) []podIssue {
+func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace string, currentRevision string, workloadAnnotations map[string]string) []podIssue {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
@@ -804,11 +820,11 @@ func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace s
 		}
 
 		// Check init and regular container statuses for errors.
-		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, oldRevision); len(iss) > 0 {
+		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, oldRevision, workloadAnnotations); len(iss) > 0 {
 			issues = append(issues, iss...)
 			continue
 		}
-		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, oldRevision); len(iss) > 0 {
+		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, oldRevision, workloadAnnotations); len(iss) > 0 {
 			issues = append(issues, iss...)
 			continue
 		}
@@ -817,10 +833,14 @@ func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace s
 		if p.Status.Phase == corev1.PodRunning {
 			for _, cond := range p.Status.Conditions {
 				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
+					msg := fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name)
+					if hasOverride(workloadAnnotations, "readinessProbe") {
+						msg += "; custom readiness probe configuration is in effect"
+					}
 					issues = append(issues, podIssue{
 						severity:      severityFailing,
 						issueType:     issueNotReady,
-						message:       fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name),
+						message:       msg,
 						isOldRevision: oldRevision,
 					})
 					break
@@ -853,7 +873,7 @@ func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace s
 
 // diagnoseContainers checks a list of container statuses for known error states and
 // returns a podIssue for each one found.
-func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevision bool) []podIssue {
+func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevision bool, workloadAnnotations map[string]string) []podIssue {
 	var issues []podIssue
 	for _, c := range statuses {
 		if c.State.Waiting != nil {
@@ -867,8 +887,14 @@ func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevi
 					exitCode = lt.ExitCode
 					if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
 						msg += " (exit code 137, possible liveness probe failure)"
+						if hasOverride(workloadAnnotations, "livenessProbe") {
+							msg += "; custom liveness probe configuration is in effect"
+						}
 					} else {
 						msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+						if lt.Reason == "OOMKilled" && hasOverride(workloadAnnotations, "resources") {
+							msg += "; custom resource limits are in effect"
+						}
 					}
 				}
 				issues = append(issues, podIssue{

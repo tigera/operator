@@ -342,13 +342,14 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
-
-		// Clean up deprecated k8s NetworkPolicy
-		objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
-			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
-		})
 	}
+
+	// Clean up deprecated k8s NetworkPolicy, regardless of variant,
+	// avoiding leftovers in the case of switching between variants.
+	objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
+	})
 
 	// Add or remove the aggregation API server objects as needed.
 	if c.cfg.RequiresAggregationServer {

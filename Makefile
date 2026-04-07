@@ -473,7 +473,9 @@ deploy-crds: kubectl
 	@export KUBECONFIG=$(KIND_KUBECONFIG) && \
 		$(BINDIR)/kubectl create -f pkg/imports/crds/operator/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/calico/v1.crd.projectcalico.org/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/calico/policy.networking.k8s.io/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/v1.crd.projectcalico.org/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/policy.networking.k8s.io/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
@@ -685,6 +687,7 @@ define prep_local_crds
 	rm -rf .crds/$(product)
 	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
+	mkdir -p pkg/imports/crds/$(product)/policy.networking.k8s.io/
 	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
@@ -708,6 +711,11 @@ define copy_v3_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
 	@cp $(dir)/api/config/crd/* pkg/imports/crds/$(product)/v3.projectcalico.org/ && echo "Copied $(product) CRDs"
+endef
+define copy_k8s_policy_crds
+    $(eval product := $(1))
+	@mv pkg/imports/crds/$(product)/v1.crd.projectcalico.org/policy.networking.k8s.io_* pkg/imports/crds/$(product)/policy.networking.k8s.io/ 2>/dev/null; true
+	@echo "Moved $(product) K8s policy CRDs to dedicated directory"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
@@ -737,6 +745,7 @@ read-libcalico-calico-version:
 update-calico-crds: fetch-calico-crds
 	$(call copy_v1_crds, $(CALICO_CRDS_DIR),"calico")
 	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
+	$(call copy_k8s_policy_crds,"calico")
 	$(call copy_admission_policies, $(CALICO_CRDS_DIR),"calico")
 
 prepare-for-calico-crds:
@@ -757,6 +766,7 @@ read-libcalico-enterprise-version:
 update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
+	$(call copy_k8s_policy_crds,"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 

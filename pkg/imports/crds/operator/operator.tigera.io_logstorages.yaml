@@ -155,6 +155,37 @@ spec:
                                       ECKOperatorStatefulSetContainer is
                                       a ECKOperator StatefulSet container.
                                     properties:
+                                      livenessProbe:
+                                        description: |-
+                                          LivenessProbe allows customization of the liveness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       name:
                                         description: |-
                                           Name is an enum which identifies the ECKOperator StatefulSet container by name.
@@ -162,6 +193,37 @@ spec:
                                         enum:
                                           - manager
                                         type: string
+                                      readinessProbe:
+                                        description: |-
+                                          ReadinessProbe allows customization of the readiness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
@@ -344,6 +406,37 @@ spec:
                                       ElasticsearchMetricsDeploymentContainer
                                       is a ElasticsearchMetricsDeployment container.
                                     properties:
+                                      livenessProbe:
+                                        description: |-
+                                          LivenessProbe allows customization of the liveness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       name:
                                         description: |-
                                           Name is an enum which identifies the ElasticsearchMetricsDeployment container by name.
@@ -351,6 +444,37 @@ spec:
                                         enum:
                                           - tigera-elasticsearch-metrics
                                         type: string
+                                      readinessProbe:
+                                        description: |-
+                                          ReadinessProbe allows customization of the readiness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
@@ -528,6 +652,37 @@ spec:
                                       ESGatewayDeploymentContainer is a es-gateway
                                       Deployment container.
                                     properties:
+                                      livenessProbe:
+                                        description: |-
+                                          LivenessProbe allows customization of the liveness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       name:
                                         description: |-
                                           Name is an enum which identifies the es-gateway Deployment container by name.
@@ -535,6 +690,37 @@ spec:
                                         enum:
                                           - tigera-secure-es-gateway
                                         type: string
+                                      readinessProbe:
+                                        description: |-
+                                          ReadinessProbe allows customization of the readiness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
@@ -722,6 +908,37 @@ spec:
                                   items:
                                     description: KibanaContainer is a Kibana container.
                                     properties:
+                                      livenessProbe:
+                                        description: |-
+                                          LivenessProbe allows customization of the liveness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Kibana Deployment container by name.
@@ -729,6 +946,37 @@ spec:
                                         enum:
                                           - kibana
                                         type: string
+                                      readinessProbe:
+                                        description: |-
+                                          ReadinessProbe allows customization of the readiness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
@@ -907,6 +1155,37 @@ spec:
                                       LinseedDeploymentContainer is a linseed
                                       Deployment container.
                                     properties:
+                                      livenessProbe:
+                                        description: |-
+                                          LivenessProbe allows customization of the liveness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       name:
                                         description: |-
                                           Name is an enum which identifies the linseed Deployment container by name.
@@ -914,6 +1193,37 @@ spec:
                                         enum:
                                           - tigera-linseed
                                         type: string
+                                      readinessProbe:
+                                        description: |-
+                                          ReadinessProbe allows customization of the readiness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.

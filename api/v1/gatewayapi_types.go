@@ -228,6 +228,16 @@ type GatewayControllerDeploymentContainer struct {
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 
 // GatewayCertgenJob allows customization of the gateway certgen job.
@@ -286,6 +296,16 @@ type GatewayCertgenJobContainer struct {
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Deployment;DaemonSet
@@ -364,6 +384,16 @@ type GatewayDeploymentContainer struct {
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 
 // GatewayDeploymentStrategy allows customization of the deployment strategy for gateway
@@ -434,6 +464,16 @@ type GatewayDaemonSetContainer struct {
 	Name string `json:"name"`
 
 	// If non-nil, Resources sets the ResourceRequirements of the daemonset's "envoy"
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 	// container.
 	// +optional
 	Resources *v1.ResourceRequirements `json:"resources,omitempty"`

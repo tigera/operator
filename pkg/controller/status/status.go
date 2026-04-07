@@ -51,6 +51,12 @@ const (
 	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
 	// killer, manual kill) can also produce this code.
 	exitCodeSIGKILL = 137
+
+	// Container waiting reason strings. These are set by the container runtime and
+	// kubelet; Kubernetes does not define constants for them.
+	waitingCrashLoopBackOff = "CrashLoopBackOff"
+	waitingImagePullBackOff = "ImagePullBackOff"
+	waitingErrImagePull     = "ErrImagePull"
 )
 
 type podIssueSeverity int
@@ -87,10 +93,15 @@ type podIssue struct {
 	exitCode          int32
 }
 
+// key returns a deduplication key for this issue. Issues with the same key are grouped
+// together in summarizeIssues, so that e.g. 10 pods all OOMKilled produce one message
+// with "(10 pods affected)" rather than 10 separate messages.
 func (p podIssue) key() string {
 	return fmt.Sprintf("%d:%s:%d", p.issueType, p.terminationReason, p.exitCode)
 }
 
+// maxIssuesPerWorkload is the maximum number of distinct issue types reported per workload.
+// Beyond this cap, additional issues are dropped to keep messages concise.
 const maxIssuesPerWorkload = 3
 
 // summarizeIssues deduplicates, prioritizes, and caps a list of pod issues into
@@ -858,7 +869,7 @@ func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevi
 	for _, c := range statuses {
 		if c.State.Waiting != nil {
 			switch c.State.Waiting.Reason {
-			case "CrashLoopBackOff":
+			case waitingCrashLoopBackOff:
 				msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
 				var termReason string
 				var exitCode int32
@@ -879,7 +890,7 @@ func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevi
 					terminationReason: termReason,
 					exitCode:          exitCode,
 				})
-			case "ImagePullBackOff", "ErrImagePull":
+			case waitingImagePullBackOff, waitingErrImagePull:
 				issues = append(issues, podIssue{
 					severity:      severityFailing,
 					issueType:     issueImagePull,
@@ -917,6 +928,8 @@ func podMatchesRevision(p corev1.Pod, currentRevision string) bool {
 
 // currentDeploymentRevision returns the pod-template-hash of the active ReplicaSet
 // for the given Deployment. Returns empty string if it cannot be determined.
+// Only called when the Deployment is unhealthy. The List call goes through
+// the controller-runtime informer cache, not directly to the API server.
 func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string {
 	rsList := &appsv1.ReplicaSetList{}
 	s, err := metav1.LabelSelectorAsMap(dep.Spec.Selector)
@@ -930,9 +943,8 @@ func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string
 		return ""
 	}
 
-	// Find the ReplicaSet that is owned by this Deployment and has active replicas.
 	for _, rs := range rsList.Items {
-		if !isOwnedBy(rs.OwnerReferences, dep.UID) {
+		if ref := metav1.GetControllerOf(&rs); ref == nil || ref.UID != dep.UID {
 			continue
 		}
 		if rs.Status.Replicas > 0 {
@@ -944,6 +956,8 @@ func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string
 
 // currentDaemonSetRevision returns the controller-revision-hash of the most recent
 // ControllerRevision for the given DaemonSet. Returns empty string if it cannot be determined.
+// Only called when the DaemonSet is unhealthy. The List call goes through
+// the controller-runtime informer cache, not directly to the API server.
 func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
 	revList := &appsv1.ControllerRevisionList{}
 	err := m.client.List(context.TODO(), revList, client.InNamespace(ds.Namespace))
@@ -955,7 +969,7 @@ func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
 	var maxRevision int64
 	var currentHash string
 	for _, rev := range revList.Items {
-		if !isOwnedBy(rev.OwnerReferences, ds.UID) {
+		if ref := metav1.GetControllerOf(&rev); ref == nil || ref.UID != ds.UID {
 			continue
 		}
 		if rev.Revision > maxRevision {
@@ -966,14 +980,6 @@ func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
 	return currentHash
 }
 
-func isOwnedBy(refs []metav1.OwnerReference, uid types.UID) bool {
-	for _, ref := range refs {
-		if ref.UID == uid && ref.Controller != nil && *ref.Controller {
-			return true
-		}
-	}
-	return false
-}
 
 func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {
 	if m.enabled == nil || !*m.enabled {

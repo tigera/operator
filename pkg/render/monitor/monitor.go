@@ -60,7 +60,7 @@ const (
 	CalicoPrometheusOperatorSecret = "calico-prometheus-operator-secret"
 
 	TigeraPrometheusObjectName  = "tigera-prometheus"
-	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
+	TigeraPrometheusRule        = "calico"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
@@ -131,6 +131,10 @@ func MonitorPolicy(cfg *Config) render.Component {
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
+		&monitoringv1.PrometheusRule{
+			TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-dp-rate", Namespace: common.TigeraPrometheusNamespace},
+		},
 	}
 
 	if alertmanagerReplicasFromConfig(cfg) > 0 {
@@ -959,7 +963,7 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	return &monitoringv1.PrometheusRule{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusDPRate,
+			Name:      TigeraPrometheusRule,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
 				"prometheus": CalicoNodePrometheus,

@@ -477,7 +477,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 
 		// PrometheusRule
-		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusDPRate, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
+		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusRule, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
 		Expect(ok).To(BeTrue())
 		Expect(prometheusruleObj.ObjectMeta.Labels).To(HaveLen(2))
 		Expect(prometheusruleObj.ObjectMeta.Labels["prometheus"]).To(Equal("calico-node-prometheus"))

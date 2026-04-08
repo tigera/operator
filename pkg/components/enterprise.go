@@ -21,271 +21,271 @@ var (
 	EnterpriseRelease string = "master"
 
 	ComponentAPIServer = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "apiserver",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentComplianceBenchmarker = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "compliance-benchmarker",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentComplianceController = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "compliance-controller",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentComplianceReporter = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "compliance-reporter",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentComplianceServer = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "compliance-server",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentComplianceSnapshotter = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "compliance-snapshotter",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraCSRInitContainer = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "key-cert-provisioner",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentDeepPacketInspection = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "deep-packet-inspection",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version: "8.19.10",
+		Version: "8.19.12",
 		variant: enterpriseVariant,
 	}
 
 	ComponentEckKibana = Component{
-		Version: "8.19.10",
+		Version: "8.19.12",
 		variant: enterpriseVariant,
 	}
 
 	ComponentElasticTseeInstaller = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "intrusion-detection-job-installer",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentElasticsearch = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "elasticsearch",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.3.0",
 		variant: enterpriseVariant,
 	}
 
 	ComponentElasticsearchOperator = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "eck-operator",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentUIAPIs = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "ui-apis",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentESGateway = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "es-gateway",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentLinseed = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "linseed",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentFluentd = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "fluentd",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentFluentdWindows = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "fluentd-windows",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentGuardian = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "guardian",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentIntrusionDetectionController = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "intrusion-detection-controller",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentWAFHTTPFilter = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "waf-http-filter",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "webhooks-processor",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentKibana = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "kibana",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentManager = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-32-g022295c17185",
 		Image:     "manager",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentDex = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "dex",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentManagerProxy = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "voltron",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentPacketCapture = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "packetcapture",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentPolicyRecommendation = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "policy-recommendation",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentEgressGateway = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "egress-gateway",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentL7Collector = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "l7-collector",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentGatewayL7Collector = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:    "gateway-l7-collector",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "envoy",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentDikastes = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "dikastes",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentL7AdmissionController = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "l7-admission-controller",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
@@ -296,178 +296,178 @@ var (
 	}
 
 	ComponentPrometheus = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "prometheus",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraPrometheusService = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "prometheus-service",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version: "v0.30.1",
+		Version: "v0.31.1",
 		variant: enterpriseVariant,
 	}
 
 	ComponentPrometheusAlertmanager = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "alertmanager",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentQueryServer = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "queryserver",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraKubeControllers = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "kube-controllers",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraNode = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "node",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "node-windows",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraTypha = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "typha",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraCNI = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "cni",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "cni-windows",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentElasticsearchMetrics = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "elasticsearch-metrics",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraFlexVolume = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "pod2daemon-flexvol",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraCSI = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "csi",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "node-driver-registrar",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "envoy-gateway",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "envoy-proxy",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "envoy-ratelimit",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
 	ComponentIstioPilot = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:    "istio-pilot",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioInstallCNI = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:    "istio-install-cni",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioZTunnel = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:    "istio-ztunnel",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioProxyv2 = Component{
-		Version:  "master",
+		Version:  "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:    "istio-proxyv2",
-		Registry: "",
+		Registry: "gcr.io/unique-caldron-775/cnx/",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentTigeraWebhooks = Component{
-		Version:   "master",
+		Version:   "v3.24.0-1.0-calient-0.dev-724-g4e8956a44a22",
 		Image:     "webhooks",
-		Registry:  "",
+		Registry:  "gcr.io/unique-caldron-775/cnx/",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}

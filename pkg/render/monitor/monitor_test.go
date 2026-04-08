@@ -93,6 +93,13 @@ var _ = Describe("monitor rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: ptr.To(int32(3)),
 			},
+			Monitor: operatorv1.MonitorSpec{
+				AlertManager: &operatorv1.AlertManager{
+					AlertManagerSpec: &operatorv1.AlertManagerSpec{
+						Replicas: ptr.To(int32(3)),
+					},
+				},
+			},
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
@@ -162,6 +169,7 @@ var _ = Describe("monitor rendering tests", func() {
 
 		cfg.Monitor.AlertManager = &operatorv1.AlertManager{
 			AlertManagerSpec: &operatorv1.AlertManagerSpec{
+				Replicas:  ptr.To(int32(3)),
 				Resources: alertManagerResources,
 			},
 		}

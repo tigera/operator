@@ -93,6 +93,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
 				KibanaScheme:  "https",
 				KibanaPort:    5601,
+				KibanaEnabled: true,
 			}
 		})
 
@@ -234,6 +235,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				KibanaHost:    "external-kibana",
 				KibanaScheme:  "https",
 				KibanaPort:    443,
+				KibanaEnabled: true,
 			}
 		})
 
@@ -375,6 +377,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				KibanaHost:    "external-kibana",
 				KibanaScheme:  "https",
 				KibanaPort:    443,
+				KibanaEnabled: true,
 			}
 		})
 
@@ -490,6 +493,7 @@ var _ = Describe("Dashboards rendering tests", func() {
 				KibanaHost:    "tigera-secure-kb-http.tigera-kibana.svc",
 				KibanaScheme:  "https",
 				KibanaPort:    5601,
+				KibanaEnabled: true,
 			}
 		})
 

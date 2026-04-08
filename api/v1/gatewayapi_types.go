@@ -64,6 +64,18 @@ type GatewayAPISpec struct {
 	// +optional
 	GatewayCertgenJob *GatewayCertgenJob `json:"gatewayCertgenJob,omitempty"`
 
+	// Configures where Envoy Gateway deploys managed gateway proxy workloads.
+	//
+	// - "ControllerNamespace" deploys managed proxy workloads in the Envoy Gateway
+	// controller namespace.
+	// - "GatewayNamespace" deploys managed proxy workloads in each Gateway's
+	// namespace.
+	//
+	// If not specified, defaults to "ControllerNamespace".
+	// +kubebuilder:default=ControllerNamespace
+	// +optional
+	GatewayDeploymentMode *GatewayDeploymentMode `json:"gatewayDeploymentMode,omitempty"`
+
 	// Configures how to manage and update Gateway API CRDs.  The default behaviour - which is
 	// used when this field is not set, or is set to "PreferExisting" - is that the Tigera
 	// operator will create the Gateway API CRDs if they do not already exist, but will not
@@ -128,6 +140,14 @@ type GatewayClassSpec struct {
 	// +optional
 	GatewayService *GatewayService `json:"gatewayService,omitempty"`
 }
+
+// +kubebuilder:validation:Enum=ControllerNamespace;GatewayNamespace
+type GatewayDeploymentMode string
+
+const (
+	GatewayDeploymentModeControllerNamespace GatewayDeploymentMode = "ControllerNamespace"
+	GatewayDeploymentModeGatewayNamespace    GatewayDeploymentMode = "GatewayNamespace"
+)
 
 //+kubebuilder:object:root=true
 //+kubebuilder:resource:scope=Cluster

@@ -189,7 +189,11 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Kubernetes Gateway API CRDs.
-	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider)
+	essentialCRDs, optionalCRDs, err := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
 
 	// Check CRDs are present and only create it if not
 	handler := utils.NewComponentHandler(log, r, r.scheme, nil)

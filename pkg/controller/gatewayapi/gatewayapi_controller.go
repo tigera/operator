@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -213,7 +214,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider)
+	essentialCRDs, optionalCRDs, err := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -275,11 +280,16 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
+		Scheme:                r.scheme,
 		Installation:          installationSpec,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
 		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
 		CurrentGatewayClasses: set.New[string](),
+	}
+
+	if gatewayAPI.Spec.GatewayDeploymentMode == nil {
+		gatewayAPI.Spec.GatewayDeploymentMode = ptr.To(operatorv1.GatewayDeploymentModeControllerNamespace)
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {

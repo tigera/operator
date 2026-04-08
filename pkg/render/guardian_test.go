@@ -344,18 +344,28 @@ var _ = Describe("Rendering tests", func() {
 				Expect(policy.Spec.Egress).To(BeEmpty())
 			})
 
-			It("should not render Enterprise network policy when IncludeEgressNetworkPolicy is false", func() {
-				// Enterprise variant with IncludeEgressNetworkPolicy=false should not render any policy
-				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.TigeraSecureEnterprise, false)
+			It("should render Enterprise network policy without domain-based egress when IncludeEgressNetworkPolicy is false", func() {
+				// Enterprise variant with IncludeEgressNetworkPolicy=false should render a policy but skip domain-based egress rules
+				renderGuardianPolicy("my-management.example.com:1234", false, operatorv1.TigeraSecureEnterprise, false)
 
 				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
-				Expect(policy).To(BeNil(), "Enterprise variant with IncludeEgressNetworkPolicy=false should not render a network policy")
+				Expect(policy).NotTo(BeNil(), "Enterprise variant should always render a network policy when tier exists")
+
+				// Verify it's the Enterprise policy (should have both Ingress and Egress types)
+				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+				Expect(policy.Spec.Egress).NotTo(BeEmpty())
+
+				// Verify no domain-based egress rules are present
+				for _, rule := range policy.Spec.Egress {
+					Expect(rule.Destination.Domains).To(BeEmpty(),
+						"Domain-based egress rules should not be present when IncludeEgressNetworkPolicy is false")
+				}
 			})
 
-			It("should render Enterprise network policy when IncludeEgressNetworkPolicy is true", func() {
-				// Enterprise variant with IncludeEgressNetworkPolicy=true should render the full policy
-				renderGuardianPolicy("127.0.0.1:1234", false, operatorv1.TigeraSecureEnterprise, true)
+			It("should render Enterprise network policy with domain-based egress when IncludeEgressNetworkPolicy is true", func() {
+				// Enterprise variant with IncludeEgressNetworkPolicy=true should render the full policy including domain-based egress
+				renderGuardianPolicy("my-management.example.com:1234", false, operatorv1.TigeraSecureEnterprise, true)
 
 				policyName := types.NamespacedName{Name: "calico-system.guardian-access", Namespace: "calico-system"}
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
@@ -364,6 +374,16 @@ var _ = Describe("Rendering tests", func() {
 				// Verify it's the Enterprise policy (should have both Ingress and Egress types)
 				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
 				Expect(policy.Spec.Egress).NotTo(BeEmpty())
+
+				// Verify domain-based egress rule is present
+				hasDomainRule := false
+				for _, rule := range policy.Spec.Egress {
+					if len(rule.Destination.Domains) > 0 {
+						hasDomainRule = true
+						break
+					}
+				}
+				Expect(hasDomainRule).To(BeTrue(), "Domain-based egress rule should be present when IncludeEgressNetworkPolicy is true")
 			})
 		})
 

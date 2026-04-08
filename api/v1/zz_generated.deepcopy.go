@@ -4406,6 +4406,11 @@ func (in *GatewayAPISpec) DeepCopyInto(out *GatewayAPISpec) {
 		*out = new(GatewayCertgenJob)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.GatewayDeploymentMode != nil {
+		in, out := &in.GatewayDeploymentMode, &out.GatewayDeploymentMode
+		*out = new(GatewayDeploymentMode)
+		**out = **in
+	}
 	if in.CRDManagement != nil {
 		in, out := &in.CRDManagement, &out.CRDManagement
 		*out = new(CRDManagement)

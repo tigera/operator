@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -280,6 +281,10 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		GatewayAPI:            gatewayAPI,
 		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
 		CurrentGatewayClasses: set.New[string](),
+	}
+
+	if gatewayAPI.Spec.GatewayDeploymentMode == nil {
+		gatewayAPI.Spec.GatewayDeploymentMode = ptr.To(operatorv1.GatewayDeploymentModeControllerNamespace)
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {

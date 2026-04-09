@@ -69,7 +69,7 @@ func AddWindowsController(mgr manager.Manager, opts options.AddOptions) error {
 
 	c, err := ctrlruntime.NewController("tigera-windows-controller", mgr, controller.Options{Reconciler: ri})
 	if err != nil {
-		return fmt.Errorf("Failed to create tigera-windows-controller: %w", err)
+		return fmt.Errorf("failed to create tigera-windows-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Installation

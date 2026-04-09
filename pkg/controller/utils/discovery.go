@@ -21,7 +21,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -187,7 +186,7 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "aws-auth", metav1.GetOptions{})
 	if err == nil {
 		return true, nil
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -196,7 +195,7 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err = c.CoreV1().ConfigMaps("kube-system").Get(ctx, "eks-certificates-controller", metav1.GetOptions{})
 	if err == nil {
 		return true, nil
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -211,7 +210,7 @@ func isEKS(ctx context.Context, c kubernetes.Interface) (bool, error) {
 				}
 			}
 		}
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -228,7 +227,7 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err := c.CoreV1().ConfigMaps("kube-system").Get(ctx, "rke2", metav1.GetOptions{})
 	if err == nil {
 		foundRKE2Resource = true
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 
@@ -239,7 +238,7 @@ func isRKE2(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	_, err = c.CoreV1().Services("kube-system").Get(ctx, "rke2-coredns-rke2-coredns", metav1.GetOptions{})
 	if err == nil {
 		foundRKE2Resource = true
-	} else if !kerrors.IsNotFound(err) {
+	} else if !errors.IsNotFound(err) {
 		return false, err
 	}
 

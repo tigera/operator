@@ -712,7 +712,15 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 		// Check well-known error states here and report an appropriate mesage to the end user.
 		switch c.State.Waiting.Reason {
 		case "CrashLoopBackOff":
-			return fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
+			msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
+			if lt := c.LastTerminationState.Terminated; lt != nil {
+				if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
+					msg += " (exit code 137, possible liveness probe failure)"
+				} else {
+					msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+				}
+			}
+			return msg
 		case "ImagePullBackOff", "ErrImagePull":
 			return fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name)
 		}

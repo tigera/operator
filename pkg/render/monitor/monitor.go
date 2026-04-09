@@ -60,7 +60,7 @@ const (
 	CalicoPrometheusOperatorSecret = "calico-prometheus-operator-secret"
 
 	TigeraPrometheusObjectName  = "tigera-prometheus"
-	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
+	TigeraPrometheusRule        = "calico"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
@@ -131,6 +131,10 @@ func MonitorPolicy(cfg *Config) render.Component {
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
+		&monitoringv1.PrometheusRule{
+			TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-dp-rate", Namespace: common.TigeraPrometheusNamespace},
+		},
 	}
 
 	if alertmanagerReplicasFromConfig(cfg) > 0 {
@@ -881,10 +885,106 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 }
 
 func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
+	rules := []monitoringv1.Rule{
+		{
+			Alert:  "DeniedPacketsRate",
+			Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
+			Labels: map[string]string{"severity": "info"},
+			Annotations: map[string]string{
+				"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
+				"description": "{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}.",
+			},
+		},
+	}
+
+	if mc.cfg.OperatorMetricsEnabled {
+		forDuration15m := monitoringv1.Duration("15m")
+		forDuration30m := monitoringv1.Duration("30m")
+		rules = append(rules,
+			monitoringv1.Rule{
+				Alert: "TLSCertExpiringWarning",
+				// Use 30d - 8h to avoid warning for certificates that the operator will automatically rotate.
+				Expr:   intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < (30 * 24 - 8) * 3600"),
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "TLS certificate {{ $labels.name }} expires in less than 30 days",
+					"description": "TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 30 days.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "TLSCertExpiringCritical",
+				Expr:   intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < 7 * 24 * 3600"),
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "TLS certificate {{ $labels.name }} expires in less than 7 days",
+					"description": "TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 7 days.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "LicenseExpiringWarning",
+				Expr:   intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 30 * 24 * 3600"),
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Calico Enterprise license expires in less than 30 days",
+					"description": "The Calico Enterprise license will expire in less than 30 days.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "LicenseExpiringCritical",
+				Expr:   intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 7 * 24 * 3600 or tigera_operator_license_valid == 0"),
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Calico Enterprise license expires in less than 7 days or is invalid",
+					"description": "The Calico Enterprise license will expire in less than 7 days, or the license is invalid.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentDegradedWarning",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
+				For:    &forDuration15m,
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is degraded",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 15 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentDegradedCritical",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
+				For:    &forDuration30m,
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is degraded",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 30 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentProgressingWarning",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`),
+				For:    &forDuration15m,
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is progressing",
+					"description": "Component {{ $labels.component }} has been in a progressing state for more than 15 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentProgressingCritical",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`),
+				For:    &forDuration30m,
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is progressing",
+					"description": "Component {{ $labels.component }} has been in a progressing state for more than 30 minutes.",
+				},
+			},
+		)
+	}
+
 	return &monitoringv1.PrometheusRule{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusDPRate,
+			Name:      TigeraPrometheusRule,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
 				"prometheus": CalicoNodePrometheus,
@@ -894,18 +994,8 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 		Spec: monitoringv1.PrometheusRuleSpec{
 			Groups: []monitoringv1.RuleGroup{
 				{
-					Name: "calico.rules",
-					Rules: []monitoringv1.Rule{
-						{
-							Alert:  "DeniedPacketsRate",
-							Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
-							Labels: map[string]string{"severity": "critical"},
-							Annotations: map[string]string{
-								"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
-								"description": "{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}.",
-							},
-						},
-					},
+					Name:  "calico.rules",
+					Rules: rules,
 				},
 			},
 		},

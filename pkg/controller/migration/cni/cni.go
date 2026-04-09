@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -114,7 +114,7 @@ func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
 	// __CNI_MTU__ as an integer, e.g. { "mtu": __CNI_MTU__ }
 	// in such cases, replace it with a placeholder, so that we can json load it, and still
 	// know that it should be substituted later during validation.
-	cniConfig = strings.Replace(cniConfig, "__CNI_MTU__", "-1", -1)
+	cniConfig = strings.ReplaceAll(cniConfig, "__CNI_MTU__", "-1")
 
 	confList, err := libcni.ConfListFromBytes([]byte(cniConfig))
 	if err == nil {

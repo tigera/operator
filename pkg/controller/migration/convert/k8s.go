@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -168,7 +167,7 @@ func (r *CheckedDaemonSet) ignoreEnv(container, key string) {
 }
 
 // getEnv gets the value of an environment variable.
-func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component, container, key string) (*string, error) {
+func getEnv(ctx context.Context, client client.Client, pts corev1.PodSpec, component, container, key string) (*string, error) {
 	c := getContainer(pts, container)
 	if c == nil {
 		return nil, ErrIncompatibleCluster{
@@ -184,9 +183,9 @@ func getEnv(ctx context.Context, client client.Client, pts v1.PodSpec, component
 				return &e.Value, nil
 			}
 			if e.ValueFrom.ConfigMapKeyRef != nil {
-				cm := v1.ConfigMap{}
+				cm := corev1.ConfigMap{}
 				err := client.Get(ctx, types.NamespacedName{
-					Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
+					Name:      e.ValueFrom.ConfigMapKeyRef.Name,
 					Namespace: "kube-system",
 				}, &cm)
 				if err != nil {

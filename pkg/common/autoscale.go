@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,7 +30,7 @@ package common
 //	...
 //	>3600             20
 func GetExpectedTyphaScale(nodes int) int {
-	var maxNodesPerTypha int = 200
+	maxNodesPerTypha := 200
 
 	// This gives a count of how many 200s so we need 1+ this number to get at least
 	// 1 typha for every 200 nodes.

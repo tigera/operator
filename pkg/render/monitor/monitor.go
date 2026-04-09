@@ -898,8 +898,8 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	}
 
 	if mc.cfg.OperatorMetricsEnabled {
-		forDuration30s := monitoringv1.Duration("30s")
-		forDuration5m := monitoringv1.Duration("5m")
+		forDuration15m := monitoringv1.Duration("15m")
+		forDuration30m := monitoringv1.Duration("30m")
 		rules = append(rules,
 			monitoringv1.Rule{
 				Alert: "TLSCertExpiringWarning",
@@ -941,21 +941,41 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 			monitoringv1.Rule{
 				Alert:  "ComponentDegradedWarning",
 				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
-				For:    &forDuration30s,
+				For:    &forDuration15m,
 				Labels: map[string]string{"severity": "warning"},
 				Annotations: map[string]string{
 					"summary":     "Component {{ $labels.component }} is degraded",
-					"description": "Component {{ $labels.component }} has been in a degraded state for more than 30 seconds.",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 15 minutes.",
 				},
 			},
 			monitoringv1.Rule{
 				Alert:  "ComponentDegradedCritical",
 				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
-				For:    &forDuration5m,
+				For:    &forDuration30m,
 				Labels: map[string]string{"severity": "critical"},
 				Annotations: map[string]string{
 					"summary":     "Component {{ $labels.component }} is degraded",
-					"description": "Component {{ $labels.component }} has been in a degraded state for more than 5 minutes.",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 30 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentProgressingWarning",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`),
+				For:    &forDuration15m,
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is progressing",
+					"description": "Component {{ $labels.component }} has been in a progressing state for more than 15 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentProgressingCritical",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`),
+				For:    &forDuration30m,
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is progressing",
+					"description": "Component {{ $labels.component }} has been in a progressing state for more than 30 minutes.",
 				},
 			},
 		)

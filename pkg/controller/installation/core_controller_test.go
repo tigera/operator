@@ -1443,8 +1443,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			bgpConfig := &v3.BGPConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfig)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(bgpConfig.Spec.ProgramClusterRoutes).To(BeNil())
+			Expect(err).Should(HaveOccurred())
 		})
 
 		It("should correctly patch FelixConfig and BGPConfig with ClusterRouteMode set to BIRD", func() {

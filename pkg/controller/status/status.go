@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2025 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -32,7 +32,6 @@ import (
 	certV1 "k8s.io/api/certificates/v1"
 	certV1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -47,11 +46,6 @@ const (
 	// terminationReasonError is the reason string the container runtime sets on
 	// ContainerStateTerminated when the container exits with a non-zero exit code.
 	terminationReasonError = "Error"
-
-	// exitCodeSIGKILL is the exit code for a container killed by SIGKILL (128 + 9).
-	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
-	// killer, manual kill) can also produce this code.
-	exitCodeSIGKILL = 137
 )
 
 // StatusManager manages the status for a single controller and component, and reports the status via
@@ -718,15 +712,7 @@ func (m *statusManager) containerErrorMessage(p corev1.Pod, c corev1.ContainerSt
 		// Check well-known error states here and report an appropriate mesage to the end user.
 		switch c.State.Waiting.Reason {
 		case "CrashLoopBackOff":
-			msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
-			if lt := c.LastTerminationState.Terminated; lt != nil {
-				if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
-					msg += " (exit code 137, possible liveness probe failure)"
-				} else {
-					msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
-				}
-			}
-			return msg
+			return fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
 		case "ImagePullBackOff", "ErrImagePull":
 			return fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name)
 		}
@@ -969,7 +955,7 @@ func hasPendingCSRUsingCertV1(ctx context.Context, cli client.Client, labelMap m
 		}
 		// no condition approved, means it is pending.
 		for _, condition := range csr.Status.Conditions {
-			if condition.Status == v1.ConditionUnknown {
+			if condition.Status == corev1.ConditionUnknown {
 				return true, nil
 			} else if condition.Type == certV1.CertificateApproved && csr.Status.Certificate == nil {
 				return true, nil
@@ -998,7 +984,7 @@ func hasPendingCSRUsingCertV1beta1(ctx context.Context, cli client.Client, label
 		}
 		// no condition approved, means it is pending.
 		for _, condition := range csr.Status.Conditions {
-			if condition.Status == v1.ConditionUnknown {
+			if condition.Status == corev1.ConditionUnknown {
 				return true, nil
 			} else if condition.Type == certV1beta1.CertificateApproved && csr.Status.Certificate == nil {
 				return true, nil
@@ -1023,9 +1009,10 @@ func UpdateStatusCondition(statuscondition []metav1.Condition, conditions []oper
 		}
 
 		status := metav1.ConditionUnknown
-		if condition.Status == operator.ConditionTrue {
+		switch condition.Status {
+		case operator.ConditionTrue:
 			status = metav1.ConditionTrue
-		} else if condition.Status == operator.ConditionFalse {
+		case operator.ConditionFalse:
 			status = metav1.ConditionFalse
 		}
 		ic := metav1.Condition{

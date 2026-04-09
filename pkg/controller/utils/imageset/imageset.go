@@ -205,5 +205,5 @@ func ResolveImages(is *operator.ImageSet, comps ...render.Component) error {
 		return nil
 	}
 
-	return fmt.Errorf("Invalid ImageSet: %s", strings.Join(errMsgs, ", "))
+	return fmt.Errorf("invalid ImageSet: %s", strings.Join(errMsgs, ", "))
 }

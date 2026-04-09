@@ -46,11 +46,6 @@ const (
 	// terminationReasonError is the reason string the container runtime sets on
 	// ContainerStateTerminated when the container exits with a non-zero exit code.
 	terminationReasonError = "Error"
-
-	// exitCodeSIGKILL is the exit code for a container killed by SIGKILL (128 + 9).
-	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
-	// killer, manual kill) can also produce this code.
-	exitCodeSIGKILL = 137
 )
 
 // StatusManager manages the status for a single controller and component, and reports the status via

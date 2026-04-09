@@ -898,16 +898,17 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	}
 
 	if mc.cfg.OperatorMetricsEnabled {
-		forDuration10s := monitoringv1.Duration("10s")
-		forDuration1m := monitoringv1.Duration("1m")
+		forDuration30s := monitoringv1.Duration("30s")
+		forDuration5m := monitoringv1.Duration("5m")
 		rules = append(rules,
 			monitoringv1.Rule{
-				Alert:  "TLSCertExpiringWarning",
-				Expr:   intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < 29 * 24 * 3600"),
+				Alert: "TLSCertExpiringWarning",
+				// Use 30d - 8h to avoid warning for certificates that the operator will automatically rotate.
+				Expr:   intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < (30 * 24 - 8) * 3600"),
 				Labels: map[string]string{"severity": "warning"},
 				Annotations: map[string]string{
-					"summary":     "TLS certificate {{ $labels.name }} expires in less than 29 days",
-					"description": "TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 29 days.",
+					"summary":     "TLS certificate {{ $labels.name }} expires in less than 30 days",
+					"description": "TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 30 days.",
 				},
 			},
 			monitoringv1.Rule{
@@ -940,21 +941,21 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 			monitoringv1.Rule{
 				Alert:  "ComponentDegradedWarning",
 				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
-				For:    &forDuration10s,
+				For:    &forDuration30s,
 				Labels: map[string]string{"severity": "warning"},
 				Annotations: map[string]string{
 					"summary":     "Component {{ $labels.component }} is degraded",
-					"description": "Component {{ $labels.component }} has been in a degraded state for more than 10 seconds.",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 30 seconds.",
 				},
 			},
 			monitoringv1.Rule{
 				Alert:  "ComponentDegradedCritical",
 				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
-				For:    &forDuration1m,
+				For:    &forDuration5m,
 				Labels: map[string]string{"severity": "critical"},
 				Annotations: map[string]string{
 					"summary":     "Component {{ $labels.component }} is degraded",
-					"description": "Component {{ $labels.component }} has been in a degraded state for more than 1 minute.",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 5 minutes.",
 				},
 			},
 		)

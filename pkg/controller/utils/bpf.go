@@ -48,7 +48,7 @@ func BPFBootstrapRequirements(ctx context.Context, c client.Client, install *ope
 	// 2. kubernetes service endpoint shouldn't be defined by kubernetes-service-endpoints ConfigMap.
 	_, err := GetK8sServiceEndPoint(c)
 	if err == nil {
-		return nil, fmt.Errorf("kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap.")
+		return nil, fmt.Errorf("kubernetes service endpoint is defined by the kubernetes-service-endpoints ConfigMap")
 	}
 
 	bpfBootstrapReq := &BPFBootstrap{}

@@ -564,7 +564,7 @@ func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNa
 // CACertCommonName returns the CommonName from the CA certificate's Subject field.
 func (cm *certificateManager) CACertCommonName() string {
 	if cm.Certificate != nil {
-		return cm.Certificate.Subject.CommonName
+		return cm.Subject.CommonName
 	}
 	return ""
 }

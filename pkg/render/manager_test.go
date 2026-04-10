@@ -840,7 +840,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert, SignerName: "my-domain/my-signer"}, ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -879,7 +879,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret).To(BeNil())
 
 		voltronContainer := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
-		rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_CA_SIGNER_NAME", "my-domain/my-signer")
+		var caSignerName string
+		for _, e := range voltronContainer.Env {
+			if e.Name == "VOLTRON_CA_SIGNER_NAME" {
+				caSignerName = e.Value
+				break
+			}
+		}
+		Expect(caSignerName).NotTo(BeEmpty(), "Expected VOLTRON_CA_SIGNER_NAME to be set")
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
@@ -1614,6 +1621,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		Tenant:                  roc.tenant,
 		Manager:                 roc.manager,
 		ExternalElastic:         roc.externalElastic,
+		CACertCommonName:        certificateManager.CACertCommonName(),
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

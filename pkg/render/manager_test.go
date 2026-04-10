@@ -877,6 +877,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret).To(BeNil())
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret).To(BeNil())
+
+		voltronContainer := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
+		var caSignerName string
+		for _, e := range voltronContainer.Env {
+			if e.Name == "VOLTRON_CA_SIGNER_NAME" {
+				caSignerName = e.Value
+				break
+			}
+		}
+		Expect(caSignerName).NotTo(BeEmpty(), "Expected VOLTRON_CA_SIGNER_NAME to be set")
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
@@ -1611,6 +1621,7 @@ func renderObjects(roc renderConfig) []client.Object {
 		Tenant:                  roc.tenant,
 		Manager:                 roc.manager,
 		ExternalElastic:         roc.externalElastic,
+		CACertCommonName:        certificateManager.CACertCommonName(),
 	}
 	component, err := render.Manager(cfg)
 	Expect(err).To(BeNil(), "Expected Manager to create successfully %s", err)

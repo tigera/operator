@@ -199,6 +199,10 @@ type ManagerConfiguration struct {
 	ExternalElastic bool
 
 	Manager *operatorv1.Manager
+
+	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
+	// Passed to Voltron so it can identify the correct CA issuer public key.
+	CACertCommonName string
 }
 
 type managerComponent struct {
@@ -568,8 +572,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
 	}
 
-	if c.cfg.Installation != nil && c.cfg.Installation.CertificateManagement != nil {
-		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_SIGNER_NAME", Value: c.cfg.Installation.CertificateManagement.SignerName})
+	if c.cfg.CACertCommonName != "" {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_SIGNER_NAME", Value: c.cfg.CACertCommonName})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

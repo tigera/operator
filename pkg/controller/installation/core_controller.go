@@ -2068,6 +2068,10 @@ func setClusterRoutingOnFelixConfiguration(
 	fc *v3.FelixConfiguration,
 	reqLogger logr.Logger,
 ) (bool, error) {
+	if install.Spec.CalicoNetwork == nil || install.Spec.CalicoNetwork.ClusterRoutingMode == nil {
+		return false, nil
+	}
+
 	updated := false
 	desiredValue := "Disabled"
 	if felixProgramsClusterRoutes(install) {
@@ -2090,9 +2094,12 @@ func setClusterRoutingOnBGPConfiguration(
 	bgpConfig *v3.BGPConfiguration,
 	reqLogger logr.Logger,
 ) (bool, error) {
+	if install.Spec.CalicoNetwork == nil || install.Spec.CalicoNetwork.ClusterRoutingMode == nil {
+		return false, nil
+	}
+
 	updated := false
 	desiredValue := "Enabled"
-
 	if felixProgramsClusterRoutes(install) {
 		desiredValue = "Disabled"
 	}

@@ -1430,7 +1430,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(pullSecret.Kind).To(Equal("Installation"))
 		})
 
-		It("should correctly patch FelixConfig and BGPConfig with ClusterRouteMode not set", func() {
+		It("should not patch FelixConfig and BGPConfig when ClusterRouteMode not set", func() {
 			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{}
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1439,14 +1439,11 @@ var _ = Describe("Testing core-controller installation", func() {
 			fc := &v3.FelixConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(fc.Spec.ProgramClusterRoutes).NotTo(BeNil())
-			Expect(*fc.Spec.ProgramClusterRoutes).To(Equal("Disabled"))
+			Expect(fc.Spec.ProgramClusterRoutes).To(BeNil())
 
 			bgpConfig := &v3.BGPConfiguration{}
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfig)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(bgpConfig.Spec.ProgramClusterRoutes).NotTo(BeNil())
-			Expect(*bgpConfig.Spec.ProgramClusterRoutes).To(Equal("Enabled"))
+			Expect(err).Should(HaveOccurred())
 		})
 
 		It("should correctly patch FelixConfig and BGPConfig with ClusterRouteMode set to BIRD", func() {

@@ -549,6 +549,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
 	}
 
+	if c.cfg.Installation != nil && c.cfg.Installation.CertificateManagement != nil {
+		env = append(env, corev1.EnvVar{Name: "CA_SIGNER_NAME", Value: c.cfg.Installation.CertificateManagement.SignerName})
+	}
+
 	if c.cfg.KeyValidatorConfig != nil {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("VOLTRON_")...)
 	}

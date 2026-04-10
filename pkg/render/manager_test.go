@@ -840,7 +840,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resources := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert, SignerName: "my-domain/my-signer"}, ControlPlaneReplicas: &replicas},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -877,6 +877,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret).To(BeNil())
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret).To(BeNil())
+
+		voltronContainer := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
+		rtest.ExpectEnv(voltronContainer.Env, "CA_SIGNER_NAME", "my-domain/my-signer")
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {

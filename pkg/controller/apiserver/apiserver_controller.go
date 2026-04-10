@@ -526,15 +526,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))
 	}
 
-	// If the projectcalico.org/v3 API group is being backed by our aggregated API server, then v3 NetworkPolicy will fail to reconcile until the Calico API server is healthy.
-	// Thus, we only render v3.NetworkPolicy after the aggregated API server becomes available to avoid a chicken-and-egg scenario.
-	//
-	// If the projectcalico.org/v3 API group is implemented using CRDs natively, we can install network policies immediately, as there is no
-	// dependency on the API server deployment.
-	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
-	}
-
+	// Add in the API server component itself.
 	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
@@ -550,6 +542,17 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			TrustedBundle:   trustedBundle,
 		}),
 	)
+
+	// If the projectcalico.org/v3 API group is being backed by our aggregated API server, then v3 NetworkPolicy will fail to reconcile until the Calico API server is healthy.
+	// Thus, we only render v3.NetworkPolicy after the aggregated API server becomes available to avoid a chicken-and-egg scenario.
+	//
+	// If the projectcalico.org/v3 API group is implemented using CRDs natively, we can install network policies immediately, as there is no
+	// dependency on the API server deployment.
+	//
+	// We do this last to avoid transient errors with policy preventing progression of the controller.
+	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
+	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

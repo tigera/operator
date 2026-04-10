@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
+	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml"
@@ -1329,5 +1330,156 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(serviceAccount.Name).To(Equal("waf-http-filter"))
 		Expect(serviceAccount.Namespace).To(Equal("tigera-gateway"))
+	})
+
+	It("should create per-namespace resources for GatewayNamespace mode (Enterprise)", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.CalicoEnterprise,
+		}
+		pullSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
+			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses:        []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:            testScheme(),
+			Installation:      installation,
+			GatewayAPI:        gatewayAPI,
+			PullSecrets:       []*corev1.Secret{pullSecret},
+			GatewayNamespaces: []string{"default", "app-ns"},
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Verify per-namespace ServiceAccounts.
+		sa1, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sa1.Namespace).To(Equal("default"))
+
+		sa2, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "app-ns")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(sa2.Namespace).To(Equal("app-ns"))
+
+		// Verify per-namespace ClusterRoleBindings.
+		crb1, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-default", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(crb1.RoleRef.Name).To(Equal("waf-http-filter"))
+		Expect(crb1.Subjects).To(HaveLen(1))
+		Expect(crb1.Subjects[0].Namespace).To(Equal("default"))
+		Expect(crb1.Labels[GatewayNamespaceResourceLabel]).To(Equal("true"))
+		Expect(crb1.Labels[GatewayNamespaceLabel]).To(Equal("default"))
+
+		crb2, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-app-ns", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(crb2.Subjects[0].Namespace).To(Equal("app-ns"))
+
+		// Verify pull secrets copied to each namespace.
+		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "default")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "app-ns")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not create per-namespace resources for ControllerNamespace mode (Enterprise)", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.CalicoEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Should NOT have per-namespace CRBs.
+		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-default", "")
+		Expect(err).To(HaveOccurred())
+
+		// But should still have the controller-namespace CRB.
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter", "")
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should not create per-namespace resources for GatewayNamespace mode (open-source)", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.Calico,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses:        []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:            testScheme(),
+			Installation:      installation,
+			GatewayAPI:        gatewayAPI,
+			GatewayNamespaces: []string{"default"},
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Open-source should NOT have per-namespace CRBs.
+		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-default", "")
+		Expect(err).To(HaveOccurred())
+
+		// Open-source should NOT have waf-http-filter SA at all.
+		_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should clean up stale per-namespace resources when Gateways are removed", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.CalicoEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses:        []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			// "default" still has a Gateway, but "removed-ns" no longer does.
+			GatewayNamespaces:        []string{"default"},
+			CurrentGatewayNamespaces: set.New("default", "removed-ns"),
+		})
+
+		objsToCreate, objsToDelete := gatewayComp.Objects()
+
+		// "default" resources should be created.
+		_, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
+		Expect(err).NotTo(HaveOccurred())
+
+		// "removed-ns" resources should be in the delete list.
+		foundSA := false
+		foundCRB := false
+		for _, obj := range objsToDelete {
+			switch o := obj.(type) {
+			case *corev1.ServiceAccount:
+				if o.Name == "waf-http-filter" && o.Namespace == "removed-ns" {
+					foundSA = true
+				}
+			case *rbacv1.ClusterRoleBinding:
+				if o.Name == "waf-http-filter-removed-ns" {
+					foundCRB = true
+				}
+			}
+		}
+		Expect(foundSA).To(BeTrue(), "expected stale SA in objsToDelete")
+		Expect(foundCRB).To(BeTrue(), "expected stale CRB in objsToDelete")
 	})
 })

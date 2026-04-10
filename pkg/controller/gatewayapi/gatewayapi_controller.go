@@ -21,8 +21,10 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -132,6 +134,21 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return nil
 	}
 
+	// Watch Gateway resources lazily — the CRD is created by this controller, so we can
+	// only start watching after it exists. Called from Reconcile once CRDs are in place.
+	gatewaysWatched := false
+	r.watchGateways = func() error {
+		if gatewaysWatched {
+			return nil
+		}
+		log.V(1).Info("Adding watch for Gateway resources")
+		if err = c.WatchObject(&gapi.Gateway{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("gatewayapi-controller failed to watch Gateway resource: %w", err)
+		}
+		gatewaysWatched = true
+		return nil
+	}
+
 	return nil
 }
 
@@ -149,6 +166,7 @@ type ReconcileGatewayAPI struct {
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
 	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
+	watchGateways       func() error
 }
 
 // Reconcile reads that state of the cluster for a GatewayAPI object and makes changes based on the state read
@@ -408,6 +426,60 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 		if operatorOwned {
 			gatewayConfig.CurrentGatewayClasses.Insert(gcList.Items[i].Name)
+		}
+	}
+
+	// When in GatewayNamespace mode and Enterprise, discover namespaces that contain
+	// Gateway resources using operator-managed GatewayClasses. These namespaces need
+	// per-namespace Enterprise resources (SA, CRB, pull secrets).
+	if *gatewayAPI.Spec.GatewayDeploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace &&
+		variant.IsEnterprise() {
+		// Start watching Gateway resources now that the CRDs are in place, so future
+		// Gateway changes trigger reconciliation.
+		if err = r.watchGateways(); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching Gateway resources", err, log)
+			return reconcile.Result{}, err
+		}
+
+		// Collect operator-managed class names (both current and from spec).
+		managedClasses := set.New[string]()
+		for _, gc := range gatewayAPI.Spec.GatewayClasses {
+			managedClasses.Insert(gc.Name)
+		}
+		for _, name := range gatewayConfig.CurrentGatewayClasses.UnsortedList() {
+			managedClasses.Insert(name)
+		}
+
+		// List all Gateway resources and find namespaces with our GatewayClasses.
+		var gwList gapi.GatewayList
+		if err = r.client.List(ctx, &gwList); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing Gateway resources", err, log)
+			return reconcile.Result{}, err
+		}
+		nsSet := set.New[string]()
+		for i := range gwList.Items {
+			if managedClasses.Has(string(gwList.Items[i].Spec.GatewayClassName)) {
+				nsSet.Insert(gwList.Items[i].Namespace)
+			}
+		}
+		gatewayConfig.GatewayNamespaces = nsSet.SortedList()
+
+		// Discover previously provisioned namespaces by listing labeled ClusterRoleBindings.
+		var crbList rbacv1.ClusterRoleBindingList
+		if err = r.client.List(ctx, &crbList, &client.ListOptions{
+			LabelSelector: labels.SelectorFromSet(map[string]string{
+				gatewayapi.GatewayNamespaceResourceLabel: "true",
+			}),
+		}); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing gateway namespace ClusterRoleBindings", err, log)
+			return reconcile.Result{}, err
+		}
+		gatewayConfig.CurrentGatewayNamespaces = set.New[string]()
+		for i := range crbList.Items {
+			// Extract namespace from CRB name: "waf-http-filter-<namespace>"
+			if ns, ok := crbList.Items[i].Labels[gatewayapi.GatewayNamespaceLabel]; ok {
+				gatewayConfig.CurrentGatewayNamespaces.Insert(ns)
+			}
 		}
 	}
 

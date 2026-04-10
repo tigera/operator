@@ -96,6 +96,10 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+
+	// Labels used on per-namespace Enterprise resources for discovery and cleanup.
+	GatewayNamespaceResourceLabel = "operator.tigera.io/gateway-namespace-resource"
+	GatewayNamespaceLabel         = "operator.tigera.io/gateway-namespace"
 )
 
 var (
@@ -413,6 +417,13 @@ type GatewayAPIImplementationConfig struct {
 	CustomEnvoyGateway    *envoyapi.EnvoyGateway
 	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
 	CurrentGatewayClasses set.Set[string]
+
+	// GatewayNamespaces is the list of namespaces that contain Gateway resources
+	// using operator-managed GatewayClasses (GatewayNamespace mode + Enterprise only).
+	GatewayNamespaces []string
+	// CurrentGatewayNamespaces tracks previously provisioned namespaces for cleanup
+	// when Gateways are removed.
+	CurrentGatewayNamespaces set.Set[string]
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -693,6 +704,33 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				},
 			},
 		)
+	}
+
+	// Per-namespace Enterprise resources for GatewayNamespace mode.
+	// When proxies run in Gateway namespaces, each namespace needs a ServiceAccount,
+	// ClusterRoleBinding, and pull secrets for the Enterprise containers.
+	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace &&
+		pr.cfg.Installation.Variant.IsEnterprise() {
+		for _, ns := range pr.cfg.GatewayNamespaces {
+			objs = append(objs,
+				pr.gatewayNamespaceSA(ns),
+				pr.gatewayNamespaceCRB(ns),
+			)
+			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+		}
+
+		// Clean up resources for namespaces that no longer have Gateway resources.
+		if pr.cfg.CurrentGatewayNamespaces != nil {
+			currentNS := set.New(pr.cfg.GatewayNamespaces...)
+			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
+				if !currentNS.Has(ns) {
+					objsToDelete = append(objsToDelete,
+						pr.gatewayNamespaceSA(ns),
+						pr.gatewayNamespaceCRB(ns),
+					)
+				}
+			}
+		}
 	}
 
 	log.V(1).Info("GatewayAPI rendering", "num_current", len(objs), "num_delete", len(objsToDelete))
@@ -1184,6 +1222,45 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
 				Namespace: "tigera-gateway",
+			},
+		},
+	}
+}
+
+// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace
+// for GatewayNamespace deployment mode.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterName,
+			Namespace: namespace,
+		},
+	}
+}
+
+// gatewayNamespaceCRB creates a ClusterRoleBinding that binds the waf-http-filter ClusterRole
+// to the ServiceAccount in the given Gateway namespace.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceCRB(namespace string) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-%s", wafFilterName, namespace),
+			Labels: map[string]string{
+				GatewayNamespaceResourceLabel: "true",
+				GatewayNamespaceLabel:         namespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: namespace,
 			},
 		},
 	}

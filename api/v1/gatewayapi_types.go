@@ -73,6 +73,7 @@ type GatewayAPISpec struct {
 	//
 	// If not specified, defaults to "ControllerNamespace".
 	// +kubebuilder:default=ControllerNamespace
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="gatewayDeploymentMode is immutable once set"
 	// +optional
 	GatewayDeploymentMode *GatewayDeploymentMode `json:"gatewayDeploymentMode,omitempty"`
 

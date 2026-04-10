@@ -5723,6 +5723,9 @@ spec:
                     - ControllerNamespace
                     - GatewayNamespace
                   type: string
+                  x-kubernetes-validations:
+                    - message: gatewayDeploymentMode is immutable once set
+                      rule: self == oldSelf
               type: object
           type: object
           x-kubernetes-validations:

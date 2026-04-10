@@ -197,6 +197,10 @@ type ManagerConfiguration struct {
 
 	Manager       *operatorv1.Manager
 	KibanaEnabled bool
+
+	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
+	// Passed to Voltron so it can identify the correct CA issuer public key.
+	CACertCommonName string
 }
 
 type managerComponent struct {
@@ -564,6 +568,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_KEY", Value: linseedKeyPath})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
+	}
+
+	if c.cfg.CACertCommonName != "" {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_SIGNER_NAME", Value: c.cfg.CACertCommonName})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {

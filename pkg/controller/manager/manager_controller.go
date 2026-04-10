@@ -680,6 +680,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		BindingNamespaces:       namespaces,
 		OSSTenantNamespaces:     ossTenantNamespaces,
 		Manager:                 instance,
+		CACertCommonName:        certificateManager.CACertCommonName(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.

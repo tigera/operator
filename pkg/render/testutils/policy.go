@@ -15,7 +15,7 @@
 package testutils
 
 import (
-	. "github.com/onsi/gomega"
+	"github.com/onsi/gomega"
 
 	"encoding/json"
 	"fmt"
@@ -71,11 +71,11 @@ func GetExpectedPolicyFromFile(name string) *v3.NetworkPolicy {
 
 func GetExpectedPolicyFromFileWithReplacements(name string, replacements map[string]string) *v3.NetworkPolicy {
 	jsonFile, err := os.Open(name)
-	Expect(err).ShouldNot(HaveOccurred())
-	defer jsonFile.Close()
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+	defer func() { _ = jsonFile.Close() }()
 
 	byteValue, err := io.ReadAll(jsonFile)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	content := string(byteValue)
 	for k, v := range replacements {
@@ -84,22 +84,22 @@ func GetExpectedPolicyFromFileWithReplacements(name string, replacements map[str
 
 	var policy v3.NetworkPolicy
 	err = json.Unmarshal([]byte(content), &policy)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	return &policy
 }
 
 func GetExpectedGlobalPolicyFromFile(name string) *v3.GlobalNetworkPolicy {
 	jsonFile, err := os.Open(name)
-	Expect(err).ShouldNot(HaveOccurred())
-	defer jsonFile.Close()
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
+	defer func() { _ = jsonFile.Close() }()
 
 	byteValue, err := io.ReadAll(jsonFile)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	var policy v3.GlobalNetworkPolicy
 	err = json.Unmarshal(byteValue, &policy)
-	Expect(err).ShouldNot(HaveOccurred())
+	gomega.Expect(err).ShouldNot(gomega.HaveOccurred())
 
 	return &policy
 }

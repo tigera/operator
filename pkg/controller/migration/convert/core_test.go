@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -256,7 +255,7 @@ var _ = Describe("core handler", func() {
 						Preference: v1.NodeSelectorTerm{
 							MatchExpressions: []v1.NodeSelectorRequirement{{
 								Key:      "foo",
-								Operator: corev1.NodeSelectorOpIn,
+								Operator: v1.NodeSelectorOpIn,
 								Values:   []string{"foo", "bar"},
 							}},
 						},
@@ -624,7 +623,7 @@ var _ = Describe("core handler", func() {
 	})
 	Context("felix prometheus metrics", func() {
 		It("with metrics enabled the default port is used", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
 				Value: "true",
 			}}
@@ -637,7 +636,7 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.NodeMetricsPort).To(BeNil())
 		})
 		It("with metrics enabled the default port is used", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
 				Value: "true",
 			}}
@@ -646,7 +645,7 @@ var _ = Describe("core handler", func() {
 			Expect(*i.Spec.NodeMetricsPort).To(Equal(int32(9091)))
 		})
 		It("with metrics port env var only, metrics are still disabled", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_PROMETHEUSMETRICSPORT",
 				Value: "5555",
 			}}
@@ -655,7 +654,7 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.NodeMetricsPort).To(BeNil())
 		})
 		It("with metrics port and enabled is reflected in installation", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
+			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
 				Name:  "FELIX_PROMETHEUSMETRICSENABLED",
 				Value: "true",
 			}, {

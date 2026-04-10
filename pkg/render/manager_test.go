@@ -927,7 +927,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret).To(BeNil())
 
 		voltronContainer := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
-		rtest.ExpectEnv(voltronContainer.Env, "CA_SIGNER_NAME", "my-domain/my-signer")
+		rtest.ExpectEnv(voltronContainer.Env, "VOLTRON_CA_SIGNER_NAME", "my-domain/my-signer")
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {

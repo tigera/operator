@@ -357,7 +357,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 		return reconcile.Result{}, err
 	}
-
 	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.opts.ClusterDomain)
 
 	// Continue to add in the legacy names and namespaces of manager components to cover version skew scenarios. These
@@ -697,6 +696,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		OSSTenantNamespaces:     ossTenantNamespaces,
 		Manager:                 instance,
 		KibanaEnabled:           kibanaEnabled,
+		CACertCommonName:        certificateManager.CACertCommonName(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.

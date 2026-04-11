@@ -345,10 +345,17 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettings",
+					"uisettingsgroups",
+					"uisettingsgroups/data",
+				},
+				Verbs: []string{"get", "list", "watch"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -466,11 +473,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
 			},
 		}))
 		roleBindingWatchManagedClusters := rtest.GetResource(resourcesToCreate, render.ManagerManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
@@ -673,10 +675,17 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettings",
+					"uisettingsgroups",
+					"uisettingsgroups/data",
+				},
+				Verbs: []string{"get", "list", "watch"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -799,11 +808,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
 			},
 		}))
 	})

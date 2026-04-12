@@ -260,6 +260,14 @@ var (
 		variant:   calicoVariant,
 	}
 
+	ComponentCalico = Component{
+		Version:   "master",
+		Image:     "calico",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIFIPS,
@@ -291,5 +299,6 @@ var (
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
 		ComponentCalicoWebhooks,
+		ComponentCalico,
 	}
 )

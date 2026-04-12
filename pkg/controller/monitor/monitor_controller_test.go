@@ -109,11 +109,11 @@ var _ = Describe("Monitor controller tests", func() {
 				Generation: 2,
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Registry: "some.registry.org/",
 			},
 		}
@@ -123,6 +123,13 @@ var _ = Describe("Monitor controller tests", func() {
 		monitorCR = &operatorv1.Monitor{
 			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.MonitorSpec{
+				AlertManager: &operatorv1.AlertManager{
+					AlertManagerSpec: &operatorv1.AlertManagerSpec{
+						Replicas: ptr.To(int32(3)),
+					},
+				},
+			},
 		}
 		Expect(cli.Create(ctx, monitorCR)).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -253,6 +260,8 @@ var _ = Describe("Monitor controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("SetMetaData", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("RemoveStatefulSets", mock.Anything).Return().Maybe()
 			r.status = mockStatus
 
 			test.ExpectWaitForTierWatch(ctx, &r, mockStatus)

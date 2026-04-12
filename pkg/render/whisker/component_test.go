@@ -24,9 +24,9 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -57,7 +57,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
 			numExpectedObjects, numDeprecatedObjects,
 		),
@@ -65,11 +65,11 @@ var _ = Describe("ComponentRendering", func() {
 			&whisker.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
-					Variant:            operatorv1.TigeraSecureEnterprise,
+					Variant:            operatorv1.CalicoEnterprise,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
 			0, numExpectedObjects+numDeprecatedObjects,
 		),
@@ -92,7 +92,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 				ClusterID:             "test-cluster-id",
 				CalicoVersion:         "test-calico-version",
 				ClusterType:           "test-cluster-type",
@@ -105,7 +105,7 @@ var _ = Describe("ComponentRendering", func() {
 					Namespace: whisker.WhiskerNamespace,
 				},
 				Spec: appsv1.DeploymentSpec{
-					Replicas: ptr.ToPtr(int32(1)),
+					Replicas: ptr.To(int32(1)),
 					Strategy: appsv1.DeploymentStrategy{
 						Type: appsv1.RecreateDeploymentStrategyType,
 					},
@@ -182,7 +182,7 @@ var _ = Describe("ComponentRendering", func() {
 			},
 			TrustedCertBundle:     defaultTrustedCertBundle,
 			WhiskerBackendKeyPair: defaultTLSKeyPair,
-			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			ClusterID:             "test-cluster-id",
 			CalicoVersion:         "test-calico-version",
 			ClusterType:           "test-cluster-type",
@@ -206,13 +206,13 @@ var _ = Describe("ComponentRendering", func() {
 				Variant:            operatorv1.Calico,
 				CalicoNetwork: &operatorv1.CalicoNetworkSpec{
 					NodeAddressAutodetectionV6: &operatorv1.NodeAddressAutodetection{
-						FirstFound: ptr.ToPtr(true),
+						FirstFound: ptr.To(true),
 					},
 				},
 			},
 			TrustedCertBundle:     defaultTrustedCertBundle,
 			WhiskerBackendKeyPair: defaultTLSKeyPair,
-			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.ToPtr(operatorv1.Enabled)}},
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			ClusterID:             "test-cluster-id",
 			CalicoVersion:         "test-calico-version",
 			ClusterType:           "test-cluster-type",
@@ -346,7 +346,7 @@ func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*a
 		Whisker: &operatorv1.Whisker{
 			Spec: operatorv1.WhiskerSpec{
 				WhiskerDeployment: overrides,
-				Notifications:     ptr.ToPtr(operatorv1.Enabled),
+				Notifications:     ptr.To(operatorv1.Enabled),
 			},
 		},
 	})

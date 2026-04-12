@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,29 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package ptr
+package common
 
 import (
-	"k8s.io/apimachinery/pkg/util/intstr"
+	"os"
+	"strings"
 )
 
-func BoolToPtr(b bool) *bool {
-	return &b
+// MetricsEnabled returns true when the operator metrics endpoint is enabled via METRICS_ENABLED=true.
+func MetricsEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_ENABLED"), "true")
 }
 
-func Int64ToPtr(i int64) *int64 {
-	return &i
-}
-
-func Int32ToPtr(i int32) *int32 {
-	return &i
-}
-
-func IntOrStrPtr(v string) *intstr.IntOrString {
-	ios := intstr.Parse(v)
-	return &ios
-}
-
-func ToPtr[V any](v V) *V {
-	return &v
+// MetricsTLSEnabled returns true when the operator metrics endpoint should use mTLS (METRICS_SCHEME=https).
+func MetricsTLSEnabled() bool {
+	return strings.EqualFold(os.Getenv("METRICS_SCHEME"), "https")
 }

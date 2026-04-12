@@ -25,6 +25,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -32,7 +33,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -377,9 +377,16 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 	replicas := l.cfg.Installation.ControlPlaneReplicas
 	if l.cfg.Tenant != nil {
-		if l.cfg.ExternalElastic {
-			// If a tenant was provided, set the expected tenant ID and enable the shared index backend.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+		// Always set the expected tenant ID when a tenant is configured, regardless of
+		// whether Elasticsearch is internal or external. This ensures tenant isolation
+		// via the x-tenant-id header for all indices including shared single indices.
+		envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: l.cfg.Tenant.Spec.ID})
+
+		if !l.cfg.ExternalElastic {
+			// For internal Elasticsearch, existing multi-index indices were created without
+			// tenant ID in the name. Disable tenant suffix in index names to preserve
+			// backward compatibility while still enforcing tenant isolation at the query level.
+			envVars = append(envVars, corev1.EnvVar{Name: "ELASTIC_MULTI_INDEX_TENANT_SUFFIX_ENABLED", Value: "false"})
 		}
 
 		if l.cfg.Tenant.MultiTenant() {
@@ -495,8 +502,8 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RollingUpdateDeploymentStrategyType,
 				RollingUpdate: &appsv1.RollingUpdateDeployment{
-					MaxUnavailable: ptr.IntOrStrPtr("0"),
-					MaxSurge:       ptr.IntOrStrPtr("100%"),
+					MaxUnavailable: ptr.To(intstr.FromInt(0)),
+					MaxSurge:       ptr.To(intstr.FromString("100%")),
 				},
 			},
 			Template: *podTemplate,

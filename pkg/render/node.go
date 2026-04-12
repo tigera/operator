@@ -185,7 +185,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
@@ -237,7 +237,7 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	var objsToDelete []client.Object
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Include Service for exposing node metrics.
 		objs = append(objs, c.nodeMetricsService())
 	}
@@ -500,6 +500,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs: []string{"get", "list", "watch", "update"},
 			},
 			{
+				// calico/node updates the status subresource of caliconodestatus objects.
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{
+					"caliconodestatuses/status",
+				},
+				Verbs: []string{"update"},
+			},
+			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
@@ -561,7 +569,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		extraRules := []rbacv1.PolicyRule{
 			{
 				// Calico Enterprise needs to be able to read additional resources.
@@ -1083,13 +1091,13 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		c.cfg.TLS.TrustedBundle.Volume(),
 		c.cfg.TLS.NodeSecret.Volume(),
 		c.varRunCalicoVolume(),
-		corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
+		{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
 		// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
-		corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+		{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 		// Volume for the bpffs itself, used by the main node container.
-		corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+		{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 		// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-		corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
+		{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 	}
 
 	if c.vppDataplaneEnabled() {
@@ -1107,7 +1115,7 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	}
 
 	// Override with Tigera-specific config.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add volume for calico logs.
 		calicoLogVol := corev1.Volume{
 			Name:         "var-log-calico",
@@ -1336,7 +1344,7 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 
 	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars()...)
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
@@ -1386,7 +1394,7 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		extraNodeMounts := []corev1.VolumeMount{
 			{MountPath: "/var/log/calico", Name: "var-log-calico"},
 		}
@@ -1640,7 +1648,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add in Calico Enterprise specific configuration.
 		extraNodeEnv := []corev1.EnvVar{
 			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -1753,7 +1761,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	// The node image includes the combined calico binary at /usr/bin/calico.
 	if c.combinedImage {
 		readinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--bird-ready", "--felix-ready"}
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.cfg.Installation.Variant.IsEnterprise() {
 			readinessCmd = append(readinessCmd, "--bgp-metrics-ready")
 		}
 		if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
@@ -1761,7 +1769,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 		}
 	} else {
 		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
-		if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if c.cfg.Installation.Variant.IsEnterprise() {
 			readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
 		}
 		if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
@@ -1781,9 +1789,11 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	}
 	rp := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
-		// Set the TimeoutSeconds greater than the default of 1 to allow additional time on loaded nodes.
-		// This timeout should be less than the PeriodSeconds (30s in controller/utils/component.go).
-		TimeoutSeconds: 10,
+		// Use a shorter period than the global default (30s) so that calico-node is
+		// marked ready promptly after startup. The global default is too slow for
+		// calico-node, which typically becomes ready within ~10s of container start.
+		PeriodSeconds:  10,
+		TimeoutSeconds: 5,
 	}
 	return lp, rp
 }

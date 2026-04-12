@@ -45,6 +45,7 @@ func app(version string) *cli.Command {
 		Commands: []*cli.Command{
 			buildCommand,
 			publishCommand,
+			branchCommand,
 			prepCommand,
 			publicCommand,
 			releaseNotesCommand,

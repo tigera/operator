@@ -117,14 +117,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(2).Info("Reconciling KubeProxy")
 
-	_, installationCR, err := utils.GetInstallation(ctx, r.cli)
+	_, installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
 		return reconcile.Result{}, err
-	} else if installationCR == nil {
+	} else if installationSpec == nil {
 		return reconcile.Result{}, nil
 	}
 
-	if !installationCR.KubeProxyManagementEnabled() {
+	if !installationSpec.KubeProxyManagementEnabled() {
 		// If KubeProxyManagement is not Enabled, we should clean up kubeproxy from tigerastatus and not reconcile kube-proxy.
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
@@ -178,8 +178,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		}
 		reqLogger.Info("kube-proxy DaemonSet patched to disable kube-proxy, since kubeProxyManagement is Enabled and BPFEnabled is true.")
-		if !installationCR.KubernetesProvider.IsNone() {
-			reqLogger.Info(fmt.Sprintf("[WARNING] Auto disabling kube-proxy may result in unexpected behavior in %s. ", installationCR.KubernetesProvider) +
+		if !installationSpec.KubernetesProvider.IsNone() {
+			reqLogger.Info(fmt.Sprintf("[WARNING] Auto disabling kube-proxy may result in unexpected behavior in %s. ", installationSpec.KubernetesProvider) +
 				"If the Operator fails to patch the kube-proxy DaemonSet, disable 'kubeProxyManagement' in the Installation CR " +
 				"and follow the eBPF installation guide at https://docs.tigera.io.")
 		}

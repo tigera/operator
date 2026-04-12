@@ -721,7 +721,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		})
 
 		It("should patch all required images for Enterprise variant", func() {
-			cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+			cfg.Installation.Variant = operatorv1.CalicoEnterprise
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -778,7 +778,7 @@ var _ = Describe("Istio Component Rendering", func() {
 		})
 
 		It("should patch ConfigMap with proxyv2 image for Enterprise variant", func() {
-			cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+			cfg.Installation.Variant = operatorv1.CalicoEnterprise
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 

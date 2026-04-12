@@ -186,11 +186,11 @@ var _ = Describe("Manager controller tests", func() {
 					ObjectMeta: metav1.ObjectMeta{Name: "default"},
 					Spec: operatorv1.InstallationSpec{
 						ControlPlaneReplicas: &replicas,
-						Variant:              operatorv1.TigeraSecureEnterprise,
+						Variant:              operatorv1.CalicoEnterprise,
 						Registry:             "some.registry.org/",
 					},
 					Status: operatorv1.InstallationStatus{
-						Variant: operatorv1.TigeraSecureEnterprise,
+						Variant: operatorv1.CalicoEnterprise,
 						Computed: &operatorv1.InstallationSpec{
 							Registry: "some.registry.org/",
 							// The test is provider agnostic.
@@ -482,14 +482,14 @@ var _ = Describe("Manager controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operatorv1.InstallationSpec{
 					ControlPlaneReplicas: &replicas,
-					Variant:              operatorv1.TigeraSecureEnterprise,
+					Variant:              operatorv1.CalicoEnterprise,
 					Registry:             "some.registry.org/",
 					ImagePullSecrets: []corev1.LocalObjectReference{{
 						Name: "tigera-pull-secret",
 					}},
 				},
 				Status: operatorv1.InstallationStatus{
-					Variant: operatorv1.TigeraSecureEnterprise,
+					Variant: operatorv1.CalicoEnterprise,
 					Computed: &operatorv1.InstallationSpec{
 						Registry: "some.registry.org/",
 						// The test is provider agnostic.

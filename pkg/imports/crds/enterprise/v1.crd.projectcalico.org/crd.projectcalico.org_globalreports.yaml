@@ -48,12 +48,15 @@ spec:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: atomic
                           include:
                             items:
                               type: string
                             type: array
+                            x-kubernetes-list-type: atomic
                         type: object
                       type: array
+                      x-kubernetes-list-type: atomic
                   type: object
                 endpoints:
                   properties:
@@ -63,6 +66,7 @@ spec:
                           items:
                             type: string
                           type: array
+                          x-kubernetes-list-type: atomic
                         selector:
                           type: string
                       type: object
@@ -74,6 +78,7 @@ spec:
                           items:
                             type: string
                           type: array
+                          x-kubernetes-list-type: atomic
                         selector:
                           type: string
                       type: object
@@ -126,6 +131,7 @@ spec:
                       - start
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
                 lastFailedReportJobs:
                   items:
                     properties:
@@ -162,6 +168,7 @@ spec:
                       - start
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
                 lastScheduledReportJob:
                   properties:
                     end:
@@ -229,6 +236,7 @@ spec:
                       - start
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
           type: object
       served: true

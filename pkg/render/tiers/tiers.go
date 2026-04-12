@@ -116,7 +116,8 @@ func (t tiersComponent) calicoSystemClusterDNSPolicy() *v3.NetworkPolicy {
 		dnsPolicySelector = "dns.operator.openshift.io/daemonset-dns == 'default'"
 		dnsPolicyNamespace = "openshift-dns"
 	} else {
-		dnsPolicySelector = "k8s-app == 'kube-dns'"
+		// In most Kubernetes distros the label is for kube-dns, but in Canonical it is for coredns.
+		dnsPolicySelector = "k8s-app in { 'kube-dns', 'coredns' }"
 		dnsPolicyNamespace = "kube-system"
 	}
 

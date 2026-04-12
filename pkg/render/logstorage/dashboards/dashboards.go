@@ -22,6 +22,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -29,7 +30,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -92,6 +92,9 @@ type Config struct {
 
 	// Credentials are used to provide annotations for elastic search users
 	Credentials []*corev1.Secret
+
+	// KibanaEnabled indicates whether Kibana is being rendered.
+	KibanaEnabled bool
 }
 
 func (d *dashboards) ResolveImages(is *operatorv1.ImageSet) error {
@@ -124,7 +127,7 @@ func (d *dashboards) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objsToDelete = append(objsToDelete,
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("dashboards-installer", d.cfg.Namespace),
 	)
-	if d.cfg.IsManaged {
+	if d.cfg.IsManaged || !d.cfg.KibanaEnabled {
 		objsToDelete = append(objsToDelete, d.resources()...)
 	} else {
 		objsToCreate = append(objsToCreate, d.resources()...)
@@ -306,7 +309,7 @@ func (d *dashboards) Job() *batchv1.Job {
 			Template: *podTemplate,
 			// PodFailurePolicy is not available for k8s < 1.26; setting BackoffLimit to a higher number (default is 6)
 			// to lessen the frequency of installation failures when responses from Elastic Search takes more time.
-			BackoffLimit: ptr.Int32ToPtr(30),
+			BackoffLimit: ptr.To(int32(30)),
 			PodFailurePolicy: &batchv1.PodFailurePolicy{
 				Rules: []batchv1.PodFailurePolicyRule{
 					// We don't want the job to fail, so we keep retrying by ignoring incrementing the backoff.

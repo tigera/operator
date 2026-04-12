@@ -35,6 +35,16 @@
       },
       {
         "action": "Allow",
+        "protocol": "UDP",
+        "destination": {
+          "services": {
+            "namespace": "kube-system",
+            "name": "coredns"
+          }
+        }
+      },
+      {
+        "action": "Allow",
         "protocol": "TCP",
         "destination": {
           "services": {

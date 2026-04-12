@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -193,7 +194,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Get Installation resource.
-	variant, install, err := utils.GetInstallation(context.Background(), d.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), d.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			d.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -232,7 +233,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, d.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, d.client)
 	if err != nil {
 		d.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -240,7 +241,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err = d.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -324,7 +325,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		certificatemanager.WithLogger(reqLogger),
 		certificatemanager.WithTenant(tenant),
 	}
-	cm, err := certificatemanager.Create(d.client, install, d.clusterDomain, helper.TruthNamespace(), opts...)
+	cm, err := certificatemanager.Create(d.client, installationSpec, d.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		d.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -338,7 +339,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	cfg := &dashboards.Config{
-		Installation:               install,
+		Installation:               installationSpec,
 		PullSecrets:                pullSecrets,
 		Namespace:                  helper.InstallNamespace(),
 		TrustedBundle:              trustedBundle,
@@ -349,6 +350,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		KibanaPort:                 kibanaPort,
 		ExternalKibanaClientSecret: externalKibanaSecret,
 		Credentials:                []*corev1.Secret{&credentials},
+		KibanaEnabled:              lscommon.KibanaEnabled(logStorage, d.multiTenant),
 	}
 	dashboardsComponent := dashboards.Dashboards(cfg)
 

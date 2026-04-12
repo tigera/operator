@@ -167,7 +167,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	errMsgs := []string{}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -240,7 +240,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 	// The deployment and its supporting objects are needed when running the aggregation API server
 	// or when running Enterprise (which always needs the queryserver).
-	if c.cfg.RequiresAggregationServer || c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.RequiresAggregationServer || c.cfg.Installation.Variant.IsEnterprise() {
 		namespacedObjects = append(namespacedObjects,
 			c.apiServerServiceAccount(),
 			c.apiServerDeployment(),
@@ -266,7 +266,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.authReaderRoleBinding(),
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		aggregationAPIServerObjects = append(aggregationAPIServerObjects,
 			c.uiSettingsGroupGetterClusterRole(),
 			c.kubeControllerManagerUISettingsGroupGetterClusterRoleBinding(),
@@ -332,7 +332,7 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Compile the final arrays based on the variant.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Create any enterprise specific objects.
 		globalObjects = append(globalObjects, globalEnterpriseObjects...)
 		namespacedObjects = append(namespacedObjects, namespacedEnterpriseObjects...)
@@ -344,13 +344,14 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
-
-		// Clean up deprecated k8s NetworkPolicy
-		objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
-			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
-		})
 	}
+
+	// Clean up deprecated k8s NetworkPolicy, regardless of variant,
+	// avoiding leftovers in the case of switching between variants.
+	objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
+	})
 
 	// Add or remove the aggregation API server objects as needed.
 	if c.cfg.RequiresAggregationServer {
@@ -632,7 +633,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 		},
 		{
 			// Core Calico backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
@@ -931,7 +932,7 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Add port for queryserver if enterprise.
 		s.Spec.Ports = append(s.Spec.Ports,
 			corev1.ServicePort{
@@ -994,7 +995,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	if c.cfg.IsSidecarInjectionEnabled() {
 		containers = append(containers, c.l7AdmissionControllerContainer())
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		containers = append(containers, c.queryServerContainer())
 	}
 
@@ -1041,7 +1042,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, []string{APIServerNamespace, "tigera-system", "calico-apiserver"})
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.cfg.TrustedBundle != nil {
 			trustedBundleHashAnnotations := c.cfg.TrustedBundle.HashAnnotations()
 			for k, v := range trustedBundleHashAnnotations {
@@ -1140,7 +1141,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
 	}
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 			corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
@@ -1205,7 +1206,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	}
 	// In case of OpenShift, apiserver needs privileged access to write audit logs to host path volume.
 	// Audit logs are owned by root on hosts so we need to be root user and group. Audit logs are supported only in Enterprise version.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		apiServer.SecurityContext = securitycontext.NewRootContext(c.cfg.OpenShift)
 	} else {
 		apiServer.SecurityContext = securitycontext.NewNonRootContext()
@@ -1223,7 +1224,7 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		args = append(args,
 			"--audit-policy-file=/etc/tigera/audit/policy.conf",
 			"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
@@ -1235,8 +1236,10 @@ func (c *apiServerComponent) startUpArgs() []string {
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
-		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
-			args = append(args, "--managementClusterCAType=Public")
+		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
+			if c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
+				args = append(args, "--managementClusterCAType=Public")
+			}
 			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
@@ -1343,7 +1346,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 		volumes = append(volumes, c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.Volume())
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.RequiresAggregationServer {
+	if c.cfg.Installation.Variant.IsEnterprise() && c.cfg.RequiresAggregationServer {
 		// Only include these volumes if we're running the aggregation API server, since audit logging is done through the
 		// main API server otherwise.
 		volumes = append(volumes,
@@ -1373,7 +1376,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 		)
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise && c.cfg.TrustedBundle != nil {
+	if c.cfg.Installation.Variant.IsEnterprise() && c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
 	}
 
@@ -1405,7 +1408,7 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// Calico Enterprise backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"licensekeys",
 				"alertexceptions",
@@ -1449,10 +1452,19 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"uisettingsgroups",
 				"managedclusters",
 			},
-			Verbs: []string{
-				"get",
-				"list",
+			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// Required by the AuthorizationReview calculator in queryserver to evaluate
+			// RBAC permissions for users.
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{
+				"clusterroles",
+				"clusterrolebindings",
+				"roles",
+				"rolebindings",
 			},
+			Verbs: []string{"get", "list", "watch"},
 		},
 	}
 
@@ -1754,7 +1766,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		},
 		// Allow the user to only view securityeventwebhooks.
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -1951,7 +1963,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 		// Allow the user to perform CRUD operations on securityeventwebhooks.
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},
@@ -2005,7 +2017,7 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRo
 	resources := []string{"networkpolicies", "globalnetworkpolicies"}
 
 	// Append additional resources for enterprise Variant.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		resources = append(resources, "stagednetworkpolicies", "stagedglobalnetworkpolicies")
 	}
 
@@ -2195,7 +2207,7 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 	})
 
 	// The following resources were not present in Calico OSS, so there is no need to clean up in OSS.
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Renamed ClusterRoleBinging tigera-tier-getter to calico-tier-getter since Tier is available in OSS
 		renamedRscList = append(renamedRscList, &rbacv1.ClusterRoleBinding{
 			TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},

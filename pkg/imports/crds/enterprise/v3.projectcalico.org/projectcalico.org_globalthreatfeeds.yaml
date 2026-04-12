@@ -125,6 +125,7 @@ spec:
                               - name
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         url:
                           type: string
                       required:
@@ -150,6 +151,7 @@ spec:
                       - type
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
                 lastSuccessfulSearch:
                   format: date-time
                   type: string

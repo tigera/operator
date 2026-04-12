@@ -137,7 +137,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 	// Get Installation resource.
-	_, installation, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -154,7 +154,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 		certificatemanager.WithLogger(logc),
 		certificatemanager.WithTenant(tenant),
 	}
-	cm, err := certificatemanager.Create(r.client, installation, r.clusterDomain, tenant.Namespace, opts...)
+	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, tenant.Namespace, opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create CA", err, logc)
 		return reconcile.Result{}, err

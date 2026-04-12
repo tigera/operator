@@ -39,6 +39,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -452,7 +453,7 @@ var _ = Describe("Istio controller tests", func() {
 					},
 				},
 				Spec: v3.FelixConfigurationSpec{
-					IstioAmbientMode: ptr.To[v3.IstioAmbientMode]("Disabled"),
+					IstioAmbientMode: ptr.To(v3.IstioAmbientMode("Disabled")),
 				},
 			}
 			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
@@ -696,7 +697,7 @@ var _ = Describe("Istio controller tests", func() {
 			// Create ImageSet with all required Istio images
 			imageSet := &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "calico-master",
+					Name: "calico-" + components.CalicoRelease,
 				},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
@@ -742,8 +743,8 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should create expected Istio resources for Enterprise variant", func() {
-			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
-			installation.Status.Variant = operatorv1.TigeraSecureEnterprise
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
+			installation.Status.Variant = operatorv1.CalicoEnterprise
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
@@ -773,14 +774,14 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should handle ImageSet application for Enterprise variant", func() {
-			installation.Spec.Variant = operatorv1.TigeraSecureEnterprise
-			installation.Status.Variant = operatorv1.TigeraSecureEnterprise
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
+			installation.Status.Variant = operatorv1.CalicoEnterprise
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
 
 			// Create ImageSet with all required Istio images for Enterprise
 			imageSet := &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: "enterprise-master",
+					Name: "enterprise-" + components.EnterpriseRelease,
 				},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{

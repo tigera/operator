@@ -82,7 +82,7 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 	logc := r.log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 
 	// Get Installation resource.
-	_, instance, err := utils.GetInstallation(ctx, r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			logc.Info("Installation not found")
@@ -99,7 +99,7 @@ func (r *ClusterCAController) Reconcile(ctx context.Context, request reconcile.R
 		certificatemanager.AllowCACreation(),
 		certificatemanager.WithLogger(logc),
 	}
-	cm, err := certificatemanager.Create(r.client, instance, r.clusterDomain, common.OperatorNamespace(), opts...)
+	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace(), opts...)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

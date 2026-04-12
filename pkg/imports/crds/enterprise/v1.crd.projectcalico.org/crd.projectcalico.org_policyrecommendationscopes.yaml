@@ -26,6 +26,22 @@ spec:
               type: object
             spec:
               properties:
+                hostEndpointSpec:
+                  properties:
+                    recommendationStatus:
+                      enum:
+                        - Enabled
+                        - Disabled
+                      type: string
+                    selector:
+                      maxLength: 4096
+                      type: string
+                    tierName:
+                      maxLength: 253
+                      type: string
+                  required:
+                    - selector
+                  type: object
                 initialLookback:
                   type: string
                 interval:
@@ -37,10 +53,15 @@ spec:
                     intraNamespacePassThroughTraffic:
                       type: boolean
                     recStatus:
+                      enum:
+                        - Enabled
+                        - Disabled
                       type: string
                     selector:
+                      maxLength: 4096
                       type: string
                     tierName:
+                      maxLength: 253
                       type: string
                   required:
                     - selector
@@ -68,6 +89,7 @@ spec:
                       - type
                     type: object
                   type: array
+                  x-kubernetes-list-type: atomic
               type: object
           type: object
       served: true

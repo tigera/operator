@@ -93,6 +93,13 @@ var _ = Describe("monitor rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: ptr.To(int32(3)),
 			},
+			Monitor: operatorv1.MonitorSpec{
+				AlertManager: &operatorv1.AlertManager{
+					AlertManagerSpec: &operatorv1.AlertManagerSpec{
+						Replicas: ptr.To(int32(3)),
+					},
+				},
+			},
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
@@ -113,7 +120,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(5))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -162,6 +169,7 @@ var _ = Describe("monitor rendering tests", func() {
 
 		cfg.Monitor.AlertManager = &operatorv1.AlertManager{
 			AlertManagerSpec: &operatorv1.AlertManagerSpec{
+				Replicas:  ptr.To(int32(3)),
 				Resources: alertManagerResources,
 			},
 		}
@@ -169,7 +177,7 @@ var _ = Describe("monitor rendering tests", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(5))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -348,8 +356,8 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusCom := components.ComponentPrometheus
 		Expect(*prometheusObj.Spec.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, prometheusCom.Image, prometheusCom.Version)))
 		Expect(prometheusObj.Spec.ServiceAccountName).To(Equal("prometheus"))
-		Expect(prometheusObj.Spec.ServiceMonitorSelector.MatchLabels["team"]).To(Equal("network-operators"))
-		Expect(prometheusObj.Spec.PodMonitorSelector.MatchLabels["team"]).To(Equal("network-operators"))
+		Expect(prometheusObj.Spec.ServiceMonitorSelector).To(Equal(&metav1.LabelSelector{}))
+		Expect(prometheusObj.Spec.PodMonitorSelector).To(Equal(&metav1.LabelSelector{}))
 		Expect(prometheusObj.Spec.Version).To(Equal(components.ComponentCoreOSPrometheus.Version))
 		Expect(prometheusObj.Spec.Retention).To(BeEquivalentTo("24h"))
 		Expect(prometheusObj.Spec.Resources.Requests.Memory().Equal(k8sresource.MustParse("400Mi"))).To(BeTrue())
@@ -451,8 +459,6 @@ var _ = Describe("monitor rendering tests", func() {
 		// PodMonitor
 		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
-		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
-		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(ConsistOf([]metav1.LabelSelectorRequirement{
@@ -488,8 +494,6 @@ var _ = Describe("monitor rendering tests", func() {
 		// ServiceMonitor
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
-		Expect(servicemonitorObj.ObjectMeta.Labels).To(HaveLen(1))
-		Expect(servicemonitorObj.ObjectMeta.Labels["team"]).To(Equal("network-operators"))
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(ConsistOf([]metav1.LabelSelectorRequirement{
@@ -675,7 +679,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(5))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -865,7 +869,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(5))
 	})
 
 	It("Should render external prometheus resources with service monitor and custom token", func() {
@@ -891,7 +895,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(5))
 	})
 
 	It("Should render external prometheus resources without service monitor", func() {
@@ -907,7 +911,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(5))
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
@@ -921,14 +925,13 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(2))
+		Expect(toDelete).To(HaveLen(4))
 		sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
 		Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
 			TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "calico-typha-metrics",
 				Namespace: "tigera-prometheus",
-				Labels:    map[string]string{"team": "network-operators"},
 			},
 			Spec: monitoringv1.ServiceMonitorSpec{
 				Endpoints: []monitoringv1.Endpoint{
@@ -1038,6 +1041,49 @@ var _ = Describe("monitor rendering tests", func() {
 			}
 			Expect(found).To(BeTrue(), "Expected ServiceMonitor %s to be in toCreate", name)
 		}
+	})
+
+	It("Should create operator metrics Service and ServiceMonitor when OperatorMetricsEnabled is true", func() {
+		cfg.OperatorMetricsEnabled = true
+		cfg.OperatorNamespace = "tigera-operator"
+		cfg.OperatorName = "tigera-operator"
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, toDelete := component.Objects()
+
+		// Operator metrics service should be in toCreate.
+		svc := rtest.GetResource(toCreate, monitor.OperatorMetricsServiceName, "tigera-operator", "", "v1", "Service")
+		Expect(svc).NotTo(BeNil())
+		service := svc.(*corev1.Service)
+		Expect(service.Spec.Ports[0].Port).To(Equal(int32(monitor.OperatorMetricsPort)))
+		Expect(service.Spec.Selector["k8s-app"]).To(Equal("tigera-operator"))
+
+		// Operator ServiceMonitor should be in toCreate.
+		sm := rtest.GetResource(toCreate, monitor.OperatorMetricsServiceName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", "ServiceMonitor")
+		Expect(sm).NotTo(BeNil())
+		serviceMonitor := sm.(*monitoringv1.ServiceMonitor)
+		Expect(serviceMonitor.Spec.Endpoints[0].Port).To(Equal(monitor.OperatorMetricsPortName))
+
+		// Neither should be in toDelete (only PodMonitor, Deployment, typhaServiceMonitor).
+		Expect(toDelete).To(HaveLen(3))
+	})
+
+	It("Should delete operator metrics resources when OperatorMetricsEnabled is false", func() {
+		cfg.OperatorMetricsEnabled = false
+		cfg.OperatorNamespace = "tigera-operator"
+		cfg.OperatorName = "tigera-operator"
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		_, toDelete := component.Objects()
+
+		// Both operator metrics resources should be in toDelete.
+		found := 0
+		for _, obj := range toDelete {
+			if obj.GetName() == monitor.OperatorMetricsServiceName {
+				found++
+			}
+		}
+		Expect(found).To(Equal(2)) // Service + ServiceMonitor
 	})
 })
 

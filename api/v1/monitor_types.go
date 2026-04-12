@@ -167,6 +167,16 @@ type PrometheusContainer struct {
 	// If omitted, the Prometheus will use its default value for this container's resources.
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 
 type AlertManager struct {
@@ -175,6 +185,11 @@ type AlertManager struct {
 	AlertManagerSpec *AlertManagerSpec `json:"spec,omitempty"`
 }
 type AlertManagerSpec struct {
+	// Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
+	// Default: 0
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// Define resources requests and limits for single Pods.
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }

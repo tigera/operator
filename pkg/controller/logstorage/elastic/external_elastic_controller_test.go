@@ -111,11 +111,11 @@ var _ = Describe("External ES Controller", func() {
 				Name: "default",
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Registry: "some.registry.org/",
 				ImagePullSecrets: []corev1.LocalObjectReference{{
 					Name: "tigera-pull-secret",
@@ -174,7 +174,7 @@ var _ = Describe("External ES Controller", func() {
 		Expect(cli.Create(
 			ctx,
 			&operatorv1.ManagementCluster{
-				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 			})).NotTo(HaveOccurred())
 
 		Expect(cli.Create(ctx,

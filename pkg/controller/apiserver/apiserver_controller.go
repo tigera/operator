@@ -25,12 +25,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -42,6 +42,7 @@ import (
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -65,11 +66,12 @@ var log = logf.Log.WithName("controller_apiserver")
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileAPIServer{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		status:         status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
-		tierWatchReady: &utils.ReadyFlag{},
-		opts:           opts,
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
+		tierWatchReady:      &utils.ReadyFlag{},
+		migrationWatchReady: &utils.ReadyFlag{},
+		opts:                opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -103,7 +105,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if opts.EnterpriseCRDExists {
 		// Watch for changes to ApplicationLayer
-		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
+		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch ApplicationLayer resource: %v", err)
 		}
@@ -182,6 +184,16 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
+	// to migration phase changes (e.g., goes hands-off during Migrating).
+	// Uses ResourceVersionChangedPredicate because migration phase transitions
+	// are status-only updates that don't bump generation.
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	}, predicate.ResourceVersionChangedPredicate{})
+
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
 }
@@ -193,11 +205,12 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client         client.Client
-	scheme         *runtime.Scheme
-	status         status.StatusManager
-	tierWatchReady *utils.ReadyFlag
-	opts           options.ControllerOptions
+	client              client.Client
+	scheme              *runtime.Scheme
+	status              status.StatusManager
+	tierWatchReady      *utils.ReadyFlag
+	migrationWatchReady *utils.ReadyFlag
+	opts                options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -208,6 +221,28 @@ type ReconcileAPIServer struct {
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(2).Info("Reconciling APIServer")
+
+	// Check if a datastore migration is in progress. If so, the migration controller
+	// owns the APIService and we should not reconcile to avoid fighting over it.
+	// Only query migration state once the watch is established to ensure we use the cache.
+	var migrationPhase string
+	if r.migrationWatchReady.IsReady() {
+		migrationPhase = datastoremigration.GetPhase(r.client)
+	}
+	if migrationPhase == datastoremigration.PhaseMigrating {
+		reqLogger.Info("DatastoreMigration is in Migrating phase, deferring APIServer reconciliation")
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	if migrationPhase == datastoremigration.PhaseConverged && !r.opts.UseV3CRDs {
+		// Migration has converged but the operator is still running in v1 mode.
+		// Trigger a restart by updating our own deployment with the CALICO_API_GROUP env var.
+		reqLogger.Info("DatastoreMigration converged, triggering operator restart to switch to v3 CRD mode")
+		if err := r.setAPIGroupEnvVar(ctx); err != nil {
+			reqLogger.Error(err, "Failed to trigger operator restart")
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		return reconcile.Result{}, nil
+	}
 
 	instance, msg, err := utils.GetAPIServer(ctx, r.client)
 	if err != nil {
@@ -252,7 +287,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	_, installationSpec, err := utils.GetInstallation(context.Background(), r.client)
+	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -291,7 +326,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 	certificateManager.AddToStatusManager(r.status, render.APIServerNamespace)
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installationSpec, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -305,7 +340,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var keyValidatorConfig authentication.KeyValidatorConfig
 	includeV3NetworkPolicy := false
 
-	if installationSpec.Variant == operatorv1.TigeraSecureEnterprise {
+	if installationSpec.Variant.IsEnterprise() {
 		trustedBundle, err = certificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, r.client,
 			common.OperatorNamespace(), false)
 		if err != nil {
@@ -491,13 +526,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))
 	}
 
-	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
-	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
-	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	if !r.opts.UseV3CRDs && includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
-	}
-
+	// Add in the API server component itself.
 	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
@@ -513,6 +542,17 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			TrustedBundle:   trustedBundle,
 		}),
 	)
+
+	// If the projectcalico.org/v3 API group is being backed by our aggregated API server, then v3 NetworkPolicy will fail to reconcile until the Calico API server is healthy.
+	// Thus, we only render v3.NetworkPolicy after the aggregated API server becomes available to avoid a chicken-and-egg scenario.
+	//
+	// If the projectcalico.org/v3 API group is implemented using CRDs natively, we can install network policies immediately, as there is no
+	// dependency on the API server deployment.
+	//
+	// We do this last to avoid transient errors with policy preventing progression of the controller.
+	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
+	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
@@ -563,6 +603,41 @@ func validateAPIServerResource(instance *operatorv1.APIServer) error {
 		if err != nil {
 			return fmt.Errorf("APIServer spec.CalicoWebhooksDeployment is not valid: %w", err)
 		}
+	}
+	return nil
+}
+
+// setAPIGroupEnvVar updates the operator's own Deployment to add the
+// CALICO_API_GROUP env var, which triggers a rolling restart. On restart,
+// UseV3CRDS() picks up the env var and the operator starts in v3 CRD mode.
+func (r *ReconcileAPIServer) setAPIGroupEnvVar(ctx context.Context) error {
+	dep := &v1.Deployment{}
+	key := types.NamespacedName{Name: "tigera-operator", Namespace: common.OperatorNamespace()}
+	if err := r.client.Get(ctx, key, dep); err != nil {
+		return fmt.Errorf("failed to get operator deployment: %w", err)
+	}
+
+	envVar := corev1.EnvVar{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}
+	changed := false
+	for i, c := range dep.Spec.Template.Spec.Containers {
+		hasVar := false
+		for _, e := range c.Env {
+			if e.Name == "CALICO_API_GROUP" {
+				hasVar = true
+				break
+			}
+		}
+		if !hasVar {
+			dep.Spec.Template.Spec.Containers[i].Env = append(dep.Spec.Template.Spec.Containers[i].Env, envVar)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+
+	if err := r.client.Update(ctx, dep); err != nil {
+		return fmt.Errorf("failed to update operator deployment: %w", err)
 	}
 	return nil
 }

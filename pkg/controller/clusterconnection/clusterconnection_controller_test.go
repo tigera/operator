@@ -151,12 +151,12 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 		installation = &operatorv1.Installation{
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Registry: "some.registry.org/",
 			},
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Status: operatorv1.InstallationStatus{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				Variant: operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{
 					Registry:           "my-reg",
 					KubernetesProvider: operatorv1.ProviderNone,
@@ -310,9 +310,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 
-				Expect(policies.Items).To(HaveLen(2))
-				Expect(policies.Items[0].Name).To(Equal("calico-system.default-deny"))
-				Expect(policies.Items[1].Name).To(Equal("calico-system.guardian-access"))
+				Expect(policies.Items).To(HaveLen(1))
+				Expect(policies.Items[0].Name).To(Equal("calico-system.guardian-access"))
 			})
 
 			It("should omit calico-system policy and not degrade when tier is not ready", func() {
@@ -353,12 +352,11 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
 
-				Expect(policies.Items).To(HaveLen(2))
-				Expect(policies.Items[0].Name).To(Equal("calico-system.default-deny"))
-				Expect(policies.Items[1].Name).To(Equal("calico-system.guardian-access"))
+				Expect(policies.Items).To(HaveLen(1))
+				Expect(policies.Items[0].Name).To(Equal("calico-system.guardian-access"))
 			})
 
-			It("should omit calico-system policy when tier is ready, but license is not sufficient", func() {
+			It("should render calico-system policy without domain-based egress when tier is ready, but license is not sufficient", func() {
 				licenseKey.Status.Features = []string{common.TiersFeature}
 				Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
 
@@ -367,7 +365,14 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
-				Expect(policies.Items).To(HaveLen(0))
+				Expect(policies.Items).To(HaveLen(1))
+				Expect(policies.Items[0].Name).To(Equal("calico-system.guardian-access"))
+
+				// Verify no domain-based egress rules are present
+				for _, rule := range policies.Items[0].Spec.Egress {
+					Expect(rule.Destination.Domains).To(BeEmpty(),
+						"Domain-based egress rules should not be present when license lacks EgressAccessControl")
+				}
 			})
 
 			It("should degrade and wait when tier and license are ready, but tier watch is not ready", func() {
@@ -384,14 +389,21 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 				Expect(policies.Items).To(HaveLen(0))
 			})
 
-			It("should omit calico-system policy when tier is ready but license is not ready", func() {
+			It("should render calico-system policy without domain-based egress when tier is ready but license is not ready", func() {
 				Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
 				policies := v3.NetworkPolicyList{}
 				Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
-				Expect(policies.Items).To(HaveLen(0))
+				Expect(policies.Items).To(HaveLen(1))
+				Expect(policies.Items[0].Name).To(Equal("calico-system.guardian-access"))
+
+				// Verify no domain-based egress rules are present
+				for _, rule := range policies.Items[0].Spec.Egress {
+					Expect(rule.Destination.Domains).To(BeEmpty(),
+						"Domain-based egress rules should not be present when license is not ready")
+				}
 			})
 
 			It("should omit calico-system policy when license is ready but tier is not ready", func() {
@@ -480,9 +492,9 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 						// Resolve the rendered rule that governs egress from guardian to voltron.
 						policies := v3.NetworkPolicyList{}
 						Expect(c.List(ctx, &policies)).ToNot(HaveOccurred())
-						Expect(policies.Items).To(HaveLen(2))
-						Expect(policies.Items[1].Name).To(Equal("calico-system.guardian-access"))
-						policy := policies.Items[1]
+						Expect(policies.Items).To(HaveLen(1))
+						Expect(policies.Items[0].Name).To(Equal("calico-system.guardian-access"))
+						policy := policies.Items[0]
 
 						// Generate the expectation based on the test case, and compare the rendered rule to our expectation.
 						expectedEgressRules := getExpectedEgressRulesFromCase(testCase)

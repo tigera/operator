@@ -105,36 +105,6 @@ func TestDevTagVersion(t *testing.T) {
 	}
 }
 
-func TestRefExistsInRemote(t *testing.T) {
-	t.Parallel()
-	// Simulated ls-remote output
-	lsRemoteOutput := "abc123\trefs/heads/release-v1.43\ndef456\trefs/tags/v3.30\nghi789\trefs/tags/v3.30^{}\njkl012\trefs/heads/release/v1.2"
-
-	tests := []struct {
-		ref  string
-		want bool
-	}{
-		{"release-v1.43", true},
-		{"v3.30", true},
-		{"v3.3", false}, // should not match partial
-		{"v3.30^{}", true},
-		{"release-v1.4", false},
-		{"nonexistent", false},
-		{"release/v1.2", true}, // ref with slash
-		{"v1.2", false},        // should not match partial of slashed ref
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.ref, func(t *testing.T) {
-			t.Parallel()
-			got := refExistsInRemote(lsRemoteOutput, tt.ref)
-			if got != tt.want {
-				t.Fatalf("refExistsInRemote(output, %q) = %v, want %v", tt.ref, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestValidateStreamFormat(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

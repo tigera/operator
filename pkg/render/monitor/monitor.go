@@ -78,10 +78,10 @@ const (
 	PrometheusServiceAccountName  = "prometheus"
 	PrometheusServerTLSSecretName = "calico-node-prometheus-tls"
 
-	AlertManagerPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + CalicoNodeAlertmanager
+	AlertmanagerPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + CalicoNodeAlertmanager
 	AlertmanagerConfigSecret   = "alertmanager-calico-node-alertmanager"
 	AlertmanagerPort           = 9093
-	MeshAlertManagerPolicyName = AlertManagerPolicyName + "-mesh"
+	MeshAlertmanagerPolicyName = AlertmanagerPolicyName + "-mesh"
 
 	ElasticsearchMetrics = "elasticsearch-metrics"
 	FluentdMetrics       = "fluentd-metrics"
@@ -100,7 +100,7 @@ const (
 	OperatorMetricsPort        = 9484
 )
 
-var alertManagerSelector = fmt.Sprintf(
+var alertmanagerSelector = fmt.Sprintf(
 	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
 	CalicoNodeAlertmanager,
 )
@@ -139,13 +139,13 @@ func MonitorPolicy(cfg *Config) render.Component {
 
 	if alertmanagerReplicasFromConfig(cfg) > 0 {
 		toCreate = append(toCreate,
-			calicoSystemAlertManagerPolicy(cfg),
-			calicoSystemAlertManagerMeshPolicy(cfg),
+			calicoSystemAlertmanagerPolicy(cfg),
+			calicoSystemAlertmanagerMeshPolicy(cfg),
 		)
 	} else {
 		toDelete = append(toDelete,
-			calicoSystemAlertManagerPolicy(cfg),
-			calicoSystemAlertManagerMeshPolicy(cfg),
+			calicoSystemAlertmanagerPolicy(cfg),
+			calicoSystemAlertmanagerMeshPolicy(cfg),
 		)
 	}
 
@@ -486,10 +486,10 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 }
 
 func alertmanagerReplicasFromConfig(cfg *Config) int32 {
-	if cfg.Monitor.AlertManager != nil &&
-		cfg.Monitor.AlertManager.AlertManagerSpec != nil &&
-		cfg.Monitor.AlertManager.AlertManagerSpec.Replicas != nil {
-		return *cfg.Monitor.AlertManager.AlertManagerSpec.Replicas
+	if cfg.Monitor.Alertmanager != nil &&
+		cfg.Monitor.Alertmanager.AlertmanagerSpec != nil &&
+		cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas != nil {
+		return *cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas
 	}
 	return 0
 }
@@ -501,9 +501,9 @@ func (mc *monitorComponent) alertmanagerReplicas() int32 {
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
-	if mc.cfg.Monitor.AlertManager != nil {
-		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
-			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
+	if mc.cfg.Monitor.Alertmanager != nil {
+		if mc.cfg.Monitor.Alertmanager.AlertmanagerSpec != nil {
+			resources = mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Resources
 		}
 	}
 
@@ -523,7 +523,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
-			Replicas:           mc.cfg.Monitor.AlertManager.AlertManagerSpec.Replicas,
+			Replicas:           mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        tolerations,
@@ -1305,11 +1305,11 @@ func (mc *monitorComponent) operatorRoleBindings() []*rbacv1.RoleBinding {
 }
 
 // Creates a network policy to allow traffic to Alertmanager (TCP port 9093).
-func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemAlertmanagerPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
-		// Allows all egress traffic from AlertManager.
+		// Allows all egress traffic from Alertmanager.
 		Action:   v3.Allow,
 		Protocol: &networkpolicy.TCPProtocol,
 	})
@@ -1317,13 +1317,13 @@ func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AlertManagerPolicyName,
+			Name:      AlertmanagerPolicyName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
-			Selector: alertManagerSelector,
+			Selector: alertmanagerSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
@@ -1340,13 +1340,13 @@ func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 }
 
 // Creates a network policy to allow traffic between Alertmanagers for HA configuration (TCP port 6783).
-func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemAlertmanagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
+				Selector: alertmanagerSelector,
 				Ports:    networkpolicy.Ports(9094),
 			},
 		},
@@ -1354,7 +1354,7 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.UDPProtocol,
 			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
+				Selector: alertmanagerSelector,
 				Ports:    networkpolicy.Ports(9094),
 			},
 		},
@@ -1364,20 +1364,20 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      MeshAlertManagerPolicyName,
+			Name:      MeshAlertmanagerPolicyName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
-			Selector: alertManagerSelector,
+			Selector: alertmanagerSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.TCPProtocol,
 					Destination: v3.EntityRule{
-						Selector: alertManagerSelector,
+						Selector: alertmanagerSelector,
 						Ports:    networkpolicy.Ports(9094),
 					},
 				},
@@ -1385,7 +1385,7 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.UDPProtocol,
 					Destination: v3.EntityRule{
-						Selector: alertManagerSelector,
+						Selector: alertmanagerSelector,
 						Ports:    networkpolicy.Ports(9094),
 					},
 				},
@@ -1433,7 +1433,7 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
+				Selector: alertmanagerSelector,
 				Ports:    networkpolicy.Ports(AlertmanagerPort),
 			},
 		},

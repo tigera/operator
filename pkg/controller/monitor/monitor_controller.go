@@ -81,8 +81,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.AlertmanagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.MeshAlertmanagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
@@ -244,8 +244,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Track alertmanager statefulset health only when it has replicas.
 	alertmanagerSS := types.NamespacedName{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)}
-	if instance.Spec.AlertManager != nil && instance.Spec.AlertManager.AlertManagerSpec != nil &&
-		instance.Spec.AlertManager.AlertManagerSpec.Replicas != nil && *instance.Spec.AlertManager.AlertManagerSpec.Replicas > 0 {
+	if instance.Spec.Alertmanager != nil && instance.Spec.Alertmanager.AlertmanagerSpec != nil &&
+		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas != nil && *instance.Spec.Alertmanager.AlertmanagerSpec.Replicas > 0 {
 		r.status.AddStatefulSets([]types.NamespacedName{alertmanagerSS})
 	} else {
 		r.status.RemoveStatefulSets(alertmanagerSS)
@@ -522,15 +522,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {
-	if instance.Spec.AlertManager == nil {
-		instance.Spec.AlertManager = &operatorv1.AlertManager{}
+	if instance.Spec.Alertmanager == nil {
+		instance.Spec.Alertmanager = &operatorv1.Alertmanager{}
 	}
-	if instance.Spec.AlertManager.AlertManagerSpec == nil {
-		instance.Spec.AlertManager.AlertManagerSpec = &operatorv1.AlertManagerSpec{}
+	if instance.Spec.Alertmanager.AlertmanagerSpec == nil {
+		instance.Spec.Alertmanager.AlertmanagerSpec = &operatorv1.AlertmanagerSpec{}
 	}
-	if instance.Spec.AlertManager.AlertManagerSpec.Replicas == nil {
+	if instance.Spec.Alertmanager.AlertmanagerSpec.Replicas == nil {
 		var replicas int32 = 0
-		instance.Spec.AlertManager.AlertManagerSpec.Replicas = &replicas
+		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas = &replicas
 	}
 
 	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {

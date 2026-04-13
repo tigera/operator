@@ -29,11 +29,14 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
+	"sigs.k8s.io/yaml"
 )
 
 type matchObject struct {
@@ -50,6 +53,14 @@ func (m *matchObject) FailureMessage(actual any) (message string) {
 
 func (m *matchObject) NegatedFailureMessage(actual any) (message string) {
 	return "" // not used within ContainElement
+}
+
+func testScheme() *runtime.Scheme {
+	s := runtime.NewScheme()
+	Expect(scheme.AddToScheme(s)).ShouldNot(HaveOccurred())
+	Expect(apiextenv1.AddToScheme(s)).ShouldNot(HaveOccurred())
+	Expect(admissionregv1.AddToScheme(s)).ShouldNot(HaveOccurred())
+	return s
 }
 
 var _ = Describe("Gateway API rendering tests", func() {
@@ -91,19 +102,26 @@ var _ = Describe("Gateway API rendering tests", func() {
 		},
 	}
 
-	It("should read Gateway API resources from YAML", func() {
-		resources := GatewayAPIResources()
-		Expect(resources.namespace.Name).To(Equal("tigera-gateway"))
+	It("should render Gateway API resources from helm chart", func() {
+		s := testScheme()
+		resources, err := renderChart(s, "")
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(resources.controllerDeployment).NotTo(BeNil())
+		Expect(resources.controllerDeployment.Namespace).To(Equal(GatewayAPINamespace))
 	})
 
 	It("should report UDPRoute as required when platform is not OpenShift", func() {
-		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderAKS)
+		s := testScheme()
+		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderAKS, s)
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(essentialCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 		Expect(optionalCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 	})
 
 	It("should report UDPRoute as optional when platform is OpenShift", func() {
-		essentialCRDs, optionalCRDs := GatewayAPICRDs(operatorv1.ProviderOpenShift)
+		s := testScheme()
+		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderOpenShift, s)
+		Expect(err).ShouldNot(HaveOccurred())
 		Expect(essentialCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 		Expect(optionalCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 	})
@@ -228,12 +246,14 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
 		By("resolving images")
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		Expect(objsToDelete).To(HaveLen(0))
+		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
+		Expect(objsToDelete).To(HaveLen(2))
 		Expect(objsToCreate).NotTo(BeEmpty())
 		Expect(objsToCreate).To(HaveLen(20 + len(gatewayAPI.Spec.GatewayClasses))) // 20 core objects plus one per GatewayClass
 
@@ -326,6 +346,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			PullSecrets:  pullSecrets,
@@ -337,7 +358,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/calico/envoy-proxy:" + components.ComponentCalicoEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		Expect(objsToDelete).To(HaveLen(0))
+		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
+		Expect(objsToDelete).To(HaveLen(2))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
@@ -419,6 +441,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			PullSecrets:  pullSecrets,
@@ -430,7 +453,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		Expect(objsToDelete).To(HaveLen(0))
+		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
+		Expect(objsToDelete).To(HaveLen(2))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
@@ -520,6 +544,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		}
 		customName := "my-gateway-controller"
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			CustomEnvoyGateway: &envoyapi.EnvoyGateway{
@@ -545,7 +570,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		Expect(objsToDelete).To(HaveLen(0))
+		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
+		Expect(objsToDelete).To(HaveLen(2))
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -730,6 +756,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		}
 
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
@@ -744,7 +771,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		Expect(objsToDelete).To(HaveLen(0))
+		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
+		Expect(objsToDelete).To(HaveLen(2))
 
 		// The default GatewayClass should not exist.
 		_, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "tigera-gateway-class", "tigera-gateway")
@@ -813,6 +841,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
@@ -837,6 +866,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
@@ -965,6 +995,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
@@ -1055,6 +1086,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
@@ -1149,6 +1181,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			CustomEnvoyProxies: map[string]*envoyapi.EnvoyProxy{
@@ -1222,6 +1255,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
@@ -1247,6 +1281,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})

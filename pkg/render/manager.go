@@ -278,9 +278,18 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		c.managerCalicoSystemNetworkPolicy(),
-		networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		managerServiceAccount(c.cfg.Namespace),
 	)
+	// The default-deny policy in calico-system is owned by the Installation
+	// controller, which uses a selector that excludes calico-apiserver so the
+	// API server remains reachable. Skip rendering it here when the Manager is
+	// being installed into calico-system (single-tenant), otherwise the two
+	// controllers fight over the policy's selector. In multi-tenant mode the
+	// Manager lives in a tenant namespace that Installation doesn't manage, so
+	// the Manager is responsible for the default-deny there.
+	if c.cfg.Namespace != common.CalicoNamespace {
+		objsToCreate = append(objsToCreate, networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace))
+	}
 	objsToCreate = append(objsToCreate, c.getTLSObjects()...)
 	objsToCreate = append(objsToCreate, c.managerService())
 	objsToCreate = append(objsToCreate, c.managerExternalNameService())

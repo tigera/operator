@@ -79,7 +79,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resources.
 		expectedResourcesToCreate := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -592,7 +591,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		// Should render the correct resources.
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -894,7 +892,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},

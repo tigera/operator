@@ -5710,6 +5710,22 @@ spec:
                           type: object
                       type: object
                   type: object
+                gatewayDeploymentMode:
+                  default: ControllerNamespace
+                  description: |-
+                    Configures where Envoy Gateway deploys managed gateway proxy workloads.
+                    - "ControllerNamespace" deploys managed proxy workloads in the Envoy Gateway
+                    controller namespace.
+                    - "GatewayNamespace" deploys managed proxy workloads in each Gateway's
+                    namespace.
+                    If not specified, defaults to "ControllerNamespace".
+                  enum:
+                    - ControllerNamespace
+                    - GatewayNamespace
+                  type: string
+                  x-kubernetes-validations:
+                    - message: gatewayDeploymentMode is immutable once set
+                      rule: self == oldSelf
               type: object
           type: object
           x-kubernetes-validations:

@@ -55,7 +55,7 @@ to point to local repositories for Calico and Enterprise respectively.`,
 	},
 	Before: prepBefore,
 	Action: prepAction,
-	After:  branchAfter,
+	After:  branchCutAfter,
 }
 
 // validatePrepRefs checks the required refs for release prep:
@@ -168,7 +168,7 @@ var prepContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.C
 var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	var err error
 
-	ctx, err = branchBeforeCommon(ctx, c, prepContextValuesFunc, validatePrepRefs)
+	ctx, err = branchCutBeforeCommon(ctx, c, prepContextValuesFunc, validatePrepRefs)
 	if err != nil {
 		return ctx, err
 	}
@@ -194,7 +194,7 @@ var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command
 	if err != nil {
 		return err
 	}
-	repoRootDir, err := branchActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
+	repoRootDir, err := branchCutActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
 	if err != nil {
 		return err
 	}

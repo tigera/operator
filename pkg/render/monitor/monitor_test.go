@@ -94,8 +94,8 @@ var _ = Describe("monitor rendering tests", func() {
 				ControlPlaneReplicas: ptr.To(int32(3)),
 			},
 			Monitor: operatorv1.MonitorSpec{
-				AlertManager: &operatorv1.AlertManager{
-					AlertManagerSpec: &operatorv1.AlertManagerSpec{
+				Alertmanager: &operatorv1.Alertmanager{
+					AlertmanagerSpec: &operatorv1.AlertmanagerSpec{
 						Replicas: ptr.To(int32(3)),
 					},
 				},
@@ -142,7 +142,7 @@ var _ = Describe("monitor rendering tests", func() {
 				"memory": k8sresource.MustParse("100Mi"),
 			},
 		}
-		alertManagerResources := corev1.ResourceRequirements{
+		alertmanagerResources := corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":    k8sresource.MustParse("601m"),
 				"memory": k8sresource.MustParse("600Mi"),
@@ -167,10 +167,10 @@ var _ = Describe("monitor rendering tests", func() {
 			},
 		}
 
-		cfg.Monitor.AlertManager = &operatorv1.AlertManager{
-			AlertManagerSpec: &operatorv1.AlertManagerSpec{
+		cfg.Monitor.Alertmanager = &operatorv1.Alertmanager{
+			AlertmanagerSpec: &operatorv1.AlertmanagerSpec{
 				Replicas:  ptr.To(int32(3)),
-				Resources: alertManagerResources,
+				Resources: alertmanagerResources,
 			},
 		}
 
@@ -189,10 +189,10 @@ var _ = Describe("monitor rendering tests", func() {
 
 		Expect(prometheusObj.Spec.CommonPrometheusFields.Resources).To(Equal(prometheusResources))
 
-		// AlertManager
+		// Alertmanager
 		alertmanagerObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodeAlertmanager, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.AlertmanagersKind).(*monitoringv1.Alertmanager)
 		Expect(ok).To(BeTrue())
-		Expect(alertmanagerObj.Spec.Resources).To(Equal(alertManagerResources))
+		Expect(alertmanagerObj.Spec.Resources).To(Equal(alertmanagerResources))
 	})
 
 	It("Should render Prometheus resource Specs correctly", func() {

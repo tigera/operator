@@ -124,8 +124,8 @@ var _ = Describe("Monitor controller tests", func() {
 			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 			Spec: operatorv1.MonitorSpec{
-				AlertManager: &operatorv1.AlertManager{
-					AlertManagerSpec: &operatorv1.AlertManagerSpec{
+				Alertmanager: &operatorv1.Alertmanager{
+					AlertmanagerSpec: &operatorv1.AlertmanagerSpec{
 						Replicas: ptr.To(int32(3)),
 					},
 				},

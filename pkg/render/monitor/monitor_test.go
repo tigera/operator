@@ -477,7 +477,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 
 		// PrometheusRule
-		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusDPRate, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
+		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusRule, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
 		Expect(ok).To(BeTrue())
 		Expect(prometheusruleObj.ObjectMeta.Labels).To(HaveLen(2))
 		Expect(prometheusruleObj.ObjectMeta.Labels["prometheus"]).To(Equal("calico-node-prometheus"))
@@ -487,7 +487,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(1))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPacketsRate"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("critical"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("info"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
 
@@ -1068,6 +1068,82 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(toDelete).To(HaveLen(3))
 	})
 
+	It("Should include operator alert rules in PrometheusRule when OperatorMetricsEnabled is true", func() {
+		cfg.OperatorMetricsEnabled = true
+		cfg.OperatorNamespace = "tigera-operator"
+		cfg.OperatorName = "tigera-operator"
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		toCreate, _ := component.Objects()
+
+		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusRule, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
+		Expect(ok).To(BeTrue())
+		rules := prometheusruleObj.Spec.Groups[0].Rules
+		Expect(rules).To(HaveLen(9))
+
+		// DeniedPacketsRate - base rule, severity downgraded to info
+		Expect(rules[0].Alert).To(Equal("DeniedPacketsRate"))
+		Expect(rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
+		Expect(rules[0].Labels["severity"]).To(Equal("info"))
+		Expect(rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
+		Expect(rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
+
+		// TLS certificate expiry alerts
+		Expect(rules[1].Alert).To(Equal("TLSCertExpiringWarning"))
+		Expect(rules[1].Expr).To(Equal(intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < (30 * 24 - 8) * 3600")))
+		Expect(rules[1].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[1].Annotations["summary"]).To(Equal("TLS certificate {{ $labels.name }} expires in less than 30 days"))
+		Expect(rules[1].Annotations["description"]).To(Equal("TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 30 days."))
+
+		Expect(rules[2].Alert).To(Equal("TLSCertExpiringCritical"))
+		Expect(rules[2].Expr).To(Equal(intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < 7 * 24 * 3600")))
+		Expect(rules[2].Labels["severity"]).To(Equal("critical"))
+		Expect(rules[2].Annotations["summary"]).To(Equal("TLS certificate {{ $labels.name }} expires in less than 7 days"))
+		Expect(rules[2].Annotations["description"]).To(Equal("TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 7 days."))
+
+		// License expiry alerts
+		Expect(rules[3].Alert).To(Equal("LicenseExpiringWarning"))
+		Expect(rules[3].Expr).To(Equal(intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 30 * 24 * 3600")))
+		Expect(rules[3].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[3].Annotations["summary"]).To(Equal("Calico Enterprise license expires in less than 30 days"))
+		Expect(rules[3].Annotations["description"]).To(Equal("The Calico Enterprise license will expire in less than 30 days."))
+
+		Expect(rules[4].Alert).To(Equal("LicenseExpiringCritical"))
+		Expect(rules[4].Expr).To(Equal(intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 7 * 24 * 3600 or tigera_operator_license_valid == 0")))
+		Expect(rules[4].Labels["severity"]).To(Equal("critical"))
+		Expect(rules[4].Annotations["summary"]).To(Equal("Calico Enterprise license expires in less than 7 days or is invalid"))
+		Expect(rules[4].Annotations["description"]).To(Equal("The Calico Enterprise license will expire in less than 7 days, or the license is invalid."))
+
+		// Component status alerts
+		Expect(rules[5].Alert).To(Equal("ComponentDegradedWarning"))
+		Expect(rules[5].Expr).To(Equal(intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`)))
+		Expect(rules[5].For).To(Equal(ptr.To(monitoringv1.Duration("15m"))))
+		Expect(rules[5].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[5].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is degraded"))
+		Expect(rules[5].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a degraded state for more than 15 minutes."))
+
+		Expect(rules[6].Alert).To(Equal("ComponentDegradedCritical"))
+		Expect(rules[6].Expr).To(Equal(intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`)))
+		Expect(rules[6].For).To(Equal(ptr.To(monitoringv1.Duration("30m"))))
+		Expect(rules[6].Labels["severity"]).To(Equal("critical"))
+		Expect(rules[6].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is degraded"))
+		Expect(rules[6].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a degraded state for more than 30 minutes."))
+
+		Expect(rules[7].Alert).To(Equal("ComponentProgressingWarning"))
+		Expect(rules[7].Expr).To(Equal(intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`)))
+		Expect(rules[7].For).To(Equal(ptr.To(monitoringv1.Duration("15m"))))
+		Expect(rules[7].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[7].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is progressing"))
+		Expect(rules[7].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a progressing state for more than 15 minutes."))
+
+		Expect(rules[8].Alert).To(Equal("ComponentProgressingCritical"))
+		Expect(rules[8].Expr).To(Equal(intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`)))
+		Expect(rules[8].For).To(Equal(ptr.To(monitoringv1.Duration("30m"))))
+		Expect(rules[8].Labels["severity"]).To(Equal("critical"))
+		Expect(rules[8].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is progressing"))
+		Expect(rules[8].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a progressing state for more than 30 minutes."))
+	})
+
 	It("Should delete operator metrics resources when OperatorMetricsEnabled is false", func() {
 		cfg.OperatorMetricsEnabled = false
 		cfg.OperatorNamespace = "tigera-operator"
@@ -1109,7 +1185,7 @@ func expectedBaseResources() []client.Object {
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-http-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-		&monitoringv1.PrometheusRule{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-dp-rate", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "PrometheusRule", APIVersion: "monitoring.coreos.com/v1"}},
+		&monitoringv1.PrometheusRule{ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "PrometheusRule", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-monitor", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "elasticsearch-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},

@@ -636,7 +636,7 @@ release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-o
 	@REPO=$(REPO) hack/bin/release prep
 
 create-release-branch: hack/bin/release var-require-all-CALICO_REF-ENTERPRISE_REF var-require-one-of-STREAM-RELEASE_STREAM
-	hack/bin/release branch
+	hack/bin/release branch cut
 
 ###############################################################################
 # Utilities

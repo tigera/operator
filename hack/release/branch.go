@@ -56,6 +56,14 @@ var (
 
 var branchCommand = &cli.Command{
 	Name:  "branch",
+	Usage: "Release branch operations",
+	Commands: []*cli.Command{
+		branchCutCommand,
+	},
+}
+
+var branchCutCommand = &cli.Command{
+	Name:  "cut",
 	Usage: "Create a new branch for the release",
 	Description: `The branch command creates a new branch for the release off of the current branch (which should be master or a release branch).
 	The new branch name is in the format <release-branch-prefix>-<stream> (e.g. release-v1.43).
@@ -78,31 +86,20 @@ var branchCommand = &cli.Command{
 		localFlag,
 		gitRemoteFlag,
 	},
-	Before: branchBefore,
-	Action: branchAction,
-	After:  branchAfter,
+	Before: branchCutBefore,
+	Action: branchCutAction,
+	After:  branchCutAfter,
 }
 
-// branchBeforeCommon handles shared Before logic for both branch and prep
-func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func(context.Context, *cli.Command) (context.Context, error), validateFn func(context.Context, *cli.Command) (context.Context, error)) (context.Context, error) {
+// branchCutBeforeCommon handles shared Before logic for both branch and prep
+func branchCutBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func(context.Context, *cli.Command) (context.Context, error), validateFn func(context.Context, *cli.Command) (context.Context, error)) (context.Context, error) {
 	// Start with a clean slate for branch cleanup functions.
-	branchCleanupFns = nil
+	branchCutCleanupFns = nil
 
 	var err error
 	ctx, err = scopeContextFn(ctx, c)
 	if err != nil {
 		return ctx, err
-	}
-
-	// Only warn about non-default base branch for the branch command;
-	// prep is expected to run from a release branch.
-	if c.Name == "branch" {
-		if baseBranch, ok := ctx.Value(baseBranchCtxKey).(string); ok && baseBranch != defaultBaseBranch {
-			logrus.WithFields(logrus.Fields{
-				"base":     baseBranch,
-				"expected": defaultBaseBranch,
-			}).Warn("Current branch is not the default base branch")
-		}
 	}
 
 	if c.Bool(skipValidationFlag.Name) {
@@ -117,8 +114,8 @@ func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func
 	return validateFn(ctx, c)
 }
 
-// branchContextValuesFunc sets branch cutting context values based on CLI flags
-var branchContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+// branchCutContextValuesFunc sets branch cutting context values based on CLI flags
+var branchCutContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	currentBranch, err := command.GitBranch()
 	if err != nil {
 		return ctx, fmt.Errorf("getting current branch: %w", err)
@@ -221,16 +218,23 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", baseBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
 	}
 
+	if baseBranch != defaultBaseBranch {
+		logrus.WithFields(logrus.Fields{
+			"base":     baseBranch,
+			"expected": defaultBaseBranch,
+		}).Warn("Current branch is not the default base branch")
+	}
+
 	return ctx, nil
 }
 
 // Pre-action for branch command.
-var branchBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	return branchBeforeCommon(ctx, c, branchContextValuesFunc, validateBranchRefs)
+var branchCutBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	return branchCutBeforeCommon(ctx, c, branchCutContextValuesFunc, validateBranchRefs)
 })
 
 // Action for branch command.
-var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
+var branchCutAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
 	stream := c.String(streamFlag.Name)
 	remote := c.String(gitRemoteFlag.Name)
 	baseBranch, err := contextString(ctx, baseBranchCtxKey)
@@ -243,7 +247,7 @@ var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) erro
 	}
 	refs := []string{branchName}
 
-	if _, err := branchActionCommon(ctx, c, fmt.Sprintf("build: update config for %s", stream)); err != nil {
+	if _, err := branchCutActionCommon(ctx, c, fmt.Sprintf("build: update config for %s", stream)); err != nil {
 		return err
 	}
 	logrus.WithField("newBranch", branchName).Info("Created new branch")
@@ -308,11 +312,11 @@ var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) erro
 	return nil
 })
 
-var branchCleanupFns []func()
+var branchCutCleanupFns []func()
 
-var branchAfter = cli.AfterFunc(func(_ context.Context, _ *cli.Command) error {
-	for i := len(branchCleanupFns) - 1; i >= 0; i-- {
-		branchCleanupFns[i]()
+var branchCutAfter = cli.AfterFunc(func(_ context.Context, _ *cli.Command) error {
+	for i := len(branchCutCleanupFns) - 1; i >= 0; i-- {
+		branchCutCleanupFns[i]()
 	}
 	return nil
 })
@@ -323,7 +327,7 @@ func switchBranch(ctx context.Context, branchName string) error {
 	if err != nil {
 		return err
 	}
-	branchCleanupFns = append(branchCleanupFns, func() {
+	branchCutCleanupFns = append(branchCutCleanupFns, func() {
 		if out, err := command.Git("switch", "-f", baseBranch); err != nil {
 			logrus.Error(out)
 			logrus.WithError(err).Errorf("Failed to reset to %q branch", baseBranch)
@@ -336,10 +340,10 @@ func switchBranch(ctx context.Context, branchName string) error {
 	return nil
 }
 
-// branchActionCommon switches to a new branch, modifies config versions, and commits the changes.
+// branchCutActionCommon switches to a new branch, modifies config versions, and commits the changes.
 // It reads the branch name and calico/enterprise versions from context (set by Before functions).
 // It returns the repo root directory for subsequent operations.
-func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (string, error) {
+func branchCutActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (string, error) {
 	branchName, err := contextString(ctx, branchNameCtxKey)
 	if err != nil {
 		return "", err
@@ -363,8 +367,14 @@ func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (
 // modifyConfigVersions updates config versions and runs make targets to regenerate files.
 // It reads calico/enterprise versions from context (set by Before functions).
 func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir string) error {
-	calicoVersion, _ := ctx.Value(calicoConfigVersionCtxKey).(string)
-	enterpriseVersion, _ := ctx.Value(enterpriseConfigVersionCtxKey).(string)
+	calicoVersion, ok := ctx.Value(calicoConfigVersionCtxKey).(string)
+	if !ok {
+		return fmt.Errorf("calico version not found in context")
+	}
+	enterpriseVersion, ok := ctx.Value(enterpriseConfigVersionCtxKey).(string)
+	if !ok {
+		return fmt.Errorf("enterprise version not found in context")
+	}
 	verCfg := &versions.VersionsConfig{
 		RepoRootDir: repoRootDir,
 		Calico: versions.VersionConfig{
@@ -372,9 +382,9 @@ func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir strin
 			Dir:     c.String(calicoDirFlag.Name),
 		},
 		Enterprise: versions.VersionConfig{
-			Version: enterpriseVersion,
+			Version:  enterpriseVersion,
 			Registry: c.String(enterpriseRegistryFlag.Name),
-			Dir:     c.String(enterpriseDirFlag.Name),
+			Dir:      c.String(enterpriseDirFlag.Name),
 		},
 	}
 	return verCfg.Generate()

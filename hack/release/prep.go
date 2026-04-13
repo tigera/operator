@@ -194,7 +194,7 @@ var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command
 	if err != nil {
 		return err
 	}
-	repoRootDir, err := branchCutActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
+	repoRootDir, err := branchCutActionCommon(ctx, c, nil, fmt.Sprintf("build: %s release", version))
 	if err != nil {
 		return err
 	}

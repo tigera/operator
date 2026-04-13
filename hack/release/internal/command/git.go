@@ -89,3 +89,18 @@ func GitRefExistsInRemote(lsRemoteOutput, ref string) bool {
 	}
 	return false
 }
+
+// GitHubMilestoneOpen reports whether a GitHub milestone with the given title exists and is open in the specified repo.
+// The repo must be in "owner/name" format (e.g., "tigera/operator").
+func GitHubMilestoneOpen(repo, milestone string) (bool, error) {
+	out, err := Run("gh", []string{
+		"api",
+		"--paginate",
+		fmt.Sprintf("/repos/%s/milestones?state=open&per_page=100", repo),
+		"--jq", fmt.Sprintf(".[] | select(.title==%q) | .title", milestone),
+	}, nil)
+	if err != nil {
+		return false, fmt.Errorf("listing milestones for %s: %w", repo, err)
+	}
+	return out == milestone, nil
+}

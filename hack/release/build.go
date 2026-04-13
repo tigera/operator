@@ -223,7 +223,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 		buildLog = buildLog.WithField("hashrelease", true)
 		buildEnv = append(buildEnv, fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name)))
 		buildCleanupFns = append(buildCleanupFns, func(ctx context.Context) error {
-			if out, err := command.GitInDir(repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
+			if out, err := command.GitInDir(repoRootDir, append([]string{"checkout", "-f"}, defaultChangedFiles...)...); err != nil {
 				logrus.Error(out)
 				return fmt.Errorf("resetting git state in repo after hashrelease build: %w", err)
 			}

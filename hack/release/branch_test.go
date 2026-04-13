@@ -65,41 +65,45 @@ func TestIsReleaseBranch(t *testing.T) {
 	}
 }
 
-func TestDevTagVersion(t *testing.T) {
+func TestNextDevRelease(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		stream       string
-		devSuffix    string
+		stream     string
+		devSuffix  string
+		wantStream string
+
 		wantTag      string
 		wantParseErr bool
 	}{
-		{"v1.43", "0.dev", "v1.44.0-0.dev", false},
-		{"v1.0", "0.dev", "v1.1.0-0.dev", false},
-		{"v10.20", "0.dev", "v10.21.0-0.dev", false},
-		{"v0.1", "0.dev", "v0.2.0-0.dev", false},
-		{"invalid", "0.dev", "", true},
-		{"v1", "0.dev", "", true},
+		{"v1.43", "0.dev", "v1.44", "v1.44.0-0.dev", false},
+		{"v1.0", "0.dev", "v1.1", "v1.1.0-0.dev", false},
+		{"v10.20", "0.dev", "v10.21", "v10.21.0-0.dev", false},
+		{"v0.1", "0.dev", "v0.2", "v0.2.0-0.dev", false},
+		{"invalid", "0.dev", "", "", true},
+		{"v1", "0.dev", "", "", true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.stream, func(t *testing.T) {
 			t.Parallel()
-			version, err := semver.Parse(fmt.Sprintf("%s.0", strings.TrimPrefix(tt.stream, "v")))
+			gotStream, gotTag, err := nextDevRelease(tt.stream, tt.devSuffix)
+			if tt.wantParseErr && err == nil {
+				t.Fatalf("nextDevRelease(%q, %q) expected parse error but got none", tt.stream, tt.devSuffix)
+			} else if !tt.wantParseErr && err != nil {
+				t.Fatalf("nextDevRelease(%q, %q) unexpected error: %v", tt.stream, tt.devSuffix, err)
+			}
+			if gotStream != tt.wantStream {
+				t.Fatalf("nextDevRelease(%q, %q) stream = %q, want %q", tt.stream, tt.devSuffix, gotStream, tt.wantStream)
+			}
+			if gotTag != tt.wantTag {
+				t.Fatalf("nextDevRelease(%q, %q) tag = %q, want %q", tt.stream, tt.devSuffix, gotTag, tt.wantTag)
+			}
 			if tt.wantParseErr {
-				if err == nil {
-					t.Fatalf("expected parse error for stream %q, got nil", tt.stream)
-				}
-				return
+				return // if we expected a parse error, we don't need to check the tag format
 			}
-			if err != nil {
-				t.Fatalf("unexpected parse error for stream %q: %v", tt.stream, err)
-			}
-			if err := version.IncrementMinor(); err != nil {
-				t.Fatalf("unexpected IncrementMinor error: %v", err)
-			}
-			got := fmt.Sprintf("v%s-%s", version.String(), tt.devSuffix)
-			if got != tt.wantTag {
-				t.Fatalf("dev tag for stream %q = %q, want %q", tt.stream, got, tt.wantTag)
+			// sanity: verify that the generated tag is a valid semver
+			if _, err := semver.Parse(strings.TrimPrefix(gotTag, "v")); err != nil {
+				t.Fatalf("nextDevRelease(%q, %q) generated invalid semver tag %q: %v", tt.stream, tt.devSuffix, gotTag, err)
 			}
 		})
 	}

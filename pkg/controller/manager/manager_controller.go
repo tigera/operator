@@ -97,10 +97,19 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+	policiesToWatch := []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
-		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
-	})
+	}
+	// The default-deny policy in calico-system is owned by the Installation
+	// controller; only watch it here when we render it ourselves, i.e. in
+	// multi-tenant mode where the Manager lives in a tenant namespace.
+	if helper.InstallNamespace() != common.CalicoNamespace {
+		policiesToWatch = append(policiesToWatch, types.NamespacedName{
+			Name:      networkpolicy.CalicoComponentDefaultDenyPolicyName,
+			Namespace: helper.InstallNamespace(),
+		})
+	}
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policiesToWatch)
 
 	// Watch for changes to primary resource Manager
 	err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})

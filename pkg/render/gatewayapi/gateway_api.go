@@ -646,12 +646,14 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
-	// Add network policies to allow gateway components to function under a
-	// default-deny policy.
+	// Add network policies to allow gateway control plane components to function
+	// under a global default-deny policy. We intentionally do not add a namespace-scoped
+	// default deny here because Gateway resources dynamically create Envoy proxy pods in
+	// this namespace whose traffic patterns (listener ports, backend destinations) are
+	// determined by the customer's Gateway and HTTPRoute configuration.
 	objs = append(objs,
 		pr.gatewayCertgenAllowTigeraPolicy(),
 		pr.gatewayControllerAllowTigeraPolicy(),
-		networkpolicy.CalicoSystemDefaultDeny(common.TigeraGatewayNamespace),
 	)
 
 	// Provision GatewayClasses.

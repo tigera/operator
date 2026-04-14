@@ -494,9 +494,18 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	r.status.ReadyToMonitor()
 
 	if licenseExpired {
+		r.status.ClearWarning("license-grace-period")
 		r.status.SetDegraded(operatorv1.ResourceValidationError,
 			"License is expired - Contact Tigera support or email licensing@tigera.io", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	// Check license grace period warning.
+	if licenseStatus == utils.LicenseStatusInGracePeriod {
+		r.status.SetWarning("license-grace-period",
+			"License has expired and is within the grace period. Please renew your license to avoid service disruption.")
+	} else {
+		r.status.ClearWarning("license-grace-period")
 	}
 
 	// Check BYO certificate expiry warnings.

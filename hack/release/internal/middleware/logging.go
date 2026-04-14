@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package middleware
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"runtime"
@@ -25,21 +26,22 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-func logPrettifier(f *runtime.Frame) (string, string) {
+// LogPrettifier formats logrus caller information as "pkg.Func():file:line".
+func LogPrettifier(f *runtime.Frame) (string, string) {
 	filename := path.Base(f.File)
 	funcSegments := strings.Split(f.Function, "/")
 	return fmt.Sprintf("%s()", funcSegments[len(funcSegments)-1]), fmt.Sprintf("%s:%d", filename, f.Line)
 }
 
-// configureLogging sets up logging to both stdout and a file.
-func configureLogging(c *cli.Command) {
-	if debug := c.Bool(debugFlag.Name); debug {
+// ConfigureLogging sets up logging to both stdout and a file.
+func ConfigureLogging(c *cli.Command) {
+	if debug := c.Bool("debug"); debug {
 		logrus.SetLevel(logrus.DebugLevel)
 	}
 
 	logrus.SetFormatter(&logrus.TextFormatter{
 		DisableLevelTruncation: true,
-		CallerPrettyfier:       logPrettifier,
+		CallerPrettyfier:       LogPrettifier,
 		ForceColors:            true,
 		PadLevelText:           true,
 		DisableQuote:           true,
@@ -57,7 +59,7 @@ func configureLogging(c *cli.Command) {
 		Formatter: &logrus.TextFormatter{
 			DisableColors:          true,
 			DisableLevelTruncation: true,
-			CallerPrettyfier:       logPrettifier,
+			CallerPrettyfier:       LogPrettifier,
 			DisableSorting:         true,
 		},
 	})
@@ -66,4 +68,13 @@ func configureLogging(c *cli.Command) {
 	}
 
 	logrus.AddHook(rotateFileHook)
+}
+
+// WithLogging wraps a cli.ActionFunc with automatic log file configuration
+// derived from the command's full name (e.g. "release branch" -> "release-branch.log").
+func WithLogging(action cli.ActionFunc) cli.ActionFunc {
+	return func(ctx context.Context, c *cli.Command) error {
+		ConfigureLogging(c)
+		return action(ctx, c)
+	}
 }

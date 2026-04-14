@@ -20,12 +20,13 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
 	"github.com/urfave/cli/v3"
 )
 
 // check that the git working tree is clean.
 var checkGitClean = func(ctx context.Context) (context.Context, error) {
-	version, err := gitVersion()
+	version, err := command.GitVersion()
 	if err != nil {
 		return ctx, fmt.Errorf("error getting git version: %w", err)
 	}
@@ -44,7 +45,7 @@ var checkVersionMatchesGitVersion = func(ctx context.Context, c *cli.Command) (c
 		checkLog.Debug("Skipping version check for hashrelease")
 		return ctx, nil
 	}
-	gitVer, err := gitVersion()
+	gitVer, err := command.GitVersion()
 	if err != nil {
 		return ctx, fmt.Errorf("getting git version: %w", err)
 	}

@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
@@ -62,6 +63,8 @@ var log = logf.Log.WithName("controller_gatewayapi")
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
+	tierWatchReady := &utils.ReadyFlag{}
+
 	r := &ReconcileGatewayAPI{
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
@@ -69,6 +72,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		multiTenant:         opts.MultiTenant,
+		tierWatchReady:      tierWatchReady,
 		newComponentHandler: utils.NewComponentHandler,
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -89,6 +93,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		log.V(5).Info("Failed to create Installation watch", "err", err)
 		return fmt.Errorf("gatewayapi-controller failed to watch Installation resource: %w", err)
 	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+		{Name: gatewayapi.GatewayControllerPolicyName, Namespace: common.TigeraGatewayNamespace},
+		{Name: gatewayapi.GatewayCertgenPolicyName, Namespace: common.TigeraGatewayNamespace},
+	})
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
@@ -146,6 +156,7 @@ type ReconcileGatewayAPI struct {
 	status              status.StatusManager
 	clusterDomain       string
 	multiTenant         bool
+	tierWatchReady      *utils.ReadyFlag
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
 	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
@@ -196,6 +207,22 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	if variant == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	// Ensure the calico-system tier exists, before rendering any network policies within it.
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Render CRDs.  Note, we do this as early as possible so as to enable the following

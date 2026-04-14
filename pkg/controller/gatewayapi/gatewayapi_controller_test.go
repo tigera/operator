@@ -95,14 +95,21 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		fakeComponentHandlers = nil
+		tierWatchReady := &utils.ReadyFlag{}
+		tierWatchReady.MarkAsReady()
 		r = &ReconcileGatewayAPI{
 			client:              c,
 			scheme:              scheme,
 			status:              mockStatus,
+			tierWatchReady:      tierWatchReady,
 			newComponentHandler: FakeComponentHandler,
 			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },
 		}
+
+		// Create the calico-system Tier, since the controller blocks on its existence.
+		tier := &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}}
+		Expect(c.Create(ctx, tier)).ShouldNot(HaveOccurred())
 	})
 
 	Context("with real component handler", func() {

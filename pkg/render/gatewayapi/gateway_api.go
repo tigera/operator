@@ -92,8 +92,8 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
-	GatewayControllerPolicyName         = networkpolicy.TigeraComponentPolicyPrefix + "gateway-api-controller-access"
-	GatewayCertgenPolicyName            = networkpolicy.TigeraComponentPolicyPrefix + "gateway-api-certgen-access"
+	GatewayControllerPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + "gateway-api-controller-access"
+	GatewayCertgenPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "gateway-api-certgen-access"
 	wafFilterName                       = "waf-http-filter"
 
 	// Envoy gateway controller serving ports.
@@ -646,12 +646,14 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
-	// Add network policies to allow gateway components to function under a
-	// default-deny policy.
+	// Add network policies to allow gateway control plane components to function
+	// under a global default-deny policy. We intentionally do not add a namespace-scoped
+	// default deny here because Gateway resources dynamically create Envoy proxy pods in
+	// this namespace whose traffic patterns (listener ports, backend destinations) are
+	// determined by the customer's Gateway and HTTPRoute configuration.
 	objs = append(objs,
 		pr.gatewayCertgenAllowTigeraPolicy(),
 		pr.gatewayControllerAllowTigeraPolicy(),
-		networkpolicy.CalicoSystemDefaultDeny(common.TigeraGatewayNamespace),
 	)
 
 	// Provision GatewayClasses.
@@ -1198,7 +1200,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayCertgenAllowTigeraPolicy() *
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
 	})
 
 	return &v3.NetworkPolicy{
@@ -1208,7 +1210,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayCertgenAllowTigeraPolicy() *
 			Namespace: common.TigeraGatewayNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: "app == 'certgen'",
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
 			Egress:   egressRules,
@@ -1225,7 +1227,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayControllerAllowTigeraPolicy(
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,
 		Protocol:    &networkpolicy.TCPProtocol,
-		Destination: networkpolicy.KubeAPIServerServiceSelectorEntityRule,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
 	})
 
 	ingressRules := []v3.Rule{
@@ -1245,7 +1247,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayControllerAllowTigeraPolicy(
 			Namespace: common.TigeraGatewayNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
-			Tier:     networkpolicy.TigeraComponentTierName,
+			Tier:     networkpolicy.CalicoTierName,
 			Selector: "k8s-app == '" + GatewayControllerLabel + "'",
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,

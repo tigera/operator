@@ -21,6 +21,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -32,6 +33,7 @@ import (
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -139,7 +141,7 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 	// Build the desired set of secrets if Istio is active.
 	targetNamespaces := map[string]bool{}
 	if istioActive {
-		_, installation, err := utils.GetInstallation(ctx, r)
+		_, installationSpec, err := utils.GetInstallationSpec(ctx, r)
 		if err != nil {
 			if errors.IsNotFound(err) {
 				reqLogger.V(1).Info("Installation not found")
@@ -148,7 +150,7 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 			return reconcile.Result{}, err
 		}
 
-		pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r)
+		pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -161,7 +163,8 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 
 		for i := range gatewayList.Items {
 			gw := &gatewayList.Items[i]
-			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName {
+			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName &&
+				gw.Namespace != common.OperatorNamespace() {
 				targetNamespaces[gw.Namespace] = true
 			}
 		}
@@ -179,6 +182,13 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 		}
 	}
 
+	// Build the desired set keyed on (namespace, name) so that renamed or removed
+	// secrets are correctly detected as stale.
+	desiredSecrets := map[types.NamespacedName]bool{}
+	for _, obj := range toCreate {
+		desiredSecrets[types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = true
+	}
+
 	// List all existing secrets managed by this controller and mark stale ones for deletion.
 	existingSecrets := &corev1.SecretList{}
 	if err := r.List(ctx, existingSecrets, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
@@ -186,7 +196,8 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 	}
 	for i := range existingSecrets.Items {
 		s := &existingSecrets.Items[i]
-		if !targetNamespaces[s.Namespace] {
+		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
+		if !desiredSecrets[key] {
 			toDelete = append(toDelete, s)
 		}
 	}

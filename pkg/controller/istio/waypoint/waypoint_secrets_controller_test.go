@@ -254,6 +254,73 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			secrets := listTrackedSecrets()
 			Expect(secrets).To(BeEmpty())
 		})
+
+		It("should clean up old secret when pull secret is renamed", func() {
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secrets := listTrackedSecrets()
+			Expect(secrets).To(HaveLen(1))
+			Expect(secrets[0].Name).To(Equal("my-pull-secret"))
+
+			// Change imagePullSecrets from my-pull-secret to new-pull-secret.
+			createPullSecret("new-pull-secret")
+			inst := &operatorv1.Installation{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, inst)).NotTo(HaveOccurred())
+			inst.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
+				{Name: "new-pull-secret"},
+			}
+			Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+
+			_, err = doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secrets = listTrackedSecrets()
+			Expect(secrets).To(HaveLen(1))
+			Expect(secrets[0].Name).To(Equal("new-pull-secret"))
+			Expect(secrets[0].Namespace).To(Equal("user-ns"))
+		})
+
+		It("should copy multiple pull secrets to waypoint namespace", func() {
+			createPullSecret("second-pull-secret")
+			inst := &operatorv1.Installation{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, inst)).NotTo(HaveOccurred())
+			inst.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
+				{Name: "my-pull-secret"},
+				{Name: "second-pull-secret"},
+			}
+			Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secrets := listTrackedSecrets()
+			Expect(secrets).To(HaveLen(2))
+
+			names := map[string]bool{}
+			for _, s := range secrets {
+				names[s.Name] = true
+				Expect(s.Namespace).To(Equal("user-ns"))
+			}
+			Expect(names).To(HaveKey("my-pull-secret"))
+			Expect(names).To(HaveKey("second-pull-secret"))
+		})
+
+		It("should not copy secrets to the operator namespace", func() {
+			createWaypointGateway("waypoint", common.OperatorNamespace())
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Pull secrets already exist in the operator namespace; the controller
+			// should skip it to avoid overwriting source secrets with labeled copies.
+			secrets := listTrackedSecrets()
+			Expect(secrets).To(BeEmpty())
+		})
 	})
 
 	Context("when Istio CR is deleted", func() {

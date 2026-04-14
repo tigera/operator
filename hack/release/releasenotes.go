@@ -19,6 +19,8 @@ import (
 	"fmt"
 
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
 	"github.com/urfave/cli/v3"
 )
 
@@ -43,7 +45,7 @@ Otherwise, use --local flag to generate release notes based on local versions fi
 
 // Pre-action for "release notes" command.
 var releaseNotesBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	configureLogging(c)
+	middleware.ConfigureLogging(c)
 
 	var err error
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
@@ -76,7 +78,7 @@ var releaseNotesAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command
 		return fmt.Errorf("error setting up GitHub client: %s", err)
 	}
 	// get root directory of operator git repo
-	repoRootDir, err := runCommand("git", []string{"rev-parse", "--show-toplevel"}, nil)
+	repoRootDir, err := command.Run("git", []string{"rev-parse", "--show-toplevel"}, nil)
 	if err != nil {
 		return fmt.Errorf("error getting git root directory: %s", err)
 	}

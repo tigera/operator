@@ -9,6 +9,7 @@ vendor/
 build/_output
 build/_test
 hack/bin
+hack/release/_output/
 operator-sdk*
 *-release-notes.md
 .crds

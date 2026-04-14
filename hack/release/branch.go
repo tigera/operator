@@ -17,13 +17,18 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
+	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/blang/semver/v4"
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
+
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
+	"github.com/tigera/operator/hack/release/internal/versions"
 )
 
 // Context keys for branch/prep commands
@@ -43,9 +48,9 @@ var (
 
 	defaultBaseBranch = "master"
 
-	changedFiles = []string{
-		calicoConfig,
-		enterpriseConfig,
+	defaultChangedFiles = []string{
+		versions.CalicoConfigPath,
+		versions.EnterpriseConfigPath,
 		"pkg/components",
 		"pkg/imports/crds",
 		"pkg/imports/admission",
@@ -54,6 +59,15 @@ var (
 
 var branchCommand = &cli.Command{
 	Name:  "branch",
+	Usage: "Release branch operations",
+	Commands: []*cli.Command{
+		branchCutCommand,
+		branchValidateCommand,
+	},
+}
+
+var branchCutCommand = &cli.Command{
+	Name:  "cut",
 	Usage: "Create a new branch for the release",
 	Description: `The branch command creates a new branch for the release off of the current branch (which should be master or a release branch).
 	The new branch name is in the format <release-branch-prefix>-<stream> (e.g. release-v1.43).
@@ -76,33 +90,24 @@ var branchCommand = &cli.Command{
 		localFlag,
 		gitRemoteFlag,
 	},
-	Before: branchBefore,
-	Action: branchAction,
-	After:  branchAfter,
+	Before: branchCutBefore,
+	Action: middleware.WithLogging(middleware.WithSummary("branch-cut", func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+		stream := c.String(streamFlag.Name)
+		outputs, err := branchCutAction(ctx, c)
+		return stream, outputs, err
+	})),
+	After: branchCutAfter,
 }
 
-// branchBeforeCommon handles shared Before logic for both branch and prep
-func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func(context.Context, *cli.Command) (context.Context, error), validateFn func(context.Context, *cli.Command) (context.Context, error)) (context.Context, error) {
-	configureLogging(c)
-
+// branchCutBeforeCommon handles shared Before logic for both branch and prep
+func branchCutBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func(context.Context, *cli.Command) (context.Context, error), validateFn func(context.Context, *cli.Command) (context.Context, error)) (context.Context, error) {
 	// Start with a clean slate for branch cleanup functions.
-	branchCleanupFns = nil
+	branchCutCleanupFns = nil
 
 	var err error
 	ctx, err = scopeContextFn(ctx, c)
 	if err != nil {
 		return ctx, err
-	}
-
-	// Only warn about non-default base branch for the branch command;
-	// prep is expected to run from a release branch.
-	if c.Name == "branch" {
-		if baseBranch, ok := ctx.Value(baseBranchCtxKey).(string); ok && baseBranch != defaultBaseBranch {
-			logrus.WithFields(logrus.Fields{
-				"base":     baseBranch,
-				"expected": defaultBaseBranch,
-			}).Warn("Current branch is not the default base branch")
-		}
 	}
 
 	if c.Bool(skipValidationFlag.Name) {
@@ -117,9 +122,9 @@ func branchBeforeCommon(ctx context.Context, c *cli.Command, scopeContextFn func
 	return validateFn(ctx, c)
 }
 
-// branchContextValuesFunc sets branch cutting context values based on CLI flags
-var branchContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	currentBranch, err := git("branch", "--show-current")
+// branchCutContextValuesFunc sets branch cutting context values based on CLI flags
+var branchCutContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	currentBranch, err := command.GitBranch()
 	if err != nil {
 		return ctx, fmt.Errorf("getting current branch: %w", err)
 	}
@@ -150,30 +155,6 @@ var isReleaseBranch = func(releaseBranchPrefix, branch string) (bool, error) {
 	return matched, nil
 }
 
-// refExistsInRemote checks if a ref exists in the ls-remote output by matching the full ref name.
-func refExistsInRemote(lsRemoteOutput, ref string) bool {
-	for _, line := range strings.Split(lsRemoteOutput, "\n") {
-		parts := strings.Fields(line)
-		if len(parts) < 2 {
-			continue
-		}
-		// ls-remote output format: <hash>\trefs/heads/<name> or refs/tags/<name>
-		remoteRef := parts[1]
-		// Strip known prefixes to get the full ref name (preserving slashes in ref names)
-		name := remoteRef
-		for _, prefix := range []string{"refs/heads/", "refs/tags/"} {
-			if trimmed, ok := strings.CutPrefix(remoteRef, prefix); ok {
-				name = trimmed
-				break
-			}
-		}
-		if name == ref {
-			return true
-		}
-	}
-	return false
-}
-
 // validateBranchRefs validates that the required ref flags are set for branch creation.
 //   - check that the stream flag is in the correct format
 //   - check that the operator branch does not already exist
@@ -195,7 +176,7 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 	if err != nil {
 		return ctx, err
 	}
-	out, err := git("ls-remote", "--heads", remote, branchName)
+	out, err := command.GitLsRemoteHeads(remote, branchName)
 	if err != nil {
 		return ctx, fmt.Errorf("checking if branch %s exists in remote %s: %w", branchName, remote, err)
 	}
@@ -219,11 +200,11 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 		{calicoRef, c.String(calicoGitRepoFlag.Name), calicoRefFlag.Name},
 		{enterpriseRef, c.String(enterpriseGitRepoFlag.Name), enterpriseRefFlag.Name},
 	} {
-		out, err := git("ls-remote", "--heads", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.ref)
+		out, err := command.GitLsRemote(fmt.Sprintf("git@github.com:%s", check.repo), check.ref, "--heads", "--tags")
 		if err != nil {
 			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.ref, check.repo, err)
 		}
-		if !refExistsInRemote(out, check.ref) {
+		if !command.GitRefExistsInRemote(out, check.ref) {
 			return ctx, fmt.Errorf("ref %q not found as a branch or tag in %s", check.ref, check.repo)
 		}
 	}
@@ -245,74 +226,97 @@ var validateBranchRefs = func(ctx context.Context, c *cli.Command) (context.Cont
 		return ctx, fmt.Errorf("current branch is %s, please switch to %s or a release branch before running this command or use --%s to skip this check", baseBranch, defaultBaseBranch, skipBranchCheckFlag.Name)
 	}
 
+	if baseBranch != defaultBaseBranch {
+		logrus.WithFields(logrus.Fields{
+			"base":     baseBranch,
+			"expected": defaultBaseBranch,
+		}).Warn("Current branch is not the default base branch")
+	}
+
 	return ctx, nil
 }
 
+// branchCutPreCommit modifies files in the new branch before committing, and returns a list of changed files to include in the commit.
+var branchCutPreCommit = func(ctx context.Context, c *cli.Command, repoRoot string) ([]string, error) {
+	// Ensure VERSION_TAG in Makefile matches the calico version in config/
+	MakefileRelPath := "Makefile"
+	calicoVer, err := versions.CalicoConfigVersions(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("getting calico version from config: %w", err)
+	}
+	if out, err := command.RunInDir(repoRoot, "sed", []string{"-i", fmt.Sprintf("s/^VERSION_TAG.*/VERSION_TAG := %s/", calicoVer), MakefileRelPath}, nil); err != nil {
+		logrus.Error(out)
+		return nil, fmt.Errorf("updating VERSION_TAG in Makefile: %w", err)
+	}
+	return []string{MakefileRelPath}, nil
+}
+
 // Pre-action for branch command.
-var branchBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	return branchBeforeCommon(ctx, c, branchContextValuesFunc, validateBranchRefs)
+var branchCutBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	return branchCutBeforeCommon(ctx, c, branchCutContextValuesFunc, validateBranchRefs)
 })
 
 // Action for branch command.
-var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
+var branchCutAction = func(ctx context.Context, c *cli.Command) (map[string]any, error) {
 	stream := c.String(streamFlag.Name)
 	remote := c.String(gitRemoteFlag.Name)
 	baseBranch, err := contextString(ctx, baseBranchCtxKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	branchName, err := contextString(ctx, branchNameCtxKey)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	refs := []string{branchName}
 
-	if _, err := branchActionCommon(ctx, c, fmt.Sprintf("build: update config for %s", stream)); err != nil {
-		return err
+	if _, err := branchCutActionCommon(ctx, c, branchCutPreCommit, fmt.Sprintf("build: update config for %s", stream)); err != nil {
+		return nil, err
+	}
+	outputs := map[string]any{
+		"release-branch": branchName,
 	}
 	logrus.WithField("newBranch", branchName).Info("Created new branch")
 
 	// If this was not branched off a release branch, switch back to baseBranch branch to create the dev tag.
 	// The dev tag goes on an empty commit on the baseBranch branch so that git describe --tags
 	// produces sensible versions for subsequent baseBranch branch commits.
-	var nextDevTag string
+	var nextDevTag, nextStream string
 	releaseBranch, err := isReleaseBranch(c.String(releaseBranchPrefixFlag.Name), baseBranch)
 	if err != nil {
-		return fmt.Errorf("checking if base branch is a release branch: %w", err)
-	}
-	version, err := semver.Parse(fmt.Sprintf("%s.0", strings.TrimPrefix(stream, "v")))
-	if err != nil {
-		logrus.WithField("stream", stream).Warn("Cannot create a valid semver off stream")
+		return outputs, fmt.Errorf("checking if base branch is a release branch: %w", err)
 	} else if !releaseBranch {
+		nextStream, nextDevTag, err = nextDevRelease(stream, c.String(devTagSuffixFlag.Name))
+		if err != nil {
+			return outputs, fmt.Errorf("calculating next dev tag: %w", err)
+		}
+		logrus.WithField("devTag", nextDevTag).Debugf("Next dev tag to create on %s", baseBranch)
+		if out, err := command.Git("switch", baseBranch); err != nil {
+			logrus.Error(out)
+			return outputs, fmt.Errorf("switching back to %s: %w", baseBranch, err)
+		}
+		if out, err := command.Git("commit", "--allow-empty", "-m", fmt.Sprintf("Start development on v%s", nextStream)); err != nil {
+			logrus.Error(out)
+			return outputs, fmt.Errorf("creating empty commit on %s: %w", baseBranch, err)
+		}
 		refs = append(refs, baseBranch)
-		if err := version.IncrementMinor(); err != nil {
-			return fmt.Errorf("incrementing minor version: %w", err)
+		if out, err := command.Git("tag", nextDevTag, "-m", fmt.Sprintf("%s development", nextStream)); err != nil {
+			logrus.Error(out)
+			return outputs, fmt.Errorf("creating git tag %s: %w", nextDevTag, err)
 		}
-		nextDevTag = fmt.Sprintf("v%s-%s", version.String(), c.String(devTagSuffixFlag.Name))
 		refs = append(refs, nextDevTag)
-		if out, err := git("switch", baseBranch); err != nil {
-			logrus.Error(out)
-			return fmt.Errorf("switching back to %s: %w", baseBranch, err)
-		}
-		if out, err := git("commit", "--allow-empty", "-m", fmt.Sprintf("Start development on v%d.%d", version.Major, version.Minor)); err != nil {
-			logrus.Error(out)
-			return fmt.Errorf("creating empty commit on %s: %w", baseBranch, err)
-		}
-		if out, err := git("tag", nextDevTag, "-m", fmt.Sprintf("%s development", version)); err != nil {
-			logrus.Error(out)
-			return fmt.Errorf("creating git tag %s: %w", nextDevTag, err)
-		}
-		logrus.WithField("devTag", nextDevTag).Infof("Created dev tag on %s", baseBranch)
+		outputs["next-dev-tag"] = nextDevTag
 	}
 
 	if c.Bool(localFlag.Name) {
 		logrus.WithFields(logrus.Fields{
-			"remote":     remote,
-			"baseBranch": baseBranch,
-			"newBranch":  branchName,
-			"newDevTag":  nextDevTag,
+			"remote":        remote,
+			"baseBranch":    baseBranch,
+			"newBranch":     branchName,
+			"nextDevStream": nextStream,
+			"nextDevTag":    nextDevTag,
 		}).Warn("Local flag is set, skipping pushing to remote")
-		return nil
+		return outputs, nil
 	}
 
 	// Push refs to remote - release branch, base branch (with empty commit), and dev tag
@@ -320,23 +324,36 @@ var branchAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) erro
 		if ref == "" {
 			continue
 		}
-		if out, err := git("push", remote, ref); err != nil {
+		if out, err := command.Git("push", remote, ref); err != nil {
 			logrus.Error(out)
-			return fmt.Errorf("pushing %s to remote: %w", ref, err)
+			return outputs, fmt.Errorf("pushing %s to remote: %w", ref, err)
 		}
 		logrus.WithFields(logrus.Fields{
 			"ref":    ref,
 			"remote": remote,
 		}).Infof("Pushed to %s", remote)
 	}
-	return nil
-})
+	return outputs, nil
+}
 
-var branchCleanupFns []func()
+// nextDevRelease calculates the next stream and dev tag based on the provided stream and devTagSuffix.
+// For example, if the stream is v1.43 and the devTagSuffix is 0.dev, it will return v1.44 and v1.44.0-0.dev.
+func nextDevRelease(stream, devTagSuffix string) (string, string, error) {
+	v, err := semver.Parse(fmt.Sprintf("%s.0", strings.TrimPrefix(stream, "v")))
+	if err != nil {
+		return "", "", fmt.Errorf("parsing stream version: %w", err)
+	}
+	if err := v.IncrementMinor(); err != nil {
+		return "", "", fmt.Errorf("incrementing minor version: %w", err)
+	}
+	return fmt.Sprintf("v%d.%d", v.Major, v.Minor), fmt.Sprintf("v%s-%s", v.String(), devTagSuffix), nil
+}
 
-var branchAfter = cli.AfterFunc(func(_ context.Context, _ *cli.Command) error {
-	for i := len(branchCleanupFns) - 1; i >= 0; i-- {
-		branchCleanupFns[i]()
+var branchCutCleanupFns []func()
+
+var branchCutAfter = cli.AfterFunc(func(_ context.Context, _ *cli.Command) error {
+	for i := len(branchCutCleanupFns) - 1; i >= 0; i-- {
+		branchCutCleanupFns[i]()
 	}
 	return nil
 })
@@ -347,23 +364,23 @@ func switchBranch(ctx context.Context, branchName string) error {
 	if err != nil {
 		return err
 	}
-	branchCleanupFns = append(branchCleanupFns, func() {
-		if out, err := git("switch", "-f", baseBranch); err != nil {
+	branchCutCleanupFns = append(branchCutCleanupFns, func() {
+		if out, err := command.Git("switch", "-f", baseBranch); err != nil {
 			logrus.Error(out)
 			logrus.WithError(err).Errorf("Failed to reset to %q branch", baseBranch)
 		}
 	})
-	if out, err := git("switch", "-C", branchName); err != nil {
+	if out, err := command.Git("switch", "-C", branchName); err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("creating and switching to branch %s: %w", branchName, err)
 	}
 	return nil
 }
 
-// branchActionCommon switches to a new branch, modifies config versions, and commits the changes.
+// branchCutActionCommon switches to a new branch, modifies config versions, and commits the changes.
 // It reads the branch name and calico/enterprise versions from context (set by Before functions).
 // It returns the repo root directory for subsequent operations.
-func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (string, error) {
+func branchCutActionCommon(ctx context.Context, c *cli.Command, preCommitFunc func(ctx context.Context, c *cli.Command, repoRoot string) (changedFiles []string, err error), commitMsg string) (string, error) {
 	branchName, err := contextString(ctx, branchNameCtxKey)
 	if err != nil {
 		return "", err
@@ -371,15 +388,22 @@ func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (
 	if err := switchBranch(ctx, branchName); err != nil {
 		return "", err
 	}
-	repoRootDir, err := gitDir()
+	repoRootDir, err := command.GitDir()
 	if err != nil {
 		return "", fmt.Errorf("getting git directory: %w", err)
 	}
 	if err := modifyConfigVersions(ctx, c, repoRootDir); err != nil {
 		return "", fmt.Errorf("modifying config versions: %w", err)
 	}
-	if err := commitConfigChanges(repoRootDir, commitMsg); err != nil {
-		return "", fmt.Errorf("committing config changes: %w", err)
+	var changedFiles []string
+	if preCommitFunc != nil {
+		changedFiles, err = preCommitFunc(ctx, c, repoRootDir)
+		if err != nil {
+			return "", fmt.Errorf("running pre-commit function: %w", err)
+		}
+	}
+	if err := commitGitChanges(repoRootDir, commitMsg, changedFiles...); err != nil {
+		return "", fmt.Errorf("committing git changes: %w", err)
 	}
 	return repoRootDir, nil
 }
@@ -387,56 +411,112 @@ func branchActionCommon(ctx context.Context, c *cli.Command, commitMsg string) (
 // modifyConfigVersions updates config versions and runs make targets to regenerate files.
 // It reads calico/enterprise versions from context (set by Before functions).
 func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir string) error {
-	calicoVersion, _ := ctx.Value(calicoConfigVersionCtxKey).(string)
-	enterpriseVersion, _ := ctx.Value(enterpriseConfigVersionCtxKey).(string)
-	makeTargets := []string{"fix"}
-	env := os.Environ()
-	if calicoVersion != "" {
-		makeTargets = append(makeTargets, "gen-versions-calico")
-		if err := updateConfigVersions(repoRootDir, calicoConfig, calicoVersion); err != nil {
-			return fmt.Errorf("modifying Calico config: %w", err)
-		}
-		// Set CALICO_CRDS_DIR if specified
-		if crdsDir := c.String(calicoDirFlag.Name); crdsDir != "" {
-			logrus.Warnf("Using local Calico CRDs from %s", crdsDir)
-			env = append(env, fmt.Sprintf("CALICO_CRDS_DIR=%s", crdsDir))
-		}
+	calicoVersion, ok := ctx.Value(calicoConfigVersionCtxKey).(string)
+	if !ok {
+		return fmt.Errorf("calico version not found in context")
 	}
-	if enterpriseVersion != "" {
-		makeTargets = append(makeTargets, "gen-versions-enterprise")
-		if err := updateConfigVersions(repoRootDir, enterpriseConfig, enterpriseVersion); err != nil {
-			return fmt.Errorf("modifying Enterprise config: %w", err)
-		}
-		// Update registry for Enterprise
-		if eRegistry := c.String(enterpriseRegistryFlag.Name); eRegistry != "" {
-			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
-			if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, eRegistry); err != nil {
-				return fmt.Errorf("modifying Enterprise registry config: %w", err)
-			}
-		}
-		// Set ENTERPRISE_CRDS_DIR if specified
-		if crdsDir := c.String(enterpriseDirFlag.Name); crdsDir != "" {
-			logrus.Warnf("Using local Enterprise CRDs from %s", crdsDir)
-			env = append(env, fmt.Sprintf("ENTERPRISE_CRDS_DIR=%s", crdsDir))
-		}
+	enterpriseVersion, ok := ctx.Value(enterpriseConfigVersionCtxKey).(string)
+	if !ok {
+		return fmt.Errorf("enterprise version not found in context")
 	}
-
-	// Run make target to ensure files are formatted correctly and generated files are up to date.
-	if out, err := makeInDir(repoRootDir, strings.Join(makeTargets, " "), env...); err != nil {
-		logrus.Error(out)
-		return fmt.Errorf("running \"make %s\": %w", strings.Join(makeTargets, " "), err)
+	verCfg := &versions.VersionsConfig{
+		RepoRootDir: repoRootDir,
+		Calico: versions.VersionConfig{
+			Version: calicoVersion,
+			Dir:     c.String(calicoDirFlag.Name),
+		},
+		Enterprise: versions.VersionConfig{
+			Version:  enterpriseVersion,
+			Registry: c.String(enterpriseRegistryFlag.Name),
+			Dir:      c.String(enterpriseDirFlag.Name),
+		},
 	}
-	return nil
+	return verCfg.Generate()
 }
 
-func commitConfigChanges(repoRootDir, msg string) error {
-	if out, err := gitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
+func commitGitChanges(repoRootDir, msg string, additionalFiles ...string) error {
+	changedFiles := append(slices.Clone(defaultChangedFiles), additionalFiles...)
+	if out, err := command.GitInDir(repoRootDir, append([]string{"add"}, changedFiles...)...); err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("staging git changes: %w", err)
 	}
-	if out, err := git("commit", "-m", msg); err != nil {
+	if out, err := command.Git("commit", "-m", msg); err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("committing git changes: %w", err)
 	}
 	return nil
+}
+
+var branchValidateCommand = &cli.Command{
+	Name:  "validate",
+	Usage: "Validate a branch cut",
+	Flags: []cli.Flag{
+		releaseBranchPrefixFlag,
+		streamFlag,
+		devTagSuffixFlag,
+		calicoGitRepoFlag,
+		enterpriseGitRepoFlag,
+		&cli.StringFlag{
+			Name:     "base-branch",
+			Category: operatorFlagCategory,
+			Usage:    "The base branch the release was cut from (used to decide whether to check the dev tag on master)",
+			Sources:  cli.EnvVars("BASE_BRANCH"),
+			Value:    "master",
+		},
+		githubTokenFlag,
+	},
+	Before: branchValidateBefore,
+	Action: middleware.WithLogging(middleware.WithSummary("branch-validate", branchValidateAction)),
+}
+
+var branchValidateBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	// Verify that gotestsum is installed before running any tests
+	if _, err := command.Run("gotestsum", []string{"--version"}, nil); err != nil {
+		return ctx, fmt.Errorf("checking gotestsum installation: %w", err)
+	}
+
+	// Check release stream is valid format
+	stream := c.String(streamFlag.Name)
+	if stream == "" {
+		return ctx, fmt.Errorf("--stream is required")
+	}
+	if valid, err := isValidStream(stream); err != nil {
+		return ctx, fmt.Errorf("validating stream: %w", err)
+	} else if !valid {
+		return ctx, fmt.Errorf("stream %q is not valid, expected format: vX.Y", stream)
+	}
+	return ctx, nil
+})
+
+var branchValidateAction = func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+	repoRoot, err := command.GitDir()
+	if err != nil {
+		return "", nil, fmt.Errorf("getting git directory: %w", err)
+	}
+	baseBranch := c.String("base-branch")
+	if baseBranch == defaultBaseBranch && c.String(githubTokenFlag.Name) == "" {
+		return "", nil, fmt.Errorf("github token is required for validating milestone on %s branch", defaultBaseBranch)
+	}
+	stream := c.String(streamFlag.Name)
+	args := []string{
+		"--format=testname",
+		"--", "-v", "-count=1",
+		"-run", "^TestBranchCut",
+		fmt.Sprintf("-stream=%s", stream),
+		fmt.Sprintf("-repo=%s", c.String(gitRepoFlag.Name)),
+		fmt.Sprintf("-calico-repo=%s", c.String(calicoGitRepoFlag.Name)),
+		fmt.Sprintf("-enterprise-repo=%s", c.String(enterpriseGitRepoFlag.Name)),
+		fmt.Sprintf("-release-branch-prefix=%s", c.String(releaseBranchPrefixFlag.Name)),
+		fmt.Sprintf("-dev-tag-suffix=%s", c.String(devTagSuffixFlag.Name)),
+		fmt.Sprintf("-base-branch=%s", baseBranch),
+		fmt.Sprintf("-remote=%s", c.String(gitRemoteFlag.Name)),
+	}
+
+	logrus.WithField("args", args).Info("Running branch-validate tests via gotestsum")
+	out, err := command.RunInDir(filepath.Join(repoRoot, middleware.ReleaseDir, "validate"), "gotestsum", args, nil)
+	if err != nil {
+		logrus.Error(out)
+		return stream, nil, fmt.Errorf("running branch-validate tests: %w", err)
+	}
+	return stream, nil, nil
 }

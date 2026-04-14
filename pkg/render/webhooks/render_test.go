@@ -174,7 +174,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should register ManagedCluster webhook and MCM flags on management clusters", func() {
-		installation.Variant = operatorv1.CalicoEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{
 			Spec: operatorv1.ManagementClusterSpec{
 				Address: "mgmt.example.com:9449",

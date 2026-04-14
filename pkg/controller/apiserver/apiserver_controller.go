@@ -516,11 +516,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		webhooksCfg := webhooks.Configuration{
-			PullSecrets:  pullSecrets,
-			KeyPair:      webhooksTLS,
-			Installation: installationSpec,
-			APIServer:    &instance.Spec,
-			OpenShift:    r.opts.DetectedProvider.IsOpenShift(),
+			PullSecrets:       pullSecrets,
+			KeyPair:           webhooksTLS,
+			Installation:      installationSpec,
+			APIServer:         &instance.Spec,
+			ManagementCluster: managementCluster,
+			MultiTenant:       r.opts.MultiTenant,
+			OpenShift:         r.opts.DetectedProvider.IsOpenShift(),
 		}
 		components = append(components, webhooks.Component(&webhooksCfg))
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))

@@ -679,6 +679,9 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 
+			// Grace period warning should be cleared when license is fully expired.
+			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "license-grace-period")
+
 			// Verify that other Prometheus resources are still created.
 			am := &monitoringv1.Alertmanager{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
@@ -689,6 +692,9 @@ var _ = Describe("Monitor controller tests", func() {
 		It("should not set degraded status when license is valid", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+
+			// Grace period warning should be cleared when license is valid.
+			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "license-grace-period")
 
 			// ServiceMonitors should be created with a valid license.
 			sm := &monitoringv1.ServiceMonitor{}
@@ -714,6 +720,10 @@ var _ = Describe("Monitor controller tests", func() {
 			// Should requeue to re-reconcile when the grace period expires.
 			Expect(result.RequeueAfter).To(BeNumerically(">", 0))
 			Expect(result.RequeueAfter).To(BeNumerically("~", 89*24*time.Hour, 1*time.Hour))
+
+			// Grace period warning should be visible in TigeraStatus.
+			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "license-grace-period",
+				"License has expired and is within the grace period. Please renew your license to avoid service disruption.")
 
 			// ServiceMonitors should still be created during the grace period.
 			sm := &monitoringv1.ServiceMonitor{}

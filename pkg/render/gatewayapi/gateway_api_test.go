@@ -236,7 +236,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		Expect(objsToDelete).To(HaveLen(0))
 		Expect(objsToCreate).NotTo(BeEmpty())
-		Expect(objsToCreate).To(HaveLen(23 + len(gatewayAPI.Spec.GatewayClasses))) // 23 core objects plus one per GatewayClass
+		Expect(objsToCreate).To(HaveLen(22 + len(gatewayAPI.Spec.GatewayClasses))) // 22 core objects plus one per GatewayClass
 
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
@@ -260,7 +260,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-certgen-access", Namespace: "tigera-gateway"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-controller-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 		})
@@ -364,7 +363,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-certgen-access", Namespace: "tigera-gateway"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-controller-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
@@ -460,7 +458,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-certgen-access", Namespace: "tigera-gateway"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-controller-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},

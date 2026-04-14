@@ -33,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
@@ -407,6 +409,74 @@ var _ = Describe("GatewayAPI tests", func() {
 
 			return nil
 		}, "30s").ShouldNot(HaveOccurred())
+	})
+
+	It("installs and creates network policies for the gateway namespace", func() {
+		By("Creating Installation")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Registry: "myregistry.io/",
+				Variant:  operator.CalicoEnterprise,
+			},
+		}
+		err := c.Create(shutdownContext, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Read it back again.
+		err = c.Get(shutdownContext, utils.DefaultInstanceKey, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		// Update the status to set variant to Enterprise.
+		instance.Status.Variant = operator.CalicoEnterprise
+		err = c.Status().Update(shutdownContext, instance)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Creating the default GatewayAPI")
+		gatewayAPI := &operator.GatewayAPI{
+			TypeMeta:   metav1.TypeMeta{Kind: "GatewayAPI", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		err = c.Create(shutdownContext, gatewayAPI)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Verifying the tigera-gateway namespace is created")
+		Eventually(func() error {
+			ns := &corev1.Namespace{}
+			return c.Get(shutdownContext, types.NamespacedName{Name: "tigera-gateway"}, ns)
+		}, 30*time.Second).ShouldNot(HaveOccurred())
+
+		By("Verifying the gateway controller allow policy is created")
+		Eventually(func() error {
+			policy := &v3.NetworkPolicy{}
+			return c.Get(shutdownContext, types.NamespacedName{
+				Name:      "calico-system.gateway-api-controller-access",
+				Namespace: "tigera-gateway",
+			}, policy)
+		}, 30*time.Second).ShouldNot(HaveOccurred())
+
+		By("Verifying the certgen allow policy is created")
+		Eventually(func() error {
+			policy := &v3.NetworkPolicy{}
+			return c.Get(shutdownContext, types.NamespacedName{
+				Name:      "calico-system.gateway-api-certgen-access",
+				Namespace: "tigera-gateway",
+			}, policy)
+		}, 30*time.Second).ShouldNot(HaveOccurred())
+
+		By("Verifying the gatewayapi status is not degraded")
+		Eventually(func() error {
+			ts, err := getTigeraStatus(c, "gatewayapi")
+			if err != nil {
+				return err
+			}
+			_, degraded, _ := readStatus(ts)
+			if degraded {
+				return errors.New("gatewayapi status is degraded")
+			}
+			return nil
+		}, 30*time.Second).Should(BeNil())
 	})
 
 	It("watches the custom EnvoyGateway ConfigMap", func() {

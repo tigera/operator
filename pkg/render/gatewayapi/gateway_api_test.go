@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -236,7 +235,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		Expect(objsToDelete).To(HaveLen(0))
 		Expect(objsToCreate).NotTo(BeEmpty())
-		Expect(objsToCreate).To(HaveLen(23 + len(gatewayAPI.Spec.GatewayClasses))) // 23 core objects plus one per GatewayClass
+		Expect(objsToCreate).To(HaveLen(20 + len(gatewayAPI.Spec.GatewayClasses))) // 20 core objects plus one per GatewayClass
 
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
@@ -258,9 +257,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-certgen-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-controller-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 		})
@@ -362,9 +358,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-certgen-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-controller-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
@@ -458,9 +451,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-certgen-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.gateway-api-controller-access", Namespace: "tigera-gateway"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "tigera-gateway"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
@@ -1304,5 +1294,54 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(serviceAccount.Name).To(Equal("waf-http-filter"))
 		Expect(serviceAccount.Namespace).To(Equal("tigera-gateway"))
+	})
+
+	Context("GatewayPolicy component", func() {
+		It("should render the calico-system tier allow policies", func() {
+			installation := &operatorv1.InstallationSpec{
+				Variant: operatorv1.Calico,
+			}
+			gatewayAPI := &operatorv1.GatewayAPI{}
+			policyComp := GatewayPolicy(&GatewayAPIImplementationConfig{
+				Installation: installation,
+				GatewayAPI:   gatewayAPI,
+			})
+
+			objsToCreate, objsToDelete := policyComp.Objects()
+			Expect(objsToDelete).To(BeEmpty())
+			Expect(objsToCreate).To(HaveLen(2))
+
+			expectedPolicies := []struct {
+				name      string
+				namespace string
+			}{
+				{name: "calico-system.gateway-api-certgen-access", namespace: "tigera-gateway"},
+				{name: "calico-system.gateway-api-controller-access", namespace: "tigera-gateway"},
+			}
+			for _, expected := range expectedPolicies {
+				Expect(objsToCreate).To(ContainElement(&matchObject{name: expected.name}),
+					fmt.Sprintf("expected NetworkPolicy %q in namespace %q", expected.name, expected.namespace))
+			}
+
+			// Spot-check that the rendered objects are Calico v3 NetworkPolicies in the calico-system tier.
+			for _, obj := range objsToCreate {
+				Expect(obj.GetObjectKind().GroupVersionKind().Kind).To(Equal("NetworkPolicy"))
+				Expect(obj.GetObjectKind().GroupVersionKind().GroupVersion().String()).To(Equal("projectcalico.org/v3"))
+				Expect(obj.GetNamespace()).To(Equal("tigera-gateway"))
+			}
+		})
+
+		It("should render OpenShift-appropriate DNS egress rules when on OpenShift", func() {
+			installation := &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderOpenShift,
+			}
+			policyComp := GatewayPolicy(&GatewayAPIImplementationConfig{
+				Installation: installation,
+				GatewayAPI:   &operatorv1.GatewayAPI{},
+			})
+
+			objsToCreate, _ := policyComp.Objects()
+			Expect(objsToCreate).To(HaveLen(2))
+		})
 	})
 })

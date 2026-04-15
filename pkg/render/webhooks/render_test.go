@@ -209,7 +209,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should set Public CA type when tunnel secret is manager-tls", func() {
-		installation.Variant = operatorv1.CalicoEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{
 			Spec: operatorv1.ManagementClusterSpec{
 				Address: "mgmt.example.com:9449",
@@ -228,7 +228,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should pass multi-tenant flag when multi-tenancy is enabled", func() {
-		installation.Variant = operatorv1.CalicoEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.MultiTenant = true
 		component := webhooks.Component(cfg)
@@ -241,7 +241,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should not register ManagedCluster webhook without ManagementCluster", func() {
-		installation.Variant = operatorv1.CalicoEnterprise
+		installation.Variant = operatorv1.TigeraSecureEnterprise
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		resources, _ := component.Objects()

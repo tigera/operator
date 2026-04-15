@@ -157,7 +157,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -777,7 +777,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -1001,7 +1001,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -2220,7 +2220,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -2357,7 +2357,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
 				},
 			}
-			cs = kfake.NewSimpleClientset(objs...)
+			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}

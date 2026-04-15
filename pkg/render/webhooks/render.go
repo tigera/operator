@@ -71,6 +71,7 @@ type component struct {
 
 	// Images.
 	webhooksImage string
+	combinedImage bool
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -82,7 +83,12 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
 	} else {
-		c.webhooksImage, err = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
+		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+			c.webhooksImage, err = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
+		} else {
+			c.webhooksImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
+			c.combinedImage = true
+		}
 	}
 	return err
 }
@@ -176,6 +182,10 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 			},
 		},
+	}
+
+	if c.combinedImage {
+		dep.Spec.Template.Spec.Containers[0].Command = []string{"calico", "component", "webhooks"}
 	}
 
 	// On management clusters, pass flags so the ManagedCluster webhook can

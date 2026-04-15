@@ -59,6 +59,7 @@ const (
 	GoldmaneConfigFilePath     = "/config"
 	GoldmaneConfigFileName     = "config.json"
 	GoldmaneMetricsServiceName = "goldmane-metrics"
+	GoldmaneHealthPort         = 8080
 )
 
 func Goldmane(cfg *Configuration) render.Component {
@@ -83,6 +84,7 @@ type Component struct {
 	cfg *Configuration
 
 	goldmaneImage string
+	combinedImage bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -92,7 +94,12 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 
 	var err error
 
-	c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise || operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+		c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
+	} else {
+		c.goldmaneImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
+		c.combinedImage = true
+	}
 	if err != nil {
 		return err
 	}
@@ -236,25 +243,48 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		MountPath: GoldmaneConfigFilePath,
 	})
 
+	readinessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+			Command: []string{"/health", "-ready"},
+		}},
+	}
+	livenessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+			Command: []string{"/health", "-live"},
+		}},
+	}
+
+	var containerCommand []string
+	if c.combinedImage {
+		containerCommand = []string{"calico", "component", "goldmane"}
+		readinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"calico", "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=readiness"},
+				},
+			},
+			PeriodSeconds: 10,
+		}
+		livenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				Exec: &corev1.ExecAction{
+					Command: []string{"calico", "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=liveness"},
+				},
+			},
+			PeriodSeconds: 10,
+		}
+	}
+
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
 		Image:           c.goldmaneImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
+		Command:         containerCommand,
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-				Command: []string{"/health", "-ready"},
-			}},
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/health", "-live"},
-				},
-			},
-		},
-		VolumeMounts: volumeMounts,
+		ReadinessProbe:  readinessProbe,
+		LivenessProbe:   livenessProbe,
+		VolumeMounts:    volumeMounts,
 	}
 }
 

@@ -173,6 +173,85 @@ var _ = Describe("Webhooks rendering tests", func() {
 				components.ComponentTigeraWebhooks.Version)))
 	})
 
+	It("should register ManagedCluster webhook and MCM flags on management clusters", func() {
+		installation.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{
+			Spec: operatorv1.ManagementClusterSpec{
+				Address: "mgmt.example.com:9449",
+				TLS: &operatorv1.TLS{
+					SecretName: "test-tunnel-secret",
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// The MutatingWebhookConfiguration should have both UISettings and ManagedCluster webhooks.
+		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mwc.Webhooks).To(HaveLen(2))
+		Expect(mwc.Webhooks[0].Name).To(Equal("uisettings.api.projectcalico.org"))
+		Expect(mwc.Webhooks[1].Name).To(Equal("managedclusters.api.projectcalico.org"))
+		Expect(*mwc.Webhooks[1].ClientConfig.Service.Path).To(Equal("/managedcluster"))
+		Expect(*mwc.Webhooks[1].FailurePolicy).To(Equal(admissionregistrationv1.Fail))
+		Expect(mwc.Webhooks[1].Rules).To(HaveLen(1))
+		Expect(mwc.Webhooks[1].Rules[0].Operations).To(ConsistOf(admissionregistrationv1.Create))
+		Expect(mwc.Webhooks[1].Rules[0].Rule.Resources).To(Equal([]string{"managedclusters"}))
+
+		// The Deployment should include MCM-specific flags.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		args := dep.Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement("--mcm-management-cluster-addr=mgmt.example.com:9449"))
+		Expect(args).To(ContainElement("--mcm-tunnel-secret-name=test-tunnel-secret"))
+		Expect(args).NotTo(ContainElement("--mcm-management-cluster-ca-type=Public"))
+		Expect(args).NotTo(ContainElement("--multi-tenant=true"))
+	})
+
+	It("should set Public CA type when tunnel secret is manager-tls", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{
+			Spec: operatorv1.ManagementClusterSpec{
+				Address: "mgmt.example.com:9449",
+				TLS: &operatorv1.TLS{
+					SecretName: "manager-tls",
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		args := dep.Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement("--mcm-management-cluster-ca-type=Public"))
+	})
+
+	It("should pass multi-tenant flag when multi-tenancy is enabled", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
+		cfg.MultiTenant = true
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		args := dep.Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement("--multi-tenant=true"))
+	})
+
+	It("should not register ManagedCluster webhook without ManagementCluster", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mwc.Webhooks).To(HaveLen(1))
+		Expect(mwc.Webhooks[0].Name).To(Equal("uisettings.api.projectcalico.org"))
+	})
+
 	It("should not include UISettingsGroup rule for Calico", func() {
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())

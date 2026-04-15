@@ -22,12 +22,14 @@ import (
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	networkpolicy "github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
@@ -90,7 +92,16 @@ const (
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
+	GatewayControllerPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + "gateway-api-controller-access"
+	GatewayCertgenPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "gateway-api-certgen-access"
 	wafFilterName                       = "waf-http-filter"
+
+	// Envoy gateway controller serving ports.
+	EnvoyGatewayPortGRPC      = 18000
+	EnvoyGatewayPortRateLimit = 18001
+	EnvoyGatewayPortWasm      = 18002
+	EnvoyGatewayPortMetrics   = 19001
+	EnvoyGatewayPortWebhook   = 9443
 )
 
 var (
@@ -424,6 +435,23 @@ func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) rend
 	}
 }
 
+// GatewayPolicy returns a Component that renders the calico-system tier network policies
+// for the gateway control plane. This is rendered separately from the main gateway component
+// so that a failure to create v3 NetworkPolicy resources does not block the rest of the
+// gateway resources. We intentionally do not include a namespace-scoped default deny here
+// because Gateway resources dynamically create Envoy proxy pods whose traffic patterns
+// (listener ports, backend destinations) are determined by the customer's Gateway and
+// HTTPRoute configuration.
+func GatewayPolicy(cfg *GatewayAPIImplementationConfig) render.Component {
+	return render.NewPassthrough(
+		[]client.Object{
+			gatewayCertgenAllowCalicoSystemPolicy(cfg.Installation.KubernetesProvider.IsOpenShift()),
+			gatewayControllerAllowCalicoSystemPolicy(cfg.Installation.KubernetesProvider.IsOpenShift()),
+		},
+		nil,
+	)
+}
+
 func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := pr.cfg.Installation.Registry
 	path := pr.cfg.Installation.ImagePath
@@ -635,6 +663,10 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	objs = append(objs, certgenJob)
 
+	// Network policies are rendered separately via GatewayPolicy() so that a failure
+	// to create them (e.g. when the v3 API is unavailable) does not block the rest of
+	// the gateway resources.
+
 	// Provision GatewayClasses.
 	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
 		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
@@ -671,7 +703,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      gcName,
-					Namespace: "tigera-gateway",
+					Namespace: common.TigeraGatewayNamespace,
 				},
 			},
 		)
@@ -706,7 +738,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		envoyProxy.APIVersion = "gateway.envoyproxy.io/v1alpha1"
 	}
 	envoyProxy.Name = className
-	envoyProxy.Namespace = "tigera-gateway"
+	envoyProxy.Namespace = common.TigeraGatewayNamespace
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
@@ -1052,7 +1084,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayClass(className, controllerN
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      className,
-			Namespace: "tigera-gateway",
+			Namespace: common.TigeraGatewayNamespace,
 		},
 		Spec: gapi.GatewayClassSpec{
 			ControllerName: gapi.GatewayController(controllerName),
@@ -1114,7 +1146,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *core
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wafFilterName,
-			Namespace: "tigera-gateway",
+			Namespace: common.TigeraGatewayNamespace,
 		},
 	}
 }
@@ -1165,8 +1197,72 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
-				Namespace: "tigera-gateway",
+				Namespace: common.TigeraGatewayNamespace,
 			},
+		},
+	}
+}
+
+// gatewayCertgenAllowCalicoSystemPolicy creates a NetworkPolicy that allows the certgen job
+// to access DNS and the Kubernetes API server, which it needs to create TLS secrets.
+func gatewayCertgenAllowCalicoSystemPolicy(openShift bool) *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, openShift)
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
+	})
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GatewayCertgenPolicyName,
+			Namespace: common.TigeraGatewayNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: "app == 'certgen'",
+			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
+			Egress:   egressRules,
+		},
+	}
+}
+
+// gatewayControllerAllowCalicoSystemPolicy creates a NetworkPolicy that allows the envoy-gateway
+// controller to access DNS and the Kubernetes API server, and to receive ingress on its
+// serving ports (xDS gRPC, ratelimit, wasm, metrics, webhook).
+func gatewayControllerAllowCalicoSystemPolicy(openShift bool) *v3.NetworkPolicy {
+	egressRules := []v3.Rule{}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, openShift)
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
+	})
+
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(EnvoyGatewayPortGRPC, EnvoyGatewayPortRateLimit, EnvoyGatewayPortWasm, EnvoyGatewayPortMetrics, EnvoyGatewayPortWebhook),
+			},
+		},
+	}
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GatewayControllerPolicyName,
+			Namespace: common.TigeraGatewayNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: "k8s-app == '" + GatewayControllerLabel + "'",
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

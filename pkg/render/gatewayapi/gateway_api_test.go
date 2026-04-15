@@ -1295,4 +1295,53 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(serviceAccount.Name).To(Equal("waf-http-filter"))
 		Expect(serviceAccount.Namespace).To(Equal("tigera-gateway"))
 	})
+
+	Context("GatewayPolicy component", func() {
+		It("should render the calico-system tier allow policies", func() {
+			installation := &operatorv1.InstallationSpec{
+				Variant: operatorv1.Calico,
+			}
+			gatewayAPI := &operatorv1.GatewayAPI{}
+			policyComp := GatewayPolicy(&GatewayAPIImplementationConfig{
+				Installation: installation,
+				GatewayAPI:   gatewayAPI,
+			})
+
+			objsToCreate, objsToDelete := policyComp.Objects()
+			Expect(objsToDelete).To(BeEmpty())
+			Expect(objsToCreate).To(HaveLen(2))
+
+			expectedPolicies := []struct {
+				name      string
+				namespace string
+			}{
+				{name: "calico-system.gateway-api-certgen-access", namespace: "tigera-gateway"},
+				{name: "calico-system.gateway-api-controller-access", namespace: "tigera-gateway"},
+			}
+			for _, expected := range expectedPolicies {
+				Expect(objsToCreate).To(ContainElement(&matchObject{name: expected.name}),
+					fmt.Sprintf("expected NetworkPolicy %q in namespace %q", expected.name, expected.namespace))
+			}
+
+			// Spot-check that the rendered objects are Calico v3 NetworkPolicies in the calico-system tier.
+			for _, obj := range objsToCreate {
+				Expect(obj.GetObjectKind().GroupVersionKind().Kind).To(Equal("NetworkPolicy"))
+				Expect(obj.GetObjectKind().GroupVersionKind().GroupVersion().String()).To(Equal("projectcalico.org/v3"))
+				Expect(obj.GetNamespace()).To(Equal("tigera-gateway"))
+			}
+		})
+
+		It("should render OpenShift-appropriate DNS egress rules when on OpenShift", func() {
+			installation := &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderOpenShift,
+			}
+			policyComp := GatewayPolicy(&GatewayAPIImplementationConfig{
+				Installation: installation,
+				GatewayAPI:   &operatorv1.GatewayAPI{},
+			})
+
+			objsToCreate, _ := policyComp.Objects()
+			Expect(objsToCreate).To(HaveLen(2))
+		})
+	})
 })

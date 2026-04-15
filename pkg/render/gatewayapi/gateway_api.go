@@ -15,9 +15,11 @@
 package gatewayapi
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
@@ -30,6 +32,8 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -37,32 +41,34 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
+	"sigs.k8s.io/yaml"
 )
 
 var (
-	//go:embed gateway_api_resources.yaml
-	gatewayAPIResourcesYAML string
+	//go:embed gateway-helm.tgz
+	gatewayHelmChart []byte
 
 	AccessLogType envoyapi.ProxyAccessLogType = "Route"
 
 	log = logf.Log.WithName("gateway_api")
 )
 
-type yamlKind struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-}
+const (
+	GatewayAPINamespace = "tigera-gateway"
+	gatewayReleaseName  = "tigera-gateway-api"
+)
 
-// This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
+// gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                     *corev1.Namespace
 	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
 	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
 	controllerServiceAccount      *corev1.ServiceAccount
@@ -91,6 +97,10 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+
+	// Labels used on per-namespace Enterprise resources for discovery and cleanup.
+	GatewayNamespaceResourceLabel = "operator.tigera.io/gateway-namespace-resource"
+	GatewayNamespaceLabel         = "operator.tigera.io/gateway-namespace"
 )
 
 var (
@@ -133,242 +143,253 @@ var (
 	}
 )
 
-func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
-	var lock sync.Mutex
-	resources := &gatewayAPIResources{}
-	const yamlDelimiter = "\n---\n"
-	return func() *gatewayAPIResources {
-		lock.Lock()
-		defer lock.Unlock()
-
-		if len(resources.k8sCRDs) == 0 {
-			for _, yml := range strings.Split(gatewayAPIResourcesYAML, yamlDelimiter) {
-				var yamlKind yamlKind
-				if err := yaml.Unmarshal([]byte(yml), &yamlKind); err != nil {
-					panic(fmt.Sprintf("unable to unmarshal YAML: %v:\n%v\n", err, yml))
-				}
-				kindStr := yamlKind.APIVersion + "/" + yamlKind.Kind
-				switch kindStr {
-				case "v1/Namespace":
-					if resources.namespace != nil {
-						panic("already read a namespace from gateway API YAML")
-					}
-					resources.namespace = &corev1.Namespace{}
-					if err := yaml.Unmarshal([]byte(yml), resources.namespace); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "apiextensions.k8s.io/v1/CustomResourceDefinition":
-					obj := &apiextenv1.CustomResourceDefinition{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(obj.Name, ".gateway.networking.x-k8s.io") {
-						resources.k8sCRDs = append(resources.k8sCRDs, obj)
-					} else if strings.HasSuffix(obj.Name, ".gateway.envoyproxy.io") {
-						resources.envoyCRDs = append(resources.envoyCRDs, obj)
-					} else {
-						panic(fmt.Sprintf("unhandled CRD name %v from gateway API YAML", obj.Name))
-					}
-				case "v1/ServiceAccount":
-					obj := &corev1.ServiceAccount{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenServiceAccount != nil {
-							panic("already read a certgen ServiceAccount from gateway API YAML")
-						}
-						resources.certgenServiceAccount = obj
-					} else {
-						if resources.controllerServiceAccount != nil {
-							panic("already read a controller ServiceAccount from gateway API YAML")
-						}
-						resources.controllerServiceAccount = obj
-					}
-				case "v1/ConfigMap":
-					obj := &corev1.ConfigMap{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if obj.Name != EnvoyGatewayConfigName {
-						panic(fmt.Sprintf("unhandled ConfigMap name %v from gateway API YAML", obj.Name))
-					}
-					if resources.envoyGatewayConfigMap != nil {
-						panic("already read envoy-gateway-config ConfigMap from gateway API YAML")
-					}
-					resources.envoyGatewayConfigMap = obj
-					resources.envoyGatewayConfig = &envoyapi.EnvoyGateway{}
-					if err := yaml.Unmarshal([]byte(obj.Data[EnvoyGatewayConfigKey]), resources.envoyGatewayConfig); err != nil {
-						panic("can't unmarshal EnvoyGateway from envoy-gateway-config ConfigMap from gateway API YAML")
-					}
-				case "rbac.authorization.k8s.io/v1/ClusterRole":
-					obj := &rbacv1.ClusterRole{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.clusterRoles = append(resources.clusterRoles, obj)
-				case "rbac.authorization.k8s.io/v1/ClusterRoleBinding":
-					obj := &rbacv1.ClusterRoleBinding{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.clusterRoleBindings = append(resources.clusterRoleBindings, obj)
-				case "rbac.authorization.k8s.io/v1/Role":
-					obj := &rbacv1.Role{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, "leader-election-role") {
-						if resources.leaderElectionRole != nil {
-							panic("already read leader-election Role from gateway API YAML")
-						}
-						resources.leaderElectionRole = obj
-					} else if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenRole != nil {
-							panic("already read certgen Role from gateway API YAML")
-						}
-						resources.certgenRole = obj
-					} else {
-						if resources.role != nil {
-							panic("already read general Role from gateway API YAML")
-						}
-						resources.role = obj
-					}
-				case "rbac.authorization.k8s.io/v1/RoleBinding":
-					obj := &rbacv1.RoleBinding{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, "leader-election-rolebinding") {
-						if resources.leaderElectionRoleBinding != nil {
-							panic("already read leader-election RoleBinding from gateway API YAML")
-						}
-						resources.leaderElectionRoleBinding = obj
-					} else if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenRoleBinding != nil {
-							panic("already read certgen RoleBinding from gateway API YAML")
-						}
-						resources.certgenRoleBinding = obj
-					} else {
-						if resources.roleBinding != nil {
-							panic("already read general RoleBinding from gateway API YAML")
-						}
-						resources.roleBinding = obj
-					}
-				case "v1/Service":
-					if resources.controllerService != nil {
-						panic("already read controller Service from gateway API YAML")
-					}
-					resources.controllerService = &corev1.Service{}
-					if err := yaml.Unmarshal([]byte(yml), resources.controllerService); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "apps/v1/Deployment":
-					if resources.controllerDeployment != nil {
-						panic("already read controller Deployment from gateway API YAML")
-					}
-					resources.controllerDeployment = &appsv1.Deployment{}
-					if err := yaml.Unmarshal([]byte(yml), resources.controllerDeployment); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "batch/v1/Job":
-					if resources.certgenJob != nil {
-						panic("already read certgen Job from gateway API YAML")
-					}
-					resources.certgenJob = &batchv1.Job{}
-					if err := yaml.Unmarshal([]byte(yml), resources.certgenJob); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
-					obj := &admissionregv1.MutatingWebhookConfiguration{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
-				case "/":
-					// No-op.  We see this when there is only a comment between
-					// two "---" delimiters.
-				default:
-					panic(fmt.Sprintf("unhandled type %v", kindStr))
-				}
-			}
-
-			// Check we now have all the resources that we expect.
-			if resources.namespace == nil {
-				panic("missing Namespace from gateway API YAML")
-			}
-			if len(resources.k8sCRDs) != 12 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 12)", len(resources.k8sCRDs)))
-			}
-			if len(resources.envoyCRDs) != 8 {
-				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
-			}
-			if resources.controllerServiceAccount == nil {
-				panic("missing controller ServiceAccount from gateway API YAML")
-			}
-			if resources.envoyGatewayConfig == nil {
-				panic("missing envoy-gateway-config from gateway API YAML")
-			}
-			if len(resources.clusterRoles) == 0 {
-				panic("missing ClusterRole from gateway API YAML")
-			}
-			if len(resources.clusterRoleBindings) == 0 {
-				panic("missing ClusterRoleBinding from gateway API YAML")
-			}
-			if resources.role == nil {
-				panic("missing general Role from gateway API YAML")
-			}
-			if resources.roleBinding == nil {
-				panic("missing general RoleBinding from gateway API YAML")
-			}
-			if resources.leaderElectionRole == nil {
-				panic("missing leader election Role from gateway API YAML")
-			}
-			if resources.leaderElectionRoleBinding == nil {
-				panic("missing leader election RoleBinding from gateway API YAML")
-			}
-			if resources.controllerService == nil {
-				panic("missing controller Service from gateway API YAML")
-			}
-			if resources.controllerDeployment == nil {
-				panic("missing controller Deployment from gateway API YAML")
-			}
-			if resources.certgenServiceAccount == nil {
-				panic("missing certgen ServiceAccount from gateway API YAML")
-			}
-			if resources.certgenRole == nil {
-				panic("missing certgen Role from gateway API YAML")
-			}
-			if resources.certgenRoleBinding == nil {
-				panic("missing certgen RoleBinding from gateway API YAML")
-			}
-			if resources.certgenJob == nil {
-				panic("missing certgen Job from gateway API YAML")
-			}
-
-			// Further assumptions that we rely on below in `Objects()`.  We put these
-			// here, instead of later, so that they are verified in UT.
-			if len(resources.controllerDeployment.Spec.Template.Spec.Containers) != 1 {
-				panic("expected 1 container in deployment from gateway API YAML")
-			}
-			if resources.controllerDeployment.Spec.Template.Spec.Containers[0].Name != EnvoyGatewayDeploymentContainerName {
-				panic("expected container name 'envoy-gateway' in deployment from gateway API YAML")
-			}
-			if len(resources.certgenJob.Spec.Template.Spec.Containers) != 1 {
-				panic("expected 1 container in certgen job from gateway API YAML")
-			}
-			if resources.certgenJob.Spec.Template.Spec.Containers[0].Name != EnvoyGatewayJobContainerName {
-				panic("expected container name 'envoy-gateway' in certgen job from gateway API YAML")
-			}
-		}
-		return resources
-	}
+// helmOpts represents the helm values passed when rendering the Envoy Gateway chart.
+type helmOpts struct {
+	Config *helmConfig `json:"config,omitempty"`
 }
 
-var GatewayAPIResources = GatewayAPIResourcesGetter()
+type helmConfig struct {
+	EnvoyGateway *helmEnvoyGateway `json:"envoyGateway,omitempty"`
+}
 
-func K8SGatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRDs []client.Object) {
-	resources := GatewayAPIResources()
+type helmEnvoyGateway struct {
+	Provider *helmProvider `json:"provider,omitempty"`
+}
+
+type helmProvider struct {
+	Kubernetes *helmKubernetes `json:"kubernetes,omitempty"`
+}
+
+type helmKubernetes struct {
+	Deploy *helmDeploy `json:"deploy,omitempty"`
+}
+
+type helmDeploy struct {
+	Type string `json:"type,omitempty"`
+}
+
+func toMap(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// renderCache caches helm chart render results keyed by deployment mode.
+// The chart output is deterministic for a given deployment mode, so we can
+// safely cache it across reconciles. Callers must deep-copy any object they
+// intend to mutate.
+var (
+	renderCacheMu sync.Mutex
+	renderCache   = map[operatorv1.GatewayDeploymentMode]*gatewayAPIResources{}
+)
+
+// renderChart renders the embedded Envoy Gateway helm chart using the Helm SDK.
+// The deploymentMode is passed as a helm value to configure
+// config.envoyGateway.provider.kubernetes.deploy.type. Results are cached.
+func renderChart(scheme *runtime.Scheme, deploymentMode operatorv1.GatewayDeploymentMode) (*gatewayAPIResources, error) {
+	renderCacheMu.Lock()
+	defer renderCacheMu.Unlock()
+
+	if cached, ok := renderCache[deploymentMode]; ok {
+		return cached, nil
+	}
+
+	chart, err := loader.LoadArchive(bytes.NewReader(gatewayHelmChart))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load gateway-helm chart: %w", err)
+	}
+
+	actionConfig := new(action.Configuration)
+	helmClient := action.NewInstall(actionConfig)
+	helmClient.DryRun = true
+	helmClient.ClientOnly = true
+	helmClient.IncludeCRDs = true
+	helmClient.Namespace = GatewayAPINamespace
+	helmClient.ReleaseName = gatewayReleaseName
+
+	opts := &helmOpts{}
+	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace {
+		opts.Config = &helmConfig{
+			EnvoyGateway: &helmEnvoyGateway{
+				Provider: &helmProvider{
+					Kubernetes: &helmKubernetes{
+						Deploy: &helmDeploy{Type: string(operatorv1.GatewayDeploymentModeGatewayNamespace)},
+					},
+				},
+			},
+		}
+	}
+
+	values, err := toMap(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert helm values: %w", err)
+	}
+
+	rel, err := helmClient.Run(chart, values)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart: %w", err)
+	}
+
+	// Combine the main manifest with hook manifests (certgen, webhooks, etc.).
+	var allManifests strings.Builder
+	allManifests.WriteString(rel.Manifest)
+	for _, hook := range rel.Hooks {
+		allManifests.WriteString("\n---\n")
+		allManifests.WriteString(hook.Manifest)
+	}
+
+	resources, err := parseManifest(scheme, allManifests.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse rendered manifest: %w", err)
+	}
+
+	renderCache[deploymentMode] = resources
+	return resources, nil
+}
+
+// parseManifest parses the rendered helm manifest into typed gatewayAPIResources.
+func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResources, error) {
+	codecs := serializer.NewCodecFactory(scheme)
+	universalDeserializer := codecs.UniversalDeserializer()
+
+	resources := &gatewayAPIResources{}
+	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader([]byte(manifest)), 4096)
+
+	for {
+		var rawObj runtime.RawExtension
+		if err := decoder.Decode(&rawObj); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("error decoding manifest document: %w", err)
+		}
+		if len(rawObj.Raw) == 0 {
+			continue
+		}
+
+		obj, _, err := universalDeserializer.Decode(rawObj.Raw, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error deserializing object: %w", err)
+		}
+
+		clientObj, ok := obj.(client.Object)
+		if !ok {
+			return nil, fmt.Errorf("object does not implement client.Object: %T", obj)
+		}
+
+		switch typedObj := clientObj.(type) {
+		case *apiextenv1.CustomResourceDefinition:
+			if strings.HasSuffix(typedObj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(typedObj.Name, ".gateway.networking.x-k8s.io") {
+				resources.k8sCRDs = append(resources.k8sCRDs, typedObj)
+			} else if strings.HasSuffix(typedObj.Name, ".gateway.envoyproxy.io") {
+				resources.envoyCRDs = append(resources.envoyCRDs, typedObj)
+			}
+		case *corev1.ServiceAccount:
+			if strings.HasSuffix(typedObj.Name, "certgen") {
+				resources.certgenServiceAccount = typedObj
+			} else {
+				resources.controllerServiceAccount = typedObj
+			}
+		case *corev1.ConfigMap:
+			if typedObj.Name == EnvoyGatewayConfigName {
+				resources.envoyGatewayConfigMap = typedObj
+				resources.envoyGatewayConfig = &envoyapi.EnvoyGateway{}
+				if err := yaml.Unmarshal([]byte(typedObj.Data[EnvoyGatewayConfigKey]), resources.envoyGatewayConfig); err != nil {
+					return nil, fmt.Errorf("can't unmarshal EnvoyGateway from ConfigMap: %w", err)
+				}
+			}
+		case *rbacv1.ClusterRole:
+			resources.clusterRoles = append(resources.clusterRoles, typedObj)
+		case *rbacv1.ClusterRoleBinding:
+			resources.clusterRoleBindings = append(resources.clusterRoleBindings, typedObj)
+		case *rbacv1.Role:
+			if strings.HasSuffix(typedObj.Name, "leader-election-role") {
+				resources.leaderElectionRole = typedObj
+			} else if strings.HasSuffix(typedObj.Name, "certgen") {
+				resources.certgenRole = typedObj
+			} else {
+				resources.role = typedObj
+			}
+		case *rbacv1.RoleBinding:
+			if strings.HasSuffix(typedObj.Name, "leader-election-rolebinding") {
+				resources.leaderElectionRoleBinding = typedObj
+			} else if strings.HasSuffix(typedObj.Name, "certgen") {
+				resources.certgenRoleBinding = typedObj
+			} else {
+				resources.roleBinding = typedObj
+			}
+		case *corev1.Service:
+			resources.controllerService = typedObj
+		case *appsv1.Deployment:
+			resources.controllerDeployment = typedObj
+		case *batchv1.Job:
+			resources.certgenJob = typedObj
+		case *admissionregv1.MutatingWebhookConfiguration:
+			resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, typedObj)
+		case *corev1.Namespace:
+			// The chart may render a namespace; we create our own in Objects(), so skip it.
+		default:
+			// Skip unknown types.
+		}
+	}
+
+	return resources, nil
+}
+
+// resourceKey returns a unique identifier for a cluster-scoped or namespaced resource.
+func resourceKey(obj client.Object) string {
+	gvk := obj.GetObjectKind().GroupVersionKind()
+	return fmt.Sprintf("%s/%s/%s/%s", gvk.GroupVersion().String(), gvk.Kind, obj.GetNamespace(), obj.GetName())
+}
+
+// computeModeCleanup returns resources that exist only in the opposite mode and should be
+// deleted when switching deployment modes. CRDs are excluded from cleanup.
+func computeModeCleanup(current, opposite *gatewayAPIResources) []client.Object {
+	// Collect keys for all non-CRD resources in the current mode.
+	currentKeys := map[string]bool{}
+	for _, objs := range [][]client.Object{
+		toClientObjects(current.clusterRoles),
+		toClientObjects(current.clusterRoleBindings),
+	} {
+		for _, obj := range objs {
+			currentKeys[resourceKey(obj)] = true
+		}
+	}
+
+	// Find resources in the opposite mode that don't exist in the current mode.
+	var toDelete []client.Object
+	for _, objs := range [][]client.Object{
+		toClientObjects(opposite.clusterRoles),
+		toClientObjects(opposite.clusterRoleBindings),
+	} {
+		for _, obj := range objs {
+			if !currentKeys[resourceKey(obj)] {
+				toDelete = append(toDelete, obj)
+			}
+		}
+	}
+	return toDelete
+}
+
+func toClientObjects[T client.Object](objs []T) []client.Object {
+	result := make([]client.Object, len(objs))
+	for i, obj := range objs {
+		result[i] = obj
+	}
+	return result
+}
+
+func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
+	resources, err := renderChart(scheme, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
+	}
 	for _, crd := range resources.k8sCRDs {
 		if provider.IsOpenShift() {
 			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
@@ -390,23 +411,37 @@ func K8SGatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRD
 
 // GatewayAPICRDs returns the k8s GatewayAPI CRDs and the Envoy CRDs together,
 // necessary for the deployment of Calico Gateway API.
-func GatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRDs []client.Object) {
-	resources := GatewayAPIResources()
-	essentialCRDs, optionalCRDs = K8SGatewayAPICRDs(provider)
+func GatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
+	resources, err := renderChart(scheme, "")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
+	}
+	essentialCRDs, optionalCRDs, err = K8SGatewayAPICRDs(provider, scheme)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, crd := range resources.envoyCRDs {
 		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 	}
 
-	return essentialCRDs, optionalCRDs
+	return essentialCRDs, optionalCRDs, nil
 }
 
 type GatewayAPIImplementationConfig struct {
+	Scheme                *runtime.Scheme
 	Installation          *operatorv1.InstallationSpec
 	GatewayAPI            *operatorv1.GatewayAPI
 	PullSecrets           []*corev1.Secret
 	CustomEnvoyGateway    *envoyapi.EnvoyGateway
 	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
 	CurrentGatewayClasses set.Set[string]
+
+	// GatewayNamespaces is the list of namespaces that contain Gateway resources
+	// using operator-managed GatewayClasses (GatewayNamespace mode + Enterprise only).
+	GatewayNamespaces []string
+	// CurrentGatewayNamespaces tracks previously provisioned namespaces for cleanup
+	// when Gateways are removed.
+	CurrentGatewayNamespaces set.Set[string]
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -416,12 +451,34 @@ type gatewayAPIImplementationComponent struct {
 	envoyRatelimitImage string
 	wafHTTPFilterImage  string
 	L7LogCollectorImage string
+
+	// Pre-rendered helm chart results, populated by ResolveImages.
+	resources         *gatewayAPIResources
+	oppositeResources *gatewayAPIResources
 }
 
-func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) render.Component {
-	return &gatewayAPIImplementationComponent{
-		cfg: cfg,
+func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) (render.Component, error) {
+	deploymentMode := operatorv1.GatewayDeploymentModeControllerNamespace
+	if cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
+		deploymentMode = *cfg.GatewayAPI.Spec.GatewayDeploymentMode
 	}
+	resources, err := renderChart(cfg.Scheme, deploymentMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart: %w", err)
+	}
+	oppositeMode := operatorv1.GatewayDeploymentModeGatewayNamespace
+	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace {
+		oppositeMode = operatorv1.GatewayDeploymentModeControllerNamespace
+	}
+	oppositeResources, err := renderChart(cfg.Scheme, oppositeMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart for opposite mode: %w", err)
+	}
+	return &gatewayAPIImplementationComponent{
+		cfg:               cfg,
+		resources:         resources,
+		oppositeResources: oppositeResources,
+	}, nil
 }
 
 func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -477,13 +534,20 @@ func (pr *gatewayAPIImplementationComponent) Ready() bool {
 }
 
 func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []client.Object) {
-	resources := GatewayAPIResources()
+	deploymentMode := operatorv1.GatewayDeploymentModeControllerNamespace
+	if pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
+		deploymentMode = *pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode
+	}
+	resources := pr.resources
 
-	// First create the namespace.  We take the name from the read resources, but otherwise
-	// follow our own pattern for namespace creation.
+	// Compute resources that exist only in the opposite mode for cleanup
+	// when switching between deployment modes.
+	modeCleanup := computeModeCleanup(resources, pr.oppositeResources)
+
+	// First create the namespace, following our own pattern for namespace creation.
 	objs := []client.Object{
 		render.CreateNamespace(
-			resources.namespace.Name,
+			GatewayAPINamespace,
 			pr.cfg.Installation.KubernetesProvider,
 			render.PSSPrivileged, // Needed for HostPath volume to write logs to
 			pr.cfg.Installation.Azure,
@@ -491,17 +555,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 
 	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, render.CreateOperatorSecretsRoleBinding(resources.namespace.Name))
+	objs = append(objs, render.CreateOperatorSecretsRoleBinding(GatewayAPINamespace))
 
 	// Add pull secrets (inferred from the Installation resource).
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GatewayAPINamespace, pr.cfg.PullSecrets...)...)...)
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{
 		resources.controllerServiceAccount,
 	} {
-		// But deep-copy each one so as not to inadvertently modify the cache inside
-		// `GatewayAPIResourcesGetter`.
+		// Deep-copy each resource to avoid modifying the originals.
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 	for _, cr := range resources.clusterRoles {
@@ -523,8 +586,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.certgenRole,
 		resources.certgenRoleBinding,
 	} {
-		// But deep-copy each one so as not to inadvertently modify the cache inside
-		// `GatewayAPIResourcesGetter`.
+		// Deep-copy each resource to avoid modifying the originals.
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
@@ -541,10 +603,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// provided by the user.
 	envoyGatewayConfig := pr.cfg.CustomEnvoyGateway
 	if envoyGatewayConfig == nil {
-		// In the upstream case, take a deepcopy of the default to make sure we don't
-		// accidentally modify the config loaded at start of day.  (In the custom case we
-		// don't need to do this because the next Reconcile will read the custom resource
-		// again from scratch.)
+		// Deep-copy so we don't mutate the cached render result.
 		envoyGatewayConfig = resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
 	}
 
@@ -651,7 +710,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		}
 	}
 
-	objsToDelete := []client.Object(nil)
+	objsToDelete := append([]client.Object(nil), modeCleanup...)
 	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
 		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
 		objsToDelete = append(objsToDelete,
@@ -675,6 +734,33 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				},
 			},
 		)
+	}
+
+	// Per-namespace Enterprise resources for GatewayNamespace mode.
+	// When proxies run in Gateway namespaces, each namespace needs a ServiceAccount,
+	// ClusterRoleBinding, and pull secrets for the Enterprise containers.
+	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace &&
+		pr.cfg.Installation.Variant.IsEnterprise() {
+		for _, ns := range pr.cfg.GatewayNamespaces {
+			objs = append(objs,
+				pr.gatewayNamespaceSA(ns),
+				pr.gatewayNamespaceCRB(ns),
+			)
+			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+		}
+
+		// Clean up resources for namespaces that no longer have Gateway resources.
+		if pr.cfg.CurrentGatewayNamespaces != nil {
+			currentNS := set.New(pr.cfg.GatewayNamespaces...)
+			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
+				if !currentNS.Has(ns) {
+					objsToDelete = append(objsToDelete,
+						pr.gatewayNamespaceSA(ns),
+						pr.gatewayNamespaceCRB(ns),
+					)
+				}
+			}
+		}
 	}
 
 	log.V(1).Info("GatewayAPI rendering", "num_current", len(objs), "num_delete", len(objsToDelete))
@@ -1166,6 +1252,45 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
 				Namespace: "tigera-gateway",
+			},
+		},
+	}
+}
+
+// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace
+// for GatewayNamespace deployment mode.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterName,
+			Namespace: namespace,
+		},
+	}
+}
+
+// gatewayNamespaceCRB creates a ClusterRoleBinding that binds the waf-http-filter ClusterRole
+// to the ServiceAccount in the given Gateway namespace.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceCRB(namespace string) *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: fmt.Sprintf("%s-%s", wafFilterName, namespace),
+			Labels: map[string]string{
+				GatewayNamespaceResourceLabel: "true",
+				GatewayNamespaceLabel:         namespace,
+			},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: namespace,
 			},
 		},
 	}

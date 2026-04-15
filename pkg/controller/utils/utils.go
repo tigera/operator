@@ -69,10 +69,10 @@ const (
 )
 
 var (
-	DefaultInstanceKey     = client.ObjectKey{Name: "default"}
-	DefaultTSEEInstanceKey = client.ObjectKey{Name: "tigera-secure"}
-	OverlayInstanceKey     = client.ObjectKey{Name: "overlay"}
-	KubeProxyInstanceKey   = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
+	DefaultInstanceKey           = client.ObjectKey{Name: "default"}
+	DefaultEnterpriseInstanceKey = client.ObjectKey{Name: "tigera-secure"}
+	OverlayInstanceKey           = client.ObjectKey{Name: "overlay"}
+	KubeProxyInstanceKey         = client.ObjectKey{Name: "kube-proxy", Namespace: "kube-system"}
 
 	PeriodicReconcileTime = 5 * time.Minute
 
@@ -331,7 +331,7 @@ func IsProjectCalicoV3Available(client client.Client, opts options.ControllerOpt
 
 func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, DefaultTSEEInstanceKey, instance)
+	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return false, nil
@@ -344,7 +344,7 @@ func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
 
 func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCollector, error) {
 	logCollector := &operatorv1.LogCollector{}
-	err := cli.Get(ctx, DefaultTSEEInstanceKey, logCollector)
+	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, logCollector)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -433,7 +433,7 @@ func PopulateK8sServiceEndPoint(client client.Client) error {
 	return nil
 }
 
-func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {
+func GetInstallationPullSecrets(i *operatorv1.InstallationSpec, c client.Client) ([]*corev1.Secret, error) {
 	secrets := []*corev1.Secret{}
 	for _, ps := range i.ImagePullSecrets {
 		s := &corev1.Secret{}
@@ -452,7 +452,7 @@ func GetNetworkingPullSecrets(i *operatorv1.InstallationSpec, c client.Client) (
 func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.ApplicationLayer, error) {
 	applicationLayer := &operatorv1.ApplicationLayer{}
 
-	err := c.Get(ctx, DefaultTSEEInstanceKey, applicationLayer)
+	err := c.Get(ctx, DefaultEnterpriseInstanceKey, applicationLayer)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -467,7 +467,7 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}
 
-	err := c.Get(ctx, DefaultTSEEInstanceKey, managementCluster)
+	err := c.Get(ctx, DefaultEnterpriseInstanceKey, managementCluster)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -482,7 +482,7 @@ func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.Man
 func GetManagementClusterConnection(ctx context.Context, c client.Client) (*operatorv1.ManagementClusterConnection, error) {
 	managementClusterConnection := &operatorv1.ManagementClusterConnection{}
 
-	err := c.Get(ctx, DefaultTSEEInstanceKey, managementClusterConnection)
+	err := c.Get(ctx, DefaultEnterpriseInstanceKey, managementClusterConnection)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -516,7 +516,7 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
 	nonclusterhost := &operatorv1.NonClusterHost{}
 
-	err := cli.Get(ctx, DefaultTSEEInstanceKey, nonclusterhost)
+	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, nonclusterhost)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -530,7 +530,7 @@ func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonC
 // GetAuthentication finds the authentication CR in your cluster.
 func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
 	authentication := &operatorv1.Authentication{}
-	err := cli.Get(ctx, DefaultTSEEInstanceKey, authentication)
+	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, authentication)
 	if err != nil {
 		return nil, err
 	}
@@ -588,10 +588,10 @@ func GetInstallationStatus(ctx context.Context, client client.Client) (*operator
 	return &instance.Status, nil
 }
 
-// GetInstallation returns the current installation, for use by other controllers. It accounts for overlays and
+// GetInstallationSpec returns the current installation, for use by other controllers. It accounts for overlays and
 // returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
 // launch enterprise-dependent components.
-func GetInstallation(ctx context.Context, client client.Client) (operatorv1.ProductVariant, *operatorv1.InstallationSpec, error) {
+func GetInstallationSpec(ctx context.Context, client client.Client) (operatorv1.ProductVariant, *operatorv1.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
@@ -624,13 +624,13 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 		}
 
 		// Default instance doesn't exist. Check for the legacy (enterprise only) CR.
-		err = client.Get(ctx, DefaultTSEEInstanceKey, instance)
+		err = client.Get(ctx, DefaultEnterpriseInstanceKey, instance)
 		if err != nil {
 			return nil, "failed to get apiserver 'tigera-secure'", err
 		}
 	} else {
 		// Assert there is no legacy "tigera-secure" instance present.
-		err = client.Get(ctx, DefaultTSEEInstanceKey, instance)
+		err = client.Get(ctx, DefaultEnterpriseInstanceKey, instance)
 		if err == nil {
 			return nil,
 				"Duplicate configuration detected",
@@ -643,7 +643,7 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 // GetPacketCapture finds the PacketCapture CR in your cluster.
 func GetPacketCaptureAPI(ctx context.Context, cli client.Client) (*operatorv1.PacketCaptureAPI, error) {
 	pc := &operatorv1.PacketCaptureAPI{}
-	err := cli.Get(ctx, DefaultTSEEInstanceKey, pc)
+	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, pc)
 	if err != nil {
 		return nil, err
 	}
@@ -683,13 +683,20 @@ type resourceWatchContext struct {
 }
 
 // WaitToAddResourceWatch will check if the required CRD APIs are available and if so, it will add a watch for the
-// resource. The completion of this operation will be signaled on a ready channel
-func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object) {
+// resource. The completion of this operation will be signaled on a ready channel.
+// An optional predicate can be provided to override the default generation-based predicate for all
+// watched objects. This is useful for resources whose meaningful changes are status-only updates
+// that don't bump generation (e.g., DatastoreMigration phase transitions).
+func WaitToAddResourceWatch(controller ctrlruntime.Controller, c kubernetes.Interface, log logr.Logger, flag *ReadyFlag, objs []client.Object, predicates ...predicate.Predicate) {
 	// Track resources left to watch and establish their watch context.
 	resourcesToWatch := map[client.Object]resourceWatchContext{}
 	for _, obj := range objs {
+		pred := createPredicateForObject(obj)
+		if len(predicates) > 0 {
+			pred = predicate.And(predicates...)
+		}
 		resourcesToWatch[obj] = resourceWatchContext{
-			predicate: createPredicateForObject(obj),
+			predicate: pred,
 			logger:    ContextLoggerForResource(log, obj),
 		}
 	}

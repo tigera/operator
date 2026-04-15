@@ -23,13 +23,13 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -155,7 +155,12 @@ func (pr *policyRecommendationComponent) clusterRole() client.Object {
 				"tier.stagednetworkpolicies",
 				"networkpolicies",
 				"tier.networkpolicies",
+				"stagedglobalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"globalnetworkpolicies",
+				"tier.globalnetworkpolicies",
 				"globalnetworksets",
+				"hostendpoints",
 			},
 			Verbs: []string{"create", "delete", "get", "list", "patch", "update", "watch"},
 		},
@@ -399,7 +404,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 			Namespace: pr.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.Int32ToPtr(1),
+			Replicas: ptr.To(int32(1)),
 			Template: *podTemplateSpec,
 		},
 	}

@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"flag"
 	"fmt"
 	"net/url"
@@ -35,6 +36,8 @@ import (
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/metrics"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
@@ -45,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	operatortls "github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/version"
 
 	operatortigeraiov1 "github.com/tigera/operator/api/v1"
@@ -62,6 +66,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/yaml"
@@ -69,7 +74,7 @@ import (
 )
 
 var (
-	defaultMetricsPort int32 = 8484
+	defaultMetricsPort int32 = 9484
 	scheme                   = runtime.NewScheme()
 	setupLog                 = ctrl.Log.WithName("setup")
 )
@@ -83,6 +88,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
+	utilruntime.Must(datastoremigration.AddToScheme(scheme))
 }
 
 func printVersion() {
@@ -176,7 +182,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	if printEnterpriseCRDs != "" {
-		if err := showCRDs(operatortigeraiov1.TigeraSecureEnterprise, printEnterpriseCRDs); err != nil {
+		if err := showCRDs(operatortigeraiov1.CalicoEnterprise, printEnterpriseCRDs); err != nil {
 			fmt.Println(err)
 			os.Exit(1)
 		}
@@ -212,7 +218,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	v3CRDs, err := apis.UseV3CRDS(cs)
+	v3CRDs, err := apis.UseV3CRDS(cfg)
 	if err != nil {
 		log.Error(err, "Failed to determine CRD version to use")
 		os.Exit(1)
@@ -257,11 +263,35 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	active.WaitUntilActive(cs, c, sigHandler, setupLog)
 	log.Info("Active operator: proceeding")
 
+	metricsOpts := server.Options{
+		BindAddress: metricsAddr(),
+	}
+	if common.MetricsTLSEnabled() {
+		metricsOpts.SecureServing = true
+		clientAuth, err := operatortls.ParseClientAuthType(os.Getenv("METRICS_CLIENT_AUTH"))
+		if err != nil {
+			setupLog.Error(err, "invalid METRICS_CLIENT_AUTH")
+			os.Exit(1)
+		}
+		minVersion, err := operatortls.ParseTLSVersion(os.Getenv("TLS_MIN_VERSION"))
+		if err != nil {
+			setupLog.Error(err, "invalid TLS_MIN_VERSION")
+			os.Exit(1)
+		}
+		getCert := getCertificateFromFile(metricsTLSCertFile(), metricsTLSKeyFile())
+		metricsOpts.TLSOpts = []func(*tls.Config){
+			func(cfg *tls.Config) {
+				cfg.GetCertificate = getCert
+				cfg.ClientAuth = clientAuth
+				cfg.ClientCAs = loadClientCAFromFile(metricsTLSCAFile())
+				cfg.MinVersion = minVersion
+			},
+		}
+	}
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: server.Options{
-			BindAddress: metricsAddr(),
-		},
+		Scheme:  scheme,
+		Metrics: metricsOpts,
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: 9443,
 		}),
@@ -480,6 +510,12 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Register custom Prometheus metrics collector.
+	if common.MetricsEnabled() {
+		collector := metrics.NewOperatorCollector(mgr.GetClient(), enterpriseCRDExists)
+		ctrlmetrics.Registry.MustRegister(collector)
+	}
+
 	setupLog.Info("starting manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
@@ -516,29 +552,6 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 		return err
 	}
 	return nil
-}
-
-// metricsAddr processes user-specified metrics host and port and sets
-// default values accordingly.
-func metricsAddr() string {
-	metricsHost := os.Getenv("METRICS_HOST")
-	metricsPort := os.Getenv("METRICS_PORT")
-
-	// if neither are specified, disable metrics.
-	if metricsHost == "" && metricsPort == "" {
-		// the controller-runtime accepts '0' to denote that metrics should be disabled.
-		return "0"
-	}
-	// if just a host is specified, listen on port 8484 of that host.
-	if metricsHost != "" && metricsPort == "" {
-		// the controller-runtime will choose a random port if none is specified.
-		// so use the defaultMetricsPort in that case.
-		return fmt.Sprintf("%s:%d", metricsHost, defaultMetricsPort)
-	}
-
-	// finally, handle cases where just a port is specified or both are specified in the same case
-	// since controller-runtime correctly uses all interfaces if no host is specified.
-	return fmt.Sprintf("%s:%s", metricsHost, metricsPort)
 }
 
 func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {

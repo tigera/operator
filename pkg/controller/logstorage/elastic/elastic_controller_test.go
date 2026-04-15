@@ -20,8 +20,8 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/ptr"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/utils/ptr"
 
 	"github.com/stretchr/testify/mock"
 
@@ -172,12 +172,12 @@ var _ = Describe("LogStorage controller", func() {
 						Name: "default",
 					},
 					Status: operatorv1.InstallationStatus{
-						Variant:  operatorv1.TigeraSecureEnterprise,
+						Variant:  operatorv1.CalicoEnterprise,
 						Computed: &operatorv1.InstallationSpec{},
 					},
 					Spec: operatorv1.InstallationSpec{
 						ControlPlaneReplicas: &replicas,
-						Variant:              operatorv1.TigeraSecureEnterprise,
+						Variant:              operatorv1.CalicoEnterprise,
 					},
 				}
 				Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
@@ -194,7 +194,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(cli.Create(
 					ctx,
 					&operatorv1.ManagementClusterConnection{
-						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 					})).NotTo(HaveOccurred())
 
 				mockStatus = &status.MockStatus{}
@@ -241,7 +241,7 @@ var _ = Describe("LogStorage controller", func() {
 					Expect(err).ShouldNot(HaveOccurred())
 
 					ls := &operatorv1.LogStorage{}
-					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).ShouldNot(HaveOccurred())
 
 					now := metav1.Now()
 					ls.DeletionTimestamp = &now
@@ -261,7 +261,7 @@ var _ = Describe("LogStorage controller", func() {
 					// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
 					By("waiting for the Elasticsearch and Kibana resources to be deleted")
 					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+					Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).ShouldNot(HaveOccurred())
 					Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 
 					result, err = r.Reconcile(ctx, reconcile.Request{})
@@ -270,7 +270,7 @@ var _ = Describe("LogStorage controller", func() {
 
 					By("expecting logstorage to have been deleted after the finalizer was removed")
 					ls = &operatorv1.LogStorage{}
-					Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).Should(HaveOccurred())
+					Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).Should(HaveOccurred())
 
 					mockStatus.AssertExpectations(GinkgoT())
 				})
@@ -290,12 +290,12 @@ var _ = Describe("LogStorage controller", func() {
 						Name: "default",
 					},
 					Status: operatorv1.InstallationStatus{
-						Variant:  operatorv1.TigeraSecureEnterprise,
+						Variant:  operatorv1.CalicoEnterprise,
 						Computed: &operatorv1.InstallationSpec{},
 					},
 					Spec: operatorv1.InstallationSpec{
 						ControlPlaneReplicas: &replicas,
-						Variant:              operatorv1.TigeraSecureEnterprise,
+						Variant:              operatorv1.CalicoEnterprise,
 						Registry:             "some.registry.org/",
 					},
 				}
@@ -313,7 +313,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(cli.Create(
 					ctx,
 					&operatorv1.ManagementCluster{
-						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 					})).NotTo(HaveOccurred())
 
 				mockStatus = &status.MockStatus{}
@@ -781,7 +781,7 @@ var _ = Describe("LogStorage controller", func() {
 									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 										{
 											Spec: corev1.PersistentVolumeClaimSpec{
-												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+												StorageClassName: ptr.To("tigera-elasticsearch"),
 											},
 										},
 									},
@@ -916,7 +916,7 @@ var _ = Describe("LogStorage controller", func() {
 										VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 											{
 												Spec: corev1.PersistentVolumeClaimSpec{
-													StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+													StorageClassName: ptr.To("tigera-elasticsearch"),
 												},
 											},
 										},
@@ -982,7 +982,7 @@ var _ = Describe("LogStorage controller", func() {
 									VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 										{
 											Spec: corev1.PersistentVolumeClaimSpec{
-												StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+												StorageClassName: ptr.To("tigera-elasticsearch"),
 											},
 										},
 									},
@@ -1183,12 +1183,12 @@ var _ = Describe("LogStorage controller", func() {
 						Name: "default",
 					},
 					Status: operatorv1.InstallationStatus{
-						Variant:  operatorv1.TigeraSecureEnterprise,
+						Variant:  operatorv1.CalicoEnterprise,
 						Computed: &operatorv1.InstallationSpec{},
 					},
 					Spec: operatorv1.InstallationSpec{
 						ControlPlaneReplicas: &replicas,
-						Variant:              operatorv1.TigeraSecureEnterprise,
+						Variant:              operatorv1.CalicoEnterprise,
 					},
 				})).ShouldNot(HaveOccurred())
 
@@ -1204,7 +1204,7 @@ var _ = Describe("LogStorage controller", func() {
 				Expect(cli.Create(
 					ctx,
 					&operatorv1.ManagementCluster{
-						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultTSEEInstanceKey.Name},
+						ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 					})).NotTo(HaveOccurred())
 
 				setUpLogStorageComponents(cli, ctx, "", certificateManager)
@@ -1257,14 +1257,14 @@ var _ = Describe("LogStorage controller", func() {
 
 				By("setting the DeletionTimestamp on the LogStorage CR")
 				ls := &operatorv1.LogStorage{}
-				Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).ShouldNot(HaveOccurred())
 
 				Expect(cli.Delete(ctx, ls)).ShouldNot(HaveOccurred())
 
 				// We don't expect LogStorage to be removed since it has the finalizer (and it seems like the fake client
 				// actually respects the finalizers).
 				ls = &operatorv1.LogStorage{}
-				Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).ShouldNot(HaveOccurred())
 
 				Expect(ls.Spec.StorageClassName).To(Equal(initializer.DefaultElasticsearchStorageClass))
 
@@ -1281,7 +1281,7 @@ var _ = Describe("LogStorage controller", func() {
 				// The LogStorage CR should still contain the finalizer, as we wait for ES and KB to finish deleting
 				By("checking LogStorage finalizer")
 				ls = &operatorv1.LogStorage{}
-				Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).ShouldNot(HaveOccurred())
+				Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).ShouldNot(HaveOccurred())
 				Expect(ls.Finalizers).Should(ContainElement("tigera.io/eck-cleanup"))
 
 				// One more reconcile should remove the finalizer and thus trigger deletion of the CR.
@@ -1292,7 +1292,7 @@ var _ = Describe("LogStorage controller", func() {
 
 				By("expecting the LogStorage CR to have been cleaned up")
 				ls = &operatorv1.LogStorage{}
-				Expect(cli.Get(ctx, utils.DefaultTSEEInstanceKey, ls)).Should(HaveOccurred())
+				Expect(cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls)).Should(HaveOccurred())
 
 				mockStatus.AssertExpectations(GinkgoT())
 			})
@@ -1366,7 +1366,7 @@ func setUpLogStorageComponents(cli client.Client, ctx context.Context, storageCl
 						VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
 							{
 								Spec: corev1.PersistentVolumeClaimSpec{
-									StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+									StorageClassName: ptr.To("tigera-elasticsearch"),
 								},
 							},
 						},

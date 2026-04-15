@@ -181,7 +181,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	// Get LogStorage resource.
 	logStorage := &operatorv1.LogStorage{}
-	key := utils.DefaultTSEEInstanceKey
+	key := utils.DefaultEnterpriseInstanceKey
 	err := r.client.Get(ctx, key, logStorage)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -202,7 +202,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Get Installation resource.
-	variant, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -272,7 +272,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
 	}
-	cm, err := certificatemanager.Create(r.client, install, r.clusterDomain, helper.TruthNamespace(), opts...)
+	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to load CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -287,7 +287,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurring while retrieving the pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -306,7 +306,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	if err := r.createESGateway(
 		ctx,
 		gwNSHelper,
-		install,
+		installationSpec,
 		variant,
 		pullSecrets,
 		hdler,
@@ -333,7 +333,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                 k8sapi.Endpoint,
 		K8sServiceEpPodNetwork:       k8sapi.PodNetworkEndpoint,
-		Installation:                 install,
+		Installation:                 installationSpec,
 		ManagementCluster:            managementCluster,
 		ClusterDomain:                r.clusterDomain,
 		Authentication:               authentication,

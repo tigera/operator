@@ -206,7 +206,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(2).Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
-	variant, instl, err := utils.GetInstallation(ctx, r.cli)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
 		return result, err
 	}
@@ -245,7 +245,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Verify the cluster doesn't also have the ManagementCluster CRD installed.
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant.IsEnterprise() {
 		managementCluster, err := utils.GetManagementCluster(ctx, r.cli)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -265,13 +265,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	if err = validate(managementClusterConnection, instl.Variant); err != nil {
+	if err = validate(managementClusterConnection, installationSpec.Variant); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
-	fillDefaults(managementClusterConnection, instl.Variant)
+	fillDefaults(managementClusterConnection, installationSpec.Variant)
 	if err = r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 	}
@@ -283,7 +283,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 
-	certificateManager, err := certificatemanager.Create(r.cli, instl, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.cli, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -306,7 +306,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var guardianKeyPair certificatemanagement.KeyPairInterface
-	if variant != operatorv1.TigeraSecureEnterprise {
+	if !variant.IsEnterprise() {
 		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.clusterDomain)
 		guardianCertificateNames = append(guardianCertificateNames, "localhost", "127.0.0.1")
 		guardianKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, render.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
@@ -317,7 +317,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		trustedBundle.AddCertificates(guardianKeyPair)
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(instl, r.cli)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.cli)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return result, err
@@ -409,7 +409,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying clusterInformation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant.IsEnterprise() {
 		managedClusterVersion = clusterInformation.Spec.CNXVersion
 	} else {
 		managedClusterVersion = clusterInformation.Spec.CalicoVersion
@@ -422,7 +422,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	var includeEgressNetworkPolicy bool
-	if variant == operatorv1.TigeraSecureEnterprise {
+	if variant.IsEnterprise() {
 		// Ensure the license can support enterprise policy, before rendering any network policies within it.
 		if license, err := utils.FetchLicenseKey(ctx, r.cli); err == nil {
 			if utils.IsFeatureActive(license, common.EgressAccessControlFeature) {
@@ -450,7 +450,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		TunnelCAType:                managementClusterConnection.Spec.TLS.CA,
 		PullSecrets:                 pullSecrets,
 		OpenShift:                   r.provider.IsOpenShift(),
-		Installation:                instl,
+		Installation:                installationSpec,
 		TunnelSecret:                tunnelSecret,
 		TrustedCertBundle:           trustedBundle,
 		ManagementClusterConnection: managementClusterConnection,
@@ -522,7 +522,7 @@ func fillDefaults(cr *operatorv1.ManagementClusterConnection, variant operatorv1
 	if cr.Spec.TLS.CA == "" {
 		cr.Spec.TLS.CA = operatorv1.CATypeTigera
 	}
-	if variant == operatorv1.TigeraSecureEnterprise && cr.Spec.Impersonation == nil {
+	if variant.IsEnterprise() && cr.Spec.Impersonation == nil {
 		cr.Spec.Impersonation = &operatorv1.Impersonation{
 			Users:           []string{},
 			Groups:          []string{},

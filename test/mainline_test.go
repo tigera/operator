@@ -79,7 +79,7 @@ var _ = Describe("Mainline component function tests", func() {
 		cleanupResources(c)
 
 		By("Verifying CRDs are installed")
-		verifyCRDsExist(c, operator.TigeraSecureEnterprise)
+		verifyCRDsExist(c, operator.CalicoEnterprise)
 
 		By("Creating the tigera-operator namespace, if it doesn't exist")
 		ns := &corev1.Namespace{
@@ -300,7 +300,7 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	clientset, err := kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	v3CRDs, err := apis.UseV3CRDS(clientset)
+	v3CRDs, err := apis.UseV3CRDS(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Create a scheme to use.
@@ -450,24 +450,24 @@ func removeInstallation(ctx context.Context, c client.Client, name string) {
 		// Collect debugging information for failure message
 		var debugInfo strings.Builder
 		debugInfo.WriteString("Installation instance still exists:\n")
-		debugInfo.WriteString(fmt.Sprintf("Instance: %+v\n", instance))
+		fmt.Fprintf(&debugInfo, "Instance: %+v\n", instance)
 
 		// Get calico-system namespace
 		ns := &corev1.Namespace{}
 		if err := c.Get(ctx, client.ObjectKey{Name: "calico-system"}, ns); err != nil {
-			debugInfo.WriteString(fmt.Sprintf("Failed to get calico-system namespace: %v\n", err))
+			fmt.Fprintf(&debugInfo, "Failed to get calico-system namespace: %v\n", err)
 		} else {
-			debugInfo.WriteString(fmt.Sprintf("calico-system namespace: %+v\n", ns))
+			fmt.Fprintf(&debugInfo, "calico-system namespace: %+v\n", ns)
 		}
 
 		// Get all pods in calico-system namespace
 		pods := &corev1.PodList{}
 		if err := c.List(ctx, pods, client.InNamespace("calico-system")); err != nil {
-			debugInfo.WriteString(fmt.Sprintf("Failed to list pods in calico-system namespace: %v\n", err))
+			fmt.Fprintf(&debugInfo, "Failed to list pods in calico-system namespace: %v\n", err)
 		} else {
-			debugInfo.WriteString(fmt.Sprintf("Pods in calico-system namespace (%d pods):\n", len(pods.Items)))
+			fmt.Fprintf(&debugInfo, "Pods in calico-system namespace (%d pods):\n", len(pods.Items))
 			for i, pod := range pods.Items {
-				debugInfo.WriteString(fmt.Sprintf("  Pod %d: Name=%s, Phase=%s, Ready=%v\n", i+1, pod.Name, pod.Status.Phase, pod.Status.ContainerStatuses))
+				fmt.Fprintf(&debugInfo, "  Pod %d: Name=%s, Phase=%s, Ready=%v\n", i+1, pod.Name, pod.Status.Phase, pod.Status.ContainerStatuses)
 			}
 		}
 

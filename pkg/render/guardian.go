@@ -95,7 +95,6 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	if guardianAccessPolicy != nil {
 		policies = []client.Object{
 			guardianAccessPolicy,
-			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
 		}
 	}
 
@@ -143,7 +142,7 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
 	} else {
 		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
@@ -163,7 +162,7 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		// Enterprise-specific RBAC and settings
 		objs = append(objs,
 			c.secretsRole(),
@@ -202,7 +201,7 @@ func (c *GuardianComponent) service() *corev1.Service {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		ports = append(ports,
 			corev1.ServicePort{
 				Name: "elasticsearch",
@@ -247,7 +246,7 @@ func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
 
 func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	var policyRules []rbacv1.PolicyRule
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		impersonation := c.cfg.ManagementClusterConnection.Spec.Impersonation
 		if impersonation != nil {
 			if impersonation.Users != nil {
@@ -473,7 +472,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 	}
 	envVars = append(envVars, c.cfg.Installation.Proxy.EnvVars()...)
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		envVars = append(envVars,
 			corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 			corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -582,12 +581,8 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 }
 
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
-	if cfg.Installation.Variant != operatorv1.TigeraSecureEnterprise {
+	if !cfg.Installation.Variant.IsEnterprise() {
 		return ossNetworkPolicy(), nil
-	}
-
-	if !cfg.IncludeEgressNetworkPolicy {
-		return nil, nil
 	}
 
 	egressRules := []v3.Rule{
@@ -666,6 +661,10 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		}
 		parsedIp := net.ParseIP(host)
 		if parsedIp == nil {
+			// Domain-based egress rules require the EgressAccessControl license feature.
+			if !cfg.IncludeEgressNetworkPolicy {
+				continue
+			}
 			// Assume host is a valid hostname.
 			egressRules = append(egressRules, v3.Rule{
 				Action:   v3.Allow,
@@ -702,7 +701,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
 	networkpolicyHelper := networkpolicy.DefaultHelper()
 	var ingressRules []v3.Rule
-	if cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if cfg.Installation.Variant.IsEnterprise() {
 		ingressRules = append(ingressRules, []v3.Rule{
 			{
 				Action:      v3.Allow,
@@ -835,7 +834,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			// Needed by kube-controllers to validate licenses; also used by ID.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		},
@@ -972,25 +971,25 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			// Needs to manage hostendpoints.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
 		},
 		{
 			// Needs access to update clusterinformations.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"clusterinformations"},
 			Verbs:     []string{"create", "get", "list", "update", "watch"},
 		},
 		{
 			// Needs to manipulate kubecontrollersconfiguration, which contains its config.
 			// It creates a default if none exists, and updates status as well.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"create", "get", "list", "update", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create"},
 		},
@@ -1000,17 +999,17 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"remoteclusterconfigurations"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
@@ -1043,12 +1042,12 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"alertexceptions"},
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "watch"},
 		},

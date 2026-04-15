@@ -122,6 +122,15 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 			},
 		},
 	}
+	// Pass imagePullSecrets to istiod so it injects them into waypoint pod specs.
+	if len(cfg.PullSecrets) > 0 {
+		secretNames := make([]string, 0, len(cfg.PullSecrets))
+		for _, s := range cfg.PullSecrets {
+			secretNames = append(secretNames, s.Name)
+		}
+		istioResOpts.IstiodOpts.Global.ImagePullSecrets = secretNames
+	}
+
 	// Set platform on all charts that have platform-specific behavior.
 	// The embedded Helm charts use zzz_profile.yaml to load platform profiles
 	// (e.g., profile-platform-openshift.yaml) which configure CNI paths, SCC
@@ -185,7 +194,7 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.IstioPilotImage, err = components.GetReference(components.ComponentIstioPilot, reg, path, prefix, is)
 		if err != nil {
 			return err

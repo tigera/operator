@@ -77,9 +77,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
-			ControlPlaneReplicas: ptr.To[int32](2),
+			ControlPlaneReplicas: ptr.To(int32(2)),
 			Registry:             "testregistry.com/",
-			Variant:              operatorv1.TigeraSecureEnterprise,
+			Variant:              operatorv1.CalicoEnterprise,
 		}
 		apiserver = &operatorv1.APIServerSpec{}
 		dnsNames = dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, clusterDomain)
@@ -489,7 +489,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
-		cfg.Installation.Variant = operatorv1.TigeraSecureEnterprise
+		cfg.Installation.Variant = operatorv1.CalicoEnterprise
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -985,6 +985,24 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect((dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args).To(ContainElement(fmt.Sprintf("--tunnelSecretName=%s", render.ManagerTLSSecretName)))
 	})
 
+	It("should pass tunnelSecretName when TLS secret is not manager-tls", func() {
+		cfg.ManagementCluster = managementCluster
+		cfg.ManagementCluster.Spec.TLS = &operatorv1.TLS{
+			SecretName: render.VoltronTunnelSecretName,
+		}
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
+		Expect(dep).ToNot(BeNil())
+
+		args := (dep.(*appsv1.Deployment)).Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement(fmt.Sprintf("--tunnelSecretName=%s", render.VoltronTunnelSecretName)))
+		Expect(args).ToNot(ContainElement("--managementClusterCAType=Public"))
+	})
+
 	It("should add an init container if certificate management is enabled", func() {
 		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{SignerName: "a.b/c", CACert: cfg.TLSKeyPair.GetCertificatePEM()}
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
@@ -1039,7 +1057,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
-		cfg.Installation.ControlPlaneReplicas = ptr.To[int32](1)
+		cfg.Installation.ControlPlaneReplicas = ptr.To(int32(1))
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -1050,7 +1068,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	})
 
 	It("should render PodAffinity when ControlPlaneReplicas is greater than 1", func() {
-		cfg.Installation.ControlPlaneReplicas = ptr.To[int32](2)
+		cfg.Installation.ControlPlaneReplicas = ptr.To(int32(2))
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
@@ -1604,7 +1622,7 @@ var (
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -1759,7 +1777,7 @@ var (
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},
@@ -1786,7 +1804,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 	BeforeEach(func() {
 		instance = &operatorv1.InstallationSpec{
-			ControlPlaneReplicas: ptr.To[int32](2),
+			ControlPlaneReplicas: ptr.To(int32(2)),
 			Registry:             "testregistry.com/",
 			Variant:              operatorv1.Calico,
 		}
@@ -2401,9 +2419,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			cfg.MultiTenant = true
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{Spec: operatorv1.ManagementClusterSpec{Address: "example.com:1234"}}
 			cfg.Installation = &operatorv1.InstallationSpec{
-				ControlPlaneReplicas: ptr.To[int32](2),
+				ControlPlaneReplicas: ptr.To(int32(2)),
 				Registry:             "testregistry.com/",
-				Variant:              operatorv1.TigeraSecureEnterprise,
+				Variant:              operatorv1.CalicoEnterprise,
 			}
 		})
 

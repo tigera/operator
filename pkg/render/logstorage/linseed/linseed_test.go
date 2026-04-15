@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apiserver/pkg/authentication/serviceaccount"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -40,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -608,10 +608,10 @@ var _ = Describe("Linseed rendering tests", func() {
 			})
 			It("should set LINSEED_PRODUCT_VARIANT to enterprise", func() {
 				cfg.ManagementCluster = true
-				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.TigeraSecureEnterprise
+				cfg.Tenant.Spec.ManagedClusterVariant = &operatorv1.CalicoEnterprise
 				resources, _ := Linseed(cfg).Objects()
 				d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
-				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.TigeraSecureEnterprise)}))
+				Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_PRODUCT_VARIANT", Value: string(operatorv1.CalicoEnterprise)}))
 			})
 			It("should not panic if ManagedClusterVariant is not set", func() {
 				cfg.ManagementCluster = true
@@ -623,17 +623,17 @@ var _ = Describe("Linseed rendering tests", func() {
 		})
 
 		It("should override replicas with the value from TenantSpec's controlPlaneReplicas when available", func() {
-			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
+			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.To(int32(3))
 			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Replicas).To(Equal(ptr.Int32ToPtr(3)))
+			Expect(d.Spec.Replicas).To(Equal(ptr.To(int32(3))))
 		})
 
 		It("should render PodAffinity when TenantSpec ControlPlaneReplicas is greater than 1", func() {
-			installation.ControlPlaneReplicas = ptr.Int32ToPtr(1)
-			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.Int32ToPtr(3)
+			installation.ControlPlaneReplicas = ptr.To(int32(1))
+			cfg.Tenant.Spec.ControlPlaneReplicas = ptr.To(int32(3))
 			component := Linseed(cfg)
 
 			resources, _ := component.Objects()
@@ -807,11 +807,12 @@ var _ = Describe("Linseed rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
 
-			// These are only set for multi-tenant clusters. Make sure they aren't set here.
+			// These are only set for multi-tenant clusters or internal ES. Make sure they aren't set here.
 			for _, env := range envs {
 				Expect(env.Name).NotTo(Equal("LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT"))
 				Expect(env.Name).NotTo(Equal("LINSEED_TENANT_NAMESPACE"))
 				Expect(env.Name).NotTo(Equal("BACKEND"))
+				Expect(env.Name).NotTo(Equal("ELASTIC_MULTI_INDEX_TENANT_SUFFIX_ENABLED"))
 			}
 		})
 
@@ -824,6 +825,12 @@ var _ = Describe("Linseed rendering tests", func() {
 			d := rtest.GetResource(resources, DeploymentName, cfg.Namespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[0].Env
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_OPERATOR_NS", Value: "tigera-operator"}))
+
+			// Tenant ID is always set when a tenant is configured.
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_EXPECTED_TENANT_ID", Value: cfg.Tenant.Spec.ID}))
+
+			// For internal ES, tenant suffix is disabled in multi-index names for backward compatibility.
+			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_MULTI_INDEX_TENANT_SUFFIX_ENABLED", Value: "false"}))
 
 			// These are only set for multi-tenant clusters. Make sure they aren't set here.
 			for _, env := range envs {
@@ -875,8 +882,8 @@ func compareResources(resources []client.Object, expectedResources []resourceTes
 	deployment := rtest.GetResource(resources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 	ExpectWithOffset(1, deployment).NotTo(BeNil())
 	ExpectWithOffset(1, deployment.Spec.Strategy.Type).To(Equal(appsv1.RollingUpdateDeploymentStrategyType))
-	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxSurge).To(Equal(ptr.IntOrStrPtr("100%")))
-	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable).To(Equal(ptr.IntOrStrPtr("0")))
+	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxSurge).To(Equal(ptr.To(intstr.FromString("100%"))))
+	ExpectWithOffset(1, deployment.Spec.Strategy.RollingUpdate.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(0))))
 
 	// Check containers
 	expected := expectedContainers()
@@ -989,7 +996,7 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  render.TigeraLinseedSecret,
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			},
@@ -998,7 +1005,7 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  "tigera-secure-linseed-token-tls",
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			},
@@ -1025,11 +1032,11 @@ func expectedContainers() []corev1.Container {
 			ImagePullPolicy: render.ImagePullPolicy(),
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
-				AllowPrivilegeEscalation: ptr.BoolToPtr(false),
-				Privileged:               ptr.BoolToPtr(false),
-				RunAsNonRoot:             ptr.BoolToPtr(true),
-				RunAsGroup:               ptr.Int64ToPtr(10001),
-				RunAsUser:                ptr.Int64ToPtr(10001),
+				AllowPrivilegeEscalation: ptr.To(false),
+				Privileged:               ptr.To(false),
+				RunAsNonRoot:             ptr.To(true),
+				RunAsGroup:               ptr.To(int64(10001)),
+				RunAsUser:                ptr.To(int64(10001)),
 				SeccompProfile:           &corev1.SeccompProfile{Type: corev1.SeccompProfileTypeRuntimeDefault},
 			},
 			ReadinessProbe: &corev1.Probe{

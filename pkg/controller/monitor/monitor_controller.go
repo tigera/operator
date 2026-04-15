@@ -81,8 +81,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.AlertmanagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.MeshAlertmanagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
@@ -112,7 +112,6 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, promethe
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
 	})
 
@@ -136,7 +135,7 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ImageSet: %w", err)
 	}
 
-	// ManagementClusterConnection (in addition to Installation/Network) is used as input to determine whether network policy should be reconciled.
+	// ManagementClusterConnection (in addition to Installation) is used as input to determine whether network policy should be reconciled.
 	err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
@@ -196,7 +195,7 @@ type ReconcileMonitor struct {
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
 	instance := &operatorv1.Monitor{}
-	err := r.client.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -242,6 +241,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// Track alertmanager statefulset health only when it has replicas.
+	alertmanagerSS := types.NamespacedName{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)}
+	if instance.Spec.Alertmanager != nil && instance.Spec.Alertmanager.AlertmanagerSpec != nil &&
+		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas != nil && *instance.Spec.Alertmanager.AlertmanagerSpec.Replicas > 0 {
+		r.status.AddStatefulSets([]types.NamespacedName{alertmanagerSS})
+	} else {
+		r.status.RemoveStatefulSets(alertmanagerSS)
+	}
 	if instance.Spec.ExternalPrometheus != nil {
 		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to get external prometheus namespace %s",
@@ -277,7 +285,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		graceRequeueAfter = time.Until(license.Status.Expiry.Add(gracePeriod))
 	}
 
-	variant, install, err := utils.GetInstallation(context.Background(), r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -287,7 +295,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(install, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -299,14 +307,14 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, install, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	var serverTLSSecret certificatemanagement.KeyPairInterface
-	if instance.Spec.ExternalPrometheus == nil || install.CertificateManagement != nil {
+	if instance.Spec.ExternalPrometheus == nil || installationSpec.CertificateManagement != nil {
 		// We're either not using an external prometheus in which case we simply sign the KeyPair directly using the certificateManager,
 		// or we are configured to use a custom TLS secret, which is also handled under the covers by `GetOrCreateKeyPair`.
 		serverTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace(), PrometheusTLSServerDNSNames(r.clusterDomain))
@@ -408,9 +416,24 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Create operator TLS keypair only when mTLS is enabled (METRICS_SCHEME=https).
+	// The Service and ServiceMonitor are created whenever metrics are enabled.
+	operatorMetricsEnabled := common.MetricsEnabled()
+	var operatorTLSSecret certificatemanagement.KeyPairInterface
+	if common.MetricsTLSEnabled() {
+		operatorMetricsServiceName := common.OperatorName() + "-metrics"
+		operatorTLSDNSNames := dns.GetServiceDNSNames(operatorMetricsServiceName, common.OperatorNamespace(), r.clusterDomain)
+		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorTLSSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating operator metrics TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		trustedBundle.AddCertificates(operatorTLSSecret)
+	}
+
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,
-		Installation:                  install,
+		Installation:                  installationSpec,
 		PullSecrets:                   pullSecrets,
 		AlertmanagerConfigSecret:      alertmanagerConfigSecret,
 		KeyValidatorConfig:            keyValidatorConfig,
@@ -422,6 +445,10 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		LicenseExpired:                licenseExpired,
+		OperatorMetricsEnabled:        operatorMetricsEnabled,
+		OperatorNamespace:             common.OperatorNamespace(),
+		OperatorName:                  common.OperatorName(),
+		OperatorTLSSecret:             operatorTLSSecret,
 	}
 
 	// Render prometheus component
@@ -433,6 +460,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(operatorTLSSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -494,6 +522,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {
+	if instance.Spec.Alertmanager == nil {
+		instance.Spec.Alertmanager = &operatorv1.Alertmanager{}
+	}
+	if instance.Spec.Alertmanager.AlertmanagerSpec == nil {
+		instance.Spec.Alertmanager.AlertmanagerSpec = &operatorv1.AlertmanagerSpec{}
+	}
+	if instance.Spec.Alertmanager.AlertmanagerSpec.Replicas == nil {
+		var replicas int32 = 0
+		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas = &replicas
+	}
+
 	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
 
 		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {

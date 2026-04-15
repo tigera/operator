@@ -80,7 +80,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
 	} else {
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -110,7 +110,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// Create the correct security context for the webhook container. By default, it should run as non-root, but in Enterprise
 	// we need to run as root to be able to write audit logs to the host filesystem.
 	securtyContext := securitycontext.NewNonRootContext()
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		securtyContext = securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
 	}
 
@@ -186,6 +186,38 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 	if c.combinedImage {
 		dep.Spec.Template.Spec.Containers[0].Command = []string{"calico", "component", "webhooks"}
+	}
+
+	// On management clusters, pass flags so the ManagedCluster webhook can
+	// generate the installation manifest with the correct tunnel address and certs.
+	if c.cfg.ManagementCluster != nil {
+		mc := c.cfg.ManagementCluster
+		if mc.Spec.Address != "" {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				fmt.Sprintf("--mcm-management-cluster-addr=%s", mc.Spec.Address),
+			)
+		}
+
+		secretName := render.TunnelSecretName(mc)
+		dep.Spec.Template.Spec.Containers[0].Args = append(
+			dep.Spec.Template.Spec.Containers[0].Args,
+			fmt.Sprintf("--mcm-tunnel-secret-name=%s", secretName),
+		)
+
+		if mc.Spec.TLS != nil && mc.Spec.TLS.SecretName == render.ManagerTLSSecretName {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				"--mcm-management-cluster-ca-type=Public",
+			)
+		}
+
+		if c.cfg.MultiTenant {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				"--multi-tenant=true",
+			)
+		}
 	}
 
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
@@ -316,7 +348,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
+				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
 			},
 			{
@@ -348,7 +380,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
+				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 			},
 			{
@@ -381,14 +413,14 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](5),
+				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
 			},
 		},
 	}
 
-	// Create a MutatingWebhookConfiguration for UISettings webhooks.
+	// Create a MutatingWebhookConfiguration for Enterprise-only mutating webhooks.
 	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "api.projectcalico.org",
@@ -424,11 +456,45 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 				AdmissionReviewVersions: []string{"v1"},
 				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To[int32](10),
+				TimeoutSeconds:          ptr.To(int32(10)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
 				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
 			},
 		},
+	}
+
+	// On management clusters, register the ManagedCluster webhook. This webhook
+	// generates the installation manifest (including tunnel certs) when a
+	// ManagedCluster CR is created.
+	if c.cfg.ManagementCluster != nil {
+		mwc.Webhooks = append(mwc.Webhooks, admissionregistrationv1.MutatingWebhook{
+			Name: "managedclusters.api.projectcalico.org",
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"projectcalico.org"},
+						APIVersions: []string{"v3"},
+						Resources:   []string{"managedclusters"},
+						Scope:       ptr.To(admissionregistrationv1.AllScopes),
+					},
+				},
+			},
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				Service: &admissionregistrationv1.ServiceReference{
+					Namespace: common.CalicoNamespace,
+					Name:      WebhooksName,
+					Path:      ptr.To("/managedcluster"),
+				},
+				CABundle: c.cfg.KeyPair.GetCertificatePEM(),
+			},
+			AdmissionReviewVersions: []string{"v1"},
+			SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+			TimeoutSeconds:          ptr.To(int32(10)),
+			FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
+		})
 	}
 
 	// Create a ClusterRole and ClusterRoleBinding for the webhook service account.
@@ -447,7 +513,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
@@ -498,7 +564,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, np)
 	}
 	objs = append(objs, dep, svc, vwc)
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		objs = append(objs, mwc)
 	}
 	objs = append(objs, cr, crb)

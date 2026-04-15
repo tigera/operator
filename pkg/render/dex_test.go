@@ -29,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	csisecret "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
@@ -40,7 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/ptr"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -103,7 +103,7 @@ var _ = Describe("dex rendering tests", func() {
 						Items: []corev1.KeyToPath{
 							{Key: "serviceAccountSecret", Path: "google-groups.json"},
 						},
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			},
@@ -112,7 +112,7 @@ var _ = Describe("dex rendering tests", func() {
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName:  "tigera-dex-tls",
-						DefaultMode: ptr.Int32ToPtr(420),
+						DefaultMode: ptr.To(int32(420)),
 					},
 				},
 			},
@@ -623,7 +623,7 @@ var _ = Describe("dex rendering tests", func() {
 	})
 })
 
-// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.45.0/cmd/dex/config.go
+// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.45.1/cmd/dex/config.go
 type ConfigYAML struct {
 	Web           Web             `yaml:"web"`
 	StaticClients []StaticClients `yaml:"staticClients"`

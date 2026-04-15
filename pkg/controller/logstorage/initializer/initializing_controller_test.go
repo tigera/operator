@@ -106,12 +106,12 @@ var _ = Describe("LogStorage Initializing controller", func() {
 					Name: "default",
 				},
 				Status: operatorv1.InstallationStatus{
-					Variant:  operatorv1.TigeraSecureEnterprise,
+					Variant:  operatorv1.CalicoEnterprise,
 					Computed: &operatorv1.InstallationSpec{},
 				},
 				Spec: operatorv1.InstallationSpec{
 					ControlPlaneReplicas: &replicas,
-					Variant:              operatorv1.TigeraSecureEnterprise,
+					Variant:              operatorv1.CalicoEnterprise,
 					ImagePullSecrets: []corev1.LocalObjectReference{{
 						Name: "tigera-pull-secret",
 					}},
@@ -508,6 +508,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			var dlr int32 = 8
 			var bgp int32 = 8
 			var replicas int32 = render.DefaultElasticsearchReplicas
+			var kibanaReplicas int32 = 1
 			limits := corev1.ResourceList{}
 			requests := corev1.ResourceList{}
 			limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
@@ -525,6 +526,11 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				},
 				Indices: &operatorv1.Indices{
 					Replicas: &replicas,
+				},
+				Kibana: &operatorv1.Kibana{
+					Spec: &operatorv1.KibanaSpec{
+						Replicas: &kibanaReplicas,
+					},
 				},
 				StorageClassName: DefaultElasticsearchStorageClass,
 				ComponentResources: []operatorv1.LogStorageComponentResource{

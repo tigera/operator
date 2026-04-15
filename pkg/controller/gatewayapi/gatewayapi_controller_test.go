@@ -70,11 +70,11 @@ var _ = Describe("Gateway API controller tests", func() {
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Registry: "some.registry.org/",
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant: operatorv1.TigeraSecureEnterprise,
+				Variant: operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{
 					Registry: "my-reg",
 					// The test is provider agnostic.
@@ -155,7 +155,7 @@ var _ = Describe("Gateway API controller tests", func() {
 
 				if gwapi.Spec.CRDManagement == nil {
 					By("checking that CRDManagement field has been updated to PreferExisting")
-					Expect(c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)).NotTo(HaveOccurred())
+					Expect(c.Get(ctx, utils.DefaultEnterpriseInstanceKey, gwapi)).NotTo(HaveOccurred())
 					Expect(gwapi.Spec.CRDManagement).NotTo(BeNil())
 					Expect(*gwapi.Spec.CRDManagement).To(Equal(operatorv1.CRDManagementPreferExisting))
 				}
@@ -426,7 +426,7 @@ var _ = Describe("Gateway API controller tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDaemonSet: &envoyapi.KubernetesDaemonSetSpec{
 							Pod: &envoyapi.KubernetesPodSpec{
@@ -557,7 +557,7 @@ var _ = Describe("Gateway API controller tests", func() {
 					},
 				},
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
 							Replicas: &three,
@@ -611,7 +611,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		By("re-reading the GatewayAPI")
-		err = c.Get(ctx, utils.DefaultTSEEInstanceKey, gwapi)
+		err = c.Get(ctx, utils.DefaultEnterpriseInstanceKey, gwapi)
 		Expect(err).NotTo(HaveOccurred())
 
 		By("checking default GatewayClasses")

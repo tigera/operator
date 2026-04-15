@@ -219,7 +219,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -229,12 +229,12 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, err
 	}
 
-	if variant != operatorv1.TigeraSecureEnterprise {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for network to be %s", operatorv1.TigeraSecureEnterprise), nil, reqLogger)
+	if !variant.IsEnterprise() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for network to be an enterprise variant", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -267,7 +267,7 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	lcSpec := instance.Spec.LogCollection
 	config := &applicationlayer.Config{
 		PullSecrets:                 pullSecrets,
-		Installation:                installation,
+		Installation:                installationSpec,
 		OsType:                      rmeta.OSTypeLinux,
 		PerHostWAFEnabled:           r.isWAFEnabled(&instance.Spec),
 		PerHostLogsEnabled:          r.isLogsCollectionEnabled(&instance.Spec),
@@ -447,7 +447,7 @@ func (r *ReconcileApplicationLayer) getWAFRulesetConfig(ctx context.Context) (*c
 // getApplicationLayer returns the default ApplicationLayer instance.
 func getApplicationLayer(ctx context.Context, cli client.Client) (*operatorv1.ApplicationLayer, error) {
 	instance := &operatorv1.ApplicationLayer{}
-	err := cli.Get(ctx, utils.DefaultTSEEInstanceKey, instance)
+	err := cli.Get(ctx, utils.DefaultEnterpriseInstanceKey, instance)
 	if err != nil {
 		return nil, err
 	}

@@ -55,7 +55,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 				},
 			},
 		}
-		c = kfake.NewSimpleClientset(objs...)
+		c = kfake.NewClientset(objs...)
 		nlw = NewNodeListWatch(c)
 		tlw = NewTyphaListWatch(c)
 

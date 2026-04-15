@@ -662,7 +662,7 @@ var _ = Describe("Windows rendering tests", func() {
 		}
 	})
 
-	It("should render all resources for a default configuration using TigeraSecureEnterprise", func() {
+	It("should render all resources for a default configuration using CalicoEnterprise", func() {
 		type testConf struct {
 			EnableBGP   bool
 			EnableVXLAN bool
@@ -698,7 +698,7 @@ var _ = Describe("Windows rendering tests", func() {
 					{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
-				defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 
 				component := render.Windows(&cfg)
@@ -1678,7 +1678,7 @@ var _ = Describe("Windows rendering tests", func() {
 		verifyWindowsProbesAndLifecycle(ds)
 	})
 
-	It("should render all resources when variant is TigeraSecureEnterprise and running on openshift", func() {
+	It("should render all resources when variant is CalicoEnterprise and running on openshift", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -1691,7 +1691,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.NodeReporterMetricsPort = 9081
 
@@ -1834,7 +1834,7 @@ var _ = Describe("Windows rendering tests", func() {
 		verifyWindowsProbesAndLifecycle(ds)
 	})
 
-	It("should render all resources when variant is TigeraSecureEnterprise and running on RKE2", func() {
+	It("should render all resources when variant is CalicoEnterprise and running on RKE2", func() {
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -1847,7 +1847,7 @@ var _ = Describe("Windows rendering tests", func() {
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 		}
 
-		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
 		cfg.NodeReporterMetricsPort = 9081
 
@@ -2134,7 +2134,7 @@ var _ = Describe("Windows rendering tests", func() {
 	})
 
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
-		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.NodeMetricsPort = nil
 		cfg.NodeReporterMetricsPort = 9081
 
@@ -2157,7 +2157,7 @@ var _ = Describe("Windows rendering tests", func() {
 
 	It("should set FELIX_PROMETHEUSMETRICSPORT with a custom value if NodeMetricsPort is set", func() {
 		var nodeMetricsPort int32 = 1234
-		defaultInstance.Variant = operatorv1.TigeraSecureEnterprise
+		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.NodeMetricsPort = &nodeMetricsPort
 		component := render.Windows(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

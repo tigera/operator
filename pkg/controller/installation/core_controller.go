@@ -68,6 +68,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
 	"github.com/tigera/operator/pkg/controller/migration/convert"
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -254,7 +255,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		}
 
 		if opts.ManageCRDs {
-			if err = addCRDWatches(c, operatorv1.TigeraSecureEnterprise, opts.UseV3CRDs); err != nil {
+			if err = addCRDWatches(c, operatorv1.CalicoEnterprise, opts.UseV3CRDs); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
 			}
 		}
@@ -278,6 +279,16 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to create periodic reconcile watch: %w", err)
 	}
+
+	// Watch DatastoreMigration CRs so the installation controller re-reconciles when
+	// migration state changes (e.g., Converged → triggers env var injection on components).
+	// Uses ResourceVersionChangedPredicate because migration phase transitions
+	// are status-only updates that don't bump generation.
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
+		&datastoremigration.DatastoreMigration{
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+		},
+	}, predicate.ResourceVersionChangedPredicate{})
 
 	return nil
 }
@@ -330,6 +341,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
+		migrationWatchReady:  &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
@@ -355,6 +367,7 @@ func secondaryResources() []client.Object {
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.MigrationClusterRoleName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoNodeObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.CalicoCNIPluginObjectName}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.KubeControllerRole}},
@@ -387,6 +400,7 @@ type ReconcileInstallation struct {
 	clusterDomain                 string
 	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
+	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
 
@@ -983,10 +997,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// The operator supports running in a "Calico only" mode so that it doesn't need to run TSEE specific controllers.
-	// If we are switching from this mode to one that enables TSEE, we need to restart the operator to enable the other controllers.
-	if !r.enterpriseCRDsExist && instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into TSEE mode.
+	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
+	// If we are switching from this mode to one that enables enterprise, we need to restart the operator to enable the other controllers.
+	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
+		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
 		b, err := utils.RequiresTigeraSecure(r.clientset)
 		if b {
@@ -1005,7 +1019,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetNetworkingPullSecrets(&instance.Spec, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(&instance.Spec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1073,7 +1087,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
@@ -1119,6 +1133,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+	}
+
+	// Reconcile the migration RBAC ClusterRole/ClusterRoleBinding. We do this
+	// early so kube-controllers can start the migration without waiting for
+	// the rest of this reconcile to complete. Only check migration state once
+	// the watch is established to ensure we use the cache.
+	migrationExists := r.migrationWatchReady.IsReady() && datastoremigration.Exists(r.client)
+	ch := r.newComponentHandler(reqLogger, r.client, r.scheme, instance)
+	if err := ch.CreateOrUpdateOrDelete(ctx, kubecontrollers.MigrationRBACComponent(migrationExists), nil); err != nil {
+		reqLogger.Info("Failed to reconcile migration RBAC", "error", err)
 	}
 
 	// Determine if we need to migrate resources from the kube-system namespace. If
@@ -1185,7 +1209,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
 
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 
 		// Determine the port to use for nodeReporter metrics.
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
@@ -1242,7 +1266,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Secure calico kube controller metrics.
 	var kubeControllerTLS certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 		// Create or Get TLS certificates for kube controller.
 		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
 			r.client,
@@ -1344,7 +1368,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Check if non-cluster host feature is enabled.
 	var nonclusterhost *operatorv1.NonClusterHost
-	if instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if instance.Spec.Variant.IsEnterprise() {
 		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
@@ -1964,7 +1988,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		}
 	}
 
-	if install.Spec.Variant == operatorv1.TigeraSecureEnterprise {
+	if install.Spec.Variant.IsEnterprise() {
 		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
 		dnsService := ""
 		switch install.Spec.KubernetesProvider {
@@ -2044,6 +2068,10 @@ func setClusterRoutingOnFelixConfiguration(
 	fc *v3.FelixConfiguration,
 	reqLogger logr.Logger,
 ) (bool, error) {
+	if install.Spec.CalicoNetwork == nil || install.Spec.CalicoNetwork.ClusterRoutingMode == nil {
+		return false, nil
+	}
+
 	updated := false
 	desiredValue := "Disabled"
 	if felixProgramsClusterRoutes(install) {
@@ -2066,9 +2094,12 @@ func setClusterRoutingOnBGPConfiguration(
 	bgpConfig *v3.BGPConfiguration,
 	reqLogger logr.Logger,
 ) (bool, error) {
+	if install.Spec.CalicoNetwork == nil || install.Spec.CalicoNetwork.ClusterRoutingMode == nil {
+		return false, nil
+	}
+
 	updated := false
 	desiredValue := "Enabled"
-
 	if felixProgramsClusterRoutes(install) {
 		desiredValue = "Disabled"
 	}

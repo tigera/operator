@@ -119,6 +119,8 @@ type CertificateManager interface {
 	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
 	// public key of the requestor is already set in the certificate template.
 	SignCertificate(certificate *x509.Certificate) ([]byte, error)
+	// CACertCommonName returns the CommonName from the CA certificate's Subject field.
+	CACertCommonName() string
 }
 
 type Option func(cm *certificateManager) error
@@ -181,7 +183,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			return nil, err
 		}
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
-		if installation.Variant == operatorv1.TigeraSecureEnterprise {
+		if installation.Variant.IsEnterprise() {
 			csrImage, err = components.GetReference(
 				components.ComponentTigeraCSRInitContainer,
 				installation.Registry,
@@ -557,6 +559,14 @@ func (cm *certificateManager) GetCertificate(cli client.Client, secretName, secr
 func (cm *certificateManager) GetKeyPair(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error) {
 	keyPair, _, err := cm.getKeyPair(cli, secretName, secretNamespace, false, dnsNames)
 	return keyPair, err
+}
+
+// CACertCommonName returns the CommonName from the CA certificate's Subject field.
+func (cm *certificateManager) CACertCommonName() string {
+	if cm.Certificate != nil {
+		return cm.Subject.CommonName
+	}
+	return ""
 }
 
 // CertificateManagement returns the CertificateManagement object or nil if it is not configured.

@@ -96,6 +96,16 @@ type GoldmaneDeploymentContainer struct {
 
 	// +optional
 	Resources *corev1.ResourceRequirements `json:"resources,omitempty"`
+
+	// ReadinessProbe allows customization of the readiness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	ReadinessProbe *ProbeOverride `json:"readinessProbe,omitempty"`
+
+	// LivenessProbe allows customization of the liveness probe timing parameters.
+	// The probe handler is set by the operator and cannot be overridden.
+	// +optional
+	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 type GoldmaneDeploymentStrategy struct {
 	// Rolling update config params. Present only if DeploymentStrategyType =

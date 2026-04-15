@@ -22,12 +22,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	v1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/ptr"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -76,7 +76,7 @@ func (c *csiComponent) csiDriver() *v1.CSIDriver {
 		v1.VolumeLifecycleEphemeral,
 	}
 	spec := v1.CSIDriverSpec{
-		PodInfoOnMount:       ptr.BoolToPtr(true),
+		PodInfoOnMount:       ptr.To(true),
 		VolumeLifecycleModes: volumeLifecycleModes,
 	}
 
@@ -384,7 +384,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
 		if err != nil {
 			return err

@@ -236,7 +236,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 1 Service to expose calico/node metrics.
 		// - 1 Service to expose Windows calico/node metrics.
 		var nodeMetricsPort int32 = 9081
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
@@ -248,7 +248,7 @@ var _ = Describe("Rendering tests", func() {
 		// - X Same as default config for EE
 		// - pass in InternalManagerTLSSecret
 		var nodeMetricsPort int32 = 9081
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 
 		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)

@@ -85,8 +85,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
-		log.V(5).Info("Failed to create network watch", "err", err)
-		return fmt.Errorf("gatewayapi-controller failed to watch Tigera network resource: %w", err)
+		log.V(5).Info("Failed to create Installation watch", "err", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch Installation resource: %w", err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -182,7 +182,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	defer r.status.SetMetaData(&gatewayAPI.ObjectMeta)
 
 	// Get the Installation, for private registry and pull secret config.
-	variant, installation, err := utils.GetInstallation(ctx, r.client)
+	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -213,7 +213,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installation.KubernetesProvider)
+	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider)
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -262,7 +262,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger.Info("Could not render all optional GatewayAPI CRDs", "err", err)
 	}
 
-	pullSecrets, err := utils.GetNetworkingPullSecrets(installation, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -275,7 +275,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
-		Installation:          installation,
+		Installation:          installationSpec,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
 		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
@@ -440,13 +440,13 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 		}
 
 		// Default resource doesn't exist. Check for the legacy (enterprise only) CR.
-		err = client.Get(ctx, utils.DefaultTSEEInstanceKey, resource)
+		err = client.Get(ctx, utils.DefaultEnterpriseInstanceKey, resource)
 		if err != nil {
 			return nil, "failed to get GatewayAPI 'tigera-secure'", err
 		}
 	} else {
 		// Assert there is no legacy "tigera-secure" resource present.
-		err = client.Get(ctx, utils.DefaultTSEEInstanceKey, resource)
+		err = client.Get(ctx, utils.DefaultEnterpriseInstanceKey, resource)
 		if err == nil {
 			return nil,
 				"Duplicate configuration detected",

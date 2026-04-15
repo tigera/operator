@@ -109,11 +109,11 @@ var _ = Describe("Monitor controller tests", func() {
 				Generation: 2,
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{},
 			},
 			Spec: operatorv1.InstallationSpec{
-				Variant:  operatorv1.TigeraSecureEnterprise,
+				Variant:  operatorv1.CalicoEnterprise,
 				Registry: "some.registry.org/",
 			},
 		}
@@ -123,6 +123,13 @@ var _ = Describe("Monitor controller tests", func() {
 		monitorCR = &operatorv1.Monitor{
 			TypeMeta:   metav1.TypeMeta{Kind: "Monitor", APIVersion: "operator.tigera.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.MonitorSpec{
+				Alertmanager: &operatorv1.Alertmanager{
+					AlertmanagerSpec: &operatorv1.AlertmanagerSpec{
+						Replicas: ptr.To(int32(3)),
+					},
+				},
+			},
 		}
 		Expect(cli.Create(ctx, monitorCR)).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, render.CreateCertificateConfigMap("test", render.TyphaCAConfigMapName, common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -161,7 +168,7 @@ var _ = Describe("Monitor controller tests", func() {
 			// Prometheus related objects should not exist.
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
@@ -174,7 +181,7 @@ var _ = Describe("Monitor controller tests", func() {
 			// Prometheus related objects should be rendered after reconciliation.
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
@@ -253,6 +260,8 @@ var _ = Describe("Monitor controller tests", func() {
 			mockStatus.On("OnCRFound").Return()
 			mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
 			mockStatus.On("SetMetaData", mock.Anything).Return()
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("RemoveStatefulSets", mock.Anything).Return().Maybe()
 			r.status = mockStatus
 
 			test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
@@ -276,7 +285,7 @@ var _ = Describe("Monitor controller tests", func() {
 				// Prometheus related objects should be rendered after reconciliation.
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeAlertmanager, Namespace: common.TigeraPrometheusNamespace}, am)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodePrometheus, Namespace: common.TigeraPrometheusNamespace}, p)).NotTo(HaveOccurred())
-				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())

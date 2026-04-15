@@ -101,7 +101,7 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.7-llvm18.1.8-k8s1.34.4
+GO_BUILD_VER?=1.25.9-llvm18.1.8-k8s1.35.3
 CALICO_BASE_VER ?= ubi9-1771532994
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)

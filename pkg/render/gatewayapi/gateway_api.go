@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -179,10 +180,26 @@ func toMap(v any) (map[string]any, error) {
 	return out, nil
 }
 
+// renderCache caches helm chart render results keyed by deployment mode.
+// The chart output is deterministic for a given deployment mode, so we can
+// safely cache it across reconciles. Callers must deep-copy any object they
+// intend to mutate.
+var (
+	renderCacheMu sync.Mutex
+	renderCache   = map[operatorv1.GatewayDeploymentMode]*gatewayAPIResources{}
+)
+
 // renderChart renders the embedded Envoy Gateway helm chart using the Helm SDK.
 // The deploymentMode is passed as a helm value to configure
-// config.envoyGateway.provider.kubernetes.deploy.type.
+// config.envoyGateway.provider.kubernetes.deploy.type. Results are cached.
 func renderChart(scheme *runtime.Scheme, deploymentMode operatorv1.GatewayDeploymentMode) (*gatewayAPIResources, error) {
+	renderCacheMu.Lock()
+	defer renderCacheMu.Unlock()
+
+	if cached, ok := renderCache[deploymentMode]; ok {
+		return cached, nil
+	}
+
 	chart, err := loader.LoadArchive(bytes.NewReader(gatewayHelmChart))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load gateway-helm chart: %w", err)
@@ -232,6 +249,7 @@ func renderChart(scheme *runtime.Scheme, deploymentMode operatorv1.GatewayDeploy
 		return nil, fmt.Errorf("failed to parse rendered manifest: %w", err)
 	}
 
+	renderCache[deploymentMode] = resources
 	return resources, nil
 }
 
@@ -574,7 +592,8 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// provided by the user.
 	envoyGatewayConfig := pr.cfg.CustomEnvoyGateway
 	if envoyGatewayConfig == nil {
-		envoyGatewayConfig = resources.envoyGatewayConfig
+		// Deep-copy so we don't mutate the cached render result.
+		envoyGatewayConfig = resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
 	}
 
 	// Ensure the minimal structure that we require for the following customizations.

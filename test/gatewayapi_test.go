@@ -25,6 +25,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,11 +36,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 )
@@ -512,6 +516,220 @@ var _ = Describe("GatewayAPI tests", func() {
 			}
 			return nil
 		}, 10*time.Second).ShouldNot(HaveOccurred())
+	})
+})
+
+// This Describe exercises the gateway controller's v3 NetworkPolicy rendering path. Unlike the
+// suite above (which runs only the GatewayAPI controller against a cluster without the v3 API
+// available), this one stands up the full Calico + APIServer stack so that the projectcalico.org/v3
+// aggregated API becomes reachable. With v3 present, the controller should render the two
+// calico-system tier allow policies (GatewayPolicy component) and keep them in place via the
+// NetworkPolicy watch.
+var _ = Describe("GatewayAPI NetworkPolicy tests", func() {
+	var c client.Client
+	var clientv3 client.Client
+	var mgr manager.Manager
+	var shutdownContext context.Context
+	var cancel context.CancelFunc
+	var operatorDone chan struct{}
+
+	BeforeEach(func() {
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
+
+		// Separate client for projectcalico.org/v3 resources.
+		var err error
+		clientv3, err = utils.V3Client(mgr.GetConfig())
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Cleaning up resources before the test")
+		cleanupGatewayResources(c)
+		cleanupResources(c)
+
+		By("Verifying CRDs are installed")
+		verifyCRDsExist(c, operator.CalicoEnterprise)
+
+		By("Creating the tigera-operator namespace, if it doesn't exist")
+		ns := &corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator"},
+			Spec:       corev1.NamespaceSpec{},
+		}
+		err = c.Create(context.Background(), ns)
+		if err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		By("Checking no Installation is left over from previous tests")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		}
+		err = c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
+		Expect(kerror.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
+	})
+
+	AfterEach(func() {
+		defer func() {
+			cancel()
+			if operatorDone != nil {
+				Eventually(func() error {
+					select {
+					case <-operatorDone:
+						return nil
+					default:
+						return fmt.Errorf("operator did not shutdown")
+					}
+				}, 60*time.Second).ShouldNot(HaveOccurred())
+			}
+		}()
+
+		By("Cleaning up resources after the test")
+		cleanupGatewayResources(c)
+		cleanupResources(c)
+
+		// Clean up Calico data that might be left behind.
+		Eventually(func() error {
+			cs := kubernetes.NewForConfigOrDie(mgr.GetConfig())
+			nodes, err := cs.CoreV1().Nodes().List(context.Background(), metav1.ListOptions{})
+			if err != nil {
+				return err
+			}
+			if len(nodes.Items) == 0 {
+				return fmt.Errorf("No nodes found")
+			}
+			for _, n := range nodes.Items {
+				for k := range n.ObjectMeta.Annotations {
+					if strings.Contains(k, "projectcalico") {
+						delete(n.ObjectMeta.Annotations, k)
+					}
+				}
+				_, err = cs.CoreV1().Nodes().Update(context.Background(), &n, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+			}
+			return nil
+		}, 30*time.Second).Should(BeNil())
+
+		mgr = nil
+	})
+
+	It("comes up under default-deny and re-creates allow policies on deletion", func() {
+		By("Installing Calico (OSS variant — the FV kind cluster only has OSS images loaded)")
+		// We intentionally leave Variant unset so the installation controller uses the
+		// Calico variant images that are pre-loaded into the kind cluster. Tiers and v3
+		// NetworkPolicies are part of OSS, so the gateway controller's v3 NetworkPolicy
+		// rendering path is fully exercised regardless of variant.
+		operatorDone = createInstallation(c, mgr, shutdownContext, nil)
+		verifyCalicoHasDeployed(c)
+
+		By("Installing the APIServer so the projectcalico.org/v3 aggregated API becomes available")
+		createAPIServer(c, mgr, shutdownContext, nil)
+		verifyAPIServerHasDeployed(c)
+
+		By("Pre-creating the tigera-gateway namespace so we can apply default-deny before the Gateway controller starts rendering into it")
+		ns := &corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"},
+		}
+		if err := c.Create(shutdownContext, ns); err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		By("Applying the recommended default-tier default-deny (v3 NetworkPolicy, selector all()) in tigera-gateway")
+		// This mirrors the docs.tigera.io/.../default-deny guidance: a default-tier NetworkPolicy
+		// with selector all() and no rules, denying all ingress/egress to pods in the namespace.
+		// Our two allow policies in the higher-precedence calico-system tier must let the
+		// envoy-gateway certgen Job and controller Deployment complete despite this deny.
+		defaultDeny := &v3.NetworkPolicy{
+			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "default.default-deny",
+				Namespace: "tigera-gateway",
+			},
+			Spec: v3.NetworkPolicySpec{
+				Tier:     "default",
+				Selector: "all()",
+				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			},
+		}
+		Expect(clientv3.Create(shutdownContext, defaultDeny)).To(Succeed())
+
+		By("Creating the default GatewayAPI")
+		gatewayAPI := &operator.GatewayAPI{
+			TypeMeta:   metav1.TypeMeta{Kind: "GatewayAPI", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		err := c.Create(shutdownContext, gatewayAPI)
+		Expect(err).NotTo(HaveOccurred())
+
+		By("Waiting for the envoy-gateway-certgen Job to complete under default-deny")
+		// If gateway-api-certgen-access isn't letting certgen reach DNS + the kube API server,
+		// the Job will never succeed and this Eventually will time out.
+		Eventually(func() error {
+			job := &batchv1.Job{}
+			if err := c.Get(shutdownContext, types.NamespacedName{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}, job); err != nil {
+				return err
+			}
+			if job.Status.Succeeded < 1 {
+				return fmt.Errorf("certgen Job not yet succeeded (succeeded=%d, failed=%d)", job.Status.Succeeded, job.Status.Failed)
+			}
+			return nil
+		}, 180*time.Second, 2*time.Second).ShouldNot(HaveOccurred())
+
+		By("Waiting for the envoy-gateway Deployment to become Ready under default-deny")
+		// If gateway-api-controller-access isn't letting the controller reach DNS/API or accept
+		// its listener traffic, the Deployment will never report AvailableReplicas >= 1.
+		Eventually(func() error {
+			deploy := &appsv1.Deployment{}
+			if err := c.Get(shutdownContext, types.NamespacedName{Name: "envoy-gateway", Namespace: "tigera-gateway"}, deploy); err != nil {
+				return err
+			}
+			if deploy.Status.AvailableReplicas < 1 {
+				return fmt.Errorf("envoy-gateway Deployment not ready (available=%d)", deploy.Status.AvailableReplicas)
+			}
+			return nil
+		}, 180*time.Second, 2*time.Second).ShouldNot(HaveOccurred())
+
+		certgenPolicyKey := types.NamespacedName{
+			Name:      "calico-system.gateway-api-certgen-access",
+			Namespace: "tigera-gateway",
+		}
+		controllerPolicyKey := types.NamespacedName{
+			Name:      "calico-system.gateway-api-controller-access",
+			Namespace: "tigera-gateway",
+		}
+
+		By("Verifying both calico-system tier allow NetworkPolicies are created in tigera-gateway")
+		// Generous timeout: the gateway controller has to observe the tier becoming available,
+		// establish its Tier and NetworkPolicy watches, and render the policy component.
+		Eventually(func() error {
+			for _, key := range []types.NamespacedName{certgenPolicyKey, controllerPolicyKey} {
+				np := &v3.NetworkPolicy{}
+				if err := clientv3.Get(shutdownContext, key, np); err != nil {
+					return fmt.Errorf("NetworkPolicy %s/%s not found: %w", key.Namespace, key.Name, err)
+				}
+				if np.Spec.Tier != "calico-system" {
+					return fmt.Errorf("NetworkPolicy %s/%s has unexpected tier %q", key.Namespace, key.Name, np.Spec.Tier)
+				}
+			}
+			return nil
+		}, 120*time.Second, 2*time.Second).ShouldNot(HaveOccurred())
+
+		By("Deleting each NetworkPolicy and verifying the watch triggers re-creation")
+		// Both policies are registered in the same WaitToAddNetworkPolicyWatches call; exercising
+		// each one guards against a future refactor accidentally dropping an entry from that list.
+		for _, key := range []types.NamespacedName{certgenPolicyKey, controllerPolicyKey} {
+			Expect(clientv3.Delete(shutdownContext, &v3.NetworkPolicy{
+				TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+				ObjectMeta: metav1.ObjectMeta{Name: key.Name, Namespace: key.Namespace},
+			})).To(Succeed())
+
+			Eventually(func() error {
+				return clientv3.Get(shutdownContext, key, &v3.NetworkPolicy{})
+			}, 60*time.Second, 2*time.Second).ShouldNot(HaveOccurred(),
+				fmt.Sprintf("expected gateway controller's NetworkPolicy watch to re-create deleted policy %s", key.Name))
+		}
 	})
 })
 

@@ -22,6 +22,7 @@ import (
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,12 +41,14 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
@@ -61,6 +64,8 @@ var log = logf.Log.WithName("controller_gatewayapi")
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
+	tierWatchReady := &utils.ReadyFlag{}
+
 	r := &ReconcileGatewayAPI{
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
@@ -88,6 +93,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		log.V(5).Info("Failed to create Installation watch", "err", err)
 		return fmt.Errorf("gatewayapi-controller failed to watch Installation resource: %w", err)
 	}
+
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+		{Name: gatewayapi.GatewayControllerPolicyName, Namespace: common.TigeraGatewayNamespace},
+		{Name: gatewayapi.GatewayCertgenPolicyName, Namespace: common.TigeraGatewayNamespace},
+	})
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
@@ -416,10 +427,32 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	err = r.newComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
+	hdler := r.newComponentHandler(log, r.client, r.scheme, gatewayAPI)
+	err = hdler.CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI resources", err, log)
 		return reconcile.Result{}, err
+	}
+
+	// v3 NetworkPolicy will fail to reconcile if the calico-system Tier does not exist or if
+	// the v3 API is not yet available. Render policies separately so this does not block the
+	// rest of the gateway resources.
+	includeV3NetworkPolicy := false
+	if err := r.client.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		includeV3NetworkPolicy = true
+	}
+
+	if includeV3NetworkPolicy {
+		policyComponent := gatewayapi.GatewayPolicy(gatewayConfig)
+		if err = hdler.CreateOrUpdateOrDelete(ctx, policyComponent, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI network policies", err, log)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Clear the degraded bit if we've reached this far.
@@ -496,6 +529,6 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurat
 // The bool return value indicates if the finalizer is Set
 func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}}
+	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.TigeraGatewayNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
 }

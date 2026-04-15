@@ -631,7 +631,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 		},
 		{
 			// Core Calico backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
@@ -1400,7 +1400,7 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// Calico Enterprise backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"licensekeys",
 				"alertexceptions",
@@ -1444,10 +1444,19 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"uisettingsgroups",
 				"managedclusters",
 			},
-			Verbs: []string{
-				"get",
-				"list",
+			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// Required by the AuthorizationReview calculator in queryserver to evaluate
+			// RBAC permissions for users.
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{
+				"clusterroles",
+				"clusterrolebindings",
+				"roles",
+				"rolebindings",
 			},
+			Verbs: []string{"get", "list", "watch"},
 		},
 	}
 
@@ -1749,7 +1758,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		},
 		// Allow the user to only view securityeventwebhooks.
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -1946,7 +1955,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 		// Allow the user to perform CRUD operations on securityeventwebhooks.
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},

@@ -21,6 +21,9 @@ const (
 	KubeControllersDeploymentName = "calico-kube-controllers"
 	WindowsDaemonSetName          = "calico-node-windows"
 
+	// Gateway API related const
+	TigeraGatewayNamespace = "tigera-gateway"
+
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"
 

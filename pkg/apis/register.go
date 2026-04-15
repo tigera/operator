@@ -105,6 +105,8 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 			&v3.LicenseKeyList{},
 			&v3.NetworkPolicy{},
 			&v3.NetworkPolicyList{},
+			&v3.NetworkSet{},
+			&v3.NetworkSetList{},
 			&v3.PolicyRecommendationScope{},
 			&v3.PolicyRecommendationScopeList{},
 			&v3.Tier{},

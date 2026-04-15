@@ -486,7 +486,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent, err := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Gateway API resources", err, log)
+		return reconcile.Result{}, err
+	}
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)

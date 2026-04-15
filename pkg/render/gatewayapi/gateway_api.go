@@ -451,12 +451,34 @@ type gatewayAPIImplementationComponent struct {
 	envoyRatelimitImage string
 	wafHTTPFilterImage  string
 	L7LogCollectorImage string
+
+	// Pre-rendered helm chart results, populated by ResolveImages.
+	resources         *gatewayAPIResources
+	oppositeResources *gatewayAPIResources
 }
 
-func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) render.Component {
-	return &gatewayAPIImplementationComponent{
-		cfg: cfg,
+func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) (render.Component, error) {
+	deploymentMode := operatorv1.GatewayDeploymentModeControllerNamespace
+	if cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
+		deploymentMode = *cfg.GatewayAPI.Spec.GatewayDeploymentMode
 	}
+	resources, err := renderChart(cfg.Scheme, deploymentMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart: %w", err)
+	}
+	oppositeMode := operatorv1.GatewayDeploymentModeGatewayNamespace
+	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace {
+		oppositeMode = operatorv1.GatewayDeploymentModeControllerNamespace
+	}
+	oppositeResources, err := renderChart(cfg.Scheme, oppositeMode)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart for opposite mode: %w", err)
+	}
+	return &gatewayAPIImplementationComponent{
+		cfg:               cfg,
+		resources:         resources,
+		oppositeResources: oppositeResources,
+	}, nil
 }
 
 func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -516,22 +538,11 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	if pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
 		deploymentMode = *pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode
 	}
-	resources, err := renderChart(pr.cfg.Scheme, deploymentMode)
-	if err != nil {
-		panic(fmt.Sprintf("failed to render gateway-helm chart: %v", err))
-	}
+	resources := pr.resources
 
-	// Render the opposite mode to find resources that only exist in that mode,
-	// so we can clean them up when switching between deployment modes.
-	oppositeMode := operatorv1.GatewayDeploymentModeGatewayNamespace
-	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace {
-		oppositeMode = operatorv1.GatewayDeploymentModeControllerNamespace
-	}
-	oppositeResources, err := renderChart(pr.cfg.Scheme, oppositeMode)
-	if err != nil {
-		panic(fmt.Sprintf("failed to render gateway-helm chart for opposite mode: %v", err))
-	}
-	modeCleanup := computeModeCleanup(resources, oppositeResources)
+	// Compute resources that exist only in the opposite mode for cleanup
+	// when switching between deployment modes.
+	modeCleanup := computeModeCleanup(resources, pr.oppositeResources)
 
 	// First create the namespace, following our own pattern for namespace creation.
 	objs := []client.Object{

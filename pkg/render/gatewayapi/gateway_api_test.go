@@ -246,11 +246,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 		By("resolving images")
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
@@ -346,12 +347,13 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			PullSecrets:  pullSecrets,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/calico/envoy-gateway:" + components.ComponentCalicoEnvoyGateway.Version))
@@ -441,12 +443,13 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 			PullSecrets:  pullSecrets,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
@@ -544,7 +547,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		customName := "my-gateway-controller"
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -564,6 +567,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
@@ -756,7 +760,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -765,6 +769,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				"custom-class-2": envoyProxy2,
 			},
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyGatewayImage).To(Equal("myregistry.io/tigera/envoy-gateway:" + components.ComponentGatewayAPIEnvoyGateway.Version))
@@ -841,11 +846,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
@@ -866,11 +872,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
@@ -995,7 +1002,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -1003,6 +1010,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				"custom-class": envoyProxy,
 			},
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
@@ -1086,11 +1094,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
@@ -1181,7 +1190,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -1189,6 +1198,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				"custom-class": envoyProxy,
 			},
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
@@ -1255,11 +1265,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class-daemonset", "tigera-gateway")
@@ -1281,11 +1292,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
@@ -1346,13 +1358,14 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:            testScheme(),
 			Installation:      installation,
 			GatewayAPI:        gatewayAPI,
 			PullSecrets:       []*corev1.Secret{pullSecret},
 			GatewayNamespaces: []string{"default", "app-ns"},
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
@@ -1394,11 +1407,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
@@ -1421,12 +1435,13 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:            testScheme(),
 			Installation:      installation,
 			GatewayAPI:        gatewayAPI,
 			GatewayNamespaces: []string{"default"},
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
@@ -1449,7 +1464,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
 			},
 		}
-		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
@@ -1457,6 +1472,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			GatewayNamespaces:        []string{"default"},
 			CurrentGatewayNamespaces: set.New("default", "removed-ns"),
 		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 

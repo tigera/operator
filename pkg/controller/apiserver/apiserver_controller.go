@@ -41,6 +41,8 @@ import (
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/installation"
+	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -515,12 +517,20 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
+		// Fetch the active IP pools.
+		currentPools, err := installation.GetActivePools(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying IP pools", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
 		webhooksCfg := webhooks.Configuration{
 			PullSecrets:       pullSecrets,
 			KeyPair:           webhooksTLS,
 			Installation:      installationSpec,
 			APIServer:         &instance.Spec,
 			ManagementCluster: managementCluster,
+			IPPools:           ippool.CRDPoolsToOperator(currentPools.Items),
 			MultiTenant:       r.opts.MultiTenant,
 			OpenShift:         r.opts.DetectedProvider.IsOpenShift(),
 		}

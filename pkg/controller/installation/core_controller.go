@@ -408,8 +408,8 @@ type ReconcileInstallation struct {
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 }
 
-// getActivePools returns the full set of enabled IP pools in the cluster.
-func getActivePools(ctx context.Context, client client.Client) (*v3.IPPoolList, error) {
+// GetActivePools returns the full set of enabled IP pools in the cluster.
+func GetActivePools(ctx context.Context, client client.Client) (*v3.IPPoolList, error) {
 	allPools := v3.IPPoolList{}
 	if err := client.List(ctx, &allPools); err != nil && !apierrors.IsNotFound(err) {
 		return nil, fmt.Errorf("unable to list IPPools: %s", err.Error())
@@ -443,7 +443,7 @@ func updateInstallationWithDefaults(ctx context.Context, client client.Client, i
 		awsNode = nil
 	}
 
-	currentPools, err := getActivePools(ctx, client)
+	currentPools, err := GetActivePools(ctx, client)
 	if err != nil {
 		return fmt.Errorf("unable to list IPPools: %s", err.Error())
 	}
@@ -955,7 +955,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Wait for IP pools to be programmed. This may be done out-of-band by the user, or by the operator's IP pool controller.
-	currentPools, err := getActivePools(ctx, r.client)
+	currentPools, err := GetActivePools(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err

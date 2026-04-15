@@ -73,6 +73,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Installation: installation,
 			APIServer:    apiServerSpec,
 			KeyPair:      kp,
+			IPPools:      []operatorv1.IPPool{{CIDR: "192.168.0.0/16"}},
 		}
 	})
 
@@ -396,10 +397,25 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(6443))
 
-		// Verify the network policy defaults to 6443.
+		// Verify the network policy.
 		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(np.Spec.Ingress).To(HaveLen(3))
+
+		// Rule 1: Allow from kube-apiserver.
+		Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[0].Source.Services).To(Equal(&v3.ServiceMatch{
+			Namespace: "default",
+			Name:      "kubernetes",
+		}))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
-		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(6443)))
+
+		// Rule 2: Deny from pod CIDRs.
+		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Deny))
+		Expect(np.Spec.Ingress[1].Source.Nets).To(ConsistOf("192.168.0.0/16"))
+
+		// Rule 3: Fallback allow.
+		Expect(np.Spec.Ingress[2].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[2].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
 	})
 
 	It("should use custom container port", func() {
@@ -435,9 +451,10 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		// Verify the network policy uses the custom port.
 		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
-		Expect(np.Spec.Ingress[0].Destination.Ports).To(HaveLen(1))
+		Expect(np.Spec.Ingress).To(HaveLen(3))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
-		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(customPort)))
+		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Deny))
+		Expect(np.Spec.Ingress[2].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
 	})
 
 	It("should not use host network by default on non-EKS", func() {

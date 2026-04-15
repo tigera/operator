@@ -306,6 +306,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		CurrentGatewayClasses: set.New[string](),
 	}
 
+	// Safety net for in-memory objects that bypass the CRD's API server defaulting (e.g. tests).
 	if gatewayAPI.Spec.GatewayDeploymentMode == nil {
 		gatewayAPI.Spec.GatewayDeploymentMode = ptr.To(operatorv1.GatewayDeploymentModeControllerNamespace)
 	}

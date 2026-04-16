@@ -141,7 +141,10 @@ blocks:
           execution_time_limit:
             minutes: 60
           commands:
-            - set -o pipefail; make fv 2>&1 | tee fv.log
+            # Cap Ginkgo at 55m (5m under the 60m execution_time_limit above) so
+            # the suite aborts itself in time for cluster-destroy and the
+            # epilogue's artifact push to run before Semaphore kills the job.
+            - set -o pipefail; make fv GINKGO_ARGS='-v -trace -r --timeout=55m' 2>&1 | tee fv.log
             - make dirty-check
       epilogue:
         always:

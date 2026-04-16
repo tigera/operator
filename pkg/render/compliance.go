@@ -248,6 +248,11 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceServerServiceAccount(),
 			c.complianceServerClusterRoleBinding(),
 		)
+
+		// allow-tigera Tier was renamed to calico-system
+		objsToDelete = append(objsToDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-server", c.cfg.Namespace),
+		)
 	} else {
 		// Compliance server is only for Standalone or Management clusters
 		objsToDelete = append(objsToDelete, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: ComplianceServerName, Namespace: c.cfg.Namespace}})

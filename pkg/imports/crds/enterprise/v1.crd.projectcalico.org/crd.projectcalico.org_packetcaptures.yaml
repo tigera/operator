@@ -112,6 +112,12 @@ spec:
                   format: date-time
                   type: string
               type: object
+              x-kubernetes-validations:
+                - message: endTime must be after startTime
+                  reason: FieldValueInvalid
+                  rule:
+                    "!has(self.endTime) || !has(self.startTime) || self.endTime >
+                    self.startTime"
             status:
               description: |-
                 PacketCaptureStatus describes the files that have been captured, for a given PacketCapture, on each node

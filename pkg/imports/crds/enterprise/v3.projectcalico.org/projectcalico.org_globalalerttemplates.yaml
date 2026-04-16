@@ -49,11 +49,27 @@ spec:
                   description: |-
                     Compare the value of the metric to the threshold using this condition.
                     Only used if Type is RuleBased.
+                  enum:
+                    - eq
+                    - not_eq
+                    - gt
+                    - gte
+                    - lt
+                    - lte
+                  maxLength: 16
                   type: string
                 dataSet:
                   description: |-
                     DataSet determines which dataset type the Query will use.
                     Required and used only if Type is RuleBased.
+                  enum:
+                    - flows
+                    - dns
+                    - audit
+                    - l7
+                    - waf
+                    - vulnerability
+                  maxLength: 32
                   type: string
                 description:
                   description: Human-readable description of the template.
@@ -73,6 +89,7 @@ spec:
                   description: |-
                     Which field to aggregate results by if using a metric other than count.
                     Only used if Type is RuleBased.
+                  maxLength: 256
                   type: string
                 lookback:
                   description: |-
@@ -84,6 +101,13 @@ spec:
                     A metric to apply to aggregated results. count is the number of log entries matching the aggregation pattern.
                     Others are applied only to numeric fields in the logs.
                     Only used if Type is RuleBased.
+                  enum:
+                    - avg
+                    - max
+                    - min
+                    - sum
+                    - count
+                  maxLength: 16
                   type: string
                 period:
                   description: |-
@@ -133,11 +157,39 @@ spec:
                   description: |-
                     Type will dictate how the fields of the GlobalAlert will be utilized.
                     Each Type will have different usages and defaults for the fields. [Default: RuleBased]
+                  enum:
+                    - RuleBased
                   type: string
               required:
                 - description
                 - severity
               type: object
+              x-kubernetes-validations:
+                - message: field without metric is invalid
+                  reason: FieldValueInvalid
+                  rule:
+                    "!has(self.field) || size(self.field) == 0 || (has(self.metric)
+                    && size(self.metric) > 0)"
+                - message: count metric cannot be applied to a field
+                  reason: FieldValueInvalid
+                  rule:
+                    "!has(self.metric) || self.metric != 'count' || !has(self.field)
+                    || size(self.field) == 0"
+                - message: non-count metrics require a field
+                  reason: FieldValueInvalid
+                  rule:
+                    "!has(self.metric) || self.metric == 'count' || size(self.metric)
+                    == 0 || (has(self.field) && size(self.field) > 0)"
+                - message: metrics require a condition
+                  reason: FieldValueInvalid
+                  rule:
+                    "!has(self.metric) || size(self.metric) == 0 || (has(self.condition)
+                    && size(self.condition) > 0)"
+                - message: dataSet is required for RuleBased alerts
+                  reason: FieldValueInvalid
+                  rule:
+                    (has(self.type) && self.type != 'RuleBased') || (has(self.dataSet)
+                    && size(self.dataSet) > 0)
           required:
             - metadata
             - spec

@@ -271,6 +271,11 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
+	// allow-tigera Tier was renamed to calico-system
+	objsToDelete = append(objsToDelete,
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-server", c.cfg.Namespace),
+	)
+
 	if c.cfg.HasNoLicense {
 		return nil, complianceObjs
 	}

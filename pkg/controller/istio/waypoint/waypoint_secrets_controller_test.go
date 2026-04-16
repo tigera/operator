@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
@@ -57,9 +58,13 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
+		gatewayWatchReady := &utils.ReadyFlag{}
+		gatewayWatchReady.MarkAsReady()
+
 		r = &ReconcileWaypointSecrets{
-			Client: cli,
-			scheme: scheme,
+			Client:            cli,
+			scheme:            scheme,
+			gatewayWatchReady: gatewayWatchReady,
 		}
 
 		installation = &operatorv1.Installation{
@@ -355,6 +360,26 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
+		})
+	})
+
+	Context("when Gateway watch is not yet ready", func() {
+		It("should skip Gateway listing and not create secrets", func() {
+			r.gatewayWatchReady = &utils.ReadyFlag{}
+
+			createPullSecret("my-pull-secret")
+			installation.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
+				{Name: "my-pull-secret"},
+			}
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			secrets := listTrackedSecrets()
+			Expect(secrets).To(BeEmpty())
 		})
 	})
 })

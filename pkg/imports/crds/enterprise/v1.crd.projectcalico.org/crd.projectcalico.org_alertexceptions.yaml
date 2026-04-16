@@ -66,6 +66,10 @@ spec:
                 - selector
                 - startTime
               type: object
+              x-kubernetes-validations:
+                - message: endTime must be after startTime
+                  reason: FieldValueInvalid
+                  rule: "!has(self.endTime) || self.endTime > self.startTime"
             status:
               description: AlertExceptionStatus contains the status of an alert exception.
               type: object

@@ -103,6 +103,12 @@ spec:
                                 recordSize:
                                   type: integer
                               type: object
+                              x-kubernetes-validations:
+                                - message: fieldNum and fieldName are mutually exclusive
+                                  reason: FieldValueInvalid
+                                  rule:
+                                    "!has(self.fieldNum) || !has(self.fieldName) ||
+                                    size(self.fieldName) == 0"
                             json:
                               properties:
                                 path:
@@ -111,6 +117,12 @@ spec:
                             newlineDelimited:
                               type: object
                           type: object
+                          x-kubernetes-validations:
+                            - message: only one format type may be specified
+                              reason: FieldValueInvalid
+                              rule:
+                                "[has(self.newlineDelimited), has(self.json), has(self.csv)].filter(x,
+                                x).size() <= 1"
                         headers:
                           items:
                             properties:
@@ -176,6 +188,10 @@ spec:
                             required:
                               - name
                             type: object
+                            x-kubernetes-validations:
+                              - message: value and valueFrom are mutually exclusive
+                                reason: FieldValueInvalid
+                                rule: "!has(self.value) || !has(self.valueFrom)"
                           type: array
                           x-kubernetes-list-type: atomic
                         url:
@@ -189,6 +205,10 @@ spec:
                     - http
                   type: object
               type: object
+              x-kubernetes-validations:
+                - message: DomainNameSet does not support syncing with a GlobalNetworkSet
+                  reason: FieldValueInvalid
+                  rule: self.content != 'DomainNameSet' || !has(self.globalNetworkSet)
             status:
               properties:
                 errorConditions:

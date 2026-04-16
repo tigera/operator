@@ -70,6 +70,7 @@ spec:
                             description: |-
                               MaxNextHops specifies the maximum number of egress gateway replicas from the selected
                               deployment that a pod should depend on.
+                            minimum: 0
                             type: integer
                           namespaceSelector:
                             description:

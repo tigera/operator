@@ -304,8 +304,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	count := int32(1)
-	if k.cfg.Installation.ControlPlaneReplicas != nil {
-		count = *k.cfg.Installation.ControlPlaneReplicas
+	if k.cfg.LogStorage != nil && k.cfg.LogStorage.Spec.Kibana != nil &&
+		k.cfg.LogStorage.Spec.Kibana.Spec != nil && k.cfg.LogStorage.Spec.Kibana.Spec.Replicas != nil {
+		count = *k.cfg.LogStorage.Spec.Kibana.Spec.Replicas
 	}
 
 	tolerations := k.cfg.Installation.ControlPlaneTolerations
@@ -380,7 +381,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		},
 	}
 
-	if k.cfg.Installation.ControlPlaneReplicas != nil && *k.cfg.Installation.ControlPlaneReplicas > 1 {
+	if count > 1 {
 		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(CRName, []string{Namespace})
 	}
 

@@ -60,7 +60,7 @@ const (
 	CalicoPrometheusOperatorSecret = "calico-prometheus-operator-secret"
 
 	TigeraPrometheusObjectName  = "tigera-prometheus"
-	TigeraPrometheusDPRate      = "tigera-prometheus-dp-rate"
+	TigeraPrometheusRule        = "calico"
 	TigeraPrometheusRole        = "tigera-prometheus-role"
 	TigeraPrometheusRoleBinding = "tigera-prometheus-role-binding"
 
@@ -78,10 +78,10 @@ const (
 	PrometheusServiceAccountName  = "prometheus"
 	PrometheusServerTLSSecretName = "calico-node-prometheus-tls"
 
-	AlertManagerPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + CalicoNodeAlertmanager
+	AlertmanagerPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + CalicoNodeAlertmanager
 	AlertmanagerConfigSecret   = "alertmanager-calico-node-alertmanager"
 	AlertmanagerPort           = 9093
-	MeshAlertManagerPolicyName = AlertManagerPolicyName + "-mesh"
+	MeshAlertmanagerPolicyName = AlertmanagerPolicyName + "-mesh"
 
 	ElasticsearchMetrics = "elasticsearch-metrics"
 	FluentdMetrics       = "fluentd-metrics"
@@ -91,9 +91,16 @@ const (
 
 	bearerTokenFile       = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 	KubeControllerMetrics = "calico-kube-controllers-metrics"
+
+	// OperatorTLSSecretName is the TLS keypair for the operator. Currently used for the metrics
+	// endpoint mTLS, but not metrics-specific so it can serve other operator TLS needs in the future.
+	OperatorTLSSecretName      = "tigera-operator-tls"
+	OperatorMetricsServiceName = "tigera-operator-metrics"
+	OperatorMetricsPortName    = "tigera-operator-metrics-port"
+	OperatorMetricsPort        = 9484
 )
 
-var alertManagerSelector = fmt.Sprintf(
+var alertmanagerSelector = fmt.Sprintf(
 	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
 	CalicoNodeAlertmanager,
 )
@@ -110,25 +117,39 @@ func Monitor(cfg *Config) render.Component {
 }
 
 func MonitorPolicy(cfg *Config) render.Component {
-	return render.NewPassthrough(
-		[]client.Object{
-			calicoSystemAlertManagerPolicy(cfg),
-			calicoSystemAlertManagerMeshPolicy(cfg),
-			calicoSystemPrometheusPolicy(cfg),
-			calicoSystemPrometheusAPIPolicy(cfg),
-			calicoSystemPrometheusOperatorPolicy(cfg),
-			networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
+	toCreate := []client.Object{
+		calicoSystemPrometheusPolicy(cfg),
+		calicoSystemPrometheusAPIPolicy(cfg),
+		calicoSystemPrometheusOperatorPolicy(cfg),
+		networkpolicy.CalicoSystemDefaultDeny(common.TigeraPrometheusNamespace),
+	}
+	toDelete := []client.Object{
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
+		&monitoringv1.PrometheusRule{
+			TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-dp-rate", Namespace: common.TigeraPrometheusNamespace},
 		},
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("calico-node-alertmanager-mesh", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("tigera-prometheus-api", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("prometheus-operator", common.TigeraPrometheusNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.TigeraPrometheusNamespace),
-		},
-	)
+	}
+
+	if alertmanagerReplicasFromConfig(cfg) > 0 {
+		toCreate = append(toCreate,
+			calicoSystemAlertmanagerPolicy(cfg),
+			calicoSystemAlertmanagerMeshPolicy(cfg),
+		)
+	} else {
+		toDelete = append(toDelete,
+			calicoSystemAlertmanagerPolicy(cfg),
+			calicoSystemAlertmanagerMeshPolicy(cfg),
+		)
+	}
+
+	return render.NewPassthrough(toCreate, toDelete)
 }
 
 // Config contains all the config information needed to render the Monitor component.
@@ -146,6 +167,12 @@ type Config struct {
 	KubeControllerPort            int
 	FelixPrometheusMetricsEnabled bool
 	LicenseExpired                bool
+
+	// Operator metrics fields.
+	OperatorMetricsEnabled bool
+	OperatorNamespace      string
+	OperatorName           string
+	OperatorTLSSecret      certificatemanagement.KeyPairInterface
 }
 
 type monitorComponent struct {
@@ -215,7 +242,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.PullSecrets...)...)...)
-	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 
 	toCreate = append(toCreate,
 		mc.prometheusOperatorServiceAccount(),
@@ -225,8 +251,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		mc.prometheusClusterRole(),
 		mc.prometheusClusterRoleBinding(),
 		mc.prometheus(),
-		mc.alertmanagerService(),
-		mc.alertmanager(),
 		mc.prometheusServiceService(),
 		mc.prometheusServiceClusterRole(),
 		mc.prometheusServiceClusterRoleBinding(),
@@ -234,6 +258,23 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	)
 
 	var toDelete []client.Object
+
+	if mc.alertmanagerReplicas() > 0 {
+		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
+		toCreate = append(toCreate,
+			mc.alertmanagerService(),
+			mc.alertmanager(),
+		)
+	} else {
+		toDelete = append(toDelete,
+			mc.alertmanager(),
+			mc.alertmanagerService(),
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+				Name:      "alertmanager-" + CalicoNodeAlertmanager,
+				Namespace: common.TigeraPrometheusNamespace,
+			}},
+		)
+	}
 
 	serviceMonitors := []client.Object{
 		mc.serviceMonitorCalicoNode(),
@@ -263,6 +304,17 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 				toCreate = append(toCreate, mc.externalPrometheusRole(), mc.externalPrometheusRoleBinding(), mc.externalServiceAccount(), mc.externalPrometheusTokenSecret())
 			}
 		}
+	}
+
+	if mc.cfg.OperatorMetricsEnabled {
+		toCreate = append(toCreate, mc.serviceOperatorMetrics())
+		if mc.cfg.LicenseExpired {
+			toDelete = append(toDelete, mc.serviceMonitorOperator())
+		} else {
+			toCreate = append(toCreate, mc.serviceMonitorOperator())
+		}
+	} else {
+		toDelete = append(toDelete, mc.serviceOperatorMetrics(), mc.serviceMonitorOperator())
 	}
 
 	if mc.cfg.Installation.TyphaMetricsPort != nil {
@@ -433,12 +485,25 @@ func (mc *monitorComponent) prometheusOperatorClusterRoleBinding() *rbacv1.Clust
 	}
 }
 
+func alertmanagerReplicasFromConfig(cfg *Config) int32 {
+	if cfg.Monitor.Alertmanager != nil &&
+		cfg.Monitor.Alertmanager.AlertmanagerSpec != nil &&
+		cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas != nil {
+		return *cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas
+	}
+	return 0
+}
+
+func (mc *monitorComponent) alertmanagerReplicas() int32 {
+	return alertmanagerReplicasFromConfig(mc.cfg)
+}
+
 func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 	resources := corev1.ResourceRequirements{}
 
-	if mc.cfg.Monitor.AlertManager != nil {
-		if mc.cfg.Monitor.AlertManager.AlertManagerSpec != nil {
-			resources = mc.cfg.Monitor.AlertManager.AlertManagerSpec.Resources
+	if mc.cfg.Monitor.Alertmanager != nil {
+		if mc.cfg.Monitor.Alertmanager.AlertmanagerSpec != nil {
+			resources = mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Resources
 		}
 	}
 
@@ -458,7 +523,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
-			Replicas:           mc.cfg.Installation.ControlPlaneReplicas,
+			Replicas:           mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
 			ServiceAccountName: PrometheusServiceAccountName,
 			Tolerations:        tolerations,
@@ -555,8 +620,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
-	promNamespace := common.TigeraPrometheusNamespace
-
 	prometheus := &monitoringv1.Prometheus{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusesKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -615,30 +678,15 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				// does not bind against the Pod IP. This forces traffic to go through the authn-proxy.
 				ListenLocal:            true,
 				NodeSelector:           mc.cfg.Installation.ControlPlaneNodeSelector,
-				PodMonitorSelector:     &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
+				PodMonitorSelector:     &metav1.LabelSelector{},
 				Resources:              corev1.ResourceRequirements{Requests: corev1.ResourceList{"memory": resource.MustParse("400Mi")}},
 				SecurityContext:        securitycontext.NewNonRootPodContext(),
 				ServiceAccountName:     PrometheusServiceAccountName,
-				ServiceMonitorSelector: &metav1.LabelSelector{MatchLabels: map[string]string{"team": "network-operators"}},
+				ServiceMonitorSelector: &metav1.LabelSelector{},
 				Tolerations:            tolerations,
 				Version:                components.ComponentCoreOSPrometheus.Version,
 				VolumeMounts:           volumeMounts,
 				Volumes:                volumes,
-			},
-			Alerting: &monitoringv1.AlertingSpec{
-				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
-					{
-						Name:      CalicoNodeAlertmanager,
-						Namespace: &promNamespace,
-						Port:      intstr.FromString("web"),
-						RelabelConfigs: []monitoringv1.RelabelConfig{
-							{
-								TargetLabel: "__scheme__",
-								Replacement: ptr.To("http"),
-							},
-						},
-					},
-				},
 			},
 			Retention: "24h",
 			RuleSelector: &metav1.LabelSelector{MatchLabels: map[string]string{
@@ -646,6 +694,25 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				"role":       "tigera-prometheus-rules",
 			}},
 		},
+	}
+
+	if mc.alertmanagerReplicas() > 0 {
+		promNamespace := common.TigeraPrometheusNamespace
+		prometheus.Spec.Alerting = &monitoringv1.AlertingSpec{
+			Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
+				{
+					Name:      CalicoNodeAlertmanager,
+					Namespace: &promNamespace,
+					Port:      intstr.FromString("web"),
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("http"),
+						},
+					},
+				},
+			},
+		}
 	}
 
 	if overrides := mc.cfg.Monitor.Prometheus; overrides != nil {
@@ -818,10 +885,106 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 }
 
 func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
+	rules := []monitoringv1.Rule{
+		{
+			Alert:  "DeniedPacketsRate",
+			Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
+			Labels: map[string]string{"severity": "info"},
+			Annotations: map[string]string{
+				"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
+				"description": "{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}.",
+			},
+		},
+	}
+
+	if mc.cfg.OperatorMetricsEnabled {
+		forDuration15m := monitoringv1.Duration("15m")
+		forDuration30m := monitoringv1.Duration("30m")
+		rules = append(rules,
+			monitoringv1.Rule{
+				Alert: "TLSCertExpiringWarning",
+				// Use 30d - 8h to avoid warning for certificates that the operator will automatically rotate.
+				Expr:   intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < (30 * 24 - 8) * 3600"),
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "TLS certificate {{ $labels.name }} expires in less than 30 days",
+					"description": "TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 30 days.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "TLSCertExpiringCritical",
+				Expr:   intstr.FromString("tigera_operator_tls_certificate_expiry_timestamp_seconds - time() < 7 * 24 * 3600"),
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "TLS certificate {{ $labels.name }} expires in less than 7 days",
+					"description": "TLS certificate {{ $labels.name }} in namespace {{ $labels.namespace }} will expire in less than 7 days.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "LicenseExpiringWarning",
+				Expr:   intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 30 * 24 * 3600"),
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Calico Enterprise license expires in less than 30 days",
+					"description": "The Calico Enterprise license will expire in less than 30 days.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "LicenseExpiringCritical",
+				Expr:   intstr.FromString("tigera_operator_license_expiry_timestamp_seconds - time() < 7 * 24 * 3600 or tigera_operator_license_valid == 0"),
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Calico Enterprise license expires in less than 7 days or is invalid",
+					"description": "The Calico Enterprise license will expire in less than 7 days, or the license is invalid.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentDegradedWarning",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
+				For:    &forDuration15m,
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is degraded",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 15 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentDegradedCritical",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="degraded"} == 1`),
+				For:    &forDuration30m,
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is degraded",
+					"description": "Component {{ $labels.component }} has been in a degraded state for more than 30 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentProgressingWarning",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`),
+				For:    &forDuration15m,
+				Labels: map[string]string{"severity": "warning"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is progressing",
+					"description": "Component {{ $labels.component }} has been in a progressing state for more than 15 minutes.",
+				},
+			},
+			monitoringv1.Rule{
+				Alert:  "ComponentProgressingCritical",
+				Expr:   intstr.FromString(`tigera_operator_component_status{condition="progressing"} == 1`),
+				For:    &forDuration30m,
+				Labels: map[string]string{"severity": "critical"},
+				Annotations: map[string]string{
+					"summary":     "Component {{ $labels.component }} is progressing",
+					"description": "Component {{ $labels.component }} has been in a progressing state for more than 30 minutes.",
+				},
+			},
+		)
+	}
+
 	return &monitoringv1.PrometheusRule{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      TigeraPrometheusDPRate,
+			Name:      TigeraPrometheusRule,
 			Namespace: common.TigeraPrometheusNamespace,
 			Labels: map[string]string{
 				"prometheus": CalicoNodePrometheus,
@@ -831,18 +994,8 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 		Spec: monitoringv1.PrometheusRuleSpec{
 			Groups: []monitoringv1.RuleGroup{
 				{
-					Name: "calico.rules",
-					Rules: []monitoringv1.Rule{
-						{
-							Alert:  "DeniedPacketsRate",
-							Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
-							Labels: map[string]string{"severity": "critical"},
-							Annotations: map[string]string{
-								"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
-								"description": "{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}.",
-							},
-						},
-					},
+					Name:  "calico.rules",
+					Rules: rules,
 				},
 			},
 		},
@@ -907,7 +1060,6 @@ func (mc *monitorComponent) serviceMonitorCalicoNode() *monitoringv1.ServiceMoni
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      CalicoNodeMonitor,
 			Namespace: common.TigeraPrometheusNamespace,
-			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector: metav1.LabelSelector{
@@ -944,7 +1096,6 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ElasticsearchMetrics,
 			Namespace: common.TigeraPrometheusNamespace,
-			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "tigera-elasticsearch-metrics"}},
@@ -981,7 +1132,6 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.FluentdMetricsService,
 			Namespace: common.TigeraPrometheusNamespace,
-			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector: metav1.LabelSelector{
@@ -1024,7 +1174,6 @@ func (mc *monitorComponent) serviceMonitorQueryServer() *monitoringv1.ServiceMon
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.QueryserverServiceName,
 			Namespace: common.TigeraPrometheusNamespace,
-			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": render.QueryserverServiceName}},
@@ -1156,11 +1305,11 @@ func (mc *monitorComponent) operatorRoleBindings() []*rbacv1.RoleBinding {
 }
 
 // Creates a network policy to allow traffic to Alertmanager (TCP port 9093).
-func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemAlertmanagerPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
-		// Allows all egress traffic from AlertManager.
+		// Allows all egress traffic from Alertmanager.
 		Action:   v3.Allow,
 		Protocol: &networkpolicy.TCPProtocol,
 	})
@@ -1168,13 +1317,13 @@ func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      AlertManagerPolicyName,
+			Name:      AlertmanagerPolicyName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
-			Selector: alertManagerSelector,
+			Selector: alertmanagerSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
@@ -1191,13 +1340,13 @@ func calicoSystemAlertManagerPolicy(cfg *Config) *v3.NetworkPolicy {
 }
 
 // Creates a network policy to allow traffic between Alertmanagers for HA configuration (TCP port 6783).
-func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
+func calicoSystemAlertmanagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 	egressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
+				Selector: alertmanagerSelector,
 				Ports:    networkpolicy.Ports(9094),
 			},
 		},
@@ -1205,7 +1354,7 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.UDPProtocol,
 			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
+				Selector: alertmanagerSelector,
 				Ports:    networkpolicy.Ports(9094),
 			},
 		},
@@ -1215,20 +1364,20 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      MeshAlertManagerPolicyName,
+			Name:      MeshAlertmanagerPolicyName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
-			Selector: alertManagerSelector,
+			Selector: alertmanagerSelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.TCPProtocol,
 					Destination: v3.EntityRule{
-						Selector: alertManagerSelector,
+						Selector: alertmanagerSelector,
 						Ports:    networkpolicy.Ports(9094),
 					},
 				},
@@ -1236,7 +1385,7 @@ func calicoSystemAlertManagerMeshPolicy(cfg *Config) *v3.NetworkPolicy {
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.UDPProtocol,
 					Destination: v3.EntityRule{
-						Selector: alertManagerSelector,
+						Selector: alertmanagerSelector,
 						Ports:    networkpolicy.Ports(9094),
 					},
 				},
@@ -1284,7 +1433,7 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Selector: alertManagerSelector,
+				Selector: alertmanagerSelector,
 				Ports:    networkpolicy.Ports(AlertmanagerPort),
 			},
 		},
@@ -1303,6 +1452,14 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 				// Egress access for Kube controller port metrics.
 				Ports: networkpolicy.Ports(uint16(cfg.KubeControllerPort)),
 			},
+		})
+	}
+
+	if cfg.OperatorMetricsEnabled {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(cfg.OperatorNamespace, OperatorMetricsServiceName),
 		})
 	}
 
@@ -1411,7 +1568,6 @@ func (mc *monitorComponent) serviceMonitorCalicoKubeControllers() *monitoringv1.
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      KubeControllerMetrics,
 			Namespace: common.TigeraPrometheusNamespace,
-			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Selector:          metav1.LabelSelector{MatchLabels: map[string]string{"k8s-app": "calico-kube-controllers"}},
@@ -1612,7 +1768,6 @@ func (mc *monitorComponent) typhaServiceMonitor() client.Object {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      render.TyphaMetricsName,
 			Namespace: TigeraPrometheusObjectName,
-			Labels:    map[string]string{"team": "network-operators"},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Endpoints: []monitoringv1.Endpoint{
@@ -1635,6 +1790,74 @@ func (mc *monitorComponent) typhaServiceMonitor() client.Object {
 			Selector: metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					render.AppLabelName: render.TyphaMetricsName,
+				},
+			},
+		},
+	}
+}
+
+// serviceOperatorMetrics creates a Service for the operator's metrics endpoint in the operator namespace.
+func (mc *monitorComponent) serviceOperatorMetrics() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OperatorMetricsServiceName,
+			Namespace: mc.cfg.OperatorNamespace,
+			Labels: map[string]string{
+				"k8s-app": mc.cfg.OperatorName,
+			},
+		},
+		Spec: corev1.ServiceSpec{
+			Type: corev1.ServiceTypeClusterIP,
+			Ports: []corev1.ServicePort{
+				{
+					Name:       OperatorMetricsPortName,
+					Port:       int32(OperatorMetricsPort),
+					Protocol:   corev1.ProtocolTCP,
+					TargetPort: intstr.FromInt(OperatorMetricsPort),
+				},
+			},
+			Selector: map[string]string{
+				"k8s-app": mc.cfg.OperatorName,
+			},
+		},
+	}
+}
+
+// serviceMonitorOperator creates a ServiceMonitor for the operator's metrics endpoint.
+func (mc *monitorComponent) serviceMonitorOperator() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OperatorMetricsServiceName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"k8s-app": mc.cfg.OperatorName,
+				},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{mc.cfg.OperatorNamespace},
+			},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          OperatorMetricsPortName,
+					ScrapeTimeout: "5s",
+					RelabelConfigs: []monitoringv1.RelabelConfig{
+						{
+							TargetLabel: "__scheme__",
+							Replacement: ptr.To("https"),
+						},
+					},
+					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
+						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
+							TLSConfig: mc.tlsConfig(OperatorMetricsServiceName),
+						},
+					},
 				},
 			},
 		},

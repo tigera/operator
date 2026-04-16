@@ -19,24 +19,43 @@ spec:
         openAPIV3Schema:
           properties:
             apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
               type: string
             kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
               type: string
             metadata:
               type: object
             spec:
+              description:
+                GlobalThreatFeedSpec contains the specification of a GlobalThreatFeed
+                resource.
               properties:
                 content:
                   default: IPSet
+                  description: Content describes the kind of data the data feed provides.
                   enum:
                     - IPSet
                     - DomainNameSet
                   type: string
                 description:
+                  description: Human-readable description of the template.
                   maxLength: 256
                   type: string
                 feedType:
                   default: Custom
+                  description:
+                    Distinguishes between Builtin Global Threat Feeds and
+                    Custom feed types.
                   enum:
                     - Builtin
                     - Custom
@@ -50,6 +69,9 @@ spec:
                   type: object
                 mode:
                   default: Enabled
+                  description:
+                    Determines whether the Global Threat Feed is Enabled
+                    or Disabled.
                   enum:
                     - Enabled
                     - Disabled
@@ -77,6 +99,12 @@ spec:
                                 recordSize:
                                   type: integer
                               type: object
+                              x-kubernetes-validations:
+                                - message: fieldNum and fieldName are mutually exclusive
+                                  reason: FieldValueInvalid
+                                  rule:
+                                    "!has(self.fieldNum) || !has(self.fieldName) ||
+                                    size(self.fieldName) == 0"
                             json:
                               properties:
                                 path:
@@ -85,6 +113,12 @@ spec:
                             newlineDelimited:
                               type: object
                           type: object
+                          x-kubernetes-validations:
+                            - message: only one format type may be specified
+                              reason: FieldValueInvalid
+                              rule:
+                                "[has(self.newlineDelimited), has(self.json), has(self.csv)].filter(x,
+                                x).size() <= 1"
                         headers:
                           items:
                             properties:
@@ -95,26 +129,52 @@ spec:
                               valueFrom:
                                 properties:
                                   configMapKeyRef:
+                                    description: Selects a key of a ConfigMap.
                                     properties:
                                       key:
+                                        description: The key to select.
                                         type: string
                                       name:
                                         default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                                         type: string
                                       optional:
+                                        description:
+                                          Specify whether the ConfigMap or
+                                          its key must be defined
                                         type: boolean
                                     required:
                                       - key
                                     type: object
                                     x-kubernetes-map-type: atomic
                                   secretKeyRef:
+                                    description:
+                                      Selects a key of a secret in the pod's
+                                      namespace
                                     properties:
                                       key:
+                                        description:
+                                          The key of the secret to select
+                                          from.  Must be a valid secret key.
                                         type: string
                                       name:
                                         default: ""
+                                        description: |-
+                                          Name of the referent.
+                                          This field is effectively required, but due to backwards compatibility is
+                                          allowed to be empty. Instances of this type with an empty value here are
+                                          almost certainly wrong.
+                                          More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
                                         type: string
                                       optional:
+                                        description:
+                                          Specify whether the Secret or its
+                                          key must be defined
                                         type: boolean
                                     required:
                                       - key
@@ -124,6 +184,10 @@ spec:
                             required:
                               - name
                             type: object
+                            x-kubernetes-validations:
+                              - message: value and valueFrom are mutually exclusive
+                                reason: FieldValueInvalid
+                                rule: "!has(self.value) || !has(self.valueFrom)"
                           type: array
                           x-kubernetes-list-type: atomic
                         url:
@@ -137,6 +201,10 @@ spec:
                     - http
                   type: object
               type: object
+              x-kubernetes-validations:
+                - message: DomainNameSet does not support syncing with a GlobalNetworkSet
+                  reason: FieldValueInvalid
+                  rule: self.content != 'DomainNameSet' || !has(self.globalNetworkSet)
             status:
               properties:
                 errorConditions:

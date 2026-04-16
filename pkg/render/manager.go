@@ -87,9 +87,6 @@ const (
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
 	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
-	ElasticsearchManagerUserSecret                                      = "calico-ee-manager-elasticsearch-access"
-	TlsSecretHashAnnotation                                             = "hash.operator.tigera.io/tls-secret"
-	KibanaTLSHashAnnotation                                             = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation                                     = "hash.operator.tigera.io/elasticsearch-user"
 	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName       = "calico-manager-managed-cluster-access"
 	LegacyManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
@@ -198,7 +195,12 @@ type ManagerConfiguration struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	Manager *operatorv1.Manager
+	Manager       *operatorv1.Manager
+	KibanaEnabled bool
+
+	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
+	// Passed to Voltron so it can identify the correct CA issuer public key.
+	CACertCommonName string
 }
 
 type managerComponent struct {
@@ -274,9 +276,18 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		c.managerCalicoSystemNetworkPolicy(),
-		networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		managerServiceAccount(c.cfg.Namespace),
 	)
+	// The default-deny policy in calico-system is owned by the Installation
+	// controller, which uses a selector that excludes calico-apiserver so the
+	// API server remains reachable. Skip rendering it here when the Manager is
+	// being installed into calico-system (single-tenant), otherwise the two
+	// controllers fight over the policy's selector. In multi-tenant mode the
+	// Manager lives in a tenant namespace that Installation doesn't manage, so
+	// the Manager is responsible for the default-deny there.
+	if c.cfg.Namespace != common.CalicoNamespace {
+		objsToCreate = append(objsToCreate, networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace))
+	}
 	objsToCreate = append(objsToCreate, c.getTLSObjects()...)
 	objsToCreate = append(objsToCreate, c.managerService())
 	objsToCreate = append(objsToCreate, c.managerExternalNameService())
@@ -466,7 +477,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!c.cfg.Tenant.MultiTenant())},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(c.cfg.KibanaEnabled)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -566,6 +577,10 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_KEY", Value: linseedKeyPath})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
+	}
+
+	if c.cfg.CACertCommonName != "" {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_SIGNER_NAME", Value: c.cfg.CACertCommonName})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
@@ -941,10 +956,20 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				// ui-apis needs broad read access to UISettings and UISettingsGroups to serve
+				// requests on behalf of users. It performs SubjectAccessReviews to enforce
+				// per-group RBAC before returning results.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettings",
+					"uisettingsgroups",
+					"uisettingsgroups/data",
+				},
+				Verbs: []string{"get", "list", "watch"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -1076,13 +1101,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				// Required by the AuthorizationReview calculator in ui-apis to evaluate
-				// RBAC permissions for UISettingsGroups.
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
 			},
 		},
 	}

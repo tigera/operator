@@ -342,13 +342,14 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
 		objsToDelete = append(objsToDelete, globalEnterpriseObjects...)
-
-		// Clean up deprecated k8s NetworkPolicy
-		objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
-			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
-		})
 	}
+
+	// Clean up deprecated k8s NetworkPolicy, regardless of variant,
+	// avoiding leftovers in the case of switching between variants.
+	objsToDelete = append(objsToDelete, &netv1.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: "allow-apiserver", Namespace: APIServerNamespace},
+	})
 
 	// Add or remove the aggregation API server objects as needed.
 	if c.cfg.RequiresAggregationServer {
@@ -630,7 +631,7 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 		},
 		{
 			// Core Calico backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"globalnetworkpolicies",
 				"networkpolicies",
@@ -1227,8 +1228,10 @@ func (c *apiServerComponent) startUpArgs() []string {
 		if c.cfg.ManagementCluster.Spec.Address != "" {
 			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
 		}
-		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
-			args = append(args, "--managementClusterCAType=Public")
+		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
+			if c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
+				args = append(args, "--managementClusterCAType=Public")
+			}
 			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
 		}
 	}
@@ -1397,7 +1400,7 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 		},
 		{
 			// Calico Enterprise backing storage.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
 				"licensekeys",
 				"alertexceptions",
@@ -1441,10 +1444,19 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"uisettingsgroups",
 				"managedclusters",
 			},
-			Verbs: []string{
-				"get",
-				"list",
+			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// Required by the AuthorizationReview calculator in queryserver to evaluate
+			// RBAC permissions for users.
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{
+				"clusterroles",
+				"clusterrolebindings",
+				"roles",
+				"rolebindings",
 			},
+			Verbs: []string{"get", "list", "watch"},
 		},
 	}
 
@@ -1746,7 +1758,7 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		},
 		// Allow the user to only view securityeventwebhooks.
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list"},
 		},
@@ -1943,7 +1955,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 		// Allow the user to perform CRUD operations on securityeventwebhooks.
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "patch", "create", "delete"},
 		},

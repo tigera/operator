@@ -95,7 +95,6 @@ func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	if guardianAccessPolicy != nil {
 		policies = []client.Object{
 			guardianAccessPolicy,
-			networkpolicy.CalicoSystemDefaultDeny(GuardianNamespace),
 		}
 	}
 
@@ -586,10 +585,6 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		return ossNetworkPolicy(), nil
 	}
 
-	if !cfg.IncludeEgressNetworkPolicy {
-		return nil, nil
-	}
-
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -666,6 +661,10 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		}
 		parsedIp := net.ParseIP(host)
 		if parsedIp == nil {
+			// Domain-based egress rules require the EgressAccessControl license feature.
+			if !cfg.IncludeEgressNetworkPolicy {
+				continue
+			}
 			// Assume host is a valid hostname.
 			egressRules = append(egressRules, v3.Rule{
 				Action:   v3.Allow,
@@ -835,7 +834,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			// Needed by kube-controllers to validate licenses; also used by ID.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		},
@@ -972,25 +971,25 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			// Needs to manage hostendpoints.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
 		},
 		{
 			// Needs access to update clusterinformations.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"clusterinformations"},
 			Verbs:     []string{"create", "get", "list", "update", "watch"},
 		},
 		{
 			// Needs to manipulate kubecontrollersconfiguration, which contains its config.
 			// It creates a default if none exists, and updates status as well.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"create", "get", "list", "update", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create"},
 		},
@@ -1000,17 +999,17 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"remoteclusterconfigurations"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
@@ -1043,12 +1042,12 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"alertexceptions"},
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "watch"},
 		},

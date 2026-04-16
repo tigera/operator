@@ -51,8 +51,10 @@ var (
 
 // AddToScheme adds all Resources to the Scheme
 func AddToScheme(s *runtime.Scheme, v3 bool) error {
-	AddToSchemes = append(AddToSchemes, calicoSchemeBuilder(v3))
-	return AddToSchemes.AddToScheme(s)
+	if err := AddToSchemes.AddToScheme(s); err != nil {
+		return err
+	}
+	return calicoSchemeBuilder(v3)(s)
 }
 
 func init() {

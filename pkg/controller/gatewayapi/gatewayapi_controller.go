@@ -24,7 +24,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
@@ -465,22 +464,20 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 		gatewayConfig.GatewayNamespaces = nsSet.SortedList()
 
-		// Discover previously provisioned namespaces by listing labeled ClusterRoleBindings.
-		var crbList rbacv1.ClusterRoleBindingList
-		if err = r.client.List(ctx, &crbList, &client.ListOptions{
-			LabelSelector: labels.SelectorFromSet(map[string]string{
-				gatewayapi.GatewayNamespaceResourceLabel: "true",
-			}),
-		}); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing gateway namespace ClusterRoleBindings", err, log)
-			return reconcile.Result{}, err
-		}
+		// Discover previously provisioned namespaces by reading the Subjects of the
+		// shared ClusterRoleBinding (if it exists). Used to clean up SAs in namespaces
+		// that no longer have Gateway resources.
 		gatewayConfig.CurrentGatewayNamespaces = set.New[string]()
-		for i := range crbList.Items {
-			// Extract namespace from CRB name: "waf-http-filter-<namespace>"
-			if ns, ok := crbList.Items[i].Labels[gatewayapi.GatewayNamespaceLabel]; ok {
-				gatewayConfig.CurrentGatewayNamespaces.Insert(ns)
+		existingCRB := &rbacv1.ClusterRoleBinding{}
+		if err = r.client.Get(ctx, types.NamespacedName{Name: gatewayapi.GatewayNamespacesCRBName}, existingCRB); err == nil {
+			for _, s := range existingCRB.Subjects {
+				if s.Kind == "ServiceAccount" {
+					gatewayConfig.CurrentGatewayNamespaces.Insert(s.Namespace)
+				}
 			}
+		} else if !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading gateway namespaces ClusterRoleBinding", err, log)
+			return reconcile.Result{}, err
 		}
 	}
 

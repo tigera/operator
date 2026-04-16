@@ -97,10 +97,6 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
-
-	// Labels used on per-namespace Enterprise resources for discovery and cleanup.
-	GatewayNamespaceResourceLabel = "operator.tigera.io/gateway-namespace-resource"
-	GatewayNamespaceLabel         = "operator.tigera.io/gateway-namespace"
 )
 
 var (
@@ -590,12 +586,17 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
-	// Add WAF HTTP Filter RBAC resources for Enterprise variant
+	// Add WAF HTTP Filter RBAC resources for Enterprise variant.
+	// We always create both ClusterRoles (split by scope), and bind them to the
+	// controller-namespace SA. In GatewayNamespace mode, the gateway-resources role is
+	// additionally bound per-namespace via RoleBindings below.
 	if pr.cfg.Installation.Variant.IsEnterprise() {
 		objs = append(objs,
 			pr.wafHttpFilterServiceAccount(),
-			pr.wafHttpFilterClusterRole(),
-			pr.wafHttpFilterClusterRoleBinding(),
+			pr.wafHttpFilterClusterScopedRole(),
+			pr.wafHttpFilterGatewayResourcesRole(),
+			pr.wafHttpFilterClusterScopedCRB(),
+			pr.wafHttpFilterGatewayResourcesCRB(),
 		)
 	}
 
@@ -711,6 +712,21 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 
 	objsToDelete := append([]client.Object(nil), modeCleanup...)
+
+	// Clean up the deprecated combined waf-http-filter ClusterRole/ClusterRoleBinding
+	// that pre-dated the cluster-scoped vs gateway-resources split. Unconditional so
+	// upgrades from older Enterprise installs always converge, and harmless on OSS.
+	objsToDelete = append(objsToDelete,
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
+		},
+	)
+
 	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
 		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
 		objsToDelete = append(objsToDelete,
@@ -738,27 +754,38 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 	// Per-namespace Enterprise resources for GatewayNamespace mode.
 	// When proxies run in Gateway namespaces, each namespace needs a ServiceAccount,
-	// ClusterRoleBinding, and pull secrets for the Enterprise containers.
+	// ServiceAccounts, pull secrets, and namespaced RoleBindings for the Enterprise
+	// containers in each Gateway namespace. The cluster-scoped permissions are granted
+	// via a single shared ClusterRoleBinding (avoids proliferating cluster-scoped
+	// objects). The Gateway API resource permissions are granted per-namespace so each
+	// proxy can only read its own namespace's gateways/routes.
 	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace &&
 		pr.cfg.Installation.Variant.IsEnterprise() {
 		for _, ns := range pr.cfg.GatewayNamespaces {
 			objs = append(objs,
 				pr.gatewayNamespaceSA(ns),
-				pr.gatewayNamespaceCRB(ns),
+				pr.gatewayNamespaceRoleBinding(ns),
 			)
 			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
 		}
+		if len(pr.cfg.GatewayNamespaces) > 0 {
+			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
+		}
 
 		// Clean up resources for namespaces that no longer have Gateway resources.
+		// The shared ClusterRoleBinding is updated above (or removed below if empty).
 		if pr.cfg.CurrentGatewayNamespaces != nil {
 			currentNS := set.New(pr.cfg.GatewayNamespaces...)
 			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
 				if !currentNS.Has(ns) {
 					objsToDelete = append(objsToDelete,
 						pr.gatewayNamespaceSA(ns),
-						pr.gatewayNamespaceCRB(ns),
+						pr.gatewayNamespaceRoleBinding(ns),
 					)
 				}
+			}
+			if len(pr.cfg.GatewayNamespaces) == 0 {
+				objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
 			}
 		}
 	}
@@ -1205,14 +1232,18 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *core
 	}
 }
 
-// wafHttpFilterClusterRole creates the ClusterRole for WAF HTTP Filter and L7 Log Collector.
-// The L7 Log Collector sidecar shares this ServiceAccount and needs additional permissions
-// to watch Gateway API resources for log enrichment.
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.ClusterRole {
+const (
+	wafFilterClusterScopedRoleName    = wafFilterName + "-cluster-scoped"
+	wafFilterGatewayResourcesRoleName = wafFilterName + "-gateway-resources"
+)
+
+// wafHttpFilterClusterScopedRole creates the ClusterRole granting access to cluster-scoped
+// resources (license keys, token reviews) needed by every WAF HTTP Filter / L7 Log Collector.
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: wafFilterName,
+			Name: wafFilterClusterScopedRoleName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1225,7 +1256,21 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
-			// Gateway API resources for L7 Log Collector enrichment
+		},
+	}
+}
+
+// wafHttpFilterGatewayResourcesRole creates the ClusterRole granting read access to
+// namespaced Gateway API resources used by the L7 Log Collector for log enrichment.
+// In ControllerNamespace mode this is bound cluster-wide; in GatewayNamespace mode it is
+// bound only to each Gateway's own namespace via per-namespace RoleBindings.
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterGatewayResourcesRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"gateway.networking.k8s.io"},
 				Resources: []string{"gateways", "httproutes", "grpcroutes"},
@@ -1235,23 +1280,48 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 	}
 }
 
-// wafHttpFilterClusterRoleBinding creates the ClusterRoleBinding for WAF HTTP Filter
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+// wafHttpFilterClusterScopedCRB binds the cluster-scoped ClusterRole to the WAF HTTP
+// Filter ServiceAccount in the controller namespace (ControllerNamespace mode).
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedCRB() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: wafFilterName,
+			Name: wafFilterClusterScopedRoleName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     wafFilterName,
+			Name:     wafFilterClusterScopedRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
-				Namespace: "tigera-gateway",
+				Namespace: GatewayAPINamespace,
+			},
+		},
+	}
+}
+
+// wafHttpFilterGatewayResourcesCRB binds the gateway-resources ClusterRole cluster-wide
+// to the WAF HTTP Filter ServiceAccount in the controller namespace. Used in
+// ControllerNamespace mode where the central proxy serves Gateways across all namespaces.
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesCRB() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterGatewayResourcesRoleName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterGatewayResourcesRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: GatewayAPINamespace,
 			},
 		},
 	}
@@ -1269,22 +1339,54 @@ func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string
 	}
 }
 
-// gatewayNamespaceCRB creates a ClusterRoleBinding that binds the waf-http-filter ClusterRole
-// to the ServiceAccount in the given Gateway namespace.
-func (pr *gatewayAPIImplementationComponent) gatewayNamespaceCRB(namespace string) *rbacv1.ClusterRoleBinding {
+// GatewayNamespacesCRBName is the name of the shared ClusterRoleBinding that binds the
+// waf-http-filter ClusterRole to ServiceAccounts in all Gateway namespaces.
+const GatewayNamespacesCRBName = wafFilterName + "-gateway-namespaces"
+
+// gatewayNamespacesCRB returns a single ClusterRoleBinding that binds the cluster-scoped
+// ClusterRole to the waf-http-filter ServiceAccount in each Gateway namespace. A single
+// shared binding avoids creating one cluster-scoped object per namespace.
+//
+// Note: this only grants cluster-scoped permissions (license keys, token reviews).
+// Access to namespaced Gateway API resources is granted via per-namespace RoleBindings
+// created by gatewayNamespaceRoleBinding, scoping each proxy to its own namespace.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespacesCRB(namespaces []string) *rbacv1.ClusterRoleBinding {
+	subjects := make([]rbacv1.Subject, 0, len(namespaces))
+	for _, ns := range namespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      wafFilterName,
+			Namespace: ns,
+		})
+	}
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: fmt.Sprintf("%s-%s", wafFilterName, namespace),
-			Labels: map[string]string{
-				GatewayNamespaceResourceLabel: "true",
-				GatewayNamespaceLabel:         namespace,
-			},
+			Name: GatewayNamespacesCRBName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     wafFilterName,
+			Name:     wafFilterClusterScopedRoleName,
+		},
+		Subjects: subjects,
+	}
+}
+
+// gatewayNamespaceRoleBinding creates a namespaced RoleBinding granting access to Gateway
+// API resources only within the given namespace, used in GatewayNamespace mode so each
+// proxy can only read gateways/routes in its own namespace.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceRoleBinding(namespace string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterGatewayResourcesRoleName,
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterGatewayResourcesRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{

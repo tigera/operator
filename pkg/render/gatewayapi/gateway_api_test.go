@@ -254,8 +254,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 		By("resolving images")
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
-		Expect(objsToDelete).To(HaveLen(2))
+		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
+		Expect(objsToDelete).To(HaveLen(4))
 		Expect(objsToCreate).NotTo(BeEmpty())
 		Expect(objsToCreate).To(HaveLen(20 + len(gatewayAPI.Spec.GatewayClasses))) // 20 core objects plus one per GatewayClass
 
@@ -361,8 +361,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/calico/envoy-proxy:" + components.ComponentCalicoEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
-		Expect(objsToDelete).To(HaveLen(2))
+		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
+		Expect(objsToDelete).To(HaveLen(4))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
@@ -457,8 +457,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
-		Expect(objsToDelete).To(HaveLen(2))
+		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
+		Expect(objsToDelete).To(HaveLen(4))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
@@ -480,8 +480,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "tigera-gateway"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-cluster-scoped"}},
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-gateway-resources"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-cluster-scoped"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-gateway-resources"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
@@ -575,8 +577,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
-		Expect(objsToDelete).To(HaveLen(2))
+		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
+		Expect(objsToDelete).To(HaveLen(4))
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -777,8 +779,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup: GatewayNamespace-only resources should be deleted when in ControllerNamespace mode.
-		Expect(objsToDelete).To(HaveLen(2))
+		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
+		Expect(objsToDelete).To(HaveLen(4))
 
 		// The default GatewayClass should not exist.
 		_, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "tigera-gateway-class", "tigera-gateway")
@@ -1301,41 +1303,41 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 		objsToCreate, _ := gatewayComp.Objects()
 
-		// Verify ClusterRole exists
-		clusterRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "waf-http-filter", "")
+		// Verify cluster-scoped ClusterRole exists with license key + token review rules.
+		csRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "waf-http-filter-cluster-scoped", "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(clusterRole.Name).To(Equal("waf-http-filter"))
-
-		// Verify the ClusterRole has the correct rules
-		Expect(clusterRole.Rules).To(HaveLen(3))
-
-		// Check license key access for WAF
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+		Expect(csRole.Rules).To(HaveLen(2))
+		Expect(csRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups: []string{"crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		}))
-
-		// Check token review permissions for WAF
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+		Expect(csRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups: []string{"authentication.k8s.io"},
 			Resources: []string{"tokenreviews"},
 			Verbs:     []string{"create"},
 		}))
 
-		// Check Gateway API resources for L7 Log Collector enrichment
-		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+		// Verify gateway-resources ClusterRole exists with route rules only.
+		grRole, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, "waf-http-filter-gateway-resources", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(grRole.Rules).To(HaveLen(1))
+		Expect(grRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups: []string{"gateway.networking.k8s.io"},
 			Resources: []string{"gateways", "httproutes", "grpcroutes"},
 			Verbs:     []string{"get", "list", "watch"},
 		}))
 
-		// Verify ClusterRoleBinding exists
-		clusterRoleBinding, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter", "")
+		// Verify both ClusterRoleBindings exist (controller-namespace SA bound to both roles cluster-wide).
+		csCRB, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-cluster-scoped", "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(clusterRoleBinding.Name).To(Equal("waf-http-filter"))
-		Expect(clusterRoleBinding.RoleRef.Name).To(Equal("waf-http-filter"))
-		Expect(clusterRoleBinding.RoleRef.Kind).To(Equal("ClusterRole"))
+		Expect(csCRB.RoleRef.Name).To(Equal("waf-http-filter-cluster-scoped"))
+		Expect(csCRB.Subjects[0].Namespace).To(Equal("tigera-gateway"))
+
+		grCRB, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(grCRB.RoleRef.Name).To(Equal("waf-http-filter-gateway-resources"))
+		Expect(grCRB.Subjects[0].Namespace).To(Equal("tigera-gateway"))
 
 		// Verify ServiceAccount exists
 		serviceAccount, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "tigera-gateway")
@@ -1378,18 +1380,24 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(sa2.Namespace).To(Equal("app-ns"))
 
-		// Verify per-namespace ClusterRoleBindings.
-		crb1, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-default", "")
+		// Verify a single shared ClusterRoleBinding (cluster-scoped role) with one Subject per namespace.
+		crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(crb1.RoleRef.Name).To(Equal("waf-http-filter"))
-		Expect(crb1.Subjects).To(HaveLen(1))
-		Expect(crb1.Subjects[0].Namespace).To(Equal("default"))
-		Expect(crb1.Labels[GatewayNamespaceResourceLabel]).To(Equal("true"))
-		Expect(crb1.Labels[GatewayNamespaceLabel]).To(Equal("default"))
+		Expect(crb.RoleRef.Name).To(Equal("waf-http-filter-cluster-scoped"))
+		Expect(crb.Subjects).To(HaveLen(2))
+		nsSubjects := []string{crb.Subjects[0].Namespace, crb.Subjects[1].Namespace}
+		Expect(nsSubjects).To(ConsistOf("default", "app-ns"))
 
-		crb2, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-app-ns", "")
+		// Verify per-namespace RoleBindings for gateway resources scoped to that namespace.
+		rb1, err := rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "default")
 		Expect(err).NotTo(HaveOccurred())
-		Expect(crb2.Subjects[0].Namespace).To(Equal("app-ns"))
+		Expect(rb1.RoleRef.Name).To(Equal("waf-http-filter-gateway-resources"))
+		Expect(rb1.Subjects).To(HaveLen(1))
+		Expect(rb1.Subjects[0].Namespace).To(Equal("default"))
+
+		rb2, err := rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "app-ns")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rb2.Subjects[0].Namespace).To(Equal("app-ns"))
 
 		// Verify pull secrets copied to each namespace.
 		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "default")
@@ -1416,12 +1424,14 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 		objsToCreate, _ := gatewayComp.Objects()
 
-		// Should NOT have per-namespace CRBs.
-		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-default", "")
+		// Should NOT have the shared per-namespace CRB.
+		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
 		Expect(err).To(HaveOccurred())
 
-		// But should still have the controller-namespace CRB.
-		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter", "")
+		// But should still have the controller-namespace CRBs (cluster-scoped + gateway-resources).
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-cluster-scoped", "")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -1445,8 +1455,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 		objsToCreate, _ := gatewayComp.Objects()
 
-		// Open-source should NOT have per-namespace CRBs.
-		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, "waf-http-filter-default", "")
+		// Open-source should NOT have the shared per-namespace CRB.
+		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
 		Expect(err).To(HaveOccurred())
 
 		// Open-source should NOT have waf-http-filter SA at all.
@@ -1480,22 +1490,28 @@ var _ = Describe("Gateway API rendering tests", func() {
 		_, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
 		Expect(err).NotTo(HaveOccurred())
 
-		// "removed-ns" resources should be in the delete list.
+		// Shared CRB should still be created with only the "default" subject.
+		crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(crb.Subjects[0].Namespace).To(Equal("default"))
+
+		// "removed-ns" SA and RoleBinding should be in the delete list.
 		foundSA := false
-		foundCRB := false
+		foundRB := false
 		for _, obj := range objsToDelete {
 			switch o := obj.(type) {
 			case *corev1.ServiceAccount:
 				if o.Name == "waf-http-filter" && o.Namespace == "removed-ns" {
 					foundSA = true
 				}
-			case *rbacv1.ClusterRoleBinding:
-				if o.Name == "waf-http-filter-removed-ns" {
-					foundCRB = true
+			case *rbacv1.RoleBinding:
+				if o.Name == "waf-http-filter-gateway-resources" && o.Namespace == "removed-ns" {
+					foundRB = true
 				}
 			}
 		}
 		Expect(foundSA).To(BeTrue(), "expected stale SA in objsToDelete")
-		Expect(foundCRB).To(BeTrue(), "expected stale CRB in objsToDelete")
+		Expect(foundRB).To(BeTrue(), "expected stale RoleBinding in objsToDelete")
 	})
 })

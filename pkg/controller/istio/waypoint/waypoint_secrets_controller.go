@@ -20,6 +20,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -62,9 +63,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return nil
 	}
 
+	gatewayWatchReady := &utils.ReadyFlag{}
+
 	r := &ReconcileWaypointSecrets{
-		Client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
+		Client:            mgr.GetClient(),
+		scheme:            mgr.GetScheme(),
+		gatewayWatchReady: gatewayWatchReady,
 	}
 
 	c, err := ctrlruntime.NewController("istio-waypoint-secrets-controller", mgr, controller.Options{Reconciler: r})
@@ -72,8 +76,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create istio-waypoint-secrets-controller: %w", err)
 	}
 
-	// Watch Gateway resources, filtering for istio-waypoint class only.
-	err = c.WatchObject(&gapi.Gateway{}, &handler.EnqueueRequestForObject{}, predicate.Funcs{
+	// Defer the Gateway watch — the Gateway API CRD may not be installed yet.
+	// The Istio reconciler creates it during reconciliation, so we use a background
+	// goroutine that retries until the CRD appears.
+	gatewayObj := &gapi.Gateway{
+		TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+	}
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, gatewayWatchReady, []client.Object{gatewayObj}, predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			gw, ok := e.Object.(*gapi.Gateway)
 			return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
@@ -91,9 +100,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
 		},
 	})
-	if err != nil {
-		return fmt.Errorf("istio-waypoint-secrets-controller failed to watch Gateway resource: %w", err)
-	}
 
 	// Watch Istio CR for pull secret config changes.
 	err = c.WatchObject(&operatorv1.Istio{}, &handler.EnqueueRequestForObject{})
@@ -119,6 +125,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 type ReconcileWaypointSecrets struct {
 	client.Client
 	scheme *runtime.Scheme
+
+	gatewayWatchReady *utils.ReadyFlag
 }
 
 func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -138,9 +146,9 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 		return reconcile.Result{}, err
 	}
 
-	// Build the desired set of secrets if Istio is active.
+	// Build the desired set of secrets if Istio is active and the Gateway watch is established.
 	targetNamespaces := map[string]bool{}
-	if istioActive {
+	if istioActive && r.gatewayWatchReady.IsReady() {
 		_, installationSpec, err := utils.GetInstallationSpec(ctx, r)
 		if err != nil {
 			if errors.IsNotFound(err) {

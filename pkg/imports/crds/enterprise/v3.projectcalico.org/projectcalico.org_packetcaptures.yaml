@@ -113,6 +113,12 @@ spec:
                   format: date-time
                   type: string
               type: object
+              x-kubernetes-validations:
+                - message: endTime must be after startTime
+                  reason: FieldValueInvalid
+                  rule:
+                    "!has(self.endTime) || !has(self.startTime) || self.endTime >
+                    self.startTime"
             status:
               description: Status of the PacketCapture
               properties:

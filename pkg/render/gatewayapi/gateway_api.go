@@ -762,7 +762,10 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace &&
 		pr.cfg.Installation.Variant.IsEnterprise() {
 		for _, ns := range pr.cfg.GatewayNamespaces {
+			// Grant the operator permission to manage secrets in this namespace,
+			// then create the per-namespace resources.
 			objs = append(objs,
+				render.CreateOperatorSecretsRoleBinding(ns),
 				pr.gatewayNamespaceSA(ns),
 				pr.gatewayNamespaceRoleBinding(ns),
 			)
@@ -779,9 +782,11 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
 				if !currentNS.Has(ns) {
 					objsToDelete = append(objsToDelete,
+						render.CreateOperatorSecretsRoleBinding(ns),
 						pr.gatewayNamespaceSA(ns),
 						pr.gatewayNamespaceRoleBinding(ns),
 					)
+					objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
 				}
 			}
 			if len(pr.cfg.GatewayNamespaces) == 0 {

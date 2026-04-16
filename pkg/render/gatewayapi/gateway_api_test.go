@@ -1474,10 +1474,15 @@ var _ = Describe("Gateway API rendering tests", func() {
 				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
 			},
 		}
+		pullSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
+			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
+		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:       testScheme(),
 			Installation: installation,
 			GatewayAPI:   gatewayAPI,
+			PullSecrets:  []*corev1.Secret{pullSecret},
 			// "default" still has a Gateway, but "removed-ns" no longer does.
 			GatewayNamespaces:        []string{"default"},
 			CurrentGatewayNamespaces: set.New("default", "removed-ns"),
@@ -1496,22 +1501,16 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(crb.Subjects).To(HaveLen(1))
 		Expect(crb.Subjects[0].Namespace).To(Equal("default"))
 
-		// "removed-ns" SA and RoleBinding should be in the delete list.
-		foundSA := false
-		foundRB := false
-		for _, obj := range objsToDelete {
-			switch o := obj.(type) {
-			case *corev1.ServiceAccount:
-				if o.Name == "waf-http-filter" && o.Namespace == "removed-ns" {
-					foundSA = true
-				}
-			case *rbacv1.RoleBinding:
-				if o.Name == "waf-http-filter-gateway-resources" && o.Namespace == "removed-ns" {
-					foundRB = true
-				}
-			}
-		}
-		Expect(foundSA).To(BeTrue(), "expected stale SA in objsToDelete")
-		Expect(foundRB).To(BeTrue(), "expected stale RoleBinding in objsToDelete")
+		// Verify stale "removed-ns" resources and standard cleanup are in the delete list.
+		rtest.ExpectResources(objsToDelete, []client.Object{
+			// Deprecated combined waf-http-filter cleanup.
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
+			// Stale per-namespace resources for "removed-ns".
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "removed-ns"}},
+			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "removed-ns"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-gateway-resources", Namespace: "removed-ns"}},
+			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "removed-ns"}},
+		})
 	})
 })

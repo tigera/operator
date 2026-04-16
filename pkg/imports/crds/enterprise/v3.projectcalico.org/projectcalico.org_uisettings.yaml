@@ -339,5 +339,7 @@ spec:
             - metadata
             - spec
           type: object
+      selectableFields:
+        - jsonPath: .spec.group
       served: true
       storage: true

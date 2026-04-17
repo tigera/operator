@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -48,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
@@ -67,6 +69,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
+		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		multiTenant:         opts.MultiTenant,
@@ -78,6 +81,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create gatewayapi-controller: %w", err)
 	}
+
+	// Lazy tier watch; policies only render when the calico-system Tier exists.
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
 	// Watch for changes to primary resource GatewayAPI
 	err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{})
@@ -159,6 +165,7 @@ type ReconcileGatewayAPI struct {
 	client              client.Client
 	scheme              *runtime.Scheme
 	enterpriseCRDsExist bool
+	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
 	clusterDomain       string
 	multiTenant         bool
@@ -296,13 +303,28 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Render v3 NetworkPolicies only when the calico-system Tier exists — same pattern
+	// as the other controllers; tolerates clusters without Calico installed.
+	includeV3NetworkPolicy := false
+	if r.tierWatchReady.IsReady() {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
+		}
+	}
+
 	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
-		Scheme:                r.scheme,
-		Installation:          installationSpec,
-		PullSecrets:           pullSecrets,
-		GatewayAPI:            gatewayAPI,
-		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
-		CurrentGatewayClasses: set.New[string](),
+		Scheme:                 r.scheme,
+		Installation:           installationSpec,
+		PullSecrets:            pullSecrets,
+		GatewayAPI:             gatewayAPI,
+		CustomEnvoyProxies:     make(map[string]*envoyapi.EnvoyProxy),
+		CurrentGatewayClasses:  set.New[string](),
+		IncludeV3NetworkPolicy: includeV3NetworkPolicy,
 	}
 
 	// Safety net for in-memory objects that bypass the CRD's API server defaulting (e.g. tests).

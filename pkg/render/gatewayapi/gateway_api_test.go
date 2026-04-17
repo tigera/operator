@@ -249,9 +249,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 		By("resolving images")
@@ -353,10 +354,11 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
-			PullSecrets:  pullSecrets,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			PullSecrets:            pullSecrets,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -452,10 +454,11 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
-			PullSecrets:  pullSecrets,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			PullSecrets:            pullSecrets,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -860,9 +863,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -886,9 +890,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1108,9 +1113,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1279,9 +1285,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1306,9 +1313,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1427,9 +1435,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1455,9 +1464,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1515,9 +1525,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 		}
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
+			Scheme:                 testScheme(),
+			Installation:           installation,
+			GatewayAPI:             gatewayAPI,
+			IncludeV3NetworkPolicy: true,
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1537,6 +1548,36 @@ var _ = Describe("Gateway API rendering tests", func() {
 		proxyPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, GatewayAPIProxyPolicyName, "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxyPolicy.Spec.Selector).To(Equal("app.kubernetes.io/managed-by == 'envoy-gateway'"))
+	})
+
+	It("should not render any v3 NetworkPolicy when IncludeV3NetworkPolicy is false", func() {
+		for _, tc := range []struct {
+			name string
+			mode operatorv1.GatewayDeploymentMode
+		}{
+			{"ControllerNamespace", operatorv1.GatewayDeploymentModeControllerNamespace},
+			{"GatewayNamespace", operatorv1.GatewayDeploymentModeGatewayNamespace},
+		} {
+			By(fmt.Sprintf("rendering in %s mode with IncludeV3NetworkPolicy=false", tc.name))
+			mode := tc.mode
+			gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+				Scheme:       testScheme(),
+				Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
+				GatewayAPI: &operatorv1.GatewayAPI{
+					Spec: operatorv1.GatewayAPISpec{
+						GatewayClasses:        []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+						GatewayDeploymentMode: &mode,
+					},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+			objsToCreate, _ := gatewayComp.Objects()
+			for _, obj := range objsToCreate {
+				_, isPolicy := obj.(*v3.NetworkPolicy)
+				Expect(isPolicy).To(BeFalse(),
+					"unexpected v3 NetworkPolicy %s/%s with IncludeV3NetworkPolicy=false", obj.GetNamespace(), obj.GetName())
+			}
+		}
 	})
 
 	It("should not create per-namespace resources for GatewayNamespace mode (open-source)", func() {

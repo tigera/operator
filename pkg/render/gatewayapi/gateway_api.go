@@ -446,13 +446,14 @@ func GatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essen
 }
 
 type GatewayAPIImplementationConfig struct {
-	Scheme                *runtime.Scheme
-	Installation          *operatorv1.InstallationSpec
-	GatewayAPI            *operatorv1.GatewayAPI
-	PullSecrets           []*corev1.Secret
-	CustomEnvoyGateway    *envoyapi.EnvoyGateway
-	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
-	CurrentGatewayClasses set.Set[string]
+	Scheme                 *runtime.Scheme
+	Installation           *operatorv1.InstallationSpec
+	GatewayAPI             *operatorv1.GatewayAPI
+	PullSecrets            []*corev1.Secret
+	CustomEnvoyGateway     *envoyapi.EnvoyGateway
+	CustomEnvoyProxies     map[string]*envoyapi.EnvoyProxy
+	CurrentGatewayClasses  set.Set[string]
+	IncludeV3NetworkPolicy bool
 
 	// GatewayNamespaces is the list of namespaces that contain Gateway resources
 	// using operator-managed GatewayClasses (GatewayNamespace mode + Enterprise only).
@@ -585,12 +586,18 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				pr.cfg.Installation.Azure,
 			),
 			render.CreateOperatorSecretsRoleBinding(controllerNS),
-			networkpolicy.CalicoSystemDefaultDeny(controllerNS),
 		)
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(controllerNS, pr.cfg.PullSecrets...)...)...)
-		objs = append(objs, envoyProxyPolicy(controllerNS, openShift))
+		if pr.cfg.IncludeV3NetworkPolicy {
+			objs = append(objs,
+				networkpolicy.CalicoSystemDefaultDeny(controllerNS),
+				envoyProxyPolicy(controllerNS, openShift),
+			)
+		}
 	}
-	objs = append(objs, gatewayAPIControllerPolicy(controllerNS, openShift))
+	if pr.cfg.IncludeV3NetworkPolicy {
+		objs = append(objs, gatewayAPIControllerPolicy(controllerNS, openShift))
+	}
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{

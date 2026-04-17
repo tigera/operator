@@ -103,12 +103,8 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
-		} else {
-			c.typhaImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-			c.combinedImage = true
-		}
+		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.typhaImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	}
 	if err != nil {
 		return err
@@ -583,7 +579,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
 	if c.combinedImage {
-		container.Command = []string{"calico", "component", "typha"}
+		container.Command = []string{components.CalicoBinaryPath, "component", "typha"}
 	}
 	return container
 }

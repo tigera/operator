@@ -84,6 +84,8 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIWindows, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeWindows, reg, path, prefix, is))
+		// There is no FIPS build for Windows, so OSS Windows always uses the combined calico-node.exe
+		// which dispatches via Cobra subcommands ("node health", "node shutdown", etc.).
 		c.combinedImage = true
 	}
 

@@ -142,7 +142,7 @@ var _ = Describe("ComponentRendering", func() {
 								{
 									Name:            goldmane.GoldmaneContainerName,
 									Image:           "quay.io/calico/calico:master",
-									Command:         []string{"calico", "component", "goldmane"},
+									Command:         []string{"/usr/bin/calico", "component", "goldmane"},
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
@@ -157,13 +157,15 @@ var _ = Describe("ComponentRendering", func() {
 									SecurityContext: securitycontext.NewNonRootContext(),
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=readiness"},
+											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=readiness"},
 										}},
+										PeriodSeconds: 10,
 									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=liveness"},
+											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=liveness"},
 										}},
+										PeriodSeconds: 10,
 									},
 									VolumeMounts: append(
 										[]corev1.VolumeMount{defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)},

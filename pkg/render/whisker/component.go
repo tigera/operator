@@ -110,12 +110,8 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise || operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
-	} else {
-		c.whiskerBackendImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-		c.combinedImage = true
-	}
+	c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+	c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -222,7 +218,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
 	if c.combinedImage {
-		container.Command = []string{"calico", "component", "whisker-backend"}
+		container.Command = []string{components.CalicoBinaryPath, "component", "whisker-backend"}
 	}
 	return container
 }

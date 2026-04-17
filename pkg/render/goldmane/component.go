@@ -94,12 +94,8 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 
 	var err error
 
-	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise || operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
-	} else {
-		c.goldmaneImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-		c.combinedImage = true
-	}
+	c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+	c.goldmaneImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -247,20 +243,22 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 			Command: []string{"/health", "-ready"},
 		}},
+		PeriodSeconds: 10,
 	}
 	livenessProbe := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 			Command: []string{"/health", "-live"},
 		}},
+		PeriodSeconds: 10,
 	}
 
 	var containerCommand []string
 	if c.combinedImage {
-		containerCommand = []string{"calico", "component", "goldmane"}
+		containerCommand = []string{components.CalicoBinaryPath, "component", "goldmane"}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"calico", "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=readiness"},
+					Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=readiness"},
 				},
 			},
 			PeriodSeconds: 10,
@@ -268,7 +266,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		livenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"calico", "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=liveness"},
+					Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=liveness"},
 				},
 			},
 			PeriodSeconds: 10,

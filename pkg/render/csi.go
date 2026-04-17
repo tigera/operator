@@ -141,7 +141,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
 	var csiCommand []string
 	if c.combinedImage {
-		csiCommand = []string{"calico", "component", "csi"}
+		csiCommand = []string{components.CalicoBinaryPath, "component", "csi"}
 	}
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
@@ -392,20 +392,12 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 		c.csiRegistrarImage, err = components.GetReference(components.ComponentTigeraCSINodeDriverRegistrar, reg, path, prefix, is)
 	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSIFIPS, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, is)
-		} else {
-			c.csiImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
-			c.combinedImage = true
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.csiImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		if err != nil {
+			return err
 		}
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
 	}
 
 	return err

@@ -191,17 +191,10 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			}
 		}
 	} else if c.cfg.RequiresAggregationServer {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-		} else {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-			c.combinedImage = true
+		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.apiServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
 		}
 	}
 
@@ -1180,7 +1173,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	var apiServerCommand []string
 	if c.combinedImage {
-		apiServerCommand = []string{"calico", "component", "apiserver"}
+		apiServerCommand = []string{components.CalicoBinaryPath, "component", "apiserver"}
 	}
 
 	apiServer := corev1.Container{

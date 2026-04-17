@@ -1887,7 +1887,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version),
 		))
-		Expect(d.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"calico", "component", "apiserver"}))
+		Expect(d.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/usr/bin/calico", "component", "apiserver"}))
 
 		expectedArgs := []string{
 			"--secure-port=5443",

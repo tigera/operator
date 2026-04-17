@@ -66,6 +66,10 @@ const (
 	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
 	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
 	KubeControllerPrometheusTLSSecret                  = "calico-kube-controllers-metrics-tls"
+
+	// KubeControllersHealthPort is the port the kube-controllers HealthAggregator listens on when run from the
+	// combined calico binary. The legacy per-component image uses file-based health checks instead.
+	KubeControllersHealthPort = 9440
 )
 
 type KubeControllersConfiguration struct {
@@ -240,12 +244,8 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.image, err = components.GetReference(components.ComponentCalicoKubeControllersFIPS, reg, path, prefix, is)
-		} else {
-			c.image, err = components.GetReference(components.ComponentCalico, reg, path, prefix, is)
-			c.combinedImage = true
-		}
+		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	}
 	return err
 }
@@ -611,11 +611,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 	var containerCommand []string
 	if c.combinedImage {
-		containerCommand = []string{"calico", "component", "kube-controllers", "--health-port=9440"}
+		containerCommand = []string{
+			components.CalicoBinaryPath,
+			"component",
+			"kube-controllers",
+			fmt.Sprintf("--health-port=%d", KubeControllersHealthPort),
+		}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"calico", "health", "--port=9440", "--type=readiness"},
+					Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", KubeControllersHealthPort), "--type=readiness"},
 				},
 			},
 			TimeoutSeconds: 10,
@@ -623,7 +628,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		livenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"calico", "health", "--port=9440", "--type=liveness"},
+					Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", KubeControllersHealthPort), "--type=liveness"},
 				},
 			},
 			FailureThreshold:    6,

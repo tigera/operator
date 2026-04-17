@@ -64,7 +64,7 @@ var (
 		"istio-ztunnel":               "istio-ztunnel",
 		"istio-proxyv2":               "istio-proxyv2",
 		"webhooks":                    "webhooks",
-	"calico":                      "calico",
+		"calico":                      "calico",
 	}
 
 	ignoredImages = map[string]struct{}{

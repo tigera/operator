@@ -781,12 +781,14 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			currentNS := set.New(pr.cfg.GatewayNamespaces...)
 			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
 				if !currentNS.Has(ns) {
+					// Delete the Secret before the RoleBinding that grants the operator
+					// permission to delete it, otherwise the delete 403s.
+					objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
 					objsToDelete = append(objsToDelete,
-						render.CreateOperatorSecretsRoleBinding(ns),
 						pr.gatewayNamespaceSA(ns),
 						pr.gatewayNamespaceRoleBinding(ns),
+						render.CreateOperatorSecretsRoleBinding(ns),
 					)
-					objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
 				}
 			}
 			if len(pr.cfg.GatewayNamespaces) == 0 {

@@ -1512,5 +1512,28 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-gateway-resources", Namespace: "removed-ns"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "removed-ns"}},
 		})
+
+		// Secret must be deleted before the RoleBinding that grants the operator
+		// permission to delete it; reversing the order causes a 403.
+		secretIdx, rbIdx := -1, -1
+		for i, obj := range objsToDelete {
+			if obj.GetNamespace() != "removed-ns" {
+				continue
+			}
+			switch obj.(type) {
+			case *corev1.Secret:
+				if obj.GetName() == "tigera-pull-secret" {
+					secretIdx = i
+				}
+			case *rbacv1.RoleBinding:
+				if obj.GetName() == "tigera-operator-secrets" {
+					rbIdx = i
+				}
+			}
+		}
+		Expect(secretIdx).NotTo(Equal(-1))
+		Expect(rbIdx).NotTo(Equal(-1))
+		Expect(secretIdx).To(BeNumerically("<", rbIdx),
+			"tigera-pull-secret must be deleted before tigera-operator-secrets RoleBinding")
 	})
 })

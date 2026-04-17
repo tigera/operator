@@ -77,6 +77,7 @@ var _ = Describe("ComponentRendering", func() {
 
 	DescribeTable("Whisker Deployment", func(cfg *whisker.Configuration, expected *appsv1.Deployment) {
 		component := whisker.Whisker(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		objsToCreate, _ := component.Objects()
 
 		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, whisker.WhiskerName, whisker.WhiskerNamespace)
@@ -118,7 +119,7 @@ var _ = Describe("ComponentRendering", func() {
 							Containers: []corev1.Container{
 								{
 									Name:            whisker.WhiskerContainerName,
-									Image:           "",
+									Image:           "quay.io/calico/whisker:master",
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
@@ -138,7 +139,8 @@ var _ = Describe("ComponentRendering", func() {
 								},
 								{
 									Name:            whisker.WhiskerBackendContainerName,
-									Image:           "",
+									Image:           "quay.io/calico/calico:master",
+									Command:         []string{"/usr/bin/calico", "component", "whisker-backend"},
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},

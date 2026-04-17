@@ -729,13 +729,8 @@ var _ = Describe("windows-controller installation tests", func() {
 						ObjectMeta: metav1.ObjectMeta{Name: "calico-" + components.CalicoRelease},
 						Spec: operator.ImageSetSpec{
 							Images: []operator.Image{
-								{Image: "calico/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
-								{Image: "calico/typha", Digest: "sha256:tigeratyphahash"},
+								{Image: "calico/calico", Digest: "sha256:calicocombinedhash"},
 								{Image: "calico/node", Digest: "sha256:tigeranodehash"},
-								{Image: "calico/cni", Digest: "sha256:tigeracnihash"},
-								{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
-								{Image: "calico/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-								{Image: "calico/csi", Digest: "sha256:calicocsihash"},
 								{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 							},
 						},

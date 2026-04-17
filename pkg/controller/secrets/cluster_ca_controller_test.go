@@ -115,7 +115,7 @@ var _ = Describe("ClusterCA controller", func() {
 			Spec: operatorv1.ImageSetSpec{
 				Images: []operatorv1.Image{
 					{
-						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalicoCSRInitContainer.Image),
+						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalico.Image),
 						Digest: "sha256:xxxxxxxxx",
 					}, {
 						Image:  fmt.Sprintf("%s%s", components.TigeraImagePath, components.ComponentTigeraCSRInitContainer.Image),
@@ -156,7 +156,7 @@ var _ = Describe("ClusterCA controller", func() {
 			Spec: operatorv1.ImageSetSpec{
 				Images: []operatorv1.Image{
 					{
-						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalicoCSRInitContainer.Image),
+						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalico.Image),
 						Digest: "sha256:xxxxxxxxx",
 					}, {
 						Image:  fmt.Sprintf("%s%s", components.TigeraImagePath, components.ComponentTigeraCSRInitContainer.Image),

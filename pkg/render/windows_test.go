@@ -562,7 +562,7 @@ var _ = Describe("Windows rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 				// Verify readiness and liveness probes.
-				verifyWindowsProbesAndLifecycle(ds)
+				verifyWindowsProbesAndLifecycle(ds, true)
 			})
 		}
 	})
@@ -1044,7 +1044,7 @@ var _ = Describe("Windows rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 				// Verify readiness and liveness probes.
-				verifyWindowsProbesAndLifecycle(ds)
+				verifyWindowsProbesAndLifecycle(ds, false)
 			})
 		}
 	})
@@ -1335,7 +1335,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		verifyWindowsProbesAndLifecycle(ds)
+		verifyWindowsProbesAndLifecycle(ds, true)
 	})
 
 	It("should properly render a configuration using the AmazonVPC CNI plugin", func() {
@@ -1479,7 +1479,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateAll))
 
 		// Verify readiness and liveness probes.
-		verifyWindowsProbesAndLifecycle(ds)
+		verifyWindowsProbesAndLifecycle(ds, true)
 	})
 
 	DescribeTable("should properly render configuration using non-Calico CNI plugin",
@@ -1533,7 +1533,7 @@ var _ = Describe("Windows rendering tests", func() {
 			}
 
 			// Verify readiness and liveness probes.
-			verifyWindowsProbesAndLifecycle(ds)
+			verifyWindowsProbesAndLifecycle(ds, true)
 		},
 		Entry("GKE", operatorv1.PluginGKE, operatorv1.IPAMPluginHostLocal),
 		Entry("AmazonVPC", operatorv1.PluginAmazonVPC, operatorv1.IPAMPluginAmazonVPC),
@@ -1675,7 +1675,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
 
-		verifyWindowsProbesAndLifecycle(ds)
+		verifyWindowsProbesAndLifecycle(ds, true)
 	})
 
 	It("should render all resources when variant is CalicoEnterprise and running on openshift", func() {
@@ -1831,7 +1831,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Env).To(ConsistOf(expectedNodeEnv))
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "confd").Env).To(ConsistOf(expectedNodeEnv))
 
-		verifyWindowsProbesAndLifecycle(ds)
+		verifyWindowsProbesAndLifecycle(ds, false)
 	})
 
 	It("should render all resources when variant is CalicoEnterprise and running on RKE2", func() {
@@ -1986,7 +1986,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 		Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-		verifyWindowsProbesAndLifecycle(ds)
+		verifyWindowsProbesAndLifecycle(ds, false)
 
 		// The metrics service should have the correct configuration.
 		ms := rtest.GetResource(resources, "calico-node-metrics-windows", "calico-system", "", "v1", "Service").(*corev1.Service)
@@ -2539,7 +2539,7 @@ var _ = Describe("Windows rendering tests", func() {
 		Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "uninstall-calico").Env).To(ConsistOf(expectedUninstallEnv))
 
 		// Verify readiness and liveness probes.
-		verifyWindowsProbesAndLifecycle(ds)
+		verifyWindowsProbesAndLifecycle(ds, true)
 	})
 
 	Context("With calico-node-windows DaemonSet overrides", func() {
@@ -2718,13 +2718,21 @@ var _ = Describe("Windows rendering tests", func() {
 })
 
 // verifyWindowsProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
-func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
-	// Verify readiness and liveness probes.
+// useCombinedImage indicates the calico-node.exe binary is the unified Cobra-based calico binary (OSS), which uses
+// subcommands (e.g. "node health --felix-live") instead of the legacy flag-style invocations used by Enterprise.
+func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, useCombinedImage bool) {
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
+	if useCombinedImage {
+		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-live"}
+		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-ready"}
+		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "shutdown"}
+	}
+
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{
-				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"},
-			},
+			Exec: &corev1.ExecAction{Command: livenessCmd},
 		},
 		InitialDelaySeconds: 10,
 		FailureThreshold:    6,
@@ -2735,9 +2743,7 @@ func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
 
 	expectedReadiness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
-			Exec: &corev1.ExecAction{
-				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"},
-			},
+			Exec: &corev1.ExecAction{Command: readinessCmd},
 		},
 		TimeoutSeconds: 10,
 		PeriodSeconds:  10,
@@ -2746,9 +2752,7 @@ func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet) {
 
 	expectedLifecycle := &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{
-			Exec: &corev1.ExecAction{
-				Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"},
-			},
+			Exec: &corev1.ExecAction{Command: preStopCmd},
 		},
 	}
 	ExpectWithOffset(1, rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Lifecycle).To(Equal(expectedLifecycle))

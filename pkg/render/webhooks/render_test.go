@@ -95,6 +95,16 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		rtest.ExpectResources(resources, expectedResources)
 
+		// Verify the Calico (non-enterprise, non-FIPS) variant uses the combined calico/calico image with Command set.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
+			fmt.Sprintf("test-registry.com/%s%s:%s",
+				components.CalicoImagePath,
+				components.ComponentCalico.Image,
+				components.ComponentCalico.Version)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/usr/bin/calico", "component", "webhooks"}))
+
 		// Verify the ClusterRole includes expected rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(cr.Rules).To(ContainElements(
@@ -114,6 +124,23 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch", "update"},
 		}))
+	})
+
+	It("should use the combined image and Cobra Command for Calico FIPS", func() {
+		fipsEnabled := operatorv1.FIPSModeEnabled
+		installation.FIPSMode = &fipsEnabled
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
+			fmt.Sprintf("test-registry.com/%s%s:%s",
+				components.CalicoImagePath,
+				components.ComponentCalicoFIPS.Image,
+				components.ComponentCalicoFIPS.Version)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{components.CalicoBinaryPath, "component", "webhooks"}))
 	})
 
 	It("should render all resources for Enterprise with the correct image", func() {

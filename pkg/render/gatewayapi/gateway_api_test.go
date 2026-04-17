@@ -21,7 +21,9 @@ import (
 	. "github.com/onsi/gomega"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
@@ -108,7 +110,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		resources, err := renderChart(s, "")
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(resources.controllerDeployment).NotTo(BeNil())
-		Expect(resources.controllerDeployment.Namespace).To(Equal(GatewayAPINamespace))
+		Expect(resources.controllerDeployment.Namespace).To(Equal(ControllerModeNamespace))
 	})
 
 	It("should report UDPRoute as required when platform is not OpenShift", func() {
@@ -254,10 +256,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 		By("resolving images")
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
-		Expect(objsToDelete).To(HaveLen(4))
+		// 2 GatewayNamespace-only CRs + 2 opposite-mode certgen CR/CRB + 2 deprecated waf-http-filter CR/CRB.
+		Expect(objsToDelete).To(HaveLen(6))
 		Expect(objsToCreate).NotTo(BeEmpty())
-		Expect(objsToCreate).To(HaveLen(20 + len(gatewayAPI.Spec.GatewayClasses))) // 20 core objects plus one per GatewayClass
+		Expect(objsToCreate).To(HaveLen(23 + len(gatewayAPI.Spec.GatewayClasses))) // 23 core objects plus one per GatewayClass
 
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
@@ -281,6 +283,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: GatewayAPIProxyPolicyName, Namespace: "tigera-gateway"}},
 		})
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
@@ -361,8 +366,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/calico/envoy-proxy:" + components.ComponentCalicoEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
-		Expect(objsToDelete).To(HaveLen(4))
+		// 2 GatewayNamespace-only CRs + 2 opposite-mode certgen CR/CRB + 2 deprecated waf-http-filter CR/CRB.
+		Expect(objsToDelete).To(HaveLen(6))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
@@ -386,6 +391,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: GatewayAPIProxyPolicyName, Namespace: "tigera-gateway"}},
 		})
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
@@ -457,8 +465,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
-		Expect(objsToDelete).To(HaveLen(4))
+		// 2 GatewayNamespace-only CRs + 2 opposite-mode certgen CR/CRB + 2 deprecated waf-http-filter CR/CRB.
+		Expect(objsToDelete).To(HaveLen(6))
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
@@ -487,6 +495,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&envoyapi.EnvoyProxy{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "secret1", Namespace: "tigera-gateway"}},
 			&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-class", Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: "tigera-gateway"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: GatewayAPIProxyPolicyName, Namespace: "tigera-gateway"}},
 		})
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
@@ -577,8 +588,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
-		Expect(objsToDelete).To(HaveLen(4))
+		// 2 GatewayNamespace-only CRs + 2 opposite-mode certgen CR/CRB + 2 deprecated waf-http-filter CR/CRB.
+		Expect(objsToDelete).To(HaveLen(6))
 
 		deploy, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
 		Expect(err).NotTo(HaveOccurred())
@@ -779,8 +790,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(gatewayComp.(*gatewayAPIImplementationComponent).envoyProxyImage).To(Equal("myregistry.io/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version))
 
 		objsToCreate, objsToDelete := gatewayComp.Objects()
-		// Mode cleanup (2 GatewayNamespace-only) + deprecated waf-http-filter CR/CRB cleanup (2).
-		Expect(objsToDelete).To(HaveLen(4))
+		// 2 GatewayNamespace-only CRs + 2 opposite-mode certgen CR/CRB + 2 deprecated waf-http-filter CR/CRB.
+		Expect(objsToDelete).To(HaveLen(6))
 
 		// The default GatewayClass should not exist.
 		_, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "tigera-gateway-class", "tigera-gateway")
@@ -1435,6 +1446,99 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should deploy the controller into calico-system in GatewayNamespace mode", func() {
+		installation := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses:        []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
+			},
+		}
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Controller Deployment, Service, and ServiceAccount should all be in calico-system.
+		_, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "calico-system")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.Service](objsToCreate, "envoy-gateway", "calico-system")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "envoy-gateway", "calico-system")
+		Expect(err).NotTo(HaveOccurred())
+
+		// EnvoyProxy co-locates with the controller.
+		_, err = rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "calico-system")
+		Expect(err).NotTo(HaveOccurred())
+
+		// calico-system is owned by the core Installation controller — we must not
+		// try to (re)create the Namespace, tigera-operator-secrets RoleBinding, or
+		// copy the pull secret there.
+		_, err = rtest.GetResourceOfType[*corev1.Namespace](objsToCreate, "calico-system", "")
+		Expect(err).To(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "tigera-operator-secrets", "calico-system")
+		Expect(err).To(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "calico-system")
+		Expect(err).To(HaveOccurred())
+
+		// And nothing should land in tigera-gateway in this mode.
+		for _, obj := range objsToCreate {
+			Expect(obj.GetNamespace()).NotTo(Equal("tigera-gateway"),
+				"unexpected resource in tigera-gateway for GatewayNamespace mode: %T %s", obj, obj.GetName())
+		}
+
+		// calico-system has a default-deny policy — the controller and its certgen
+		// Job need an allow policy to reach the Kubernetes API. We must not render
+		// a default-deny ourselves here: that one is owned by the core Installation.
+		policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ControllerPolicyName, common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(policy.Spec.Tier).To(Equal("calico-system"))
+		Expect(policy.Spec.Selector).To(Equal("app.kubernetes.io/name == 'gateway-helm' || app == 'certgen'"))
+		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", common.CalicoNamespace)
+		Expect(err).To(HaveOccurred(), "must not render default-deny in calico-system")
+
+		// Proxies live in user namespaces in GatewayNamespace mode — no proxy policy here.
+		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, GatewayAPIProxyPolicyName, common.CalicoNamespace)
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should deploy the controller into tigera-gateway in ControllerNamespace mode", func() {
+		installation := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				// GatewayDeploymentMode unset → defaults to ControllerNamespace.
+			},
+		}
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		_, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.Namespace](objsToCreate, "tigera-gateway", "")
+		Expect(err).NotTo(HaveOccurred())
+
+		// We own tigera-gateway: install default-deny + controller allow + proxy allow.
+		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ControllerPolicyName, "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(policy.Spec.Tier).To(Equal("calico-system"))
+		proxyPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, GatewayAPIProxyPolicyName, "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proxyPolicy.Spec.Selector).To(Equal("app.kubernetes.io/managed-by == 'envoy-gateway'"))
+	})
+
 	It("should not create per-namespace resources for GatewayNamespace mode (open-source)", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.Calico,
@@ -1506,6 +1610,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 			// Deprecated combined waf-http-filter cleanup.
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
+			// Opposite-mode certgen CR/CRB (name embeds the ControllerNamespace-mode namespace).
+			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
+			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			// Stale per-namespace resources for "removed-ns".
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "removed-ns"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "removed-ns"}},
@@ -1513,8 +1620,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "removed-ns"}},
 		})
 
-		// Secret must be deleted before the RoleBinding that grants the operator
-		// permission to delete it; reversing the order causes a 403.
+		// Secret must be deleted before the RoleBinding that grants us delete perms (else 403).
 		secretIdx, rbIdx := -1, -1
 		for i, obj := range objsToDelete {
 			if obj.GetNamespace() != "removed-ns" {
@@ -1535,5 +1641,77 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(rbIdx).NotTo(Equal(-1))
 		Expect(secretIdx).To(BeNumerically("<", rbIdx),
 			"tigera-pull-secret must be deleted before tigera-operator-secrets RoleBinding")
+	})
+
+	It("must not create or delete core-owned shared resources in reserved namespaces", func() {
+		installation := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses:        []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				GatewayDeploymentMode: ptr.To(operatorv1.GatewayDeploymentModeGatewayNamespace),
+			},
+		}
+		pullSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
+			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
+		}
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+			PullSecrets:  []*corev1.Secret{pullSecret},
+			// Gateways in reserved namespaces (odd but possible) plus a normal one.
+			GatewayNamespaces:        []string{common.CalicoNamespace, common.OperatorNamespace(), "app-ns"},
+			CurrentGatewayNamespaces: set.New(common.CalicoNamespace, common.OperatorNamespace(), "app-ns"),
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// app-ns gets the full treatment — WAF SA + both RoleBindings + pull secret.
+		_, err := rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "tigera-operator-secrets", "app-ns")
+		Expect(err).NotTo(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "app-ns")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Reserved namespaces get WAF-specific resources but not the shared ones.
+		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
+			_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", ns)
+			Expect(err).NotTo(HaveOccurred(), "WAF SA should still be created in %s", ns)
+			_, err = rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", ns)
+			Expect(err).NotTo(HaveOccurred(), "WAF gateway-resources RB should still be created in %s", ns)
+
+			_, err = rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "tigera-operator-secrets", ns)
+			Expect(err).To(HaveOccurred(), "must not create tigera-operator-secrets in reserved namespace %s", ns)
+			_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", ns)
+			Expect(err).To(HaveOccurred(), "must not copy tigera-pull-secret into reserved namespace %s", ns)
+		}
+
+		// Delete path: never queue shared resources in reserved namespaces.
+		gatewayComp, gatewayCompErr = GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:                   testScheme(),
+			Installation:             installation,
+			GatewayAPI:               gatewayAPI,
+			PullSecrets:              []*corev1.Secret{pullSecret},
+			GatewayNamespaces:        nil,
+			CurrentGatewayNamespaces: set.New(common.CalicoNamespace, common.OperatorNamespace()),
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		_, objsToDelete := gatewayComp.Objects()
+		for _, obj := range objsToDelete {
+			ns := obj.GetNamespace()
+			if ns != common.CalicoNamespace && ns != common.OperatorNamespace() {
+				continue
+			}
+			switch o := obj.(type) {
+			case *rbacv1.RoleBinding:
+				Expect(o.Name).NotTo(Equal("tigera-operator-secrets"),
+					"must not delete tigera-operator-secrets in reserved namespace %s", ns)
+			case *corev1.Secret:
+				Expect(o.Name).NotTo(Equal("tigera-pull-secret"),
+					"must not delete tigera-pull-secret in reserved namespace %s", ns)
+			}
+		}
 	})
 })

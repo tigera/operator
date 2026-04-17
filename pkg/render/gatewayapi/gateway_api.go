@@ -24,12 +24,14 @@ import (
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"helm.sh/helm/v3/pkg/action"
@@ -62,8 +64,14 @@ var (
 )
 
 const (
-	GatewayAPINamespace = "tigera-gateway"
-	gatewayReleaseName  = "tigera-gateway-api"
+	// ControllerModeNamespace is the ControllerNamespace-mode default; use controllerNamespaceFor to resolve per mode.
+	ControllerModeNamespace = "tigera-gateway"
+	GatewayReleaseName      = "tigera-gateway-api"
+
+	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
+	GatewayAPIProxyPolicyName  = networkpolicy.CalicoComponentPolicyPrefix + "envoy-proxy"
+	EnvoyGatewayPolicySelector = "app.kubernetes.io/name == 'gateway-helm' || app == 'certgen'"
+	EnvoyProxyPolicySelector   = "app.kubernetes.io/managed-by == 'envoy-gateway'"
 )
 
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
@@ -176,6 +184,20 @@ func toMap(v any) (map[string]any, error) {
 	return out, nil
 }
 
+// controllerNamespaceFor returns calico-system for GatewayNamespace mode, tigera-gateway otherwise.
+func controllerNamespaceFor(mode operatorv1.GatewayDeploymentMode) string {
+	if mode == operatorv1.GatewayDeploymentModeGatewayNamespace {
+		return common.CalicoNamespace
+	}
+	return ControllerModeNamespace
+}
+
+// isReservedOperatorNamespace reports whether core Installation already owns
+// tigera-operator-secrets / tigera-pull-secret in ns (deleting ours would wipe them).
+func isReservedOperatorNamespace(ns string) bool {
+	return ns == common.CalicoNamespace || ns == common.OperatorNamespace()
+}
+
 // renderCache caches helm chart render results keyed by deployment mode.
 // The chart output is deterministic for a given deployment mode, so we can
 // safely cache it across reconciles. Callers must deep-copy any object they
@@ -206,8 +228,8 @@ func renderChart(scheme *runtime.Scheme, deploymentMode operatorv1.GatewayDeploy
 	helmClient.DryRun = true
 	helmClient.ClientOnly = true
 	helmClient.IncludeCRDs = true
-	helmClient.Namespace = GatewayAPINamespace
-	helmClient.ReleaseName = gatewayReleaseName
+	helmClient.Namespace = controllerNamespaceFor(deploymentMode)
+	helmClient.ReleaseName = GatewayReleaseName
 
 	opts := &helmOpts{}
 	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace {
@@ -453,6 +475,14 @@ type gatewayAPIImplementationComponent struct {
 	oppositeResources *gatewayAPIResources
 }
 
+func (pr *gatewayAPIImplementationComponent) controllerNamespace() string {
+	mode := operatorv1.GatewayDeploymentModeControllerNamespace
+	if pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
+		mode = *pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode
+	}
+	return controllerNamespaceFor(mode)
+}
+
 func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) (render.Component, error) {
 	deploymentMode := operatorv1.GatewayDeploymentModeControllerNamespace
 	if cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
@@ -534,27 +564,33 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	if pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode != nil {
 		deploymentMode = *pr.cfg.GatewayAPI.Spec.GatewayDeploymentMode
 	}
+	controllerNS := controllerNamespaceFor(deploymentMode)
 	resources := pr.resources
 
 	// Compute resources that exist only in the opposite mode for cleanup
 	// when switching between deployment modes.
 	modeCleanup := computeModeCleanup(resources, pr.oppositeResources)
 
-	// First create the namespace, following our own pattern for namespace creation.
-	objs := []client.Object{
-		render.CreateNamespace(
-			GatewayAPINamespace,
-			pr.cfg.Installation.KubernetesProvider,
-			render.PSSPrivileged, // Needed for HostPath volume to write logs to
-			pr.cfg.Installation.Azure,
-		),
+	// calico-system is owned by the core Installation; only bootstrap when we own the
+	// namespace (tigera-gateway). Envoy Proxy workloads live here in ControllerNamespace
+	// mode, so they also need an allow policy alongside the default-deny.
+	var objs []client.Object
+	openShift := pr.cfg.Installation.KubernetesProvider.IsOpenShift()
+	if controllerNS != common.CalicoNamespace {
+		objs = append(objs,
+			render.CreateNamespace(
+				controllerNS,
+				pr.cfg.Installation.KubernetesProvider,
+				render.PSSPrivileged, // HostPath volume for l7-collector logs
+				pr.cfg.Installation.Azure,
+			),
+			render.CreateOperatorSecretsRoleBinding(controllerNS),
+			networkpolicy.CalicoSystemDefaultDeny(controllerNS),
+		)
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(controllerNS, pr.cfg.PullSecrets...)...)...)
+		objs = append(objs, envoyProxyPolicy(controllerNS, openShift))
 	}
-
-	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, render.CreateOperatorSecretsRoleBinding(GatewayAPINamespace))
-
-	// Add pull secrets (inferred from the Installation resource).
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(GatewayAPINamespace, pr.cfg.PullSecrets...)...)...)
+	objs = append(objs, gatewayAPIControllerPolicy(controllerNS, openShift))
 
 	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
 	for _, resource := range []client.Object{
@@ -746,7 +782,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 				},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      gcName,
-					Namespace: "tigera-gateway",
+					Namespace: controllerNS,
 				},
 			},
 		)
@@ -762,14 +798,15 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	if deploymentMode == operatorv1.GatewayDeploymentModeGatewayNamespace &&
 		pr.cfg.Installation.Variant.IsEnterprise() {
 		for _, ns := range pr.cfg.GatewayNamespaces {
-			// Grant the operator permission to manage secrets in this namespace,
-			// then create the per-namespace resources.
 			objs = append(objs,
-				render.CreateOperatorSecretsRoleBinding(ns),
 				pr.gatewayNamespaceSA(ns),
 				pr.gatewayNamespaceRoleBinding(ns),
 			)
-			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+			// Skip shared resources in reserved namespaces — core Installation owns them.
+			if !isReservedOperatorNamespace(ns) {
+				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
+				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+			}
 		}
 		if len(pr.cfg.GatewayNamespaces) > 0 {
 			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
@@ -781,14 +818,18 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			currentNS := set.New(pr.cfg.GatewayNamespaces...)
 			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
 				if !currentNS.Has(ns) {
-					// Delete the Secret before the RoleBinding that grants the operator
-					// permission to delete it, otherwise the delete 403s.
-					objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+					// Secret must go before the RoleBinding that grants us delete perms; skip shared
+					// resources in reserved namespaces (core-owned).
+					if !isReservedOperatorNamespace(ns) {
+						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+					}
 					objsToDelete = append(objsToDelete,
 						pr.gatewayNamespaceSA(ns),
 						pr.gatewayNamespaceRoleBinding(ns),
-						render.CreateOperatorSecretsRoleBinding(ns),
 					)
+					if !isReservedOperatorNamespace(ns) {
+						objsToDelete = append(objsToDelete, render.CreateOperatorSecretsRoleBinding(ns))
+					}
 				}
 			}
 			if len(pr.cfg.GatewayNamespaces) == 0 {
@@ -826,7 +867,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		envoyProxy.APIVersion = "gateway.envoyproxy.io/v1alpha1"
 	}
 	envoyProxy.Name = className
-	envoyProxy.Namespace = "tigera-gateway"
+	envoyProxy.Namespace = pr.controllerNamespace()
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
@@ -1172,7 +1213,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayClass(className, controllerN
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      className,
-			Namespace: "tigera-gateway",
+			Namespace: pr.controllerNamespace(),
 		},
 		Spec: gapi.GatewayClassSpec{
 			ControllerName: gapi.GatewayController(controllerName),
@@ -1234,7 +1275,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *core
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wafFilterName,
-			Namespace: "tigera-gateway",
+			Namespace: pr.controllerNamespace(),
 		},
 	}
 }
@@ -1304,7 +1345,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedCRB() *rb
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
-				Namespace: GatewayAPINamespace,
+				Namespace: pr.controllerNamespace(),
 			},
 		},
 	}
@@ -1328,7 +1369,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesCRB() 
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
-				Namespace: GatewayAPINamespace,
+				Namespace: pr.controllerNamespace(),
 			},
 		},
 	}
@@ -1401,6 +1442,78 @@ func (pr *gatewayAPIImplementationComponent) gatewayNamespaceRoleBinding(namespa
 				Name:      wafFilterName,
 				Namespace: namespace,
 			},
+		},
+	}
+}
+
+// gatewayAPIControllerPolicy allows the controller + certgen to reach kube-apiserver and DNS.
+func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPolicy {
+	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
+	egress = append(egress,
+		v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		v3.Rule{Action: v3.Pass},
+	)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ControllerPolicyName,
+			Namespace: namespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: EnvoyGatewayPolicySelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			// 9443: webhook. 18000-18002: xDS. 19001: metrics.
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
+					},
+				},
+			},
+			Egress: egress,
+		},
+	}
+}
+
+// envoyProxyPolicy allows Envoy Proxy workloads to reach xDS + DNS; user traffic passes to later tiers.
+func envoyProxyPolicy(namespace string, openShift bool) *v3.NetworkPolicy {
+	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
+	egress = append(egress,
+		v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Selector:          EnvoyGatewayPolicySelector,
+				NamespaceSelector: "projectcalico.org/name == '" + namespace + "'",
+				Ports:             networkpolicy.Ports(18000, 18001, 18002),
+			},
+		},
+		v3.Rule{Action: v3.Pass},
+	)
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GatewayAPIProxyPolicyName,
+			Namespace: namespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: EnvoyProxyPolicySelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			// Client / LB traffic to gateway listeners is handled by later tiers.
+			Ingress: []v3.Rule{{Action: v3.Pass}},
+			Egress:  egress,
 		},
 	}
 }

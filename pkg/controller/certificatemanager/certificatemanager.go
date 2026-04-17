@@ -150,8 +150,9 @@ func WithTenant(t *operatorv1.Tenant) Option {
 // brings their own secrets, CertificateManager will preserve and return them.
 func Create(cli client.Client, installation *operatorv1.InstallationSpec, clusterDomain, ns string, opts ...Option) (CertificateManager, error) {
 	var (
-		cryptoCA *crypto.CA
-		csrImage string
+		cryptoCA         *crypto.CA
+		csrImage         string
+		csrImageCombined bool
 		// The private key is of type any, as this is the interface used in the x509 package for all private key types.
 		privateKey                    any
 		privateKeyPEM, certificatePEM []byte
@@ -183,26 +184,11 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			return nil, err
 		}
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
-		if installation.Variant.IsEnterprise() {
-			csrImage, err = components.GetReference(
-				components.ComponentTigeraCSRInitContainer,
-				installation.Registry,
-				installation.ImagePath,
-				installation.ImagePrefix,
-				imageSet,
-			)
-		} else {
-			csrImage, err = components.GetReference(
-				components.ComponentCalicoCSRInitContainer,
-				installation.Registry,
-				installation.ImagePath,
-				installation.ImagePrefix,
-				imageSet,
-			)
-		}
+		csrImage, err = certificatemanagement.ResolveCSRInitImage(installation, imageSet)
 		if err != nil {
 			return nil, err
 		}
+		csrImageCombined = components.UsesCombinedCalicoImage(installation)
 
 		if installation.CertificateManagement != nil {
 			// Configured to use certificate management. Get the CACert from
@@ -285,6 +271,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 		PrivateKeyPEM:         privateKeyPEM,
 		CertificatePEM:        certificatePEM,
 		CSRImage:              csrImage,
+		CSRImageCombined:      csrImageCombined,
 		ClusterDomain:         clusterDomain,
 		CertificateManagement: certificateManagement,
 	}
@@ -313,10 +300,11 @@ func (cm *certificateManager) CreateCSRKeyPair(secretName, namespace string, dns
 			CACert:     cm.keyPair.CertificatePEM,
 			SignerName: OperatorCSRSignerName,
 		},
-		DNSNames:       dnsNames,
-		CSRImage:       cm.keyPair.CSRImage,
-		Namespace:      namespace,
-		CertificatePEM: cm.keyPair.CertificatePEM,
+		DNSNames:         dnsNames,
+		CSRImage:         cm.keyPair.CSRImage,
+		CSRImageCombined: cm.keyPair.CSRImageCombined,
+		Namespace:        namespace,
+		CertificatePEM:   cm.keyPair.CertificatePEM,
 	}
 }
 
@@ -581,6 +569,7 @@ func certificateManagementKeyPair(ca *certificateManager, secretName, ns string,
 		CertificateManagement: ca.CertificateManagement(),
 		DNSNames:              dnsNames,
 		CSRImage:              ca.keyPair.CSRImage,
+		CSRImageCombined:      ca.keyPair.CSRImageCombined,
 		Namespace:             ns,
 		CertificatePEM:        ca.CertificateManagement().CACert,
 	}

@@ -20,49 +20,9 @@ package components
 var (
 	CalicoRelease string = "master"
 
-	ComponentCalicoCNI = Component{
-		Version:   "master",
-		Image:     "cni",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoCNIFIPS = Component{
-		Version:   "master-fips",
-		Image:     "cni",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
 	ComponentCalicoCNIWindows = Component{
 		Version:   "master",
 		Image:     "cni-windows",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoCSRInitContainer = Component{
-		Version:   "master",
-		Image:     "key-cert-provisioner",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoKubeControllers = Component{
-		Version:   "master",
-		Image:     "kube-controllers",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoKubeControllersFIPS = Component{
-		Version:   "master-fips",
-		Image:     "kube-controllers",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -92,62 +52,6 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalicoTypha = Component{
-		Version:   "master",
-		Image:     "typha",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoTyphaFIPS = Component{
-		Version:   "master-fips",
-		Image:     "typha",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoFlexVolume = Component{
-		Version:   "master",
-		Image:     "pod2daemon-flexvol",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoAPIServer = Component{
-		Version:   "master",
-		Image:     "apiserver",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoAPIServerFIPS = Component{
-		Version:   "master-fips",
-		Image:     "apiserver",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoCSI = Component{
-		Version:   "master",
-		Image:     "csi",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoCSIFIPS = Component{
-		Version:   "master-fips",
-		Image:     "csi",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
 	ComponentCalicoCSIRegistrar = Component{
 		Version:   "master",
 		Image:     "node-driver-registrar",
@@ -156,33 +60,9 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalicoCSIRegistrarFIPS = Component{
-		Version:   "master-fips",
-		Image:     "node-driver-registrar",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoGoldmane = Component{
-		Version:   "master",
-		Image:     "goldmane",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
 	ComponentCalicoWhisker = Component{
 		Version:   "master",
 		Image:     "whisker",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoWhiskerBackend = Component{
-		Version:   "master",
-		Image:     "whisker-backend",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -207,14 +87,6 @@ var (
 	ComponentCalicoEnvoyRatelimit = Component{
 		Version:   "master",
 		Image:     "envoy-ratelimit",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoGuardian = Component{
-		Version:   "master",
-		Image:     "guardian",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -252,44 +124,37 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalicoWebhooks = Component{
+	ComponentCalico = Component{
 		Version:   "master",
-		Image:     "webhooks",
+		Image:     "calico",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoFIPS = Component{
+		Version:   "master-fips",
+		Image:     "calico",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
 	}
 
 	CalicoImages = []Component{
-		ComponentCalicoCNI,
-		ComponentCalicoCNIFIPS,
 		ComponentCalicoCNIWindows,
-		ComponentCalicoCSRInitContainer,
-		ComponentCalicoKubeControllers,
-		ComponentCalicoKubeControllersFIPS,
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
 		ComponentCalicoNodeWindows,
-		ComponentCalicoTypha,
-		ComponentCalicoTyphaFIPS,
-		ComponentCalicoFlexVolume,
-		ComponentCalicoAPIServer,
-		ComponentCalicoAPIServerFIPS,
-		ComponentCalicoCSI,
-		ComponentCalicoCSIFIPS,
 		ComponentCalicoCSIRegistrar,
-		ComponentCalicoCSIRegistrarFIPS,
-		ComponentCalicoGoldmane,
 		ComponentCalicoWhisker,
-		ComponentCalicoWhiskerBackend,
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
-		ComponentCalicoGuardian,
 		ComponentCalicoIstioPilot,
 		ComponentCalicoIstioInstallCNI,
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
-		ComponentCalicoWebhooks,
+		ComponentCalico,
+		ComponentCalicoFIPS,
 	}
 )

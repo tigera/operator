@@ -157,6 +157,7 @@ type apiServerComponent struct {
 	l7AdmissionControllerImage      string
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
+	combinedImage                   bool
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -190,16 +191,10 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			}
 		}
 	} else if c.cfg.RequiresAggregationServer {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-		} else {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
+		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.apiServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
 		}
 	}
 
@@ -1176,9 +1171,15 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
+	var apiServerCommand []string
+	if c.combinedImage {
+		apiServerCommand = []string{components.CalicoBinaryPath, "component", "apiserver"}
+	}
+
 	apiServer := corev1.Container{
 		Name:            string(APIServerContainerName),
 		Image:           c.apiServerImage,
+		Command:         apiServerCommand,
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
 		Env:             env,

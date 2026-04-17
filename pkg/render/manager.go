@@ -98,6 +98,12 @@ const (
 	DashboardAPIPort         = "8444"
 	DashboardAPIHealthPort   = "8090"
 	DashboardAPIName         = "tigera-dashboard-api"
+
+	// VoltronAdditionalTunnelSecretName is the name of an optional, pre-provisioned secret
+	// in the truth namespace that holds an additional CA used by Voltron for tunnel server
+	// certificates. When the secret is present the manager controller wires it into the
+	// Voltron deployment. It is managed out-of-band; the operator only consumes it.
+	VoltronAdditionalTunnelSecretName = "calico-management-additional-cluster-connection"
 )
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -126,6 +132,9 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	tlsAnnotations[cfg.InternalTLSKeyPair.HashAnnotationKey()] = cfg.InternalTLSKeyPair.HashAnnotationValue()
 	if cfg.ManagementCluster != nil {
 		tlsAnnotations[cfg.TunnelServerCert.HashAnnotationKey()] = cfg.TunnelServerCert.HashAnnotationValue()
+		if cfg.AdditionalTunnelServerCert != nil {
+			tlsAnnotations[cfg.AdditionalTunnelServerCert.HashAnnotationKey()] = cfg.AdditionalTunnelServerCert.HashAnnotationValue()
+		}
 	}
 
 	return &managerComponent{
@@ -156,6 +165,12 @@ type ManagerConfiguration struct {
 
 	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
 	TunnelServerCert certificatemanagement.KeyPairInterface
+
+	// AdditionalTunnelServerCert is an optional additional CA used by Voltron for tunnel server
+	// certificates. It is populated by the manager controller when a pre-provisioned secret named
+	// VoltronAdditionalTunnelSecretName exists in the truth namespace, and is mounted into the
+	// Voltron container so Voltron can serve TLS from it.
+	AdditionalTunnelServerCert certificatemanagement.KeyPairInterface
 
 	// TLS KeyPair used by both Voltron and ui-apis, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
@@ -382,6 +397,9 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 			c.cfg.TunnelServerCert.Volume(),
 			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
+		if c.cfg.AdditionalTunnelServerCert != nil {
+			v = append(v, c.cfg.AdditionalTunnelServerCert.Volume())
+		}
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
@@ -551,6 +569,15 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_KEY", Value: linseedKeyPath})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
+		if c.cfg.AdditionalTunnelServerCert != nil {
+			// Voltron scans a single parent directory for additional cert/key pairs. Each
+			// cert/key pair is mounted into its own subdirectory so multiple can coexist.
+			// The tls.crt from each pair is also used as an additional CA to verify
+			// client (guardian) connections.
+			env = append(env,
+				corev1.EnvVar{Name: "VOLTRON_ADDITIONAL_CERT_KEY_PAIRS_PATH", Value: "/additional-tunnel-certificates"},
+			)
+		}
 	}
 
 	if c.cfg.CACertCommonName != "" {
@@ -571,6 +598,13 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		if c.cfg.ManagementCluster != nil {
 			mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
 			mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+			if c.cfg.AdditionalTunnelServerCert != nil {
+				mounts = append(mounts, corev1.VolumeMount{
+					Name:      c.cfg.AdditionalTunnelServerCert.GetName(),
+					MountPath: fmt.Sprintf("/additional-tunnel-certificates/%s", c.cfg.AdditionalTunnelServerCert.GetName()),
+					ReadOnly:  true,
+				})
+			}
 		}
 	}
 

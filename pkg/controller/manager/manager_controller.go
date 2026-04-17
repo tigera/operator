@@ -42,7 +42,6 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
-	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -158,7 +157,8 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 			// We need to watch for es-gateway certificate because ui-apis still creates a
 			// client to talk to elastic via es-gateway
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
+			render.VoltronTunnelSecretName, render.VoltronAdditionalTunnelSecretName,
+			render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -654,33 +654,47 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// If an additional tunnel CA secret has been provisioned in the truth namespace, Voltron
+	// will mount it and serve TLS from it. This is only relevant for management clusters
+	// (Voltron is what consumes the additional CA). The secret is managed out-of-band; the
+	// controller just watches and consumes it.
+	var additionalTunnelServerCert certificatemanagement.KeyPairInterface
+	if managementCluster != nil {
+		additionalTunnelServerCert, err = r.resolveAdditionalTunnelCert(ctx, helper.TruthNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error resolving additional tunnel CA", err, logc)
+			return reconcile.Result{}, err
+		}
+	}
+
 	managerCfg := &render.ManagerConfiguration{
-		VoltronRouteConfig:      routeConfig,
-		KeyValidatorConfig:      keyValidatorConfig,
-		TrustedCertBundle:       trustedBundle,
-		TLSKeyPair:              tlsSecret,
-		VoltronLinseedKeyPair:   linseedVoltronServerCert,
-		PullSecrets:             pullSecrets,
-		OpenShift:               r.provider.IsOpenShift(),
-		Installation:            installation,
-		ManagementCluster:       managementCluster,
-		NonClusterHost:          nonclusterhost,
-		TunnelServerCert:        tunnelServerCert,
-		InternalTLSKeyPair:      internalTrafficSecret,
-		ClusterDomain:           r.clusterDomain,
-		ESLicenseType:           elasticLicenseType,
-		Replicas:                replicas,
-		Compliance:              complianceCR,
-		ComplianceLicenseActive: complianceLicenseFeatureActive,
-		ComplianceNamespace:     utils.NewNamespaceHelper(r.multiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
-		Namespace:               helper.InstallNamespace(),
-		TruthNamespace:          helper.TruthNamespace(),
-		Tenant:                  tenant,
-		ExternalElastic:         r.elasticExternal,
-		BindingNamespaces:       namespaces,
-		OSSTenantNamespaces:     ossTenantNamespaces,
-		Manager:                 instance,
-		CACertCommonName:        certificateManager.CACertCommonName(),
+		VoltronRouteConfig:         routeConfig,
+		KeyValidatorConfig:         keyValidatorConfig,
+		TrustedCertBundle:          trustedBundle,
+		TLSKeyPair:                 tlsSecret,
+		VoltronLinseedKeyPair:      linseedVoltronServerCert,
+		PullSecrets:                pullSecrets,
+		OpenShift:                  r.provider.IsOpenShift(),
+		Installation:               installation,
+		ManagementCluster:          managementCluster,
+		NonClusterHost:             nonclusterhost,
+		TunnelServerCert:           tunnelServerCert,
+		AdditionalTunnelServerCert: additionalTunnelServerCert,
+		InternalTLSKeyPair:         internalTrafficSecret,
+		ClusterDomain:              r.clusterDomain,
+		ESLicenseType:              elasticLicenseType,
+		Replicas:                   replicas,
+		Compliance:                 complianceCR,
+		ComplianceLicenseActive:    complianceLicenseFeatureActive,
+		ComplianceNamespace:        utils.NewNamespaceHelper(r.multiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
+		Namespace:                  helper.InstallNamespace(),
+		TruthNamespace:             helper.TruthNamespace(),
+		Tenant:                     tenant,
+		ExternalElastic:            r.elasticExternal,
+		BindingNamespaces:          namespaces,
+		OSSTenantNamespaces:        ossTenantNamespaces,
+		Manager:                    instance,
+		CACertCommonName:           certificateManager.CACertCommonName(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -717,6 +731,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
+				rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),
@@ -827,4 +842,23 @@ func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamesp
 	}
 
 	return builder.Build()
+}
+
+// resolveAdditionalTunnelCert looks up the additional tunnel CA secret in the truth namespace.
+// When the secret is present, a KeyPair is returned so that Voltron mounts the CA and gets the
+// corresponding environment variables set. When the secret is absent, (nil, nil) is returned and
+// Voltron runs without the additional CA. The secret is created and rotated out-of-band; this
+// controller only consumes it.
+func (r *ReconcileManager) resolveAdditionalTunnelCert(
+	ctx context.Context,
+	truthNamespace string,
+) (certificatemanagement.KeyPairInterface, error) {
+	secret, err := utils.GetSecret(ctx, r.client, render.VoltronAdditionalTunnelSecretName, truthNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s secret: %w", render.VoltronAdditionalTunnelSecretName, err)
+	}
+	if secret == nil {
+		return nil, nil
+	}
+	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
 }

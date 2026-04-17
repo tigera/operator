@@ -95,7 +95,7 @@ type Component struct {
 
 	whiskerImage        string
 	whiskerBackendImage string
-	combinedImage       bool
+	useCombinedImage    bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -110,7 +110,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
-	c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+	c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 	c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
@@ -217,7 +217,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		container.Command = []string{components.CalicoBinaryPath, "component", "whisker-backend"}
 	}
 	return container

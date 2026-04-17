@@ -167,10 +167,10 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage      string
-	flexvolImage  string
-	nodeImage     string
-	combinedImage bool
+	cniImage         string
+	flexvolImage     string
+	nodeImage        string
+	useCombinedImage bool
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -190,7 +190,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
 		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
 	} else {
-		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 		combinedRef := appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
 		c.cniImage = combinedRef
 		c.flexvolImage = combinedRef
@@ -1198,7 +1198,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	}
 
 	cniCommand := []string{"/opt/cni/bin/install"}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		cniCommand = []string{components.CalicoBinaryPath, "component", "cni", "install"}
 	}
 
@@ -1221,7 +1221,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	}
 
 	var flexvolCommand []string
-	if c.combinedImage {
+	if c.useCombinedImage {
 		flexvolCommand = []string{components.CalicoBinaryPath, "component", "flexvol"}
 	}
 
@@ -1265,11 +1265,11 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 
 	// The node image includes the combined calico binary at /usr/bin/calico.
 	command := []string{CalicoNodeObjectName, "-init"}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		command = []string{components.CalicoBinaryPath, "component", "node", "init"}
 	}
 	if !c.cfg.Installation.BPFEnabled() {
-		if c.combinedImage {
+		if c.useCombinedImage {
 			command = append(command, "--best-effort")
 		} else {
 			command = append(command, "-best-effort")
@@ -1742,7 +1742,7 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	// The node image includes both calico-node (legacy) and calico (combined binary).
 	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		preStopCmd = []string{components.CalicoBinaryPath, "component", "node", "shutdown"}
 	}
 	lc := &corev1.Lifecycle{
@@ -1759,7 +1759,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 
 	// The node image includes the combined calico binary at /usr/bin/calico. Enterprise still uses the
 	// legacy /bin/calico-node entrypoint until combined-image support lands for Enterprise.
-	if c.combinedImage {
+	if c.useCombinedImage {
 		readinessCmd = []string{components.CalicoBinaryPath, "component", "node", "health", "--bird-ready", "--felix-ready"}
 		if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
 			readinessCmd = []string{components.CalicoBinaryPath, "component", "node", "health", "--felix-ready"}

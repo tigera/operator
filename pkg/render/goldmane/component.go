@@ -83,8 +83,8 @@ type Configuration struct {
 type Component struct {
 	cfg *Configuration
 
-	goldmaneImage string
-	combinedImage bool
+	goldmaneImage    string
+	useCombinedImage bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -94,7 +94,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 
 	var err error
 
-	c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+	c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 	c.goldmaneImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
@@ -253,7 +253,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	}
 
 	var containerCommand []string
-	if c.combinedImage {
+	if c.useCombinedImage {
 		containerCommand = []string{components.CalicoBinaryPath, "component", "goldmane"}
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

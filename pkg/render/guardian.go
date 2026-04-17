@@ -133,9 +133,9 @@ type GuardianConfiguration struct {
 }
 
 type GuardianComponent struct {
-	cfg           *GuardianConfiguration
-	image         string
-	combinedImage bool
+	cfg              *GuardianConfiguration
+	image            string
+	useCombinedImage bool
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -146,7 +146,7 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
 	} else {
-		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 		c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	}
 	return err
@@ -500,7 +500,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 	}
 
 	var command []string
-	if c.combinedImage {
+	if c.useCombinedImage {
 		command = []string{components.CalicoBinaryPath, "component", "guardian"}
 	}
 

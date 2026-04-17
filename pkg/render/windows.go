@@ -60,10 +60,10 @@ type WindowsConfiguration struct {
 }
 
 type windowsComponent struct {
-	cfg           *WindowsConfiguration
-	cniImage      string
-	nodeImage     string
-	combinedImage bool
+	cfg              *WindowsConfiguration
+	cniImage         string
+	nodeImage        string
+	useCombinedImage bool
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -86,7 +86,7 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeWindows, reg, path, prefix, is))
 		// There is no FIPS build for Windows, so OSS Windows always uses the combined calico-node.exe
 		// which dispatches via Cobra subcommands ("node health", "node shutdown", etc.).
-		c.combinedImage = true
+		c.useCombinedImage = true
 	}
 
 	if len(errMsgs) != 0 {
@@ -753,7 +753,7 @@ func (c *windowsComponent) windowsVolumeMounts() []corev1.VolumeMount {
 func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
 	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-live"}
 		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-ready"}
 	}
@@ -776,7 +776,7 @@ func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *cor
 // windowsLifecycle creates the node's postStart and preStop hooks.
 func (c *windowsComponent) windowsLifecycle() *corev1.Lifecycle {
 	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "shutdown"}
 	}
 	lc := &corev1.Lifecycle{

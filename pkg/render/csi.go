@@ -53,7 +53,7 @@ type csiComponent struct {
 
 	csiImage          string
 	csiRegistrarImage string
-	combinedImage     bool
+	useCombinedImage  bool
 }
 
 func CSI(cfg *CSIConfiguration) Component {
@@ -140,7 +140,7 @@ func (c *csiComponent) csiAffinities() *corev1.Affinity {
 func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
 	var csiCommand []string
-	if c.combinedImage {
+	if c.useCombinedImage {
 		csiCommand = []string{components.CalicoBinaryPath, "component", "csi"}
 	}
 	csiContainer := corev1.Container{
@@ -392,7 +392,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 		c.csiRegistrarImage, err = components.GetReference(components.ComponentTigeraCSINodeDriverRegistrar, reg, path, prefix, is)
 	} else {
-		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 		c.csiImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			return err

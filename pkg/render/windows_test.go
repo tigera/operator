@@ -2718,13 +2718,13 @@ var _ = Describe("Windows rendering tests", func() {
 })
 
 // verifyWindowsProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
-// combinedImage indicates the calico-node.exe binary is the unified Cobra-based calico binary (OSS), which uses
+// useCombinedImage indicates the calico-node.exe binary is the unified Cobra-based calico binary (OSS), which uses
 // subcommands (e.g. "node health --felix-live") instead of the legacy flag-style invocations used by Enterprise.
-func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, combinedImage bool) {
+func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, useCombinedImage bool) {
 	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
 	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
 	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
-	if combinedImage {
+	if useCombinedImage {
 		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-live"}
 		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-ready"}
 		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "shutdown"}

@@ -70,8 +70,8 @@ type component struct {
 	cfg *Configuration
 
 	// Images.
-	webhooksImage string
-	combinedImage bool
+	webhooksImage    string
+	useCombinedImage bool
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -83,7 +83,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
 	} else {
-		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 		c.webhooksImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	}
 	return err
@@ -180,7 +180,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	if c.combinedImage {
+	if c.useCombinedImage {
 		dep.Spec.Template.Spec.Containers[0].Command = []string{components.CalicoBinaryPath, "component", "webhooks"}
 	}
 

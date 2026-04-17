@@ -91,8 +91,8 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage    string
-	combinedImage bool
+	typhaImage       string
+	useCombinedImage bool
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -103,7 +103,7 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	} else {
-		c.combinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
+		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
 		c.typhaImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	}
 	if err != nil {
@@ -578,7 +578,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		ReadinessProbe:  rp,
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
-	if c.combinedImage {
+	if c.useCombinedImage {
 		container.Command = []string{components.CalicoBinaryPath, "component", "typha"}
 	}
 	return container

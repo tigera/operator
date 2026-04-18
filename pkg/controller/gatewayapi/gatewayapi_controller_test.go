@@ -99,6 +99,7 @@ var _ = Describe("Gateway API controller tests", func() {
 			client:              c,
 			scheme:              scheme,
 			status:              mockStatus,
+			tierWatchReady:      &utils.ReadyFlag{},
 			newComponentHandler: FakeComponentHandler,
 			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },

@@ -1016,4 +1016,3 @@ func cleanupGatewayResources(c client.Client) {
 		return nil
 	}, "60s").ShouldNot(HaveOccurred())
 }
-

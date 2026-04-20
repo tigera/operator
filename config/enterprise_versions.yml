@@ -1,8 +1,8 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: master
+title: wt-l2-prod-cni
 components:
   libcalico-go:
-    version: master
+    version: wt-l2-prod-cni
   manager:
     image: manager
     version: master

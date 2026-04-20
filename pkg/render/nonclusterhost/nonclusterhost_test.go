@@ -126,6 +126,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 					"ippools",
 					"licensekeys",
 					"networkpolicies",
+					"networks",
 					"networksets",
 					"packetcaptures",
 					"remoteclusterconfigurations",

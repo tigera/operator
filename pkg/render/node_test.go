@@ -670,6 +670,22 @@ var _ = Describe("Node rendering tests", func() {
 					i++
 				}
 
+				// Enterprise CNI plugin needs get on projectcalico.org/networks to resolve L2 bridge attachments.
+				cniRole := rtest.GetResource(resources, "calico-cni-plugin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(cniRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+					Resources: []string{"networks"},
+					Verbs:     []string{"get"},
+				}))
+
+				// Enterprise calico-node needs get/list/watch on projectcalico.org/networks.
+				nodeRole := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(nodeRole.Rules).To(ContainElement(SatisfyAll(
+					HaveField("APIGroups", ConsistOf("projectcalico.org", "crd.projectcalico.org")),
+					HaveField("Resources", ContainElement("networks")),
+					HaveField("Verbs", ConsistOf("get", "list", "watch")),
+				)))
+
 				// The DaemonSet should have the correct configuration.
 				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 

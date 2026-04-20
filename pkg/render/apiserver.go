@@ -1425,6 +1425,7 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"egressgatewaypolicies",
 				"securityeventwebhooks",
 				"bfdconfigurations",
+				"networks",
 			},
 			Verbs: []string{
 				"get",

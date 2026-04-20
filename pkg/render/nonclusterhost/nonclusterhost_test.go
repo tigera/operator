@@ -148,7 +148,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"linseed.tigera.io"},
-				Resources: []string{"flowlogs"},
+				Resources: []string{"flowlogs", "policyactivity"},
 				Verbs:     []string{"create"},
 			},
 			rbacv1.PolicyRule{

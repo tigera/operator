@@ -201,6 +201,12 @@ type InstallationSpec struct {
 	// +optional
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
+	// TyphaPodDisruptionBudget configures the PodDisruptionBudget for the calico-typha
+	// Deployment. Fields left unset fall back to the operator's defaults. The PDB's
+	// selector is managed by the operator and cannot be overridden.
+	// +optional
+	TyphaPodDisruptionBudget *PodDisruptionBudgetOverride `json:"typhaPodDisruptionBudget,omitempty"`
+
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`

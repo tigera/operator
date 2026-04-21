@@ -1120,6 +1120,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"l7logs-multi-cluster",
 					"events",
 					"processes",
+					"policyactivity",
 				},
 				Verbs: []string{"get"},
 			},

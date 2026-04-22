@@ -576,6 +576,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"egressgatewaypolicies",
 					"externalnetworks",
 					"licensekeys",
+					"networks",
 					"packetcaptures",
 					"remoteclusterconfigurations",
 				},

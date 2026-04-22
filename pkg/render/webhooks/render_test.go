@@ -73,7 +73,6 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Installation: installation,
 			APIServer:    apiServerSpec,
 			KeyPair:      kp,
-			IPPools:      []operatorv1.IPPool{{CIDR: "192.168.0.0/16"}},
 		}
 	})
 
@@ -85,7 +84,6 @@ var _ = Describe("Webhooks rendering tests", func() {
 		expectedResources := []client.Object{
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksPolicyName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhooks-pods", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkSet", APIVersion: "projectcalico.org/v3"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&admissionregistrationv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "api.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "ValidatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"}},
@@ -125,7 +123,6 @@ var _ = Describe("Webhooks rendering tests", func() {
 		expectedResources := []client.Object{
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksPolicyName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-webhooks-pods", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkSet", APIVersion: "projectcalico.org/v3"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&admissionregistrationv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "api.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "ValidatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"}},
@@ -411,17 +408,15 @@ var _ = Describe("Webhooks rendering tests", func() {
 		}))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
 
-		// Rule 2: Deny from pod CIDRs via NetworkSet.
+		// Rule 2: Deny from any workload endpoint (pod traffic); the orchestrator selector
+		// excludes NetworkSets so a user-defined set doesn't broaden or narrow the rule.
 		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Deny))
-		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("has(calico-webhooks-pods)"))
+		Expect(np.Spec.Ingress[1].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("has(projectcalico.org/orchestrator)"))
 
-		// Rule 3: Fallback allow.
+		// Rule 3: Fallback allow for non-pod sources (including tunnel-SNAT'd hostnet apiserver traffic).
 		Expect(np.Spec.Ingress[2].Action).To(Equal(v3.Allow))
 		Expect(np.Spec.Ingress[2].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
-
-		// Verify the NetworkSet.
-		ns := rtest.GetResource(resources, "calico-webhooks-pods", common.CalicoNamespace, "projectcalico.org", "v3", "NetworkSet").(*v3.NetworkSet)
-		Expect(ns.Spec.Nets).To(ConsistOf("192.168.0.0/16"))
 	})
 
 	It("should use custom container port", func() {
@@ -460,31 +455,9 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(np.Spec.Ingress).To(HaveLen(3))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
 		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Deny))
-		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("has(calico-webhooks-pods)"))
+		Expect(np.Spec.Ingress[1].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("has(projectcalico.org/orchestrator)"))
 		Expect(np.Spec.Ingress[2].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
-
-		// Verify the NetworkSet.
-		ns := rtest.GetResource(resources, "calico-webhooks-pods", common.CalicoNamespace, "projectcalico.org", "v3", "NetworkSet").(*v3.NetworkSet)
-		Expect(ns.Spec.Nets).To(ConsistOf("192.168.0.0/16"))
-	})
-
-	It("should skip NetworkSet and Rule 2 when no IP pools are provided", func() {
-		cfg.IPPools = nil
-		cfg.Installation.CalicoNetwork = nil
-
-		component := webhooks.Component(cfg)
-		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-		resources, _ := component.Objects()
-
-		// Verify the network policy only has 2 rules (Rule 1 and Rule 3).
-		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
-		Expect(np.Spec.Ingress).To(HaveLen(2))
-		Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow)) // Apiserver
-		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Allow)) // Fallback
-
-		// Verify the NetworkSet is not present.
-		ns := rtest.GetResource(resources, "calico-webhooks-pods", common.CalicoNamespace, "projectcalico.org", "v3", "NetworkSet")
-		Expect(ns).To(BeNil())
 	})
 
 	It("should not use host network by default on non-EKS", func() {

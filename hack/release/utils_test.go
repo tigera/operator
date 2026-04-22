@@ -16,8 +16,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/google/go-cmp/cmp"
 )
 
 func TestIsReleaseVersionFormat(t *testing.T) {
@@ -103,19 +101,6 @@ func TestIsEnterpriseReleaseVersionFormat(t *testing.T) {
 				t.Fatalf("isEnterpriseReleaseVersionFormat(%q) = %v, want %v", tc.version, got, tc.want)
 			}
 		})
-	}
-}
-
-func checkReleaseVersions(t testing.TB, got map[string]string, wantCalicoVer, wantEnterpriseVer string) {
-	t.Helper()
-	want := map[string]string{
-		"Calico": wantCalicoVer,
-	}
-	if wantEnterpriseVer != "" {
-		want["Calico Enterprise"] = wantEnterpriseVer
-	}
-	if diff := cmp.Diff(want, got); diff != "" {
-		t.Fatalf("releaseVersions() mismatch (-want +got):\n%s", diff)
 	}
 }
 

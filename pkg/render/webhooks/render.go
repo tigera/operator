@@ -43,8 +43,9 @@ import (
 const (
 	WebhooksTLSSecretName = "calico-webhooks-tls"
 
-	WebhooksName            = "calico-webhooks"
-	WebhooksSecretsRBACName = "calico-webhooks-secrets-access"
+	WebhooksName              = "calico-webhooks"
+	WebhooksSecretsRBACName   = "calico-webhooks-secrets-access"
+	WebhooksPodNetworkSetName = "calico-webhooks-pods"
 )
 
 var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.CalicoTierName, WebhooksName)
@@ -57,6 +58,7 @@ type Configuration struct {
 	Installation      *operatorv1.InstallationSpec
 	APIServer         *operatorv1.APIServerSpec
 	ManagementCluster *operatorv1.ManagementCluster
+	IPPools           []operatorv1.IPPool
 	MultiTenant       bool
 	OpenShift         bool
 }
@@ -178,6 +180,38 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
+	// On management clusters, pass flags so the ManagedCluster webhook can
+	// generate the installation manifest with the correct tunnel address and certs.
+	if c.cfg.ManagementCluster != nil {
+		mc := c.cfg.ManagementCluster
+		if mc.Spec.Address != "" {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				fmt.Sprintf("--mcm-management-cluster-addr=%s", mc.Spec.Address),
+			)
+		}
+
+		secretName := render.TunnelSecretName(mc)
+		dep.Spec.Template.Spec.Containers[0].Args = append(
+			dep.Spec.Template.Spec.Containers[0].Args,
+			fmt.Sprintf("--mcm-tunnel-secret-name=%s", secretName),
+		)
+
+		if mc.Spec.TLS != nil && mc.Spec.TLS.SecretName == render.ManagerTLSSecretName {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				"--mcm-management-cluster-ca-type=Public",
+			)
+		}
+
+		if c.cfg.MultiTenant {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				"--multi-tenant=true",
+			)
+		}
+	}
+
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
 		dep.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(WebhooksName, []string{common.CalicoNamespace})
 	}
@@ -197,6 +231,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// Network policy to allow traffic to/from the webhook pod. Skip if host networking is
 	// enabled, since network policy is ineffective for host-networked pods.
 	var np *v3.NetworkPolicy
+	var ns *v3.NetworkSet
 	if !dep.Spec.Template.Spec.HostNetwork {
 		egressRules := networkpolicy.AppendDNSEgressRules(nil, c.cfg.OpenShift)
 		egressRules = append(egressRules,
@@ -209,6 +244,67 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Action: v3.Pass,
 			},
 		)
+
+		ingressRules := []v3.Rule{
+			{
+				// Rule 1: Allow traffic from the kube-apiserver using serviceSelector.
+				// This is the most robust way to identify the apiserver.
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source:   networkpolicy.KubeAPIServerEntityRule,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+		}
+
+		// Rule 2: Explicitly deny all other pods in the cluster using a NetworkSet.
+		// Using a NetworkSet is more efficient than label selectors on every pod in large clusters.
+		var podCIDRs []string
+		for _, pool := range c.cfg.IPPools {
+			podCIDRs = append(podCIDRs, pool.CIDR)
+		}
+		if len(podCIDRs) == 0 && c.cfg.Installation.CalicoNetwork != nil {
+			for _, pool := range c.cfg.Installation.CalicoNetwork.IPPools {
+				podCIDRs = append(podCIDRs, pool.CIDR)
+			}
+		}
+
+		if len(podCIDRs) > 0 {
+			ns = &v3.NetworkSet{
+				TypeMeta: metav1.TypeMeta{Kind: "NetworkSet", APIVersion: "projectcalico.org/v3"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      WebhooksPodNetworkSetName,
+					Namespace: common.CalicoNamespace,
+					Labels: map[string]string{
+						WebhooksPodNetworkSetName: "",
+					},
+				},
+				Spec: v3.NetworkSetSpec{
+					Nets: podCIDRs,
+				},
+			}
+
+			ingressRules = append(ingressRules, v3.Rule{
+				Action: v3.Deny,
+				Source: v3.EntityRule{
+					Selector: fmt.Sprintf("has(%s)", WebhooksPodNetworkSetName),
+				},
+			})
+		}
+
+		ingressRules = append(ingressRules,
+			v3.Rule{
+				// Rule 3: Fallback allow-port rule for compatibility with SNAT environments.
+				// Because of Rule 2, this will only match non-pod traffic.
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+		)
+
 		np = &v3.NetworkPolicy{
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -220,16 +316,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Tier:     networkpolicy.CalicoTierName,
 				Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
 				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-				Ingress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							Ports: networkpolicy.Ports(uint16(containerPort)),
-						},
-					},
-				},
-				Egress: egressRules,
+				Ingress:  ingressRules,
+				Egress:   egressRules,
 			},
 		}
 	}
@@ -378,7 +466,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	// Create a MutatingWebhookConfiguration for UISettings webhooks.
+	// Create a MutatingWebhookConfiguration for Enterprise-only mutating webhooks.
 	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "api.projectcalico.org",
@@ -419,6 +507,40 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
 			},
 		},
+	}
+
+	// On management clusters, register the ManagedCluster webhook. This webhook
+	// generates the installation manifest (including tunnel certs) when a
+	// ManagedCluster CR is created.
+	if c.cfg.ManagementCluster != nil {
+		mwc.Webhooks = append(mwc.Webhooks, admissionregistrationv1.MutatingWebhook{
+			Name: "managedclusters.api.projectcalico.org",
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"projectcalico.org"},
+						APIVersions: []string{"v3"},
+						Resources:   []string{"managedclusters"},
+						Scope:       ptr.To(admissionregistrationv1.AllScopes),
+					},
+				},
+			},
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				Service: &admissionregistrationv1.ServiceReference{
+					Namespace: common.CalicoNamespace,
+					Name:      WebhooksName,
+					Path:      ptr.To("/managedcluster"),
+				},
+				CABundle: c.cfg.KeyPair.GetCertificatePEM(),
+			},
+			AdmissionReviewVersions: []string{"v1"},
+			SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+			TimeoutSeconds:          ptr.To(int32(10)),
+			FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
+		})
 	}
 
 	// Create a ClusterRole and ClusterRoleBinding for the webhook service account.
@@ -487,6 +609,9 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	if np != nil {
 		objs = append(objs, np)
 	}
+	if ns != nil {
+		objs = append(objs, ns)
+	}
 	objs = append(objs, dep, svc, vwc)
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		objs = append(objs, mwc)
@@ -495,6 +620,15 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 	// Management clusters need access to the tunnel CA secret for signing managed cluster certificates.
 	var objsToDelete []client.Object
+	if ns == nil {
+		objsToDelete = append(objsToDelete, &v3.NetworkSet{
+			TypeMeta: metav1.TypeMeta{Kind: "NetworkSet", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      WebhooksPodNetworkSetName,
+				Namespace: common.CalicoNamespace,
+			},
+		})
+	}
 	if c.cfg.ManagementCluster != nil {
 		objs = append(objs, render.TunnelSecretRBAC(WebhooksSecretsRBACName, WebhooksName, c.cfg.ManagementCluster, c.cfg.MultiTenant)...)
 	} else {

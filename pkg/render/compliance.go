@@ -196,11 +196,6 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 			c.complianceAccessCalicoSystemNetworkPolicy(),
 			networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		)
-		// allow-tigera Tier was renamed to calico-system
-		objsToDelete = append(objsToDelete,
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-access", c.cfg.Namespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
-		)
 		complianceObjs = append(complianceObjs,
 			c.complianceControllerServiceAccount(),
 			c.complianceControllerRole(),
@@ -271,11 +266,18 @@ func (c *complianceComponent) Objects() ([]client.Object, []client.Object) {
 		complianceObjs = append(complianceObjs, c.complianceControllerClusterAdminClusterRoleBinding())
 	}
 
-	if c.cfg.HasNoLicense {
-		return nil, complianceObjs
+	deprecatedObjs := []client.Object{
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-server", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("compliance-access", c.cfg.Namespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
 	}
 
-	return complianceObjs, objsToDelete
+	if c.cfg.HasNoLicense {
+		return nil, append(complianceObjs, deprecatedObjs...)
+	}
+
+	return complianceObjs, append(objsToDelete, deprecatedObjs...)
 }
 
 func (c *complianceComponent) Ready() bool {

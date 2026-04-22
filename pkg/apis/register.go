@@ -51,8 +51,10 @@ var (
 
 // AddToScheme adds all Resources to the Scheme
 func AddToScheme(s *runtime.Scheme, v3 bool) error {
-	AddToSchemes = append(AddToSchemes, calicoSchemeBuilder(v3))
-	return AddToSchemes.AddToScheme(s)
+	if err := AddToSchemes.AddToScheme(s); err != nil {
+		return err
+	}
+	return calicoSchemeBuilder(v3)(s)
 }
 
 func init() {
@@ -105,6 +107,8 @@ func calicoSchemeBuilder(useV3 bool) func(*runtime.Scheme) error {
 			&v3.LicenseKeyList{},
 			&v3.NetworkPolicy{},
 			&v3.NetworkPolicyList{},
+			&v3.NetworkSet{},
+			&v3.NetworkSetList{},
 			&v3.PolicyRecommendationScope{},
 			&v3.PolicyRecommendationScopeList{},
 			&v3.Tier{},

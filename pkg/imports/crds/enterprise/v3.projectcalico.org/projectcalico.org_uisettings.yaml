@@ -180,8 +180,6 @@ spec:
                         type: object
                       type: array
                       x-kubernetes-list-type: atomic
-                  required:
-                    - nodes
                   type: object
                 user:
                   description: |-
@@ -331,9 +329,17 @@ spec:
                 - description
                 - group
               type: object
+              x-kubernetes-validations:
+                - message: exactly one of view, layer, or dashboard must be specified
+                  reason: FieldValueInvalid
+                  rule:
+                    "[has(self.view), has(self.layer), has(self.dashboard)].filter(x,
+                    x).size() == 1"
           required:
             - metadata
             - spec
           type: object
+      selectableFields:
+        - jsonPath: .spec.group
       served: true
       storage: true

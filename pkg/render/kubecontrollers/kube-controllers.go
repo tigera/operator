@@ -16,6 +16,7 @@ package kubecontrollers
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -638,9 +639,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace, sc))
 	}
-	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	tolerations := appendUniqueTolerations(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+		tolerations = appendUniqueTolerations(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -682,6 +683,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 	return &d
+}
+
+func appendUniqueTolerations(tolerations []corev1.Toleration, toAppend ...corev1.Toleration) []corev1.Toleration {
+	for _, toleration := range toAppend {
+		if slices.Contains(tolerations, toleration) {
+			continue
+		}
+		tolerations = append(tolerations, toleration)
+	}
+	return tolerations
 }
 
 func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.ClusterRoleBinding {

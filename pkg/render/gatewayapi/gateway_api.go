@@ -15,21 +15,27 @@
 package gatewayapi
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"helm.sh/helm/v3/pkg/action"
+	"helm.sh/helm/v3/pkg/chart/loader"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -37,32 +43,47 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
+	k8syaml "k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
-	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
+	"sigs.k8s.io/yaml"
 )
 
 var (
-	//go:embed gateway_api_resources.yaml
-	gatewayAPIResourcesYAML string
+	//go:embed gateway-helm.tgz
+	gatewayHelmChart []byte
 
 	AccessLogType envoyapi.ProxyAccessLogType = "Route"
 
 	log = logf.Log.WithName("gateway_api")
 )
 
-type yamlKind struct {
-	APIVersion string `yaml:"apiVersion"`
-	Kind       string `yaml:"kind"`
-}
+// Legacy* name the tigera-gateway install. Slated for deprecation; to retire
+// it, drop these constants with legacyObjects and its callers.
+const (
+	LegacyControllerNamespace = "tigera-gateway"
+	LegacyReleaseName         = "tigera-gateway-api"
+	LegacyControllerName      = "gateway.envoyproxy.io/gatewayclass-controller"
+	LegacyGatewayClassName    = "tigera-gateway-class"
 
-// This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
+	// Namespaced* name the calico-system install: controller there,
+	// deploy.type=GatewayNamespace, proxies in each Gateway's own namespace.
+	NamespacedReleaseName      = "tigera-gateway-api-ns"
+	NamespacedControllerName   = "gateway.envoyproxy.io/gatewayclass-controller-ns"
+	NamespacedGatewayClassName = "tigera-gateway-class-ns"
+
+	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
+	EnvoyGatewayPolicySelector = "app.kubernetes.io/name == 'gateway-helm' || app == 'certgen'"
+)
+
+// gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                     *corev1.Namespace
 	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
 	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
 	controllerServiceAccount      *corev1.ServiceAccount
@@ -133,242 +154,234 @@ var (
 	}
 )
 
-func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
-	var lock sync.Mutex
-	resources := &gatewayAPIResources{}
-	const yamlDelimiter = "\n---\n"
-	return func() *gatewayAPIResources {
-		lock.Lock()
-		defer lock.Unlock()
-
-		if len(resources.k8sCRDs) == 0 {
-			for _, yml := range strings.Split(gatewayAPIResourcesYAML, yamlDelimiter) {
-				var yamlKind yamlKind
-				if err := yaml.Unmarshal([]byte(yml), &yamlKind); err != nil {
-					panic(fmt.Sprintf("unable to unmarshal YAML: %v:\n%v\n", err, yml))
-				}
-				kindStr := yamlKind.APIVersion + "/" + yamlKind.Kind
-				switch kindStr {
-				case "v1/Namespace":
-					if resources.namespace != nil {
-						panic("already read a namespace from gateway API YAML")
-					}
-					resources.namespace = &corev1.Namespace{}
-					if err := yaml.Unmarshal([]byte(yml), resources.namespace); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "apiextensions.k8s.io/v1/CustomResourceDefinition":
-					obj := &apiextenv1.CustomResourceDefinition{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(obj.Name, ".gateway.networking.x-k8s.io") {
-						resources.k8sCRDs = append(resources.k8sCRDs, obj)
-					} else if strings.HasSuffix(obj.Name, ".gateway.envoyproxy.io") {
-						resources.envoyCRDs = append(resources.envoyCRDs, obj)
-					} else {
-						panic(fmt.Sprintf("unhandled CRD name %v from gateway API YAML", obj.Name))
-					}
-				case "v1/ServiceAccount":
-					obj := &corev1.ServiceAccount{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenServiceAccount != nil {
-							panic("already read a certgen ServiceAccount from gateway API YAML")
-						}
-						resources.certgenServiceAccount = obj
-					} else {
-						if resources.controllerServiceAccount != nil {
-							panic("already read a controller ServiceAccount from gateway API YAML")
-						}
-						resources.controllerServiceAccount = obj
-					}
-				case "v1/ConfigMap":
-					obj := &corev1.ConfigMap{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if obj.Name != EnvoyGatewayConfigName {
-						panic(fmt.Sprintf("unhandled ConfigMap name %v from gateway API YAML", obj.Name))
-					}
-					if resources.envoyGatewayConfigMap != nil {
-						panic("already read envoy-gateway-config ConfigMap from gateway API YAML")
-					}
-					resources.envoyGatewayConfigMap = obj
-					resources.envoyGatewayConfig = &envoyapi.EnvoyGateway{}
-					if err := yaml.Unmarshal([]byte(obj.Data[EnvoyGatewayConfigKey]), resources.envoyGatewayConfig); err != nil {
-						panic("can't unmarshal EnvoyGateway from envoy-gateway-config ConfigMap from gateway API YAML")
-					}
-				case "rbac.authorization.k8s.io/v1/ClusterRole":
-					obj := &rbacv1.ClusterRole{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.clusterRoles = append(resources.clusterRoles, obj)
-				case "rbac.authorization.k8s.io/v1/ClusterRoleBinding":
-					obj := &rbacv1.ClusterRoleBinding{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.clusterRoleBindings = append(resources.clusterRoleBindings, obj)
-				case "rbac.authorization.k8s.io/v1/Role":
-					obj := &rbacv1.Role{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, "leader-election-role") {
-						if resources.leaderElectionRole != nil {
-							panic("already read leader-election Role from gateway API YAML")
-						}
-						resources.leaderElectionRole = obj
-					} else if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenRole != nil {
-							panic("already read certgen Role from gateway API YAML")
-						}
-						resources.certgenRole = obj
-					} else {
-						if resources.role != nil {
-							panic("already read general Role from gateway API YAML")
-						}
-						resources.role = obj
-					}
-				case "rbac.authorization.k8s.io/v1/RoleBinding":
-					obj := &rbacv1.RoleBinding{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					if strings.HasSuffix(obj.Name, "leader-election-rolebinding") {
-						if resources.leaderElectionRoleBinding != nil {
-							panic("already read leader-election RoleBinding from gateway API YAML")
-						}
-						resources.leaderElectionRoleBinding = obj
-					} else if strings.HasSuffix(obj.Name, "certgen") {
-						if resources.certgenRoleBinding != nil {
-							panic("already read certgen RoleBinding from gateway API YAML")
-						}
-						resources.certgenRoleBinding = obj
-					} else {
-						if resources.roleBinding != nil {
-							panic("already read general RoleBinding from gateway API YAML")
-						}
-						resources.roleBinding = obj
-					}
-				case "v1/Service":
-					if resources.controllerService != nil {
-						panic("already read controller Service from gateway API YAML")
-					}
-					resources.controllerService = &corev1.Service{}
-					if err := yaml.Unmarshal([]byte(yml), resources.controllerService); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "apps/v1/Deployment":
-					if resources.controllerDeployment != nil {
-						panic("already read controller Deployment from gateway API YAML")
-					}
-					resources.controllerDeployment = &appsv1.Deployment{}
-					if err := yaml.Unmarshal([]byte(yml), resources.controllerDeployment); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "batch/v1/Job":
-					if resources.certgenJob != nil {
-						panic("already read certgen Job from gateway API YAML")
-					}
-					resources.certgenJob = &batchv1.Job{}
-					if err := yaml.Unmarshal([]byte(yml), resources.certgenJob); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-				case "admissionregistration.k8s.io/v1/MutatingWebhookConfiguration":
-					obj := &admissionregv1.MutatingWebhookConfiguration{}
-					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
-						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
-					}
-					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
-				case "/":
-					// No-op.  We see this when there is only a comment between
-					// two "---" delimiters.
-				default:
-					panic(fmt.Sprintf("unhandled type %v", kindStr))
-				}
-			}
-
-			// Check we now have all the resources that we expect.
-			if resources.namespace == nil {
-				panic("missing Namespace from gateway API YAML")
-			}
-			if len(resources.k8sCRDs) != 12 {
-				panic(fmt.Sprintf("missing/extra k8s CRDs from gateway API YAML (%v != 12)", len(resources.k8sCRDs)))
-			}
-			if len(resources.envoyCRDs) != 8 {
-				panic(fmt.Sprintf("missing/extra envoy CRDs from gateway API YAML (%v != 8)", len(resources.envoyCRDs)))
-			}
-			if resources.controllerServiceAccount == nil {
-				panic("missing controller ServiceAccount from gateway API YAML")
-			}
-			if resources.envoyGatewayConfig == nil {
-				panic("missing envoy-gateway-config from gateway API YAML")
-			}
-			if len(resources.clusterRoles) == 0 {
-				panic("missing ClusterRole from gateway API YAML")
-			}
-			if len(resources.clusterRoleBindings) == 0 {
-				panic("missing ClusterRoleBinding from gateway API YAML")
-			}
-			if resources.role == nil {
-				panic("missing general Role from gateway API YAML")
-			}
-			if resources.roleBinding == nil {
-				panic("missing general RoleBinding from gateway API YAML")
-			}
-			if resources.leaderElectionRole == nil {
-				panic("missing leader election Role from gateway API YAML")
-			}
-			if resources.leaderElectionRoleBinding == nil {
-				panic("missing leader election RoleBinding from gateway API YAML")
-			}
-			if resources.controllerService == nil {
-				panic("missing controller Service from gateway API YAML")
-			}
-			if resources.controllerDeployment == nil {
-				panic("missing controller Deployment from gateway API YAML")
-			}
-			if resources.certgenServiceAccount == nil {
-				panic("missing certgen ServiceAccount from gateway API YAML")
-			}
-			if resources.certgenRole == nil {
-				panic("missing certgen Role from gateway API YAML")
-			}
-			if resources.certgenRoleBinding == nil {
-				panic("missing certgen RoleBinding from gateway API YAML")
-			}
-			if resources.certgenJob == nil {
-				panic("missing certgen Job from gateway API YAML")
-			}
-
-			// Further assumptions that we rely on below in `Objects()`.  We put these
-			// here, instead of later, so that they are verified in UT.
-			if len(resources.controllerDeployment.Spec.Template.Spec.Containers) != 1 {
-				panic("expected 1 container in deployment from gateway API YAML")
-			}
-			if resources.controllerDeployment.Spec.Template.Spec.Containers[0].Name != EnvoyGatewayDeploymentContainerName {
-				panic("expected container name 'envoy-gateway' in deployment from gateway API YAML")
-			}
-			if len(resources.certgenJob.Spec.Template.Spec.Containers) != 1 {
-				panic("expected 1 container in certgen job from gateway API YAML")
-			}
-			if resources.certgenJob.Spec.Template.Spec.Containers[0].Name != EnvoyGatewayJobContainerName {
-				panic("expected container name 'envoy-gateway' in certgen job from gateway API YAML")
-			}
-		}
-		return resources
-	}
+// helmOpts represents the helm values passed when rendering the Envoy Gateway chart.
+type helmOpts struct {
+	Config *helmConfig `json:"config,omitempty"`
 }
 
-var GatewayAPIResources = GatewayAPIResourcesGetter()
+type helmConfig struct {
+	EnvoyGateway *helmEnvoyGateway `json:"envoyGateway,omitempty"`
+}
 
-func K8SGatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRDs []client.Object) {
-	resources := GatewayAPIResources()
+type helmEnvoyGateway struct {
+	Gateway  *helmGateway  `json:"gateway,omitempty"`
+	Provider *helmProvider `json:"provider,omitempty"`
+}
+
+type helmGateway struct {
+	ControllerName string `json:"controllerName,omitempty"`
+}
+
+type helmProvider struct {
+	Kubernetes *helmKubernetes `json:"kubernetes,omitempty"`
+}
+
+type helmKubernetes struct {
+	Deploy *helmDeploy `json:"deploy,omitempty"`
+}
+
+type helmDeploy struct {
+	Type string `json:"type,omitempty"`
+}
+
+func toMap(v any) (map[string]any, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	if err := json.Unmarshal(b, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// isReservedOperatorNamespace reports whether core Installation already owns
+// tigera-operator-secrets / tigera-pull-secret in ns (deleting ours would wipe them).
+func isReservedOperatorNamespace(ns string) bool {
+	return ns == common.CalicoNamespace || ns == common.OperatorNamespace()
+}
+
+// The operator only ever does two chart renders. The chart output is
+// deterministic, so each is cached by its own sync.Once on first use.
+// Callers must deep-copy any object they intend to mutate.
+var (
+	legacyChartOnce    sync.Once
+	legacyChartResults *gatewayAPIResources
+	legacyChartErr     error
+
+	namespacedChartOnce    sync.Once
+	namespacedChartResults *gatewayAPIResources
+	namespacedChartErr     error
+)
+
+func legacyChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
+	legacyChartOnce.Do(func() {
+		legacyChartResults, legacyChartErr = renderChart(scheme, LegacyReleaseName, LegacyControllerNamespace, "", "")
+	})
+	return legacyChartResults, legacyChartErr
+}
+
+func namespacedChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
+	namespacedChartOnce.Do(func() {
+		namespacedChartResults, namespacedChartErr = renderChart(scheme, NamespacedReleaseName, common.CalicoNamespace, NamespacedControllerName, "GatewayNamespace")
+	})
+	return namespacedChartResults, namespacedChartErr
+}
+
+// renderChart renders the embedded Envoy Gateway helm chart using the Helm SDK.
+// releaseName + namespace go to Helm as Release.Name / Release.Namespace. controllerName
+// overrides config.envoyGateway.gateway.controllerName when non-empty. deployType
+// overrides config.envoyGateway.provider.kubernetes.deploy.type when non-empty.
+func renderChart(scheme *runtime.Scheme, releaseName, namespace, controllerName, deployType string) (*gatewayAPIResources, error) {
+	chart, err := loader.LoadArchive(bytes.NewReader(gatewayHelmChart))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load gateway-helm chart: %w", err)
+	}
+
+	actionConfig := new(action.Configuration)
+	helmClient := action.NewInstall(actionConfig)
+	helmClient.DryRun = true
+	helmClient.ClientOnly = true
+	helmClient.IncludeCRDs = true
+	helmClient.Namespace = namespace
+	helmClient.ReleaseName = releaseName
+
+	opts := &helmOpts{}
+	if controllerName != "" || deployType != "" {
+		eg := &helmEnvoyGateway{}
+		if controllerName != "" {
+			eg.Gateway = &helmGateway{ControllerName: controllerName}
+		}
+		if deployType != "" {
+			eg.Provider = &helmProvider{
+				Kubernetes: &helmKubernetes{
+					Deploy: &helmDeploy{Type: deployType},
+				},
+			}
+		}
+		opts.Config = &helmConfig{EnvoyGateway: eg}
+	}
+
+	values, err := toMap(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert helm values: %w", err)
+	}
+
+	rel, err := helmClient.Run(chart, values)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart: %w", err)
+	}
+
+	// Combine the main manifest with hook manifests (certgen, webhooks, etc.).
+	var allManifests strings.Builder
+	allManifests.WriteString(rel.Manifest)
+	for _, hook := range rel.Hooks {
+		allManifests.WriteString("\n---\n")
+		allManifests.WriteString(hook.Manifest)
+	}
+
+	resources, err := parseManifest(scheme, allManifests.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse rendered manifest: %w", err)
+	}
+	return resources, nil
+}
+
+// parseManifest parses the rendered helm manifest into typed gatewayAPIResources.
+func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResources, error) {
+	codecs := serializer.NewCodecFactory(scheme)
+	universalDeserializer := codecs.UniversalDeserializer()
+
+	resources := &gatewayAPIResources{}
+	decoder := k8syaml.NewYAMLOrJSONDecoder(bytes.NewReader([]byte(manifest)), 4096)
+
+	for {
+		var rawObj runtime.RawExtension
+		if err := decoder.Decode(&rawObj); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("error decoding manifest document: %w", err)
+		}
+		if len(rawObj.Raw) == 0 {
+			continue
+		}
+
+		obj, _, err := universalDeserializer.Decode(rawObj.Raw, nil, nil)
+		if err != nil {
+			return nil, fmt.Errorf("error deserializing object: %w", err)
+		}
+
+		clientObj, ok := obj.(client.Object)
+		if !ok {
+			return nil, fmt.Errorf("object does not implement client.Object: %T", obj)
+		}
+
+		switch typedObj := clientObj.(type) {
+		case *apiextenv1.CustomResourceDefinition:
+			if strings.HasSuffix(typedObj.Name, ".gateway.networking.k8s.io") || strings.HasSuffix(typedObj.Name, ".gateway.networking.x-k8s.io") {
+				resources.k8sCRDs = append(resources.k8sCRDs, typedObj)
+			} else if strings.HasSuffix(typedObj.Name, ".gateway.envoyproxy.io") {
+				resources.envoyCRDs = append(resources.envoyCRDs, typedObj)
+			}
+		case *corev1.ServiceAccount:
+			if strings.HasSuffix(typedObj.Name, "certgen") {
+				resources.certgenServiceAccount = typedObj
+			} else {
+				resources.controllerServiceAccount = typedObj
+			}
+		case *corev1.ConfigMap:
+			if typedObj.Name == EnvoyGatewayConfigName {
+				resources.envoyGatewayConfigMap = typedObj
+				resources.envoyGatewayConfig = &envoyapi.EnvoyGateway{}
+				if err := yaml.Unmarshal([]byte(typedObj.Data[EnvoyGatewayConfigKey]), resources.envoyGatewayConfig); err != nil {
+					return nil, fmt.Errorf("can't unmarshal EnvoyGateway from ConfigMap: %w", err)
+				}
+			}
+		case *rbacv1.ClusterRole:
+			resources.clusterRoles = append(resources.clusterRoles, typedObj)
+		case *rbacv1.ClusterRoleBinding:
+			resources.clusterRoleBindings = append(resources.clusterRoleBindings, typedObj)
+		case *rbacv1.Role:
+			if strings.HasSuffix(typedObj.Name, "leader-election-role") {
+				resources.leaderElectionRole = typedObj
+			} else if strings.HasSuffix(typedObj.Name, "certgen") {
+				resources.certgenRole = typedObj
+			} else {
+				resources.role = typedObj
+			}
+		case *rbacv1.RoleBinding:
+			if strings.HasSuffix(typedObj.Name, "leader-election-rolebinding") {
+				resources.leaderElectionRoleBinding = typedObj
+			} else if strings.HasSuffix(typedObj.Name, "certgen") {
+				resources.certgenRoleBinding = typedObj
+			} else {
+				resources.roleBinding = typedObj
+			}
+		case *corev1.Service:
+			resources.controllerService = typedObj
+		case *appsv1.Deployment:
+			resources.controllerDeployment = typedObj
+		case *batchv1.Job:
+			resources.certgenJob = typedObj
+		case *admissionregv1.MutatingWebhookConfiguration:
+			resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, typedObj)
+		case *corev1.Namespace:
+			// The chart may render a namespace; we create our own in Objects(), so skip it.
+		default:
+			// Skip unknown types.
+		}
+	}
+
+	return resources, nil
+}
+
+func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
+	resources, err := legacyChart(scheme)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
+	}
 	for _, crd := range resources.k8sCRDs {
 		if provider.IsOpenShift() {
 			// OpenShift 4.19+ restricts the Gateway CRDs that we can install, so report
@@ -390,23 +403,42 @@ func K8SGatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRD
 
 // GatewayAPICRDs returns the k8s GatewayAPI CRDs and the Envoy CRDs together,
 // necessary for the deployment of Calico Gateway API.
-func GatewayAPICRDs(provider operatorv1.Provider) (essentialCRDs, optionalCRDs []client.Object) {
-	resources := GatewayAPIResources()
-	essentialCRDs, optionalCRDs = K8SGatewayAPICRDs(provider)
+func GatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
+	resources, err := legacyChart(scheme)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
+	}
+	essentialCRDs, optionalCRDs, err = K8SGatewayAPICRDs(provider, scheme)
+	if err != nil {
+		return nil, nil, err
+	}
 	for _, crd := range resources.envoyCRDs {
 		essentialCRDs = append(essentialCRDs, crd.DeepCopyObject().(client.Object))
 	}
 
-	return essentialCRDs, optionalCRDs
+	return essentialCRDs, optionalCRDs, nil
 }
 
 type GatewayAPIImplementationConfig struct {
-	Installation          *operatorv1.InstallationSpec
-	GatewayAPI            *operatorv1.GatewayAPI
-	PullSecrets           []*corev1.Secret
-	CustomEnvoyGateway    *envoyapi.EnvoyGateway
-	CustomEnvoyProxies    map[string]*envoyapi.EnvoyProxy
-	CurrentGatewayClasses set.Set[string]
+	Scheme                 *runtime.Scheme
+	Installation           *operatorv1.InstallationSpec
+	GatewayAPI             *operatorv1.GatewayAPI
+	PullSecrets            []*corev1.Secret
+	CustomEnvoyGateway     *envoyapi.EnvoyGateway
+	CustomEnvoyProxies     map[string]*envoyapi.EnvoyProxy
+	CurrentGatewayClasses  set.Set[string]
+	IncludeV3NetworkPolicy bool
+
+	// GatewayNamespaces is the list of namespaces containing a Gateway that targets
+	// the calico-system controller (Enterprise only).
+	GatewayNamespaces []string
+	// CurrentGatewayNamespaces tracks previously provisioned namespaces for cleanup
+	// when Gateways are removed.
+	CurrentGatewayNamespaces set.Set[string]
+
+	// HasLegacyGateways is true when at least one Gateway resolves to the
+	// tigera-gateway controllerName. False → the install is torn down.
+	HasLegacyGateways bool
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -416,12 +448,26 @@ type gatewayAPIImplementationComponent struct {
 	envoyRatelimitImage string
 	wafHTTPFilterImage  string
 	L7LogCollectorImage string
+
+	// Pre-rendered helm chart results for the two installs.
+	legacy     *gatewayAPIResources
+	namespaced *gatewayAPIResources
 }
 
-func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) render.Component {
-	return &gatewayAPIImplementationComponent{
-		cfg: cfg,
+func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) (render.Component, error) {
+	legacy, err := legacyChart(cfg.Scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart (legacy tigera-gateway): %w", err)
 	}
+	namespaced, err := namespacedChart(cfg.Scheme)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render gateway-helm chart (namespaced calico-system): %w", err)
+	}
+	return &gatewayAPIImplementationComponent{
+		cfg:        cfg,
+		legacy:     legacy,
+		namespaced: namespaced,
+	}, nil
 }
 
 func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -477,33 +523,189 @@ func (pr *gatewayAPIImplementationComponent) Ready() bool {
 }
 
 func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []client.Object) {
-	resources := GatewayAPIResources()
+	var objs, objsToDelete []client.Object
+	openShift := pr.cfg.Installation.KubernetesProvider.IsOpenShift()
 
-	// First create the namespace.  We take the name from the read resources, but otherwise
-	// follow our own pattern for namespace creation.
-	objs := []client.Object{
+	// DEPRECATION: kept only while legacy Gateways exist; retire by deleting
+	// this block along with legacyObjects and the Legacy* constants.
+	if pr.cfg.HasLegacyGateways {
+		objs = append(objs, pr.legacyObjects()...)
+		// User-declared GatewayClasses target the tigera-gateway controller. Skip the
+		// namespaced class if the user also declared it; the caller auto-provisions it.
+		for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
+			className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
+			if className == NamespacedGatewayClassName {
+				continue
+			}
+			proxy := pr.envoyProxyConfig(className, LegacyControllerNamespace, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
+			objs = append(objs, proxy, pr.gatewayClass(className, LegacyControllerName, proxy))
+			pr.cfg.CurrentGatewayClasses.Delete(className)
+		}
+	} else {
+		objsToDelete = append(objsToDelete, pr.legacyTeardownObjects()...)
+	}
+
+	// Allow policy for the calico-system controller to punch through the core
+	// Installation's default-deny.
+	if pr.cfg.IncludeV3NetworkPolicy {
+		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
+	}
+
+	// Helm-rendered resources for the calico-system controller.
+	objs = append(objs, pr.controllerObjects(pr.namespaced, false)...)
+
+	// Auto-provision the calico-system class so users can create Gateways in their own
+	// namespaces without declaring a GatewayClass in the GatewayAPI CR.
+	nsClassSpec := &operatorv1.GatewayClassSpec{Name: NamespacedGatewayClassName}
+	nsProxy := pr.envoyProxyConfig(NamespacedGatewayClassName, common.CalicoNamespace, nil, nsClassSpec)
+	objs = append(objs, nsProxy, pr.gatewayClass(NamespacedGatewayClassName, NamespacedControllerName, nsProxy))
+	pr.cfg.CurrentGatewayClasses.Delete(NamespacedGatewayClassName)
+
+	// Clean up the deprecated combined waf-http-filter ClusterRole/ClusterRoleBinding
+	// that pre-dated the cluster-scoped vs gateway-resources split. Unconditional so
+	// upgrades from older Enterprise installs always converge, and harmless on OSS.
+	objsToDelete = append(objsToDelete,
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
+		},
+	)
+
+	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
+		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
+		objsToDelete = append(objsToDelete,
+			&gapi.GatewayClass{
+				TypeMeta:   metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: gcName},
+			},
+			&envoyapi.EnvoyProxy{
+				TypeMeta:   metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
+				ObjectMeta: metav1.ObjectMeta{Name: gcName, Namespace: LegacyControllerNamespace},
+			},
+		)
+	}
+
+	// Shared WAF ClusterRoles (Enterprise). Kept across tigera-gateway teardown
+	// because the per-namespace SAs still bind to them.
+	if pr.cfg.Installation.Variant.IsEnterprise() {
+		objs = append(objs,
+			pr.wafHttpFilterClusterScopedRole(),
+			pr.wafHttpFilterGatewayResourcesRole(),
+		)
+	}
+
+	// Per-namespace Enterprise resources for namespaces containing a Gateway that
+	// targets the namespaced controller (populated by the GatewayAPI controller).
+	if pr.cfg.Installation.Variant.IsEnterprise() {
+		for _, ns := range pr.cfg.GatewayNamespaces {
+			objs = append(objs,
+				pr.gatewayNamespaceSA(ns),
+				pr.gatewayNamespaceRoleBinding(ns),
+			)
+			// Skip shared resources in reserved namespaces — core Installation owns them.
+			if !isReservedOperatorNamespace(ns) {
+				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
+				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+			}
+		}
+		if len(pr.cfg.GatewayNamespaces) > 0 {
+			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
+		}
+
+		// Clean up resources for namespaces that no longer have a namespaced-class Gateway.
+		if pr.cfg.CurrentGatewayNamespaces != nil {
+			currentNS := set.New(pr.cfg.GatewayNamespaces...)
+			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
+				if !currentNS.Has(ns) {
+					// Secret must go before the RoleBinding that grants us delete perms; skip shared
+					// resources in reserved namespaces (core-owned).
+					if !isReservedOperatorNamespace(ns) {
+						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+					}
+					objsToDelete = append(objsToDelete,
+						pr.gatewayNamespaceSA(ns),
+						pr.gatewayNamespaceRoleBinding(ns),
+					)
+					if !isReservedOperatorNamespace(ns) {
+						objsToDelete = append(objsToDelete, render.CreateOperatorSecretsRoleBinding(ns))
+					}
+				}
+			}
+			if len(pr.cfg.GatewayNamespaces) == 0 {
+				objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
+			}
+		}
+	}
+
+	log.V(1).Info("GatewayAPI rendering", "num_current", len(objs), "num_delete", len(objsToDelete))
+	return objs, objsToDelete
+}
+
+// legacyObjects returns every resource tied to the tigera-gateway install.
+// Grouped together so the install can be retired in a single delete pass.
+// User-declared GatewayClasses are rendered by Objects, not here.
+func (pr *gatewayAPIImplementationComponent) legacyObjects() []client.Object {
+	var objs []client.Object
+
+	// Bootstrap the tigera-gateway namespace; we own it.
+	objs = append(objs,
 		render.CreateNamespace(
-			resources.namespace.Name,
+			LegacyControllerNamespace,
 			pr.cfg.Installation.KubernetesProvider,
-			render.PSSPrivileged, // Needed for HostPath volume to write logs to
+			render.PSSPrivileged, // HostPath volume for l7-collector logs
 			pr.cfg.Installation.Azure,
 		),
+		render.CreateOperatorSecretsRoleBinding(LegacyControllerNamespace),
+	)
+	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LegacyControllerNamespace, pr.cfg.PullSecrets...)...)...)
+
+	// Helm-rendered envoy-gateway controller in tigera-gateway.
+	objs = append(objs, pr.controllerObjects(pr.legacy, true)...)
+
+	// Legacy-only WAF bits: SA in tigera-gateway + the CRBs that bind it. The
+	// shared ClusterRoles are rendered outside (Enterprise, unconditional).
+	if pr.cfg.Installation.Variant.IsEnterprise() {
+		objs = append(objs,
+			pr.wafHttpFilterServiceAccount(),
+			pr.wafHttpFilterClusterScopedCRB(),
+			pr.wafHttpFilterGatewayResourcesCRB(),
+		)
 	}
 
-	// Create role binding to allow creating secrets in our namespace.
-	objs = append(objs, render.CreateOperatorSecretsRoleBinding(resources.namespace.Name))
+	return objs
+}
 
-	// Add pull secrets (inferred from the Installation resource).
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(resources.namespace.Name, pr.cfg.PullSecrets...)...)...)
-
-	// Add all the non-CRD resources, read from YAML, that we can apply without any tweaking.
-	for _, resource := range []client.Object{
-		resources.controllerServiceAccount,
-	} {
-		// But deep-copy each one so as not to inadvertently modify the cache inside
-		// `GatewayAPIResourcesGetter`.
-		objs = append(objs, resource.DeepCopyObject().(client.Object))
+// legacyTeardownObjects returns the retirement delete list: Namespace +
+// cluster-scoped objects (the cascade handles the rest), plus the Deployment
+// so the component handler calls status.RemoveDeployments on it. Queuing
+// Secrets/RoleBindings explicitly would 403 once the tigera-operator-secrets
+// RoleBinding is cascaded; Deployment delete goes via cluster-wide perms.
+func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects() []client.Object {
+	var objs []client.Object
+	for _, obj := range pr.legacyObjects() {
+		if _, isNamespace := obj.(*corev1.Namespace); isNamespace || obj.GetNamespace() == "" {
+			objs = append(objs, obj)
+			continue
+		}
+		if _, isDeployment := obj.(*appsv1.Deployment); isDeployment {
+			objs = append(objs, obj)
+		}
 	}
+	return objs
+}
+
+// controllerObjects returns the helm-rendered resources for one envoy-gateway
+// install. applyCustomEG=true applies user CustomEnvoyGateway + image/pull-secret
+// overrides to the EnvoyGateway ConfigMap (tigera-gateway controller only).
+func (pr *gatewayAPIImplementationComponent) controllerObjects(resources *gatewayAPIResources, applyCustomEG bool) []client.Object {
+	var objs []client.Object
+
+	// SA + cluster-scoped RBAC + webhooks + namespaced RBAC.
+	objs = append(objs, resources.controllerServiceAccount.DeepCopyObject().(client.Object))
 	for _, cr := range resources.clusterRoles {
 		objs = append(objs, cr.DeepCopyObject().(client.Object))
 	}
@@ -523,32 +725,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		resources.certgenRole,
 		resources.certgenRoleBinding,
 	} {
-		// But deep-copy each one so as not to inadvertently modify the cache inside
-		// `GatewayAPIResourcesGetter`.
 		objs = append(objs, resource.DeepCopyObject().(client.Object))
 	}
 
-	// Add WAF HTTP Filter RBAC resources for Enterprise variant
-	if pr.cfg.Installation.Variant.IsEnterprise() {
-		objs = append(objs,
-			pr.wafHttpFilterServiceAccount(),
-			pr.wafHttpFilterClusterRole(),
-			pr.wafHttpFilterClusterRoleBinding(),
-		)
-	}
-
-	// Prepare EnvoyGateway config, either from upstream or from a custom EnvoyGatewayConfigRef
-	// provided by the user.
-	envoyGatewayConfig := pr.cfg.CustomEnvoyGateway
-	if envoyGatewayConfig == nil {
-		// In the upstream case, take a deepcopy of the default to make sure we don't
-		// accidentally modify the config loaded at start of day.  (In the custom case we
-		// don't need to do this because the next Reconcile will read the custom resource
-		// again from scratch.)
+	// EnvoyGateway ConfigMap.
+	var envoyGatewayConfig *envoyapi.EnvoyGateway
+	if applyCustomEG && pr.cfg.CustomEnvoyGateway != nil {
+		envoyGatewayConfig = pr.cfg.CustomEnvoyGateway
+	} else {
 		envoyGatewayConfig = resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
 	}
-
-	// Ensure the minimal structure that we require for the following customizations.
 	if envoyGatewayConfig.Provider == nil {
 		envoyGatewayConfig.Provider = &envoyapi.EnvoyGatewayProvider{}
 	}
@@ -577,111 +763,43 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	if envoyGatewayConfig.Gateway.ControllerName == "" {
 		envoyGatewayConfig.Gateway.ControllerName = resources.envoyGatewayConfig.Gateway.ControllerName
 	}
-
-	// Substitute possibly modified image names.
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Container.Image = &pr.envoyRatelimitImage
 	envoyGatewayConfig.Provider.Kubernetes.ShutdownManager.Image = &pr.envoyGatewayImage
-
-	// Add in pull secrets.  (Note that these are at the pod level and cover both the
-	// "ShutdownManager" and "RateLimit" images.)
 	envoyGatewayConfig.Provider.Kubernetes.RateLimitDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
-
-	// Enable extension APIs.
 	envoyGatewayConfig.ExtensionAPIs.EnableBackend = true
 	envoyGatewayConfig.ExtensionAPIs.EnableEnvoyPatchPolicy = true
 
-	// Rebuild the ConfigMap with those changes.
 	envoyGatewayConfigMap := resources.envoyGatewayConfigMap.DeepCopyObject().(*corev1.ConfigMap)
 	if bytes, err := yaml.Marshal(*envoyGatewayConfig); err == nil {
 		envoyGatewayConfigMap.Data[EnvoyGatewayConfigKey] = string(bytes)
 	} else {
 		panic(fmt.Sprintf("couldn't marshal EnvoyGateway to YAML: %v", err))
 	}
-
 	objs = append(objs, envoyGatewayConfigMap)
 
-	// Deep copy the controller deployment,
+	// Controller Deployment.
 	controllerDeployment := resources.controllerDeployment.DeepCopyObject().(*appsv1.Deployment)
-
-	// Substitute possibly modified gateway image name.
 	controllerDeployment.Spec.Template.Spec.Containers[0].Image = pr.envoyGatewayImage
-
-	// Reference additional pull secrets.
 	controllerDeployment.Spec.Template.Spec.ImagePullSecrets = append(
 		controllerDeployment.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
-
-	// Add a k8s-app label that we can use to provide API access for the controller.
 	controllerDeployment.Spec.Template.Labels["k8s-app"] = GatewayControllerLabel
-
-	// Apply customizations from the GatewayControllerDeployment field of the GatewayAPI CR.
 	rcomp.ApplyDeploymentOverrides(controllerDeployment, pr.cfg.GatewayAPI.Spec.GatewayControllerDeployment)
-
 	objs = append(objs, controllerDeployment)
 
-	// Deep copy the certgen job,
+	// Certgen Job.
 	certgenJob := resources.certgenJob.DeepCopyObject().(*batchv1.Job)
-
-	// Substitute possibly modified gateway image name.
 	certgenJob.Spec.Template.Spec.Containers[0].Image = pr.envoyGatewayImage
-
-	// Reference additional pull secrets.
 	certgenJob.Spec.Template.Spec.ImagePullSecrets = append(
 		certgenJob.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
-
-	// Apply customizations from the GatewayCertgenJob field of the GatewayAPI CR.
 	rcomp.ApplyJobOverrides(certgenJob, pr.cfg.GatewayAPI.Spec.GatewayCertgenJob)
-
 	objs = append(objs, certgenJob)
 
-	// Provision GatewayClasses.
-	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
-		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
-
-		// The EnvoyProxy config.
-		proxyConfig := pr.envoyProxyConfig(className, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
-		objs = append(objs, proxyConfig)
-
-		// The GatewayClass using that EnvoyProxy config.
-		objs = append(objs, pr.gatewayClass(className, envoyGatewayConfig.Gateway.ControllerName, proxyConfig))
-
-		if pr.cfg.CurrentGatewayClasses.Has(className) {
-			pr.cfg.CurrentGatewayClasses.Delete(className)
-		}
-	}
-
-	objsToDelete := []client.Object(nil)
-	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
-		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
-		objsToDelete = append(objsToDelete,
-			&gapi.GatewayClass{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "GatewayClass",
-					APIVersion: "gateway.networking.k8s.io/v1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name: gcName,
-				},
-			},
-			&envoyapi.EnvoyProxy{
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "EnvoyProxy",
-					APIVersion: "gateway.envoyproxy.io/v1alpha1",
-				},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      gcName,
-					Namespace: "tigera-gateway",
-				},
-			},
-		)
-	}
-
-	log.V(1).Info("GatewayAPI rendering", "num_current", len(objs), "num_delete", len(objsToDelete))
-	return objs, objsToDelete
+	return objs
 }
 
-func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
+func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
 	// if it's based on a custom resource from another namespace.
@@ -706,7 +824,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		envoyProxy.APIVersion = "gateway.envoyproxy.io/v1alpha1"
 	}
 	envoyProxy.Name = className
-	envoyProxy.Namespace = "tigera-gateway"
+	envoyProxy.Namespace = ns
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
@@ -1052,7 +1170,7 @@ func (pr *gatewayAPIImplementationComponent) gatewayClass(className, controllerN
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      className,
-			Namespace: "tigera-gateway",
+			Namespace: LegacyControllerNamespace,
 		},
 		Spec: gapi.GatewayClassSpec{
 			ControllerName: gapi.GatewayController(controllerName),
@@ -1114,19 +1232,23 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *core
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      wafFilterName,
-			Namespace: "tigera-gateway",
+			Namespace: LegacyControllerNamespace,
 		},
 	}
 }
 
-// wafHttpFilterClusterRole creates the ClusterRole for WAF HTTP Filter and L7 Log Collector.
-// The L7 Log Collector sidecar shares this ServiceAccount and needs additional permissions
-// to watch Gateway API resources for log enrichment.
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.ClusterRole {
+const (
+	wafFilterClusterScopedRoleName    = wafFilterName + "-cluster-scoped"
+	wafFilterGatewayResourcesRoleName = wafFilterName + "-gateway-resources"
+)
+
+// wafHttpFilterClusterScopedRole creates the ClusterRole granting access to cluster-scoped
+// resources (license keys, token reviews) needed by every WAF HTTP Filter / L7 Log Collector.
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: wafFilterName,
+			Name: wafFilterClusterScopedRoleName,
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
@@ -1139,7 +1261,20 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},
 			},
-			// Gateway API resources for L7 Log Collector enrichment
+		},
+	}
+}
+
+// wafHttpFilterGatewayResourcesRole grants read access to namespaced Gateway
+// API resources (used by the L7 Log Collector). Bound cluster-wide in
+// tigera-gateway; per-namespace for proxies in Gateway namespaces.
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterGatewayResourcesRoleName,
+		},
+		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"gateway.networking.k8s.io"},
 				Resources: []string{"gateways", "httproutes", "grpcroutes"},
@@ -1149,24 +1284,153 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 	}
 }
 
-// wafHttpFilterClusterRoleBinding creates the ClusterRoleBinding for WAF HTTP Filter
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+// wafHttpFilterClusterScopedCRB binds the cluster-scoped ClusterRole to the WAF HTTP
+// Filter ServiceAccount in tigera-gateway.
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedCRB() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: wafFilterName,
+			Name: wafFilterClusterScopedRoleName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     wafFilterName,
+			Name:     wafFilterClusterScopedRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
 				Name:      wafFilterName,
-				Namespace: "tigera-gateway",
+				Namespace: LegacyControllerNamespace,
 			},
+		},
+	}
+}
+
+// wafHttpFilterGatewayResourcesCRB binds the gateway-resources ClusterRole
+// cluster-wide to the SA in tigera-gateway (proxies there serve all namespaces).
+func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesCRB() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: wafFilterGatewayResourcesRoleName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterGatewayResourcesRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: LegacyControllerNamespace,
+			},
+		},
+	}
+}
+
+// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace,
+// used by proxies that the calico-system controller deploys there.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string) *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterName,
+			Namespace: namespace,
+		},
+	}
+}
+
+// GatewayNamespacesCRBName is the name of the shared ClusterRoleBinding that binds the
+// waf-http-filter ClusterRole to ServiceAccounts in all Gateway namespaces.
+const GatewayNamespacesCRBName = wafFilterName + "-gateway-namespaces"
+
+// gatewayNamespacesCRB binds the cluster-scoped WAF ClusterRole to the
+// waf-http-filter SA in each Gateway namespace via a single shared CRB.
+// Gateway API resource access is scoped per namespace via gatewayNamespaceRoleBinding.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespacesCRB(namespaces []string) *rbacv1.ClusterRoleBinding {
+	subjects := make([]rbacv1.Subject, 0, len(namespaces))
+	for _, ns := range namespaces {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      wafFilterName,
+			Namespace: ns,
+		})
+	}
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: GatewayNamespacesCRBName,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterClusterScopedRoleName,
+		},
+		Subjects: subjects,
+	}
+}
+
+// gatewayNamespaceRoleBinding scopes the WAF SA's Gateway API read access
+// to its own namespace (least privilege for proxies in user namespaces).
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceRoleBinding(namespace string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      wafFilterGatewayResourcesRoleName,
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     wafFilterGatewayResourcesRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      wafFilterName,
+				Namespace: namespace,
+			},
+		},
+	}
+}
+
+// gatewayAPIControllerPolicy allows the controller + certgen to reach kube-apiserver and DNS.
+func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPolicy {
+	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
+	egress = append(egress,
+		v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		v3.Rule{Action: v3.Pass},
+	)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ControllerPolicyName,
+			Namespace: namespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: EnvoyGatewayPolicySelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			// 9443: webhook. 18000-18002: xDS. 19001: metrics.
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
+					},
+				},
+			},
+			Egress: egress,
 		},
 	}
 }

@@ -93,15 +93,18 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 
 		fakeComponentHandlers = nil
 		r = &ReconcileGatewayAPI{
 			client:              c,
 			scheme:              scheme,
 			status:              mockStatus,
+			tierWatchReady:      &utils.ReadyFlag{},
 			newComponentHandler: FakeComponentHandler,
 			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },
+			watchGateways:       func() error { return nil },
 		}
 	})
 

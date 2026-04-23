@@ -17,11 +17,14 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
+	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
@@ -65,6 +69,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
+		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		multiTenant:         opts.MultiTenant,
@@ -76,6 +81,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create gatewayapi-controller: %w", err)
 	}
+
+	// Lazy tier watch; policies only render when the calico-system Tier exists.
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
 	// Watch for changes to primary resource GatewayAPI
 	err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{})
@@ -131,6 +139,21 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return nil
 	}
 
+	// Watch Gateway resources lazily — the CRD is created by this controller, so we can
+	// only start watching after it exists. Called from Reconcile once CRDs are in place.
+	gatewaysWatched := false
+	r.watchGateways = func() error {
+		if gatewaysWatched {
+			return nil
+		}
+		log.V(1).Info("Adding watch for Gateway resources")
+		if err = c.WatchObject(&gapi.Gateway{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("gatewayapi-controller failed to watch Gateway resource: %w", err)
+		}
+		gatewaysWatched = true
+		return nil
+	}
+
 	return nil
 }
 
@@ -142,12 +165,14 @@ type ReconcileGatewayAPI struct {
 	client              client.Client
 	scheme              *runtime.Scheme
 	enterpriseCRDsExist bool
+	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
 	clusterDomain       string
 	multiTenant         bool
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
 	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
+	watchGateways       func() error
 }
 
 // Reconcile reads that state of the cluster for a GatewayAPI object and makes changes based on the state read
@@ -213,7 +238,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider)
+	essentialCRDs, optionalCRDs, err := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -274,12 +303,28 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Render v3 NetworkPolicies only when the calico-system Tier exists — same pattern
+	// as the other controllers; tolerates clusters without Calico installed.
+	includeV3NetworkPolicy := false
+	if r.tierWatchReady.IsReady() {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
+		}
+	}
+
 	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
-		Installation:          installationSpec,
-		PullSecrets:           pullSecrets,
-		GatewayAPI:            gatewayAPI,
-		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
-		CurrentGatewayClasses: set.New[string](),
+		Scheme:                 r.scheme,
+		Installation:           installationSpec,
+		PullSecrets:            pullSecrets,
+		GatewayAPI:             gatewayAPI,
+		CustomEnvoyProxies:     make(map[string]*envoyapi.EnvoyProxy),
+		CurrentGatewayClasses:  set.New[string](),
+		IncludeV3NetworkPolicy: includeV3NetworkPolicy,
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {
@@ -401,10 +446,92 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	// Start watching Gateway resources now that the CRDs are in place, so future
+	// Gateway changes trigger reconciliation.
+	if err = r.watchGateways(); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching Gateway resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	var gwList gapi.GatewayList
+	if err = r.client.List(ctx, &gwList); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing Gateway resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	// Classify each Gateway by its class's controllerName. The map is seeded
+	// from Spec.GatewayClasses first so Gateways created before the class is
+	// rendered still classify correctly; existing GatewayClass resources fill
+	// in any we didn't seed (e.g. raw classes outside the CR).
+	classController := make(map[string]string, len(gcList.Items)+len(gatewayAPI.Spec.GatewayClasses)+1)
+	classController[gatewayapi.NamespacedGatewayClassName] = gatewayapi.NamespacedControllerName
+	for _, c := range gatewayAPI.Spec.GatewayClasses {
+		if c.Name == gatewayapi.NamespacedGatewayClassName {
+			continue
+		}
+		classController[c.Name] = gatewayapi.LegacyControllerName
+	}
+	for i := range gcList.Items {
+		if _, seeded := classController[gcList.Items[i].Name]; !seeded {
+			classController[gcList.Items[i].Name] = string(gcList.Items[i].Spec.ControllerName)
+		}
+	}
+	nsSet := set.New[string]()
+	for i := range gwList.Items {
+		className := string(gwList.Items[i].Spec.GatewayClassName)
+		switch classController[className] {
+		case gatewayapi.LegacyControllerName:
+			gatewayConfig.HasLegacyGateways = true
+		case gatewayapi.NamespacedControllerName:
+			nsSet.Insert(gwList.Items[i].Namespace)
+		}
+	}
+	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
+
+	// Enterprise: read previously-provisioned namespaces from the shared CRB's
+	// Subjects so we can clean them up when their Gateway is gone.
+	if variant.IsEnterprise() {
+		gatewayConfig.CurrentGatewayNamespaces = set.New[string]()
+		existingCRB := &rbacv1.ClusterRoleBinding{}
+		if err = r.client.Get(ctx, types.NamespacedName{Name: gatewayapi.GatewayNamespacesCRBName}, existingCRB); err == nil {
+			for _, s := range existingCRB.Subjects {
+				if s.Kind == "ServiceAccount" {
+					gatewayConfig.CurrentGatewayNamespaces.Insert(s.Namespace)
+				}
+			}
+		} else if !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading gateway namespaces ClusterRoleBinding", err, log)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// If tigera-gateway is mid-teardown, skip the legacy render this reconcile
+	// by treating HasLegacyGateways as false — otherwise every object would log
+	// "Namespace is terminating, skipping creation". The teardown-branch deletes
+	// are no-ops against already-terminating objects.
+	legacyNamespaceTerminating := false
+	if gatewayConfig.HasLegacyGateways {
+		ns := &corev1.Namespace{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: gatewayapi.LegacyControllerNamespace}, ns)
+		switch {
+		case err == nil && ns.GetDeletionTimestamp() != nil:
+			reqLogger.V(1).Info("tigera-gateway is terminating; deferring legacy render until cascade completes")
+			legacyNamespaceTerminating = true
+			gatewayConfig.HasLegacyGateways = false
+		case err != nil && !errors.IsNotFound(err):
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking tigera-gateway namespace", err, log)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent, err := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Gateway API resources", err, log)
+		return reconcile.Result{}, err
+	}
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
@@ -424,6 +551,12 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
+
+	// If we skipped the legacy render (namespace mid-teardown), requeue so we
+	// don't wait for the periodic tick to retry.
+	if legacyNamespaceTerminating {
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 
 	// Update the status of the GatewayAPI instance and StatusManager.
 	return reconcile.Result{}, nil

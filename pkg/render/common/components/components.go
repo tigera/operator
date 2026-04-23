@@ -453,13 +453,25 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 // For UT purposes, only, this variable stores the override fields that were handled in that most
 // recent `applyReplicatedPodResourceOverrides` call.  UT code then checks that the structures we
 // use for `overrides` do not have any _other_ fields than those (except for known special cases).
-var overrideFieldsHandledInLastApplyCall []string
+// Writes to it are gated on recordHandledFields: production reconcilers run many Apply*Overrides
+// calls concurrently, and an unsynchronized append on a shared slice races during growslice
+// (see issue #4703). Tests that inspect the slice must set recordHandledFields = true.
+var (
+	overrideFieldsHandledInLastApplyCall []string
+	recordHandledFields                  bool
+)
 
 func resetHandledFields() {
+	if !recordHandledFields {
+		return
+	}
 	overrideFieldsHandledInLastApplyCall = nil
 }
 
 func recordHandledField(fieldNames []string) {
+	if !recordHandledFields {
+		return
+	}
 	dottedName := strings.Join(fieldNames, ".")
 	overrideFieldsHandledInLastApplyCall = append(overrideFieldsHandledInLastApplyCall, dottedName)
 }

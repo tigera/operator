@@ -32,6 +32,7 @@ spec:
                       - Workload
                       - Tunnel
                       - LoadBalancer
+                      - HostSecondaryInterface
                     type: string
                   maxItems: 10
                   type: array

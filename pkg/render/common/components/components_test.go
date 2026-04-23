@@ -135,6 +135,8 @@ var _ = Describe("Common components render tests", func() {
 
 	DescribeTable("check for unhandled fields",
 		func(overrides any, expectUnhandled bool, allowedExtraFields ...string) {
+			recordHandledFields = true
+			defer func() { recordHandledFields = false }()
 			// Call applyReplicatedPodResourceOverrides to discover all the fields that
 			// we handle.
 			r := &replicatedPodResource{}

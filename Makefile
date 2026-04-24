@@ -388,6 +388,7 @@ NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
 GOLDMANE_IMAGE := calico/goldmane
 WHISKER_IMAGE := calico/whisker
 WHISKER_BACKEND_IMAGE := calico/whisker-backend
+ENVOY_GATEWAY_IMAGE := calico/envoy-gateway
 
 .PHONY: calico-node.tar
 calico-node.tar:
@@ -444,6 +445,11 @@ calico-whisker-backend.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
 
+.PHONY: calico-envoy-gateway.tar
+calico-envoy-gateway.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(ENVOY_GATEWAY_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(ENVOY_GATEWAY_IMAGE):$(VERSION_TAG)
+
 IMAGE_TARS := calico-node.tar \
 	calico-apiserver.tar \
 	calico-cni.tar \
@@ -454,7 +460,8 @@ IMAGE_TARS := calico-node.tar \
 	calico-node-driver-registrar.tar \
 	calico-goldmane.tar \
 	calico-whisker.tar \
-	calico-whisker-backend.tar
+	calico-whisker-backend.tar \
+	calico-envoy-gateway.tar
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.

@@ -91,7 +91,8 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage string
+	typhaImage       string
+	useCombinedImage bool
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -99,14 +100,11 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
+	if img, ok := components.CombinedCalicoImage(c.cfg.Installation); ok {
+		c.useCombinedImage = true
+		c.typhaImage, err = components.GetReference(img, reg, path, prefix, is)
 	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
-		} else {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
-		}
+		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
 	}
 	if err != nil {
 		return err
@@ -568,7 +566,7 @@ func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
 // typhaContainer creates the main typha container.
 func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes("localhost")
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            TyphaContainerName,
 		Image:           c.typhaImage,
 		ImagePullPolicy: ImagePullPolicy(),
@@ -580,6 +578,10 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		ReadinessProbe:  rp,
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
+	if c.useCombinedImage {
+		container.Command = []string{components.CalicoBinaryPath, "component", "typha"}
+	}
+	return container
 }
 
 func (c *typhaComponent) typhaContainerNonClusterHost() corev1.Container {

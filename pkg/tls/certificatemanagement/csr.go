@@ -36,6 +36,8 @@ const (
 
 // CreateCSRInitContainer creates an init container that can be added to a pod spec in order to create a CSR for its
 // TLS certificates. It uses the provided params and the k8s downward api to be able to specify certificate subject information.
+// When combined is true, the init container dispatches into the combined calico/calico binary via Cobra subcommands
+// rather than running the dedicated key-cert-provisioner image entrypoint.
 func CreateCSRInitContainer(
 	certificateManagement *operatorv1.CertificateManagement,
 	secretName,
@@ -46,10 +48,17 @@ func CreateCSRInitContainer(
 	certName string,
 	dnsNames []string,
 	appNameLabel string,
-	securityContext *corev1.SecurityContext) corev1.Container {
+	securityContext *corev1.SecurityContext,
+	combined bool,
+) corev1.Container {
+	var command []string
+	if combined {
+		command = []string{components.CalicoBinaryPath, "component", "key-cert-provisioner"}
+	}
 	return corev1.Container{
-		Name:  CSRInitContainerName,
-		Image: image,
+		Name:    CSRInitContainerName,
+		Image:   image,
+		Command: command,
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: CSRCMountPath, Name: mountName, ReadOnly: false},
 		},
@@ -90,24 +99,14 @@ func CreateCSRInitContainer(
 	}
 }
 
-// ResolveCsrInitImage resolves the image needed for the CSR init image taking into account the specified ImageSet
+// ResolveCSRInitImage resolves the image needed for the CSR init container, taking into account the specified
+// ImageSet. OSS installs use the combined calico/calico image (or its FIPS variant); Enterprise uses the
+// dedicated CSR init container image.
 func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
-	if inst.Variant.IsEnterprise() {
-		return components.GetReference(
-			components.ComponentTigeraCSRInitContainer,
-			inst.Registry,
-			inst.ImagePath,
-			inst.ImagePrefix,
-			is,
-		)
+	if img, ok := components.CombinedCalicoImage(inst); ok {
+		return components.GetReference(img, inst.Registry, inst.ImagePath, inst.ImagePrefix, is)
 	}
-	return components.GetReference(
-		components.ComponentCalicoCSRInitContainer,
-		inst.Registry,
-		inst.ImagePath,
-		inst.ImagePrefix,
-		is,
-	)
+	return components.GetReference(components.ComponentTigeraCSRInitContainer, inst.Registry, inst.ImagePath, inst.ImagePrefix, is)
 }
 
 // CSRClusterRole returns a role with the necessary permissions to create certificate signing requests.

@@ -15,6 +15,8 @@
 package goldmane_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -92,6 +94,7 @@ var _ = Describe("ComponentRendering", func() {
 
 	DescribeTable("Goldmane Deployment", func(cfg *goldmane.Configuration, expected *appsv1.Deployment) {
 		component := goldmane.Goldmane(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		objsToCreate, _ := component.Objects()
 
 		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, goldmane.GoldmaneName, goldmane.GoldmaneNamespace)
@@ -138,7 +141,8 @@ var _ = Describe("ComponentRendering", func() {
 							Containers: []corev1.Container{
 								{
 									Name:            goldmane.GoldmaneContainerName,
-									Image:           "",
+									Image:           "quay.io/calico/calico:master",
+									Command:         []string{"/usr/bin/calico", "component", "goldmane"},
 									ImagePullPolicy: render.ImagePullPolicy(),
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
@@ -153,15 +157,15 @@ var _ = Describe("ComponentRendering", func() {
 									SecurityContext: securitycontext.NewNonRootContext(),
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"/health", "-ready"},
+											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=readiness"},
 										}},
+										PeriodSeconds: 10,
 									},
 									LivenessProbe: &corev1.Probe{
-										ProbeHandler: corev1.ProbeHandler{
-											Exec: &corev1.ExecAction{
-												Command: []string{"/health", "-live"},
-											},
-										},
+										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=liveness"},
+										}},
+										PeriodSeconds: 10,
 									},
 									VolumeMounts: append(
 										[]corev1.VolumeMount{defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)},

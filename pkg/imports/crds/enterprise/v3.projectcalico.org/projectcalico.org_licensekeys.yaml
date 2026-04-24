@@ -24,6 +24,9 @@ spec:
         - jsonPath: .status.maxnodes
           name: Max-Nodes
           type: integer
+        - jsonPath: .status.maxcores
+          name: Max-Cores
+          type: integer
         - jsonPath: .status.conditions[?(@.type=='Valid')].status
           name: Valid
           type: string
@@ -149,8 +152,11 @@ spec:
                     GracePeriod is how long after expiry the license remains
                     functional (e.g. "90d")
                   type: string
+                maxcores:
+                  description: Maximum Number of Allowed CPU Cores.
+                  type: integer
                 maxnodes:
-                  description: Maximum Number of Allowed Nodes
+                  description: Maximum Number of Allowed Nodes.
                   type: integer
                 package:
                   description:

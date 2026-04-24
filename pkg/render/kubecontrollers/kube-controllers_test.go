@@ -638,6 +638,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, t)))
 	})
 
+	It("should not duplicate default tolerations when they are specified as ControlPlaneTolerations", func() {
+		instance.ControlPlaneTolerations = []corev1.Toleration{rmeta.TolerateCriticalAddonsOnly}
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		resources, _ := component.Objects()
+		d := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(rmeta.TolerateCriticalAddonsAndControlPlane))
+	})
+
 	It("should render resourcerequirements", func() {
 		rr := &corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{

@@ -30,6 +30,8 @@ import (
 
 var log = logf.Log.WithName("discovery")
 
+const gkeNodeLabelPrefix = "cloud.google.com/gke-"
+
 // RequiresTigeraSecure determines if the configuration requires we start the tigera secure
 // controllers.
 func RequiresTigeraSecure(clientset *kubernetes.Clientset) (bool, error) {
@@ -79,7 +81,7 @@ func MultiTenant(ctx context.Context, c kubernetes.Interface) (bool, error) {
 
 func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (operatorv1.Provider, error) {
 	// First, try to determine the platform based on the present API groups.
-	if platform, err := autodetectFromGroup(clientset); err != nil {
+	if platform, err := autodetectFromGroup(ctx, clientset); err != nil {
 		return operatorv1.ProviderNone, fmt.Errorf("failed to check provider based on API groups: %s", err)
 	} else if platform != operatorv1.ProviderNone {
 		// We detected a platform. Use it.
@@ -141,15 +143,18 @@ func isOpenshift(c kubernetes.Interface) (bool, error) {
 }
 
 // autodetectFromGroup auto detects the platform based on the API groups that are present.
-func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
+func autodetectFromGroup(ctx context.Context, c kubernetes.Interface) (operatorv1.Provider, error) {
 	groups, err := c.Discovery().ServerGroups()
 	if err != nil {
 		return operatorv1.ProviderNone, err
 	}
 	for _, g := range groups.Groups {
 		if g.Name == "networking.gke.io" {
-			// Running on GKE.
-			return operatorv1.ProviderGKE, nil
+			if isGKE, err := hasGKENodeLabels(ctx, c); err != nil {
+				return operatorv1.ProviderNone, err
+			} else if isGKE {
+				return operatorv1.ProviderGKE, nil
+			}
 		}
 
 		if g.Name == "core.tanzu.vmware.com" {
@@ -157,6 +162,21 @@ func autodetectFromGroup(c kubernetes.Interface) (operatorv1.Provider, error) {
 		}
 	}
 	return operatorv1.ProviderNone, nil
+}
+
+func hasGKENodeLabels(ctx context.Context, c kubernetes.Interface) (bool, error) {
+	nodes, err := c.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+	for _, node := range nodes.Items {
+		for label := range node.Labels {
+			if strings.HasPrefix(label, gkeNodeLabelPrefix) {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
 }
 
 // isDockerEE returns true if running on a Docker Enterprise cluster, and false otherwise.

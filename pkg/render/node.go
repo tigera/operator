@@ -185,13 +185,9 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
-	} else {
-		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
-		combinedRef := appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
+	if img, ok := components.CombinedCalicoImage(c.cfg.Installation); ok {
+		c.useCombinedImage = true
+		combinedRef := appendIfErr(components.GetReference(img, reg, path, prefix, is))
 		c.cniImage = combinedRef
 		c.flexvolImage = combinedRef
 		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
@@ -199,6 +195,10 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		} else {
 			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
 		}
+	} else {
+		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
+		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
 	}
 
 	if len(errMsgs) != 0 {

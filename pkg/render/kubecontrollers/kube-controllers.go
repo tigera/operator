@@ -241,11 +241,11 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
+	if img, ok := components.CombinedCalicoImage(c.cfg.Installation); ok {
+		c.useCombinedImage = true
+		c.image, err = components.GetReference(img, reg, path, prefix, is)
 	} else {
-		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
-		c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
 	}
 	return err
 }

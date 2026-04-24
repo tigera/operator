@@ -191,8 +191,9 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			}
 		}
 	} else if c.cfg.RequiresAggregationServer {
-		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
-		c.apiServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		img, ok := components.CombinedCalicoImage(c.cfg.Installation)
+		c.useCombinedImage = ok
+		c.apiServerImage, err = components.GetReference(img, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}

@@ -384,20 +384,19 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-
-		c.csiRegistrarImage, err = components.GetReference(components.ComponentTigeraCSINodeDriverRegistrar, reg, path, prefix, is)
-	} else {
-		c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
-		c.csiImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if img, ok := components.CombinedCalicoImage(c.cfg.Installation); ok {
+		c.useCombinedImage = true
+		c.csiImage, err = components.GetReference(img, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
 		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+	} else {
+		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentTigeraCSINodeDriverRegistrar, reg, path, prefix, is)
 	}
 
 	return err

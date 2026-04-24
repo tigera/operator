@@ -103,22 +103,10 @@ func CreateCSRInitContainer(
 // ImageSet. OSS installs use the combined calico/calico image (or its FIPS variant); Enterprise uses the
 // dedicated CSR init container image.
 func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
-	if inst.Variant.IsEnterprise() {
-		return components.GetReference(
-			components.ComponentTigeraCSRInitContainer,
-			inst.Registry,
-			inst.ImagePath,
-			inst.ImagePrefix,
-			is,
-		)
+	if img, ok := components.CombinedCalicoImage(inst); ok {
+		return components.GetReference(img, inst.Registry, inst.ImagePath, inst.ImagePrefix, is)
 	}
-	return components.GetReference(
-		components.CombinedCalicoImage(inst),
-		inst.Registry,
-		inst.ImagePath,
-		inst.ImagePrefix,
-		is,
-	)
+	return components.GetReference(components.ComponentTigeraCSRInitContainer, inst.Registry, inst.ImagePath, inst.ImagePrefix, is)
 }
 
 // CSRClusterRole returns a role with the necessary permissions to create certificate signing requests.

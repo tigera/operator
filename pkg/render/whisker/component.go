@@ -95,7 +95,6 @@ type Component struct {
 
 	whiskerImage        string
 	whiskerBackendImage string
-	useCombinedImage    bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -110,13 +109,13 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 		return err
 	}
 
-	c.useCombinedImage = components.UsesCombinedCalicoImage(c.cfg.Installation)
-	c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-	if err != nil {
-		return err
+	// Whisker is only ever deployed for Calico OSS, which always uses the combined calico/calico image.
+	img, ok := components.CombinedCalicoImage(c.cfg.Installation)
+	if !ok {
+		return fmt.Errorf("whisker is only supported on Calico OSS installations")
 	}
-
-	return nil
+	c.whiskerBackendImage, err = components.GetReference(img, reg, path, prefix, is)
+	return err
 }
 
 func (c *Component) SupportedOSType() rmeta.OSType {
@@ -201,10 +200,11 @@ func (c *Component) whiskerService() *corev1.Service {
 }
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
-	container := corev1.Container{
+	return corev1.Container{
 		Name:            WhiskerBackendContainerName,
 		Image:           c.whiskerBackendImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},
@@ -217,10 +217,6 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
-	if c.useCombinedImage {
-		container.Command = []string{components.CalicoBinaryPath, "component", "whisker-backend"}
-	}
-	return container
 }
 
 func (c *Component) deployment() *appsv1.Deployment {

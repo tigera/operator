@@ -32,12 +32,16 @@ func UsesCombinedCalicoImage(installation *operatorv1.InstallationSpec) bool {
 	return !installation.Variant.IsEnterprise()
 }
 
-// CombinedCalicoImage returns the combined calico/calico Component to deploy for the given
-// installation, picking the FIPS-tagged variant when FIPS mode is enabled. Callers should only
-// invoke this when UsesCombinedCalicoImage returns true.
-func CombinedCalicoImage(installation *operatorv1.InstallationSpec) Component {
-	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
-		return ComponentCalicoFIPS
+// CombinedCalicoImage returns the combined calico/calico Component for the given installation
+// along with a boolean indicating whether it should be used. When the boolean is false, the
+// returned Component is meaningless and callers should deploy per-component images instead.
+// The FIPS-tagged variant is selected automatically when FIPS mode is enabled.
+func CombinedCalicoImage(installation *operatorv1.InstallationSpec) (Component, bool) {
+	if !UsesCombinedCalicoImage(installation) {
+		return Component{}, false
 	}
-	return ComponentCalico
+	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+		return ComponentCalicoFIPS, true
+	}
+	return ComponentCalico, true
 }

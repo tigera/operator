@@ -14,6 +14,7 @@ This command:
 
 - Creates a `release-vX.Y` branch from master
 - Updates `config/calico_versions.yml` and `config/enterprise_versions.yml` to point at the given refs
+- Updates `VERSION_TAG` in `Makefile` to match the Calico version
 - Runs `make fix gen-versions-calico gen-versions-enterprise` to regenerate files
 - Commits the changes to the release branch
 - Switches back to master, creates an empty commit, and tags it `vX.(Y+1).0-0.dev`
@@ -30,6 +31,26 @@ This command:
 After the branch is created, create the next minor release's first milestone at
 https://github.com/tigera/operator/milestones (e.g., if `release-v1.43` was created,
 create milestone `v1.44.0`).
+
+### Validating the branch cut
+
+Once the release branch, dev tag, and next-version milestone are in place, run:
+
+```sh
+make branch-validate RELEASE_STREAM=vX.Y
+```
+
+This runs a suite of checks against the remote state to catch common branch-cut mistakes:
+
+- The `release-vX.Y` branch exists in the operator remote
+- The Calico branch referenced in `config/calico_versions.yml` exists in `projectcalico/calico`
+- `VERSION_TAG` in the release branch's `Makefile` matches the Calico version in `config/calico_versions.yml`
+- The Enterprise branch referenced in `config/enterprise_versions.yml` exists in `tigera/calico-private`
+- The next dev tag (`vX.(Y+1).0-0.dev`) exists on the operator remote
+- The next minor release's milestone (`vX.(Y+1).0`) exists and is open
+
+Use `GIT_REMOTE=<remote>` to target a different remote (default: `origin`). Any failure is reported per check;
+fix the offending state and re-run.
 
 ## Preparing for the release
 

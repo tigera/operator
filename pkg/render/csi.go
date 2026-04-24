@@ -53,6 +53,7 @@ type csiComponent struct {
 
 	csiImage          string
 	csiRegistrarImage string
+	useCombinedImage  bool
 }
 
 func CSI(cfg *CSIConfiguration) Component {
@@ -138,9 +139,14 @@ func (c *csiComponent) csiAffinities() *corev1.Affinity {
 
 func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
+	var csiCommand []string
+	if c.useCombinedImage {
+		csiCommand = []string{components.CalicoBinaryPath, "component", "csi"}
+	}
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
 		Image:           c.csiImage,
+		Command:         csiCommand,
 		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
@@ -378,28 +384,19 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
+	if img, ok := components.CombinedCalicoImage(c.cfg.Installation); ok {
+		c.useCombinedImage = true
+		c.csiImage, err = components.GetReference(img, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+	} else {
 		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
-
 		c.csiRegistrarImage, err = components.GetReference(components.ComponentTigeraCSINodeDriverRegistrar, reg, path, prefix, is)
-	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSIFIPS, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, is)
-		} else {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
-
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
-		}
 	}
 
 	return err

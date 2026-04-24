@@ -59,6 +59,7 @@ const (
 	GoldmaneConfigFilePath     = "/config"
 	GoldmaneConfigFileName     = "config.json"
 	GoldmaneMetricsServiceName = "goldmane-metrics"
+	GoldmaneHealthPort         = 8080
 )
 
 func Goldmane(cfg *Configuration) render.Component {
@@ -90,14 +91,15 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	var err error
-
-	c.goldmaneImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
-	if err != nil {
-		return err
+	// Goldmane is only ever deployed for Calico OSS, which always uses the combined calico/calico image.
+	img, ok := components.CombinedCalicoImage(c.cfg.Installation)
+	if !ok {
+		return fmt.Errorf("goldmane is only supported on Calico OSS installations")
 	}
 
-	return nil
+	var err error
+	c.goldmaneImage, err = components.GetReference(img, reg, path, prefix, is)
+	return err
 }
 
 func (c *Component) SupportedOSType() rmeta.OSType {
@@ -240,19 +242,20 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		Name:            GoldmaneContainerName,
 		Image:           c.goldmaneImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "goldmane"},
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-				Command: []string{"/health", "-ready"},
+				Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=readiness"},
 			}},
+			PeriodSeconds: 10,
 		},
 		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{"/health", "-live"},
-				},
-			},
+			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+				Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=liveness"},
+			}},
+			PeriodSeconds: 10,
 		},
 		VolumeMounts: volumeMounts,
 	}

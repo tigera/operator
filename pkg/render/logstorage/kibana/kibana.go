@@ -282,7 +282,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			corev1.TLSCertKey,
 			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
 			Namespace,
-			sc)
+			sc,
+			false,
+		)
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{

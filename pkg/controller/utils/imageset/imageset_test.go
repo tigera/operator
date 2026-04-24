@@ -65,9 +65,9 @@ var _ = Describe("imageset tests", func() {
 					},
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
-							{Image: "calico/cni", Digest: "sha256:xxxxxxxxx"},
+							{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
-							{Image: "calico/typha", Digest: "sha256:xxxxxxxxx"},
+							{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 						},
 					},
 				},
@@ -80,9 +80,9 @@ var _ = Describe("imageset tests", func() {
 					},
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
-							{Image: "calico/cni", Digest: "sha256:xxxxxxxxx"},
+							{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
-							{Image: "calico/typha", Digest: "sha256:xxxxxxxxx"},
+							{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/unknown", Digest: "sha256:xxxxxxxxx"},
 						},
 					},
@@ -98,7 +98,7 @@ var _ = Describe("imageset tests", func() {
 					},
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
-							{Image: "calico/cni", Digest: "xxxxxxxxx"},
+							{Image: "calico/node", Digest: "xxxxxxxxx"},
 						},
 					},
 				},
@@ -124,9 +124,9 @@ var _ = Describe("imageset tests", func() {
 			}
 			isSpec := operator.ImageSetSpec{
 				Images: []operator.Image{
-					{Image: "calico/cni", Digest: "sha256:xxxxxxxxx"},
+					{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
 					{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
-					{Image: "calico/typha", Digest: "sha256:xxxxxxxxx"},
+					{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 				},
 			}
 			c := fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects(

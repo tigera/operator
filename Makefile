@@ -618,7 +618,7 @@ hack/release/ut:
 	mkdir -p report/release
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
+	gotestsum --format=testname --junitfile report/release/ut.xml $$(go list $(PACKAGE_NAME)/hack/release/... | grep -v /hack/release/validate)'
 
 release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
 	hack/bin/release from
@@ -636,7 +636,17 @@ release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-o
 	@REPO=$(REPO) hack/bin/release prep
 
 create-release-branch: hack/bin/release var-require-all-CALICO_REF-ENTERPRISE_REF var-require-one-of-STREAM-RELEASE_STREAM
-	hack/bin/release branch
+	hack/bin/release branch cut
+
+GOTESTSUM_VERSION?=1.13.0
+$(HACK_BIN)/gotestsum: $(HACK_BIN)
+	@curl -sSL -o $(HACK_BIN)/gotestsum.tar.gz https://github.com/gotestyourself/gotestsum/releases/download/v$(GOTESTSUM_VERSION)/gotestsum_$(GOTESTSUM_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
+	@tar -zxvf $(HACK_BIN)/gotestsum.tar.gz -C $(HACK_BIN) gotestsum
+	@chmod +x $@
+	@rm $(HACK_BIN)/gotestsum.tar.gz
+
+branch-validate: hack/bin/release $(HACK_BIN)/gotestsum var-require-one-of-STREAM-RELEASE_STREAM
+	PATH=$$PATH:$(CURDIR)/$(HACK_BIN) hack/bin/release branch validate
 
 ###############################################################################
 # Utilities

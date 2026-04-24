@@ -26,6 +26,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
 	"github.com/urfave/cli/v3"
 )
 
@@ -51,7 +53,7 @@ var publishCommand = &cli.Command{
 // Pre-action for publish command.
 // It configures logging and performs validations.
 var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	configureLogging(c)
+	middleware.ConfigureLogging(c)
 
 	var err error
 
@@ -89,7 +91,7 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 
 // Action for publish command.
 var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	repoRootDir, err := gitDir()
+	repoRootDir, err := command.GitDir()
 	if err != nil {
 		return fmt.Errorf("getting git directory: %w", err)
 	}
@@ -152,7 +154,7 @@ var publishImages = func(c *cli.Command, repoRootDir string) error {
 	}
 
 	log.Info("Publishing Operator images")
-	if out, err := makeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
+	if out, err := command.MakeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
 		log.Error(out)
 		return fmt.Errorf("publishing images: %w", err)
 	}

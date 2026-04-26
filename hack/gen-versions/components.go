@@ -41,7 +41,6 @@ var (
 		"calicoctl":                   "ctl",
 		"flexvol":                     "pod2daemon-flexvol",
 		"csi":                         "csi",
-		"csi-node-driver-registrar":   "node-driver-registrar",
 		"typha":                       "typha",
 		"key-cert-provisioner":        "key-cert-provisioner",
 		"apiserver":                   "apiserver",

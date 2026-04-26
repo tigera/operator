@@ -54,15 +54,6 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
-{{ with index .Components "csi-node-driver-registrar" }}
-	ComponentCalicoCSIRegistrar = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   calicoVariant,
-	}
-{{- end }}
 {{ with index .Components.whisker }}
 	ComponentCalicoWhisker = Component{
 		Version:   "{{ .Version }}",
@@ -158,7 +149,6 @@ var (
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
 		ComponentCalicoNodeWindows,
-		ComponentCalicoCSIRegistrar,
 		ComponentCalicoWhisker,
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,

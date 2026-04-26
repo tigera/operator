@@ -139,9 +139,10 @@ func (c *csiComponent) csiAffinities() *corev1.Affinity {
 
 func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
-	var csiCommand []string
+	var csiCommand, registrarCommand []string
 	if c.useCombinedImage {
 		csiCommand = []string{components.CalicoBinaryPath, "component", "csi"}
+		registrarCommand = []string{"/usr/bin/csi-node-driver-registrar"}
 	}
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
@@ -188,6 +189,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	registrarContainer := corev1.Container{
 		Name:            CSIRegistrarContainerName,
 		Image:           c.csiRegistrarImage,
+		Command:         registrarCommand,
 		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--v=5",
@@ -390,7 +392,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		if err != nil {
 			return err
 		}
-		c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
+		c.csiRegistrarImage = c.csiImage
 	} else {
 		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
 		if err != nil {

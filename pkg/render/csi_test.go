@@ -309,8 +309,9 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)))
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalicoCSIRegistrar.Image, components.ComponentCalicoCSIRegistrar.Version)))
+		expectedImage := fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(expectedImage))
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(expectedImage))
 	})
 
 	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
@@ -323,7 +324,7 @@ var _ = Describe("CSI rendering tests", func() {
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).NotTo(ContainSubstring("-fips"))
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(ContainSubstring("-fips"))
 	})
 
 	It("should render the labels when the provider is openshift", func() {

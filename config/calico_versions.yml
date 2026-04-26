@@ -23,8 +23,6 @@ components:
     version: master
   csi:
     version: master
-  csi-node-driver-registrar:
-    version: master
   key-cert-provisioner:
     version: master
   whisker:

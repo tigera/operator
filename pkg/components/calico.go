@@ -52,14 +52,6 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalicoCSIRegistrar = Component{
-		Version:   "master",
-		Image:     "node-driver-registrar",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
 	ComponentCalicoWhisker = Component{
 		Version:   "master",
 		Image:     "whisker",
@@ -145,7 +137,6 @@ var (
 		ComponentCalicoNode,
 		ComponentCalicoNodeFIPS,
 		ComponentCalicoNodeWindows,
-		ComponentCalicoCSIRegistrar,
 		ComponentCalicoWhisker,
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,

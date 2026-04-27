@@ -654,6 +654,13 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get"},
+		})
+	}
 	return role
 }
 

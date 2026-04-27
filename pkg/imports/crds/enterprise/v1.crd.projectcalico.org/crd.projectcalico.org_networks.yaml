@@ -146,6 +146,18 @@ spec:
                                           minLength: 1
                                           type: string
                                       type: object
+                                    nativeVLAN:
+                                      description: |-
+                                        NativeVLAN, when set, designates one VLAN ID as the trunk's native
+                                        VLAN: frames in that VLAN are sent untagged on the wire and
+                                        untagged frames received on the trunk are tagged with this VLAN.
+                                        The referenced VLAN ID must appear in spec.vlans (either directly
+                                        as an id or within a range).  When unset (default) the trunk is
+                                        strictly tagged: only 802.1Q-tagged frames are accepted and
+                                        transmitted.
+                                      maximum: 4094
+                                      minimum: 1
+                                      type: integer
                                     vlans:
                                       description: |-
                                         VLANs restricts which VLANs this trunk carries.  Defaults to all
@@ -196,17 +208,17 @@ spec:
                                             x-kubernetes-validations:
                                               - message: start must be <= end
                                                 rule: self.start <= self.end
-                                          untagged:
-                                            description: |-
-                                              Untagged selects untagged (non-802.1Q) traffic on the bridge.  At
-                                              most one L2VLANSpec may use this match.
-                                            type: object
                                         type: object
                                       type: array
                                       x-kubernetes-list-type: atomic
                                   required:
                                     - interface
                                   type: object
+                                  x-kubernetes-validations:
+                                    - message: nativeVLAN must be between 1 and 4094
+                                      rule:
+                                        "!has(self.nativeVLAN) || self.nativeVLAN
+                                        >= 1 && self.nativeVLAN <= 4094"
                               type: object
                             maxItems: 1
                             type: array
@@ -228,36 +240,17 @@ spec:
                     vlans:
                       description: |-
                         VLANs is the authoritative list of 802.1Q VLAN segments carried by
-                        this network.  Each entry defines a VLAN ID, a contiguous range of
-                        VLAN IDs, or untagged traffic, plus the subnets associated with
-                        that segment.
+                        this network.  Each entry defines a single VLAN ID or a contiguous
+                        range of VLAN IDs, plus the subnets associated with that segment.
 
                         Workload attachments select a single entry via the CNI config
-                        "vlan" field; if spec.vlans has exactly one entry, the CNI config
-                        "vlan" field may be omitted.
-
-                        At most one entry may use the "untagged" match.
+                        "vlan" field; if spec.vlans has exactly one entry that resolves to
+                        a single VLAN ID, the CNI config "vlan" field may be omitted.
                       items:
                         description:
                           L2VLANSpec defines a VLAN segment and its optional
                           IP configuration.
                         properties:
-                          broadcastMulticast:
-                            default: Block
-                            description: |-
-                              BroadcastMulticast controls whether broadcast and multicast frames
-                              are forwarded to workloads on this VLAN.  "Block" (default) drops
-                              broadcast and multicast frames before they reach workloads,
-                              preventing broadcast storms and multicast DoS.  "Allow" permits
-                              them through.  ARP is always permitted regardless of this setting.
-
-                              Note: v1 always blocks broadcast/multicast regardless of this
-                              field; the field is present for forward compatibility with a
-                              future broadcast/multicast policy model.
-                            enum:
-                              - Allow
-                              - Block
-                            type: string
                           subnets:
                             description: |-
                               Subnets are the IP subnets for this VLAN segment.  Used to apply
@@ -290,8 +283,8 @@ spec:
                             x-kubernetes-list-type: atomic
                           vlan:
                             description: |-
-                              VLAN identifies this segment: a single VLAN ID, a contiguous
-                              range, or untagged traffic.
+                              VLAN identifies this segment: a single VLAN ID or a contiguous
+                              range of VLAN IDs.
                             maxProperties: 1
                             minProperties: 1
                             properties:
@@ -326,11 +319,6 @@ spec:
                                 x-kubernetes-validations:
                                   - message: start must be <= end
                                     rule: self.start <= self.end
-                              untagged:
-                                description: |-
-                                  Untagged selects untagged (non-802.1Q) traffic on the bridge.  At
-                                  most one L2VLANSpec may use this match.
-                                type: object
                             type: object
                         required:
                           - vlan
@@ -338,93 +326,11 @@ spec:
                       minItems: 1
                       type: array
                       x-kubernetes-list-type: atomic
-                      x-kubernetes-validations:
-                        - message: at most one vlans entry may be untagged
-                          rule: self.filter(v, has(v.vlan.untagged)).size() <= 1
                   required:
                     - hostConfig
                     - vlans
                   type: object
               type: object
-            status:
-              description: NetworkStatus reports the observed state of a Network.
-              properties:
-                conditions:
-                  description: |-
-                    Conditions represent the latest available observations of the
-                    network's state.
-                  items:
-                    description:
-                      Condition contains details for one aspect of the current
-                      state of this API Resource.
-                    properties:
-                      lastTransitionTime:
-                        description: |-
-                          lastTransitionTime is the last time the condition transitioned from one status to another.
-                          This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
-                        format: date-time
-                        type: string
-                      message:
-                        description: |-
-                          message is a human readable message indicating details about the transition.
-                          This may be an empty string.
-                        maxLength: 32768
-                        type: string
-                      observedGeneration:
-                        description: |-
-                          observedGeneration represents the .metadata.generation that the condition was set based upon.
-                          For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
-                          with respect to the current state of the instance.
-                        format: int64
-                        minimum: 0
-                        type: integer
-                      reason:
-                        description: |-
-                          reason contains a programmatic identifier indicating the reason for the condition's last transition.
-                          Producers of specific condition types may define expected values and meanings for this field,
-                          and whether the values are considered a guaranteed API.
-                          The value should be a CamelCase string.
-                          This field may not be empty.
-                        maxLength: 1024
-                        minLength: 1
-                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
-                        type: string
-                      status:
-                        description: status of the condition, one of True, False, Unknown.
-                        enum:
-                          - "True"
-                          - "False"
-                          - Unknown
-                        type: string
-                      type:
-                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
-                        maxLength: 316
-                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
-                        type: string
-                    required:
-                      - lastTransitionTime
-                      - message
-                      - reason
-                      - status
-                      - type
-                    type: object
-                  type: array
-                  x-kubernetes-list-map-keys:
-                    - type
-                  x-kubernetes-list-type: map
-                type:
-                  description: |-
-                    Type is the resolved network type, e.g. "L2Bridge".  Populated by
-                    the controller for kubectl print columns.
-                  type: string
-                vlans:
-                  description: |-
-                    VLANs is a human-readable summary of configured VLAN IDs for
-                    kubectl print columns (e.g. "100,200,500-600").
-                  type: string
-              type: object
           type: object
       served: true
       storage: true
-      subresources:
-        status: {}

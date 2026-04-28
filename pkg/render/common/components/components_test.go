@@ -1299,7 +1299,7 @@ func recordHandledFields() (recorded func() []string, restore func()) {
 		rec = append(rec, strings.Join(normalizeFieldPath(overrides, fieldNames), "."))
 		return original(overrides, fieldNames...)
 	}
-	return func() []string { return rec }, func() { getField = original }
+	return func() []string { return append([]string(nil), rec...) }, func() { getField = original }
 }
 
 // defaultedDaemonSet returns a DaemonSet with its fields populated.

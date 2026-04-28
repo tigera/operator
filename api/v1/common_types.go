@@ -66,3 +66,13 @@ type NamespacedName struct {
 	Namespace string `json:"namespace"`
 	Name      string `json:"name"`
 }
+
+// NetworkPolicyManagement specifies whether or not the operator should manage
+// NetworkPolicies within the cluster.
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type NetworkPolicyManagement string
+
+const (
+	NetworkPolicyManagementEnabled  NetworkPolicyManagement = "Enabled"
+	NetworkPolicyManagementDisabled NetworkPolicyManagement = "Disabled"
+)

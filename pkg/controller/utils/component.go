@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -42,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -445,6 +447,35 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+
+	// If NetworkPolicyManagement is disabled, then we should not create any NetworkPolicies,
+	// and we should actively delete any that already exist.
+	hasNetworkPolicies := false
+	for _, obj := range objsToCreate {
+		if isNetworkPolicy(obj) {
+			hasNetworkPolicies = true
+			break
+		}
+	}
+
+	if hasNetworkPolicies {
+		_, installation, err := GetInstallationSpec(ctx, c.client)
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		if installation != nil && installation.NetworkPolicyManagement != nil && *installation.NetworkPolicyManagement == operatorv1.NetworkPolicyManagementDisabled {
+			newToCreate := []client.Object{}
+			for _, obj := range objsToCreate {
+				if isNetworkPolicy(obj) {
+					objsToDelete = append(objsToDelete, obj)
+				} else {
+					newToCreate = append(newToCreate, obj)
+				}
+			}
+			objsToCreate = newToCreate
+		}
+	}
+
 	osType := component.SupportedOSType()
 
 	if len(c.apiGroupEnvs) > 0 {
@@ -1184,4 +1215,12 @@ func mergeEnvVars(existing []v1.EnvVar, toMerge []v1.EnvVar) []v1.EnvVar {
 		}
 	}
 	return existing
+}
+
+func isNetworkPolicy(obj client.Object) bool {
+	switch obj.(type) {
+	case *v3.NetworkPolicy, *v3.GlobalNetworkPolicy, *netv1.NetworkPolicy:
+		return true
+	}
+	return false
 }

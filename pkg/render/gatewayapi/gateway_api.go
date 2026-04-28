@@ -424,6 +424,34 @@ func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) rend
 	}
 }
 
+// GatewayAPINamespaceComponent emits only the tigera-gateway Namespace. The controller renders
+// this early — alongside CRDs and before EnvoyProxyRef resolution — so that users can create
+// EnvoyProxy resources in tigera-gateway on a fresh install without the controller deadlocking
+// on a missing namespace.
+func GatewayAPINamespaceComponent(installation *operatorv1.InstallationSpec) render.Component {
+	return &gatewayAPINamespaceComponent{installation: installation}
+}
+
+type gatewayAPINamespaceComponent struct {
+	installation *operatorv1.InstallationSpec
+}
+
+func (c *gatewayAPINamespaceComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
+func (c *gatewayAPINamespaceComponent) SupportedOSType() rmeta.OSType            { return rmeta.OSTypeLinux }
+func (c *gatewayAPINamespaceComponent) Ready() bool                              { return true }
+
+func (c *gatewayAPINamespaceComponent) Objects() ([]client.Object, []client.Object) {
+	resources := GatewayAPIResources()
+	return []client.Object{
+		render.CreateNamespace(
+			resources.namespace.Name,
+			c.installation.KubernetesProvider,
+			render.PSSPrivileged, // Needed for HostPath volume to write logs to
+			c.installation.Azure,
+		),
+	}, nil
+}
+
 func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := pr.cfg.Installation.Registry
 	path := pr.cfg.Installation.ImagePath

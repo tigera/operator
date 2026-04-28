@@ -135,11 +135,14 @@ var _ = Describe("Common components render tests", func() {
 
 	DescribeTable("check for unhandled fields",
 		func(overrides any, expectUnhandled bool, allowedExtraFields ...string) {
-			// Call applyReplicatedPodResourceOverrides to discover all the fields that
+			// Wrap getField so we can observe which paths the production
+			// code accesses, then run it to discover all the fields that
 			// we handle.
+			recorded, restore := recordHandledFields()
+			defer restore()
 			r := &replicatedPodResource{}
 			applyReplicatedPodResourceOverrides(r, overrides)
-			handledFields := append(overrideFieldsHandledInLastApplyCall, allowedExtraFields...)
+			handledFields := append(recorded(), allowedExtraFields...)
 
 			// Now traverse the structure to find any unhandled fields.
 			unhandledFields := findUnhandled(handledFields, "", reflect.TypeOf(overrides))
@@ -1275,6 +1278,28 @@ func addContainer(cs []corev1.Container) []corev1.Container {
 	containers = append(containers, cs[0])
 	containers = append(containers, newContainer)
 	return containers
+}
+
+// recordHandledFields swaps the package-level getField with a wrapper that
+// records each field path accessed, then returns:
+//   - recorded: a closure returning the accumulated paths
+//   - restore: a function (typically deferred) that restores the original getField
+//
+// The wrapper passes raw fieldNames through to the original getField, so any
+// per-type path adjustments made there are unchanged. Recording mirrors those
+// adjustments via normalizeFieldPath so the recorded paths match the field
+// names we actually look up.
+//
+// NOT safe under parallel test execution: the swap mutates package state.
+// All "check for unhandled fields" entries run serially in this Describe.
+func recordHandledFields() (recorded func() []string, restore func()) {
+	var rec []string
+	original := getField
+	getField = func(overrides any, fieldNames ...string) reflect.Value {
+		rec = append(rec, strings.Join(normalizeFieldPath(overrides, fieldNames), "."))
+		return original(overrides, fieldNames...)
+	}
+	return func() []string { return append([]string(nil), rec...) }, func() { getField = original }
 }
 
 // defaultedDaemonSet returns a DaemonSet with its fields populated.

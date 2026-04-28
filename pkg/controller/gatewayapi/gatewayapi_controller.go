@@ -262,6 +262,19 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger.Info("Could not render all optional GatewayAPI CRDs", "err", err)
 	}
 
+	// Render the tigera-gateway Namespace early — before any of the steps below that may
+	// early-return (e.g. EnvoyProxyRef resolution). The namespace is part of the operator's
+	// contract for any GatewayAPI CR, so it must always exist; otherwise users referencing
+	// custom EnvoyProxy resources in tigera-gateway on a fresh install hit a deadlock where
+	// reconcile fails on the missing EnvoyProxy and never reaches the non-CRD render that
+	// would have created the namespace.
+	namespaceComponent := gatewayapi.GatewayAPINamespaceComponent(installationSpec)
+	err = r.newComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, namespaceComponent, nil)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering tigera-gateway namespace", err, log)
+		return reconcile.Result{}, err
+	}
+
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)

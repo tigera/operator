@@ -731,7 +731,6 @@ var _ = Describe("windows-controller installation tests", func() {
 							Images: []operator.Image{
 								{Image: "calico/calico", Digest: "sha256:calicocombinedhash"},
 								{Image: "calico/node", Digest: "sha256:tigeranodehash"},
-								{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 							},
 						},
 					}

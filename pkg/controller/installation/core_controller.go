@@ -58,8 +58,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operator "github.com/tigera/operator/api/v1"
-	operatorv1 "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -1304,11 +1302,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}))
 
 	// Check if non-cluster host feature is enabled.
-	var nonclusterhost *operatorv1.NonClusterHost
+	var nonclusterhost *operator.NonClusterHost
 	if instance.Spec.Variant == operator.TigeraSecureEnterprise {
 		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
+			r.status.SetDegraded(operator.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
 			return reconcile.Result{}, err
 		} else if nonclusterhost != nil {
 			// This is the default common name in CSR from non-cluster hosts.
@@ -1330,7 +1328,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			if r.typhaAutoscalerNonClusterHost == nil {
 				calicoClient, err := calicoclient.NewForConfig(r.config)
 				if err != nil {
-					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
+					r.status.SetDegraded(operator.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
 					return reconcile.Result{}, err
 				}
 
@@ -1417,7 +1415,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var goldmaneRunning bool
 	// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
 	if instance.Spec.Variant == operator.Calico {
-		goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.client)
+		goldmaneCR, err := utils.GetIfExists[operator.Goldmane](ctx, utils.DefaultInstanceKey, r.client)
 		if err != nil {
 			r.status.SetDegraded(operator.ResourceReadError, "Unable retrieve Goldmane CR", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1771,7 +1769,7 @@ func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *oper
 	// we don't need to handle upgrades from versions that were previously FelixConfiguration only - nftables mode has always
 	// been controlled by the operator.
 	if install.Spec.CalicoNetwork.LinuxDataplane != nil {
-		if *install.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneNftables {
+		if *install.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneNftables {
 			// The operator is configured to use the nftables dataplane. Configure Felix to use nftables.
 			nftablesMode := crdv1.NFTablesModeEnabled
 			fc.Spec.NFTablesMode = &nftablesMode
@@ -2096,9 +2094,9 @@ func addCRDWatches(c ctrlruntime.Controller, v operator.ProductVariant) error {
 }
 
 func crdPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
-	pools := []v1.IPPool{}
+	pools := []operator.IPPool{}
 	for _, p := range crds {
-		op := v1.IPPool{}
+		op := operator.IPPool{}
 		op.FromProjectCalicoV1(p)
 		pools = append(pools, op)
 	}

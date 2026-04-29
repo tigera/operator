@@ -47,6 +47,7 @@ func bpfValidateAnnotations(fc *crdv1.FelixConfiguration) error {
 	match = match || annotationValue != nil && fc.Spec.BPFEnabled != nil && *annotationValue == *fc.Spec.BPFEnabled
 
 	if !match {
+		//lint:ignore ST1005 preserve original message formatting
 		return errors.New(`Unable to set bpfEnabled: FelixConfiguration "default" has been modified by someone else, refusing to override potential user configuration.`)
 	}
 

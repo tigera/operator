@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operator "github.com/tigera/operator/api/v1"
-	v1 "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -33,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -188,7 +186,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Get all IP pools currently in the cluster.
 	currentPools := &crdv1.IPPoolList{}
 	err := r.client.List(ctx, currentPools)
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !apierrors.IsNotFound(err) {
 		r.status.SetDegraded(operator.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -224,7 +222,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operator.ResourceNotReady, "Error querying APIServer", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	apiAvailable := apiserver != nil && apiserver.Status.State == v1.TigeraStatusReady
+	apiAvailable := apiserver != nil && apiserver.Status.State == operator.TigeraStatusReady
 
 	// Create a lookup map of pools owned by this controller for easy access.
 	// This controller will only modify IP pools if:
@@ -247,7 +245,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// Without this logic, this controller would consider these pools as not owned by itself, resulting in errors
 			// when it attempts to create overlappin IP pools.
 			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
-				v1p := v1.IPPool{}
+				v1p := operator.IPPool{}
 				v1p.FromProjectCalicoV1(p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
 				if !reflect.DeepEqual(cnp, v1p) {
@@ -393,10 +391,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{}, nil
 }
 
-func CRDPoolsToOperator(crds []crdv1.IPPool) []v1.IPPool {
-	pools := []v1.IPPool{}
+func CRDPoolsToOperator(crds []crdv1.IPPool) []operator.IPPool {
+	pools := []operator.IPPool{}
 	for _, p := range crds {
-		op := v1.IPPool{}
+		op := operator.IPPool{}
 		op.FromProjectCalicoV1(p)
 		pools = append(pools, op)
 	}

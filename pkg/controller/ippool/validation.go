@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -115,6 +115,7 @@ func ValidatePools(instance *operator.Installation) error {
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
 				if int32(ones) > *pool.BlockSize {
+					//lint:ignore ST1005 preserve original message formatting
 					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
 				}
 			}
@@ -128,6 +129,7 @@ func ValidatePools(instance *operator.Installation) error {
 				// Verify that the CIDR contains the blocksize.
 				ones, _ := cidr.Mask.Size()
 				if int32(ones) > *pool.BlockSize {
+					//lint:ignore ST1005 preserve original message formatting
 					return fmt.Errorf("IP pool size is too small. It must be equal to or greater than the block size.")
 				}
 			}

@@ -37,7 +37,7 @@ func GetClusterDomain(resolvConfPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reg := regexp.MustCompile(`^search.*?\ssvc\.([^\s]*)`)
 
@@ -73,7 +73,7 @@ func Nameservers(resolvConfPath string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	reg := regexp.MustCompile(`^nameserver\s+([^\s]+)`)
 

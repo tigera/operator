@@ -51,7 +51,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
 	tigeratls "github.com/tigera/operator/pkg/tls"
@@ -362,14 +361,14 @@ var _ = Describe("Manager controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secret := &corev1.Secret{}
+			s := &corev1.Secret{}
 			// Verify that the operator managed cert secrets exist. These cert
 			// secrets should have the manager service DNS names plus localhost only.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, []string{"localhost"}...)
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, s)).ShouldNot(HaveOccurred())
+			test.VerifyCert(s, []string{"localhost"}...)
 
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, []string{"localhost"}...)
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, s)).ShouldNot(HaveOccurred())
+			test.VerifyCert(s, []string{"localhost"}...)
 
 			// Check that the internal secret was copied over to the manager namespace
 			internalSecret := &corev1.Secret{}
@@ -378,27 +377,27 @@ var _ = Describe("Manager controller tests", func() {
 			// Create a custom manager cert secret.
 			dnsNames := []string{"manager.example.com", "192.168.10.22"}
 			testCA := test.MakeTestCA("manager-test")
-			customSecret, err := rsecret.CreateTLSSecret(
+			customSecret, err := secret.CreateTLSSecret(
 				testCA, render.ManagerTLSSecretName, common.OperatorNamespace(), corev1.TLSPrivateKeyKey, corev1.TLSCertKey, tigeratls.DefaultCertificateDuration, nil, dnsNames...)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Update the existing operator managed cert secret with bytes from
 			// the custom manager cert secret.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			secret.Data[corev1.TLSCertKey] = customSecret.Data[corev1.TLSCertKey]
-			secret.Data[corev1.TLSPrivateKeyKey] = customSecret.Data[corev1.TLSPrivateKeyKey]
-			Expect(c.Update(ctx, secret)).NotTo(HaveOccurred())
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, s)).ShouldNot(HaveOccurred())
+			s.Data[corev1.TLSCertKey] = customSecret.Data[corev1.TLSCertKey]
+			s.Data[corev1.TLSPrivateKeyKey] = customSecret.Data[corev1.TLSPrivateKeyKey]
+			Expect(c.Update(ctx, s)).NotTo(HaveOccurred())
 
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Verify that the existing certs have changed - check that the
 			// certs have the DNS names in the user-supplied cert.
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, dnsNames...)
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: common.OperatorNamespace()}, s)).ShouldNot(HaveOccurred())
+			test.VerifyCert(s, dnsNames...)
 
-			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, secret)).ShouldNot(HaveOccurred())
-			test.VerifyCert(secret, dnsNames...)
+			Expect(c.Get(ctx, types.NamespacedName{Name: render.ManagerTLSSecretName, Namespace: render.ManagerNamespace}, s)).ShouldNot(HaveOccurred())
+			test.VerifyCert(s, dnsNames...)
 		})
 
 		It("should replace the internal manager TLS cert secret if its DNS names are invalid", func() {

@@ -1178,7 +1178,7 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 // apiServer creates a MutatingWebhookConfiguration for sidecars.
 func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
 	var cacert []byte
-	var svcPort int32 = getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
+	var svcPort = getContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
 
 	svcpath := "/sidecar-webhook"
 	svcref := admregv1.ServiceReference{

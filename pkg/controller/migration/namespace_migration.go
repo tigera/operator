@@ -665,7 +665,7 @@ func (m *CoreNamespaceMigration) waitUntilNodeCanBeMigrated(ctx context.Context,
 			return false, err
 		}
 
-		var maxUnavailable int32 = defaultMaxUnavailable
+		var maxUnavailable = defaultMaxUnavailable
 
 		if csMaxUnavailable != nil {
 			numNodesMaxUnavailable, err := intstr.GetValueFromIntOrPercent(csMaxUnavailable, int(ksD+csD), false)

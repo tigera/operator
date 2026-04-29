@@ -22,26 +22,15 @@ import (
 // Components deployed from the combined image invoke this binary via Command / probe exec.
 const CalicoBinaryPath = "/usr/bin/calico"
 
-// UsesCombinedCalicoImage reports whether the given installation should deploy the combined
-// calico/calico image in place of per-component images. Today this is all Calico OSS installs,
-// including FIPS mode. Enterprise support for the combined image is planned as a follow-up.
-func UsesCombinedCalicoImage(installation *operatorv1.InstallationSpec) bool {
-	if installation == nil {
-		return false
-	}
-	return !installation.Variant.IsEnterprise()
-}
-
-// CombinedCalicoImage returns the combined calico/calico Component for the given installation
-// along with a boolean indicating whether it should be used. When the boolean is false, the
-// returned Component is meaningless and callers should deploy per-component images instead.
-// The FIPS-tagged variant is selected automatically when FIPS mode is enabled.
-func CombinedCalicoImage(installation *operatorv1.InstallationSpec) (Component, bool) {
-	if !UsesCombinedCalicoImage(installation) {
-		return Component{}, false
+// CombinedCalicoImage returns the combined calico/calico Component for the given installation.
+// The right Component is selected based on the installation variant (Calico OSS vs. Calico Enterprise)
+// and FIPS mode. FIPS + Enterprise is rejected at admission so it is not represented here.
+func CombinedCalicoImage(installation *operatorv1.InstallationSpec) Component {
+	if installation.Variant.IsEnterprise() {
+		return ComponentTigeraCalico
 	}
 	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
-		return ComponentCalicoFIPS, true
+		return ComponentCalicoFIPS
 	}
-	return ComponentCalico, true
+	return ComponentCalico
 }

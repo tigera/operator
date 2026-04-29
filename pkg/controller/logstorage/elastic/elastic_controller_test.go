@@ -1040,13 +1040,13 @@ var _ = Describe("LogStorage controller", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-								{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
+								{Image: "tigera/calico", Digest: "sha256:kubecontrollershash"},
 								{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 								{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 								{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 								{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 								{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
-								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+								{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
 					})).ToNot(HaveOccurred())

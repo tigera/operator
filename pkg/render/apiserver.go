@@ -157,7 +157,6 @@ type apiServerComponent struct {
 	l7AdmissionControllerImage      string
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
-	useCombinedImage                bool
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -167,15 +166,17 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	errMsgs := []string{}
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+	enterprise := c.cfg.Installation.Variant.IsEnterprise()
+	if enterprise || c.cfg.RequiresAggregationServer {
+		c.apiServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
+	}
+
+	if enterprise {
+		// queryserver ships in the combined calico image.
+		c.queryServerImage = c.apiServerImage
 		if c.cfg.IsSidecarInjectionEnabled() {
 			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
 			if err != nil {
@@ -185,17 +186,8 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
-			c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-		}
-	} else if c.cfg.RequiresAggregationServer {
-		img, ok := components.CombinedCalicoImage(c.cfg.Installation)
-		c.useCombinedImage = ok
-		c.apiServerImage, err = components.GetReference(img, reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
+			// dikastes ships in the combined calico image.
+			c.dikastesImage = c.apiServerImage
 		}
 	}
 
@@ -1172,15 +1164,10 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
-	var apiServerCommand []string
-	if c.useCombinedImage {
-		apiServerCommand = []string{components.CalicoBinaryPath, "component", "apiserver"}
-	}
-
 	apiServer := corev1.Container{
 		Name:            string(APIServerContainerName),
 		Image:           c.apiServerImage,
-		Command:         apiServerCommand,
+		Command:         []string{components.CalicoBinaryPath, "component", "apiserver"},
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
 		Env:             env,
@@ -1313,6 +1300,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	container := corev1.Container{
 		Name:            string(TigeraAPIServerQueryServerContainerName),
 		Image:           c.queryServerImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "queryserver"},
 		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
 		LivenessProbe: &corev1.Probe{

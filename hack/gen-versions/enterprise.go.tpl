@@ -19,8 +19,8 @@ package components
 
 var (
 	EnterpriseRelease string = "{{ .Title }}"
-{{ with index .Components "apiserver" }}
-	ComponentAPIServer = Component{
+{{ with index .Components "calico" }}
+	ComponentTigeraCalico = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -66,15 +66,6 @@ var (
 {{- end }}
 {{ with index .Components "compliance-snapshotter" }}
 	ComponentComplianceSnapshotter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "key-cert-provisioner" }}
-	ComponentTigeraCSRInitContainer = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -174,15 +165,6 @@ var (
 {{- end }}
 {{ with index .Components "fluentd-windows" }}
 	ComponentFluentdWindows = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with .Components.guardian }}
-	ComponentGuardian = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -306,15 +288,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "dikastes" }}
-	ComponentDikastes = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "l7-admission-controller" }}
 	ComponentL7AdmissionController = Component{
 		Version:   "{{ .Version }}",
@@ -363,24 +336,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "queryserver" }}
-	ComponentQueryServer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "kube-controllers" }}
-	ComponentTigeraKubeControllers = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "node" }}
 	ComponentTigeraNode = Component{
 		Version:   "{{ .Version }}",
@@ -399,24 +354,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with .Components.typha }}
-	ComponentTigeraTypha = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "tigera-cni" }}
-	ComponentTigeraCNI = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = Component{
 		Version:   "{{ .Version }}",
@@ -428,33 +365,6 @@ var (
 {{- end }}
 {{ with index .Components "elasticsearch-metrics" }}
 	ComponentElasticsearchMetrics = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "flexvol" }}
-	ComponentTigeraFlexVolume = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "csi" }}
-	ComponentTigeraCSI = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "csi-node-driver-registrar" }}
-	ComponentTigeraCSINodeDriverRegistrar = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -521,26 +431,16 @@ var (
 		variant:  enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components.webhooks }}
-	ComponentTigeraWebhooks = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
-		ComponentAPIServer,
+		ComponentTigeraCalico,
 		ComponentComplianceBenchmarker,
 		ComponentComplianceController,
 		ComponentComplianceReporter,
 		ComponentComplianceServer,
 		ComponentComplianceSnapshotter,
-		ComponentTigeraCSRInitContainer,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
@@ -548,7 +448,6 @@ var (
 		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
-		ComponentGuardian,
 		ComponentIntrusionDetectionController,
 		ComponentWAFHTTPFilter,
 		ComponentSecurityEventWebhooksProcessor,
@@ -565,21 +464,13 @@ var (
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
-		ComponentQueryServer,
-		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
-		ComponentTigeraTypha,
-		ComponentTigeraCNI,
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentLinseed,
-		ComponentDikastes,
 		ComponentL7AdmissionController,
-		ComponentTigeraFlexVolume,
-		ComponentTigeraCSI,
-		ComponentTigeraCSINodeDriverRegistrar,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
@@ -587,6 +478,5 @@ var (
 		ComponentIstioInstallCNI,
 		ComponentIstioZTunnel,
 		ComponentIstioProxyv2,
-		ComponentTigeraWebhooks,
 	}
 )

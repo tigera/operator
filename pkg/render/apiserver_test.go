@@ -199,7 +199,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
 		))
 
 		expectedArgs := []string{
@@ -245,7 +245,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
 		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 

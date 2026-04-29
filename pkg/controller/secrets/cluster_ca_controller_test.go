@@ -118,7 +118,7 @@ var _ = Describe("ClusterCA controller", func() {
 						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalico.Image),
 						Digest: "sha256:xxxxxxxxx",
 					}, {
-						Image:  fmt.Sprintf("%s%s", components.TigeraImagePath, components.ComponentTigeraCSRInitContainer.Image),
+						Image:  fmt.Sprintf("%s%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image),
 						Digest: "sha256:xxxxxxxxx",
 					},
 				},
@@ -159,7 +159,7 @@ var _ = Describe("ClusterCA controller", func() {
 						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalico.Image),
 						Digest: "sha256:xxxxxxxxx",
 					}, {
-						Image:  fmt.Sprintf("%s%s", components.TigeraImagePath, components.ComponentTigeraCSRInitContainer.Image),
+						Image:  fmt.Sprintf("%s%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image),
 						Digest: "sha256:xxxxxxxxx",
 					},
 				},

@@ -16,7 +16,7 @@ package crds
 
 import (
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	opv1 "github.com/tigera/operator/api/v1"
 )

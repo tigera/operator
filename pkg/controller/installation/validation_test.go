@@ -23,7 +23,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 
@@ -74,7 +74,7 @@ var _ = Describe("Installation validation tests", func() {
 	})
 
 	It("should allow dual stack (both IPv4 and IPv6) if BPF is enabled", func() {
-		var enabled operator.BGPOption = operator.BGPEnabled
+		var enabled = operator.BGPEnabled
 		instance.Spec.CalicoNetwork.BGP = &enabled
 		bpf := operator.LinuxDataplaneBPF
 		instance.Spec.CalicoNetwork.LinuxDataplane = &bpf
@@ -980,7 +980,7 @@ var _ = Describe("Installation validation tests", func() {
 					NodeSelector:  "all()",
 				},
 			}
-			var disabled operator.BGPOption = operator.BGPDisabled
+			var disabled = operator.BGPDisabled
 			instance.Spec.CalicoNetwork.BGP = &disabled
 			k8sapi.Endpoint = k8sapi.ServiceEndpoint{
 				Host: "1.2.3.4",
@@ -1022,7 +1022,7 @@ var _ = Describe("Installation validation tests", func() {
 
 			It("should return an error if IP pool encapsulation is IPIP", func() {
 				instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = operator.EncapsulationIPIP
-				var enabled operator.BGPOption = operator.BGPEnabled
+				var enabled = operator.BGPEnabled
 				instance.Spec.CalicoNetwork.BGP = &enabled
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,14 +22,13 @@ import (
 	"regexp"
 	"strings"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -205,7 +204,7 @@ func GetGlobalResource(resources []client.Object, name, group, version, kind str
 	return nil
 }
 
-func GetContainer(containers []v1.Container, name string) *v1.Container {
+func GetContainer(containers []corev1.Container, name string) *corev1.Container {
 	for _, container := range containers {
 		if container.Name == name {
 			return &container
@@ -242,7 +241,7 @@ func ExpectGlobalAlertTemplateToBePopulated(resource runtime.Object) {
 	}
 }
 
-func ExpectEnv(env []v1.EnvVar, key, value string) {
+func ExpectEnv(env []corev1.EnvVar, key, value string) {
 	for _, e := range env {
 		if e.Name == key {
 			Expect(e.Value).To(Equal(value))
@@ -252,7 +251,7 @@ func ExpectEnv(env []v1.EnvVar, key, value string) {
 	Expect(false).To(BeTrue(), fmt.Sprintf("Missing expected environment variable %s", key))
 }
 
-func ExpectVolumeMount(vms []v1.VolumeMount, name, path string) {
+func ExpectVolumeMount(vms []corev1.VolumeMount, name, path string) {
 	for _, vm := range vms {
 		if vm.Name == name {
 			Expect(vm.MountPath).To(Equal(path))

@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	"github.com/stretchr/testify/mock"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -800,7 +800,7 @@ var _ = Describe("validate()", func() {
 	It("should not allow blocksize to exceed the pool size", func() {
 		// Try with an invalid block size.
 		var twentySix int32 = 26
-		var enabled operator.BGPOption = operator.BGPEnabled
+		enabled := operator.BGPEnabled
 		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
@@ -827,7 +827,7 @@ var _ = Describe("validate()", func() {
 		var blockSizeJustRight int32 = 32
 
 		// Start with a valid block size - /32 - just on the border.
-		var enabled operator.BGPOption = operator.BGPEnabled
+		enabled := operator.BGPEnabled
 		instance.Spec.CalicoNetwork.BGP = &enabled
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{

@@ -22,7 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -430,7 +430,7 @@ var _ = Describe("Component handler tests", func() {
 		labels := map[string]string{
 			"extra": "extra-value",
 		}
-		ns.ObjectMeta.Labels = labels
+		ns.Labels = labels
 		Expect(c.Update(ctx, ns)).NotTo(HaveOccurred())
 
 		By("checking that the namespace is updated with extra label")
@@ -479,7 +479,7 @@ var _ = Describe("Component handler tests", func() {
 			"cattle-not-pets":     "indeed",
 			fakeComponentLabelKey: "not-present",
 		}
-		ns.ObjectMeta.Labels = labels
+		ns.Labels = labels
 		err = c.Update(ctx, ns)
 		Expect(err).To(BeNil())
 

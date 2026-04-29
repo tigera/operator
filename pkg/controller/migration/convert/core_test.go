@@ -18,11 +18,10 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -47,14 +46,14 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.ComponentResources).To(BeEmpty())
 		})
 
-		var rqs = v1.ResourceRequirements{
-			Limits: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("500m"),
-				v1.ResourceMemory: resource.MustParse("500Mi"),
+		var rqs = corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("500m"),
+				corev1.ResourceMemory: resource.MustParse("500Mi"),
 			},
-			Requests: v1.ResourceList{
-				v1.ResourceCPU:    resource.MustParse("250m"),
-				v1.ResourceMemory: resource.MustParse("64Mi"),
+			Requests: corev1.ResourceList{
+				corev1.ResourceCPU:    resource.MustParse("250m"),
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
 			},
 		}
 
@@ -85,9 +84,9 @@ var _ = Describe("core handler", func() {
 			}))
 		})
 		It("should migrate resources from all 3 components", func() {
-			rqs = v1.ResourceRequirements{
-				Limits: v1.ResourceList{
-					v1.ResourceCPU: resource.MustParse("500m"),
+			rqs = corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{
+					corev1.ResourceCPU: resource.MustParse("500m"),
 				},
 			}
 			expectedCompRsrc := []operatorv1.ComponentResource{operatorv1.ComponentResource{
@@ -95,13 +94,13 @@ var _ = Describe("core handler", func() {
 				ResourceRequirements: rqs.DeepCopy(),
 			}}
 			comps.node.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
-			rqs.Limits[v1.ResourceCPU] = resource.MustParse("400m")
+			rqs.Limits[corev1.ResourceCPU] = resource.MustParse("400m")
 			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameKubeControllers,
 				ResourceRequirements: rqs.DeepCopy(),
 			})
 			comps.kubeControllers.Spec.Template.Spec.Containers[0].Resources = *rqs.DeepCopy()
-			rqs.Limits[v1.ResourceCPU] = resource.MustParse("300m")
+			rqs.Limits[corev1.ResourceCPU] = resource.MustParse("300m")
 			expectedCompRsrc = append(expectedCompRsrc, operatorv1.ComponentResource{
 				ComponentName:        operatorv1.ComponentNameTypha,
 				ResourceRequirements: rqs.DeepCopy(),
@@ -171,17 +170,17 @@ var _ = Describe("core handler", func() {
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("should error for unexpected affinities", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{}
+				comps.node.Spec.Template.Spec.Affinity = &corev1.Affinity{}
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("shouldn't error for aks affinity on aks", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
-					NodeAffinity: &v1.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-							NodeSelectorTerms: []v1.NodeSelectorTerm{{
-								MatchExpressions: []v1.NodeSelectorRequirement{{
+				comps.node.Spec.Template.Spec.Affinity = &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
 									Key:      "type",
-									Operator: v1.NodeSelectorOpNotIn,
+									Operator: corev1.NodeSelectorOpNotIn,
 									Values:   []string{"virtual-kubelet"},
 								}},
 							}},
@@ -192,13 +191,13 @@ var _ = Describe("core handler", func() {
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("shouldn't error for eks fargate affinity on eks ", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
-					NodeAffinity: &v1.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-							NodeSelectorTerms: []v1.NodeSelectorTerm{{
-								MatchExpressions: []v1.NodeSelectorRequirement{{
+				comps.node.Spec.Template.Spec.Affinity = &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
 									Key:      "eks.amazonaws.com/compute-type",
-									Operator: v1.NodeSelectorOpNotIn,
+									Operator: corev1.NodeSelectorOpNotIn,
 									Values:   []string{"fargate"},
 								}},
 							}},
@@ -209,13 +208,13 @@ var _ = Describe("core handler", func() {
 				Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should error for other affinities on aks", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
-					NodeAffinity: &v1.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-							NodeSelectorTerms: []v1.NodeSelectorTerm{{
-								MatchExpressions: []v1.NodeSelectorRequirement{{
+				comps.node.Spec.Template.Spec.Affinity = &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
 									Key:      "type",
-									Operator: v1.NodeSelectorOpExists,
+									Operator: corev1.NodeSelectorOpExists,
 								}},
 							}},
 						},
@@ -225,13 +224,13 @@ var _ = Describe("core handler", func() {
 				Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 			})
 			It("should error for other affinities on eks", func() {
-				comps.node.Spec.Template.Spec.Affinity = &v1.Affinity{
-					NodeAffinity: &v1.NodeAffinity{
-						RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-							NodeSelectorTerms: []v1.NodeSelectorTerm{{
-								MatchExpressions: []v1.NodeSelectorRequirement{{
+				comps.node.Spec.Template.Spec.Affinity = &corev1.Affinity{
+					NodeAffinity: &corev1.NodeAffinity{
+						RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+							NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+								MatchExpressions: []corev1.NodeSelectorRequirement{{
 									Key:      "eks.amazonaws.com/compute-type",
-									Operator: v1.NodeSelectorOpExists,
+									Operator: corev1.NodeSelectorOpExists,
 								}},
 							}},
 						},
@@ -251,18 +250,18 @@ var _ = Describe("core handler", func() {
 					Expect(handleNodeSelectors(&comps, i)).ToNot(HaveOccurred())
 				})
 				It("should migrate a Preferred nodeAffinity", func() {
-					terms := []v1.PreferredSchedulingTerm{{
+					terms := []corev1.PreferredSchedulingTerm{{
 						Weight: 100,
-						Preference: v1.NodeSelectorTerm{
-							MatchExpressions: []v1.NodeSelectorRequirement{{
+						Preference: corev1.NodeSelectorTerm{
+							MatchExpressions: []corev1.NodeSelectorRequirement{{
 								Key:      "foo",
 								Operator: corev1.NodeSelectorOpIn,
 								Values:   []string{"foo", "bar"},
 							}},
 						},
 					}}
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
+					comps.typha.Spec.Template.Spec.Affinity = &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
 							PreferredDuringSchedulingIgnoredDuringExecution: terms,
 						},
 					}
@@ -270,11 +269,11 @@ var _ = Describe("core handler", func() {
 					Expect(i.Spec.TyphaAffinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution).To(Equal(terms))
 				})
 				It("should error for a Required nodeAffinity", func() {
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						NodeAffinity: &v1.NodeAffinity{
-							RequiredDuringSchedulingIgnoredDuringExecution: &v1.NodeSelector{
-								NodeSelectorTerms: []v1.NodeSelectorTerm{{
-									MatchFields: []v1.NodeSelectorRequirement{{
+					comps.typha.Spec.Template.Spec.Affinity = &corev1.Affinity{
+						NodeAffinity: &corev1.NodeAffinity{
+							RequiredDuringSchedulingIgnoredDuringExecution: &corev1.NodeSelector{
+								NodeSelectorTerms: []corev1.NodeSelectorTerm{{
+									MatchFields: []corev1.NodeSelectorRequirement{{
 										Key: "foo",
 									}},
 								}},
@@ -284,7 +283,7 @@ var _ = Describe("core handler", func() {
 					Expect(handleNodeSelectors(&comps, i)).To(HaveOccurred())
 				})
 				It("should not error if podAffinity is set", func() {
-					terms := []v1.PodAffinityTerm{{
+					terms := []corev1.PodAffinityTerm{{
 						LabelSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{{
 								Key:      "foo",
@@ -293,8 +292,8 @@ var _ = Describe("core handler", func() {
 							}},
 						},
 					}}
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						PodAffinity: &v1.PodAffinity{
+					comps.typha.Spec.Template.Spec.Affinity = &corev1.Affinity{
+						PodAffinity: &corev1.PodAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: terms,
 						},
 					}
@@ -302,7 +301,7 @@ var _ = Describe("core handler", func() {
 					Expect(i.Spec.TyphaDeployment.Spec.Template.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution).To(Equal(terms))
 				})
 				It("should not error if podAntiAffinity is set", func() {
-					terms := []v1.PodAffinityTerm{{
+					terms := []corev1.PodAffinityTerm{{
 						LabelSelector: &metav1.LabelSelector{
 							MatchExpressions: []metav1.LabelSelectorRequirement{{
 								Key:      "foo",
@@ -311,8 +310,8 @@ var _ = Describe("core handler", func() {
 							}},
 						},
 					}}
-					comps.typha.Spec.Template.Spec.Affinity = &v1.Affinity{
-						PodAntiAffinity: &v1.PodAntiAffinity{
+					comps.typha.Spec.Template.Spec.Affinity = &corev1.Affinity{
+						PodAntiAffinity: &corev1.PodAntiAffinity{
 							RequiredDuringSchedulingIgnoredDuringExecution: terms,
 						},
 					}
@@ -374,18 +373,18 @@ var _ = Describe("core handler", func() {
 			Expect(i.Spec.FlexVolumePath).To(Equal("None"))
 		})
 		It("should carry forward flexvolumepath", func() {
-			hostPathDirectoryOrCreate := v1.HostPathDirectoryOrCreate
+			hostPathDirectoryOrCreate := corev1.HostPathDirectoryOrCreate
 			path := "/foo/bar/"
-			comps.node.Spec.Template.Spec.Volumes = append(comps.node.Spec.Template.Spec.Volumes, v1.Volume{
+			comps.node.Spec.Template.Spec.Volumes = append(comps.node.Spec.Template.Spec.Volumes, corev1.Volume{
 				Name: "flexvol-driver-host",
-				VolumeSource: v1.VolumeSource{
-					HostPath: &v1.HostPathVolumeSource{
+				VolumeSource: corev1.VolumeSource{
+					HostPath: &corev1.HostPathVolumeSource{
 						Path: path,
 						Type: &hostPathDirectoryOrCreate,
 					},
 				},
 			})
-			comps.node.Spec.Template.Spec.InitContainers = append(comps.node.Spec.Template.Spec.InitContainers, v1.Container{
+			comps.node.Spec.Template.Spec.InitContainers = append(comps.node.Spec.Template.Spec.InitContainers, corev1.Container{
 				Name: "flexvol-driver",
 			})
 
@@ -400,12 +399,12 @@ var _ = Describe("core handler", func() {
 		// a different env var name.
 		// the 'setEnvVars' function is used to update the correct container's env vars
 		// for the given test.
-		AssertNodeName := func(nodeNameVarName string, setEnvVars func([]v1.EnvVar)) {
+		AssertNodeName := func(nodeNameVarName string, setEnvVars func([]corev1.EnvVar)) {
 			It("should not throw an error if set to noderef", func() {
-				setEnvVars([]v1.EnvVar{{
+				setEnvVars([]corev1.EnvVar{{
 					Name: nodeNameVarName,
-					ValueFrom: &v1.EnvVarSource{
-						FieldRef: &v1.ObjectFieldSelector{
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
 							FieldPath: "spec.nodeName",
 						},
 					},
@@ -413,10 +412,10 @@ var _ = Describe("core handler", func() {
 				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should throw an error if set to a different fieldPath", func() {
-				setEnvVars([]v1.EnvVar{{
+				setEnvVars([]corev1.EnvVar{{
 					Name: nodeNameVarName,
-					ValueFrom: &v1.EnvVarSource{
-						FieldRef: &v1.ObjectFieldSelector{
+					ValueFrom: &corev1.EnvVarSource{
+						FieldRef: &corev1.ObjectFieldSelector{
 							FieldPath: "metadata.name",
 						},
 					},
@@ -424,7 +423,7 @@ var _ = Describe("core handler", func() {
 				Expect(handleCore(&comps, i)).To(HaveOccurred())
 			})
 			It("should throw an error if hardcoded to a value", func() {
-				setEnvVars([]v1.EnvVar{{
+				setEnvVars([]corev1.EnvVar{{
 					Name:  nodeNameVarName,
 					Value: "foobar",
 				}})
@@ -437,18 +436,18 @@ var _ = Describe("core handler", func() {
 		})
 
 		It("should not throw an error if both are set correctly", func() {
-			comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+			comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 				Name: "NODENAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
 						FieldPath: "spec.nodeName",
 					},
 				},
 			}}
-			comps.node.Spec.Template.Spec.InitContainers[0].Env = []v1.EnvVar{{
+			comps.node.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name: "KUBERNETES_NODE_NAME",
-				ValueFrom: &v1.EnvVarSource{
-					FieldRef: &v1.ObjectFieldSelector{
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
 						FieldPath: "spec.nodeName",
 					},
 				},
@@ -457,12 +456,12 @@ var _ = Describe("core handler", func() {
 		})
 
 		Context("on the calico/node container", func() {
-			AssertNodeName("NODENAME", func(envVars []v1.EnvVar) {
+			AssertNodeName("NODENAME", func(envVars []corev1.EnvVar) {
 				comps.node.Spec.Template.Spec.Containers[0].Env = envVars
 			})
 		})
 		Context("on the install-cni container", func() {
-			AssertNodeName("KUBERNETES_NODE_NAME", func(envVars []v1.EnvVar) {
+			AssertNodeName("KUBERNETES_NODE_NAME", func(envVars []corev1.EnvVar) {
 				comps.node.Spec.Template.Spec.InitContainers[0].Env = envVars
 			})
 		})
@@ -473,12 +472,12 @@ var _ = Describe("core handler", func() {
 			// function initializes all components with the expected, valid tolerations (which it does).
 			// the first parameter is the existing tolerations, so that they can be adjusted.
 			// the second parameter is a function which updates the tolerations of the desired component.
-			TestTolerations := func(existingTolerations []v1.Toleration, setTolerations func([]v1.Toleration)) {
+			TestTolerations := func(existingTolerations []corev1.Toleration, setTolerations func([]corev1.Toleration)) {
 				It("should not error if only expected tolerations are set", func() {
 					Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 				})
 				It("should not error if no tolerations set", func() {
-					setTolerations([]v1.Toleration{})
+					setTolerations([]corev1.Toleration{})
 					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
 				})
 				It("should not error if missing just one toleration", func() {
@@ -486,7 +485,7 @@ var _ = Describe("core handler", func() {
 					Expect(handleCore(&comps, i)).NotTo(HaveOccurred())
 				})
 				It("should not error if additional toleration exists", func() {
-					setTolerations(append(existingTolerations, v1.Toleration{
+					setTolerations(append(existingTolerations, corev1.Toleration{
 						Key:    "foo",
 						Effect: "bar",
 					}))
@@ -494,17 +493,17 @@ var _ = Describe("core handler", func() {
 				})
 			}
 			Describe("calico-node", func() {
-				TestTolerations(comps.node.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
+				TestTolerations(comps.node.Spec.Template.Spec.Tolerations, func(t []corev1.Toleration) {
 					comps.node.Spec.Template.Spec.Tolerations = t
 				})
 			})
 			Describe("kube-controllers", func() {
-				TestTolerations(comps.kubeControllers.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
+				TestTolerations(comps.kubeControllers.Spec.Template.Spec.Tolerations, func(t []corev1.Toleration) {
 					comps.kubeControllers.Spec.Template.Spec.Tolerations = t
 				})
 			})
 			Describe("typha", func() {
-				TestTolerations(comps.typha.Spec.Template.Spec.Tolerations, func(t []v1.Toleration) {
+				TestTolerations(comps.typha.Spec.Template.Spec.Tolerations, func(t []corev1.Toleration) {
 					comps.typha.Spec.Template.Spec.Tolerations = t
 				})
 			})
@@ -567,14 +566,14 @@ var _ = Describe("core handler", func() {
 
 	Context("cni", func() {
 		It("should not raise an error if CNI_CONF_NAME is 10-calico.conflist", func() {
-			comps.node.Spec.Template.Spec.InitContainers[0].Env = []v1.EnvVar{{
+			comps.node.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_CONF_NAME",
 				Value: "10-calico.conflist",
 			}}
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 		})
 		It("should raise error if CNI_CONF_NAME isn't 10-calico.conflist", func() {
-			comps.node.Spec.Template.Spec.InitContainers[0].Env = []v1.EnvVar{{
+			comps.node.Spec.Template.Spec.InitContainers[0].Env = []corev1.EnvVar{{
 				Name:  "CNI_CONF_NAME",
 				Value: "2-calico.conflist",
 			}}
@@ -584,21 +583,21 @@ var _ = Describe("core handler", func() {
 	Context("kube-controllers", func() {
 		Context("ENABLED_CONTROLLERS", func() {
 			It("should not error if ENABLED_CONTROLLERS is expected value", func() {
-				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "ENABLED_CONTROLLERS",
 					Value: "node",
 				}}
 				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should not error if ENABLED_CONTROLLERS is expected value", func() {
-				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "ENABLED_CONTROLLERS",
 					Value: "node,loadbalancer",
 				}}
 				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should error if ENABLED_CONTROLLERS is not expected value", func() {
-				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "ENABLED_CONTROLLERS",
 					Value: "hep",
 				}}
@@ -607,14 +606,14 @@ var _ = Describe("core handler", func() {
 		})
 		Context("AUTO_HOST_ENDPOINTS", func() {
 			It("should not error if AUTO_HOST_ENDPOINTS is expected value", func() {
-				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "AUTO_HOST_ENDPOINTS",
 					Value: "disabled",
 				}}
 				Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
 			})
 			It("should error if AUTO_HOST_ENDPOINTS is not expected value", func() {
-				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+				comps.kubeControllers.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 					Name:  "AUTO_HOST_ENDPOINTS",
 					Value: "enabled",
 				}}

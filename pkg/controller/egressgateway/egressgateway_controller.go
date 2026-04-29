@@ -441,7 +441,7 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	// If CIDR is specified, check if CIDR matches with any IPPool.
 	// If Aws.NativeIP is enabled, check if the IPPool is backed by aws-subnet ID.
 	if len(egw.Spec.IPPools) == 0 {
-		return fmt.Errorf("At least one IPPool must be specified")
+		return fmt.Errorf("at least one IPPool must be specified")
 	}
 
 	for _, ippool := range egw.Spec.IPPools {
@@ -469,7 +469,7 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	if egw.Spec.EgressGatewayFailureDetection != nil {
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe == nil &&
 			egw.Spec.EgressGatewayFailureDetection.HTTPProbe == nil {
-			return fmt.Errorf("Either ICMP or HTTP probe must be configured")
+			return fmt.Errorf("either ICMP or HTTP probe must be configured")
 		}
 		// Check if ICMP and HTTP probe timeout is greater than interval.
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe != nil {

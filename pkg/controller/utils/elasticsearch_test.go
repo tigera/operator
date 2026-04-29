@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	"github.com/olivere/elastic/v7"
 	apps "k8s.io/api/apps/v1"
@@ -292,7 +292,7 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 				jsonFile, err = os.Open("test_files/02_put_policy_readonly.json")
 			}
 			Expect(err).To(BeNil())
-			defer jsonFile.Close()
+			defer func() { _ = jsonFile.Close() }()
 			expectedBody, _ := io.ReadAll(jsonFile)
 			Expect(actualBody).To(MatchJSON(expectedBody))
 

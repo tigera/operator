@@ -106,9 +106,8 @@ func GetComponents(versionsPath string) (Release, error) {
 		if component.Image == "" {
 			image := defaultImages[key]
 			if image == "" {
-				//lint:ignore ST1005 preserve original message formatting
-				return cv, fmt.Errorf("no image nor default image available for component '%s'. "+
-					"Either fill in the 'image' field or update this code with a defaultImage.", key)
+				return cv, fmt.Errorf("no image nor default image available for component '%s': "+
+					"either fill in the 'image' field or update this code with a defaultImage", key)
 			}
 			component.Image = image
 		}

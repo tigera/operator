@@ -573,11 +573,8 @@ func fillDefaults(instance *operator.Installation, currentPools *crdv1.IPPoolLis
 		}
 	}
 
-	needIPv4Autodetection := false
-	if *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF {
-		// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
-		needIPv4Autodetection = true
-	}
+	// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
+	needIPv4Autodetection := *instance.Spec.CalicoNetwork.LinuxDataplane == operator.LinuxDataplaneBPF
 	if currentPools != nil {
 		for _, pool := range currentPools.Items {
 			ip, _, err := net.ParseCIDR(pool.Spec.CIDR)

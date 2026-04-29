@@ -34,7 +34,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck // ST1001: dot import idiomatic for gomega test helpers
 
 	"github.com/openshift/library-go/pkg/crypto"
 
@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -87,7 +86,7 @@ func GetResource(c client.Client, obj client.Object) error {
 	return c.Get(context.Background(), k, obj)
 }
 
-func GetContainer(containers []v1.Container, name string) *v1.Container {
+func GetContainer(containers []corev1.Container, name string) *corev1.Container {
 	for _, container := range containers {
 		if container.Name == name {
 			return &container
@@ -108,7 +107,7 @@ func RunOperator(mgr manager.Manager, ctx context.Context) (doneChan chan struct
 		close(doneChan)
 		// This should not error but it does. Something is not stopping or closing down but
 		// this does not cause other errors. This started happening after updating to
-		// operator-sdk v1.0.1 from v0.10.0.
+		// operator-sdk corev1.0.1 from v0.10.0.
 		//Expect(err).NotTo(HaveOccurred(), func() string {
 		//	var buf bytes.Buffer
 		//	pprof.Lookup("goroutine").WriteTo(&buf, 2)
@@ -120,12 +119,12 @@ func RunOperator(mgr manager.Manager, ctx context.Context) (doneChan chan struct
 	return doneChan
 }
 
-func VerifyPublicCert(secret *v1.Secret, pubKey string, expectedSANs ...string) {
+func VerifyPublicCert(secret *corev1.Secret, pubKey string, expectedSANs ...string) {
 	Expect(secret.Data).To(HaveKey(pubKey))
 	VerifyCertSANs(secret.Data[pubKey], expectedSANs...)
 }
 
-func VerifyCert(secret *v1.Secret, expectedSANs ...string) {
+func VerifyCert(secret *corev1.Secret, expectedSANs ...string) {
 	Expect(secret.Data).To(HaveKey(corev1.TLSPrivateKeyKey))
 	Expect(secret.Data).To(HaveKey(corev1.TLSCertKey))
 
@@ -189,18 +188,18 @@ func (t typhaListWatch) Watch(options metav1.ListOptions) (watch.Interface, erro
 	return t.cs.AppsV1().Deployments("calico-system").Watch(context.Background(), options)
 }
 
-func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *v1.Node {
-	node := &v1.Node{
+func CreateNode(c kubernetes.Interface, name string, labels map[string]string, annotations map[string]string) *corev1.Node {
+	node := &corev1.Node{
 		TypeMeta: metav1.TypeMeta{Kind: "Node", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: name,
 		},
 	}
 	if labels != nil {
-		node.ObjectMeta.Labels = labels
+		node.Labels = labels
 	}
 	if annotations != nil {
-		node.ObjectMeta.Annotations = annotations
+		node.Annotations = annotations
 	}
 
 	var err error
@@ -209,13 +208,13 @@ func CreateNode(c kubernetes.Interface, name string, labels map[string]string, a
 	return node
 }
 
-func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *v1.Node {
+func CreateWindowsNode(cs kubernetes.Interface, name string, variant operator.ProductVariant, version string) *corev1.Node {
 	return CreateNode(cs, name,
 		map[string]string{"kubernetes.io/os": "windows"},
 		map[string]string{})
 }
 
-func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*v1.Node) error {
+func AssertNodesUnchanged(c kubernetes.Interface, nodes ...*corev1.Node) error {
 	for _, node := range nodes {
 		newNode, err := c.CoreV1().Nodes().Get(context.Background(), node.Name, metav1.GetOptions{})
 		Expect(err).To(BeNil())

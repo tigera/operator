@@ -531,8 +531,7 @@ func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) erro
 		}
 		b, err := yaml.Marshal(v)
 		if err != nil {
-			//lint:ignore ST1005 preserve original capitalization
-			return fmt.Errorf("Failed to Marshal %s: %v", v.Name, err)
+			return fmt.Errorf("failed to marshal %s: %v", v.Name, err)
 		}
 		if !first {
 			fmt.Println("---")
@@ -544,7 +543,7 @@ func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) erro
 	}
 	// Indicates nothing was printed so we couldn't find the requested outputType
 	if first {
-		return fmt.Errorf("No CRD matching %s", outputType)
+		return fmt.Errorf("no CRD matching %s", outputType)
 	}
 
 	return nil
@@ -577,7 +576,7 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 	for {
 		select {
 		case <-to:
-			return fmt.Errorf("Timeout waiting for pre-delete hook")
+			return fmt.Errorf("timeout waiting for pre-delete hook")
 		default:
 			if err := c.Get(ctx, utils.DefaultInstanceKey, installation); errors.IsNotFound(err) {
 				// It's gone! We can return.

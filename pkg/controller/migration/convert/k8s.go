@@ -185,7 +185,7 @@ func getEnv(ctx context.Context, client client.Client, pts corev1.PodSpec, compo
 			if e.ValueFrom.ConfigMapKeyRef != nil {
 				cm := corev1.ConfigMap{}
 				err := client.Get(ctx, types.NamespacedName{
-					Name:      e.ValueFrom.ConfigMapKeyRef.LocalObjectReference.Name,
+					Name:      e.ValueFrom.ConfigMapKeyRef.Name,
 					Namespace: "kube-system",
 				}, &cm)
 				if err != nil {

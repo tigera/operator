@@ -797,12 +797,12 @@ func setStandardSelectorAndLabels(obj client.Object) {
 	switch obj := obj.(type) {
 	case *apps.Deployment:
 		d := obj
-		name = d.ObjectMeta.Name
-		if d.ObjectMeta.Labels == nil {
-			d.ObjectMeta.Labels = make(map[string]string)
+		name = d.Name
+		if d.Labels == nil {
+			d.Labels = make(map[string]string)
 		}
-		d.ObjectMeta.Labels["k8s-app"] = name
-		d.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+		d.Labels["k8s-app"] = name
+		d.Labels["app.kubernetes.io/name"] = name
 		if d.Spec.Selector == nil {
 			d.Spec.Selector = &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -813,7 +813,7 @@ func setStandardSelectorAndLabels(obj client.Object) {
 		podTemplate = &d.Spec.Template
 	case *apps.DaemonSet:
 		d := obj
-		name = d.ObjectMeta.Name
+		name = d.Name
 		if d.Spec.Selector == nil {
 			d.Spec.Selector = &metav1.LabelSelector{
 				MatchLabels: map[string]string{
@@ -826,14 +826,14 @@ func setStandardSelectorAndLabels(obj client.Object) {
 		return
 	}
 
-	if podTemplate.ObjectMeta.Labels == nil {
-		podTemplate.ObjectMeta.Labels = make(map[string]string)
+	if podTemplate.Labels == nil {
+		podTemplate.Labels = make(map[string]string)
 	}
-	if podTemplate.ObjectMeta.Labels["k8s-app"] == "" {
-		podTemplate.ObjectMeta.Labels["k8s-app"] = name
+	if podTemplate.Labels["k8s-app"] == "" {
+		podTemplate.Labels["k8s-app"] = name
 	}
-	if podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] == "" {
-		podTemplate.ObjectMeta.Labels["app.kubernetes.io/name"] = name
+	if podTemplate.Labels["app.kubernetes.io/name"] == "" {
+		podTemplate.Labels["app.kubernetes.io/name"] = name
 	}
 }
 

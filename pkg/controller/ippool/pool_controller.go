@@ -62,7 +62,7 @@ func Add(mgr manager.Manager, opts options.AddOptions) error {
 
 	c, err := ctrlruntime.NewController("tigera-ippool-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("Failed to create tigera-ippool-controller: %w", err)
+		return fmt.Errorf("failed to create tigera-ippool-controller: %w", err)
 	}
 
 	// Watch for changes to primary resource Installation

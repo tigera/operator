@@ -16,7 +16,7 @@ package convert
 
 import (
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -27,7 +27,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kscheme "k8s.io/client-go/kubernetes/scheme"
@@ -113,7 +112,7 @@ var _ = Describe("convert bpf config", func() {
 
 	It("converts dataplane to BPF given bpfenabled env var set to true", func() {
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
-		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+		comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
 			Value: "true",
 		}}
@@ -128,7 +127,7 @@ var _ = Describe("convert bpf config", func() {
 
 	It("converts dataplane to empty given bpfenabled env var set to false", func() {
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM, f).Build()
-		comps.node.Spec.Template.Spec.Containers[0].Env = []v1.EnvVar{{
+		comps.node.Spec.Template.Spec.Containers[0].Env = []corev1.EnvVar{{
 			Name:  "FELIX_BPFENABLED",
 			Value: "false",
 		}}

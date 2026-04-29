@@ -20,7 +20,6 @@ import (
 	"strings"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
@@ -74,7 +73,7 @@ var _ = Describe("IPPool FV tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 		err = c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
-		Expect(errors.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
+		Expect(kerror.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
 	})
 
 	AfterEach(func() {

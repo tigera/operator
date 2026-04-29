@@ -199,7 +199,7 @@ var _ = Describe("Rendering tests", func() {
 
 	AfterEach(func() {
 		if CurrentGinkgoTestDescription().Failed {
-			logWriter.Flush()
+			_ = logWriter.Flush()
 			fmt.Printf("Logs:\n%s\n", logBuffer.String())
 		}
 	})

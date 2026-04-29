@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ var (
 	}
 )
 
-func getEndPointCM(c *components, ns string) (error, map[string]string) {
+func getEndPointCM(c *components, ns string) (map[string]string, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
 		Name:      cmName,
@@ -54,9 +54,9 @@ func getEndPointCM(c *components, ns string) (error, map[string]string) {
 	}
 	err := c.client.Get(ctx, cmNamespacedName, cm)
 	if err != nil {
-		return err, nil
+		return nil, err
 	}
-	return nil, cm.Data
+	return cm.Data, nil
 }
 
 var _ = Describe("convert bpf config", func() {
@@ -82,7 +82,7 @@ var _ = Describe("convert bpf config", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(*i.Spec.CalicoNetwork.LinuxDataplane).To(BeEquivalentTo(operatorv1.LinuxDataplaneBPF))
 		Expect(i.Spec.CalicoNetwork.HostPorts).To(BeNil())
-		err, data := getEndPointCM(&comps, common.OperatorNamespace())
+		data, err := getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
 	})
@@ -94,10 +94,10 @@ var _ = Describe("convert bpf config", func() {
 		err := handleBPF(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(i.Spec.CalicoNetwork).To(BeNil())
-		err, data := getEndPointCM(&comps, "kube-system")
+		data, err := getEndPointCM(&comps, "kube-system")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
-		err, data = getEndPointCM(&comps, common.OperatorNamespace())
+		data, err = getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).To(HaveOccurred())
 		Expect(data).To(BeNil())
 	})
@@ -106,7 +106,7 @@ var _ = Describe("convert bpf config", func() {
 		comps.client = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(endPointCM).Build()
 		err := handleBPF(&comps, i)
 		Expect(err).To(HaveOccurred())
-		err, data := getEndPointCM(&comps, "kube-system")
+		data, err := getEndPointCM(&comps, "kube-system")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
 	})
@@ -121,7 +121,7 @@ var _ = Describe("convert bpf config", func() {
 		Expect(err).ToNot(HaveOccurred())
 		Expect(*i.Spec.CalicoNetwork.LinuxDataplane).To(BeEquivalentTo(operatorv1.LinuxDataplaneBPF))
 		Expect(i.Spec.CalicoNetwork.HostPorts).To(BeNil())
-		err, data := getEndPointCM(&comps, common.OperatorNamespace())
+		data, err := getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
 	})
@@ -135,10 +135,10 @@ var _ = Describe("convert bpf config", func() {
 		err := handleBPF(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(i.Spec.CalicoNetwork).To(BeNil())
-		err, data := getEndPointCM(&comps, "kube-system")
+		data, err := getEndPointCM(&comps, "kube-system")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
-		err, data = getEndPointCM(&comps, common.OperatorNamespace())
+		data, err = getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).To(HaveOccurred())
 		Expect(data).To(BeNil())
 	})
@@ -149,10 +149,10 @@ var _ = Describe("convert bpf config", func() {
 		err := handleBPF(&comps, i)
 		Expect(err).ToNot(HaveOccurred())
 		Expect(i.Spec.CalicoNetwork).To(BeNil())
-		err, data := getEndPointCM(&comps, "kube-system")
+		data, err := getEndPointCM(&comps, "kube-system")
 		Expect(err).ToNot(HaveOccurred())
 		Expect(data).To(Equal(cmData))
-		err, data = getEndPointCM(&comps, common.OperatorNamespace())
+		data, err = getEndPointCM(&comps, common.OperatorNamespace())
 		Expect(err).To(HaveOccurred())
 		Expect(data).To(BeNil())
 	})

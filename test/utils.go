@@ -33,7 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/kubernetes"
 
-	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
 	"github.com/openshift/library-go/pkg/crypto"
@@ -103,7 +103,7 @@ func GetContainer(containers []v1.Container, name string) *v1.Container {
 func RunOperator(mgr manager.Manager, ctx context.Context) (doneChan chan struct{}) {
 	doneChan = make(chan struct{})
 	go func() {
-		defer GinkgoRecover()
+		defer ginkgo.GinkgoRecover()
 		_ = mgr.Start(ctx)
 		close(doneChan)
 		// This should not error but it does. Something is not stopping or closing down but
@@ -235,7 +235,7 @@ func DeleteAllowTigeraTierAndExpectWait(ctx context.Context, c client.Client, r 
 	mockStatus.On("SetDegraded", operator.ResourceNotReady, "Waiting for allow-tigera tier to be created, see the 'tiers' TigeraStatus for more information", "tiers.projectcalico.org \"allow-tigera\" not found", mock.Anything).Return()
 	_, err = r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
+	mockStatus.AssertExpectations(ginkgo.GinkgoT())
 }
 
 // ExpectWaitForTierWatch expects the Reconciler issues a degraded status, waiting for a Tier watch to be established.
@@ -252,7 +252,7 @@ func ExpectWaitForWatch(ctx context.Context, r reconcile.Reconciler, mockStatus 
 	mockStatus.On("SetDegraded", operator.ResourceNotReady, message, mock.Anything, mock.Anything).Return()
 	_, err := r.Reconcile(ctx, reconcile.Request{})
 	Expect(err).ShouldNot(HaveOccurred())
-	mockStatus.AssertExpectations(GinkgoT())
+	mockStatus.AssertExpectations(ginkgo.GinkgoT())
 }
 
 type ObjectTrackerCall string

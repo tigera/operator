@@ -9,17 +9,8 @@ components:
   voltron:
     image: voltron
     version: master
-  apiserver:
-    image: apiserver
-    version: master
-  queryserver:
-    image: queryserver
-    version: master
-  kube-controllers:
-    image: kube-controllers
-    version: master
-  typha:
-    image: typha
+  calico:
+    image: calico
     version: master
   node:
     image: node
@@ -87,12 +78,6 @@ components:
   compliance-benchmarker:
     image: compliance-benchmarker
     version: master
-  guardian:
-    image: guardian
-    version: master
-  tigera-cni:
-    image: cni
-    version: master
   tigera-cni-windows:
     image: cni-windows
     version: master
@@ -125,15 +110,6 @@ components:
   deep-packet-inspection:
     image: deep-packet-inspection
     version: master
-  flexvol:
-    image: pod2daemon-flexvol
-    version: master
-  csi:
-    image: csi
-    version: master
-  csi-node-driver-registrar:
-    image: node-driver-registrar
-    version: master
   elasticsearch-operator:
     image: eck-operator
     version: master
@@ -150,17 +126,11 @@ components:
   envoy:
     image: envoy
     version: master
-  dikastes:
-    image: dikastes
-    version: master
   l7-admission-controller:
     image: l7-admission-controller
     version: master
   egress-gateway:
     image: egress-gateway
-    version: master
-  key-cert-provisioner:
-    image: key-cert-provisioner
     version: master
   gateway-api-envoy-gateway:
     image: envoy-gateway
@@ -182,6 +152,4 @@ components:
     version: master
   istio-proxyv2:
     image: istio-proxyv2
-    version: master
-  webhooks:
     version: master

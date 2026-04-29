@@ -652,7 +652,7 @@ var _ = Describe("Manager controller tests", func() {
 								{Image: "tigera/manager", Digest: "sha256:managerhash"},
 								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
 								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
-								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+								{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
 					})).ToNot(HaveOccurred())

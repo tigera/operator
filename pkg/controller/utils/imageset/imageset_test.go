@@ -66,7 +66,7 @@ var _ = Describe("imageset tests", func() {
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
 							{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
-							{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
+							{Image: "tigera/calico", Digest: "sha256:xxxxxxxxx"},
 							{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 						},
 					},
@@ -81,7 +81,7 @@ var _ = Describe("imageset tests", func() {
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
 							{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
-							{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
+							{Image: "tigera/calico", Digest: "sha256:xxxxxxxxx"},
 							{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/unknown", Digest: "sha256:xxxxxxxxx"},
 						},
@@ -125,7 +125,7 @@ var _ = Describe("imageset tests", func() {
 			isSpec := operator.ImageSetSpec{
 				Images: []operator.Image{
 					{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
-					{Image: "tigera/cni", Digest: "sha256:xxxxxxxxx"},
+					{Image: "tigera/calico", Digest: "sha256:xxxxxxxxx"},
 					{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 				},
 			}

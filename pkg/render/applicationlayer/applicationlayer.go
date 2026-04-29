@@ -137,7 +137,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
+	c.config.dikastesImage, err = components.GetReference(components.CombinedCalicoImage(c.config.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -302,7 +302,9 @@ func (c *component) containers() []corev1.Container {
 		// Web Application Firewall (WAF) and ApplicationLayer Policies (ALP) specific container
 
 		commandArgs := []string{
-			"/dikastes",
+			components.CalicoBinaryPath,
+			"component",
+			"dikastes",
 			"server",
 			"--dial", "/var/run/felix/nodeagent/socket",
 			"--listen", "/var/run/dikastes/dikastes.sock",

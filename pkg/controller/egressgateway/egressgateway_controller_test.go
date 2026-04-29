@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-logr/logr"
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	"github.com/stretchr/testify/mock"
 
 	ocsv1 "github.com/openshift/api/security/v1"

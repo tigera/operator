@@ -15,7 +15,7 @@
 package testutils
 
 import (
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	"encoding/json"
 	"fmt"

@@ -22,7 +22,7 @@ import (
 	"regexp"
 	"strings"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"

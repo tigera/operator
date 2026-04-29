@@ -27,7 +27,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/openshift/library-go/pkg/crypto"

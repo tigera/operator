@@ -26,7 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/tls"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"

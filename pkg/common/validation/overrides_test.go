@@ -19,7 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	typha "github.com/tigera/operator/pkg/common/validation/typha"
 	"github.com/tigera/operator/pkg/render"

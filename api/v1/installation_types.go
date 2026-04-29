@@ -806,10 +806,7 @@ func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
 	}
 
 	// Configure DisableNewAllocations
-	disableAlloc := false
-	if crd.Spec.Disabled {
-		disableAlloc = true
-	}
+	disableAlloc := crd.Spec.Disabled
 	p.DisableNewAllocations = &disableAlloc
 
 	// Set BlockSize
@@ -820,10 +817,7 @@ func (p *IPPool) FromProjectCalicoV1(crd pcv1.IPPool) {
 	p.NodeSelector = crd.Spec.NodeSelector
 
 	// Set BGP export.
-	disableExport := false
-	if crd.Spec.DisableBGPExport {
-		disableExport = true
-	}
+	disableExport := crd.Spec.DisableBGPExport
 	p.DisableBGPExport = &disableExport
 
 	for _, use := range crd.Spec.AllowedUses {

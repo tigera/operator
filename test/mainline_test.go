@@ -556,13 +556,13 @@ func dumpCalicoSystemDiagnostics(cs kubernetes.Interface) {
 	defer cancel()
 
 	w := GinkgoWriter
-	fmt.Fprintf(w, "\n===== diagnostics: %s namespace state =====\n", ns)
+	_, _ = fmt.Fprintf(w, "\n===== diagnostics: %s namespace state =====\n", ns)
 
 	if ds, err := cs.AppsV1().DaemonSets(ns).Get(ctx, "calico-node", metav1.GetOptions{}); err != nil {
-		fmt.Fprintf(w, "DaemonSet calico-node: get failed: %v\n", err)
+		_, _ = fmt.Fprintf(w, "DaemonSet calico-node: get failed: %v\n", err)
 	} else {
 		s := ds.Status
-		fmt.Fprintf(w, "DaemonSet calico-node: desired=%d current=%d ready=%d available=%d updated=%d misscheduled=%d\n",
+		_, _ = fmt.Fprintf(w, "DaemonSet calico-node: desired=%d current=%d ready=%d available=%d updated=%d misscheduled=%d\n",
 			s.DesiredNumberScheduled, s.CurrentNumberScheduled, s.NumberReady, s.NumberAvailable, s.UpdatedNumberScheduled, s.NumberMisscheduled)
 	}
 
@@ -657,7 +657,7 @@ func streamPodLog(ctx context.Context, cs kubernetes.Interface, p corev1.Pod, co
 		fmt.Fprintf(w, "    (no logs: %v)\n", err)
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	buf := make([]byte, 4096)
 	for {
 		n, readErr := stream.Read(buf)
@@ -668,7 +668,7 @@ func streamPodLog(ctx context.Context, cs kubernetes.Interface, p corev1.Pod, co
 			break
 		}
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {

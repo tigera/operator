@@ -21,7 +21,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	//"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	corev1 "k8s.io/api/core/v1"

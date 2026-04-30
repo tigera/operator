@@ -15,7 +15,7 @@
 package testutils
 
 import (
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	"encoding/json"
 	"fmt"
@@ -72,7 +72,7 @@ func GetExpectedPolicyFromFile(name string) *v3.NetworkPolicy {
 func GetExpectedPolicyFromFileWithReplacements(name string, replacements map[string]string) *v3.NetworkPolicy {
 	jsonFile, err := os.Open(name)
 	Expect(err).ShouldNot(HaveOccurred())
-	defer jsonFile.Close()
+	defer func() { _ = jsonFile.Close() }()
 
 	byteValue, err := io.ReadAll(jsonFile)
 	Expect(err).ShouldNot(HaveOccurred())
@@ -92,7 +92,7 @@ func GetExpectedPolicyFromFileWithReplacements(name string, replacements map[str
 func GetExpectedGlobalPolicyFromFile(name string) *v3.GlobalNetworkPolicy {
 	jsonFile, err := os.Open(name)
 	Expect(err).ShouldNot(HaveOccurred())
-	defer jsonFile.Close()
+	defer func() { _ = jsonFile.Close() }()
 
 	byteValue, err := io.ReadAll(jsonFile)
 	Expect(err).ShouldNot(HaveOccurred())

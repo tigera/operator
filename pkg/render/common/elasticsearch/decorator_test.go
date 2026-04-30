@@ -1,4 +1,4 @@
-// Copyright (c) 2019, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019, 2023,2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -20,7 +20,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	corev1 "k8s.io/api/core/v1"
 )

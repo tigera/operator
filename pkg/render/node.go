@@ -667,7 +667,7 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]interface{} {
 			"type": "k8s",
 		},
 		"policy_setup_timeout_seconds": linuxPolicySetupTimeoutSeconds,
-		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().VolumeSource.HostPath.Path, "endpoint-status"),
+		"endpoint_status_dir":          filepath.Join(c.varRunCalicoVolume().HostPath.Path, "endpoint-status"),
 	}
 
 	// Determine logging configuration

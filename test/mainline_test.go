@@ -99,6 +99,17 @@ var _ = Describe("Mainline component function tests", func() {
 		Expect(kerror.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("Expected Installation not to exist, but got: %s", err))
 	})
 
+	JustAfterEach(func() {
+		// If the spec failed, dump pod state from calico-system before AfterEach
+		// tears the resources down. The operator log only shows that the DaemonSet
+		// reports 0 ready pods — to know *why* we need pod descriptions, container
+		// statuses, recent events, and (for restarted containers) the previous logs.
+		if !CurrentGinkgoTestDescription().Failed || mgr == nil {
+			return
+		}
+		dumpCalicoSystemDiagnostics(kubernetes.NewForConfigOrDie(mgr.GetConfig()))
+	})
+
 	AfterEach(func() {
 		defer func() {
 			cancel()
@@ -534,6 +545,130 @@ func verifyCalicoHasDeployed(c client.Client) {
 		}
 		return assertAvailable(ts)
 	}, 60*time.Second).Should(BeNil())
+}
+
+// dumpCalicoSystemDiagnostics writes pod, event, and recent-log state for the
+// calico-system namespace to the GinkgoWriter. Called from JustAfterEach when a
+// spec fails so the failure output captures *why* a calico-node pod isn't Ready.
+func dumpCalicoSystemDiagnostics(cs kubernetes.Interface) {
+	const ns = "calico-system"
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	w := GinkgoWriter
+	fmt.Fprintf(w, "\n===== diagnostics: %s namespace state =====\n", ns)
+
+	if ds, err := cs.AppsV1().DaemonSets(ns).Get(ctx, "calico-node", metav1.GetOptions{}); err != nil {
+		fmt.Fprintf(w, "DaemonSet calico-node: get failed: %v\n", err)
+	} else {
+		s := ds.Status
+		fmt.Fprintf(w, "DaemonSet calico-node: desired=%d current=%d ready=%d available=%d updated=%d misscheduled=%d\n",
+			s.DesiredNumberScheduled, s.CurrentNumberScheduled, s.NumberReady, s.NumberAvailable, s.UpdatedNumberScheduled, s.NumberMisscheduled)
+	}
+
+	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		fmt.Fprintf(w, "list pods in %s failed: %v\n", ns, err)
+	} else {
+		for _, p := range pods.Items {
+			fmt.Fprintf(w, "\n--- pod %s/%s phase=%s node=%s ---\n", p.Namespace, p.Name, p.Status.Phase, p.Spec.NodeName)
+			for _, cond := range p.Status.Conditions {
+				if cond.Status == corev1.ConditionTrue {
+					continue
+				}
+				fmt.Fprintf(w, "  not-true condition: %s=%s reason=%q message=%q\n", cond.Type, cond.Status, cond.Reason, cond.Message)
+			}
+			containerStatuses := append([]corev1.ContainerStatus{}, p.Status.InitContainerStatuses...)
+			containerStatuses = append(containerStatuses, p.Status.ContainerStatuses...)
+			for _, cs := range containerStatuses {
+				fmt.Fprintf(w, "  container %q ready=%v restarts=%d state=%s\n",
+					cs.Name, cs.Ready, cs.RestartCount, describeContainerState(cs.State))
+				if cs.LastTerminationState.Terminated != nil {
+					t := cs.LastTerminationState.Terminated
+					fmt.Fprintf(w, "    last termination: exit=%d signal=%d reason=%q message=%q\n",
+						t.ExitCode, t.Signal, t.Reason, t.Message)
+				}
+			}
+			dumpPodLogs(ctx, cs, p)
+		}
+	}
+
+	if events, err := cs.CoreV1().Events(ns).List(ctx, metav1.ListOptions{Limit: 50}); err != nil {
+		fmt.Fprintf(w, "\nlist events in %s failed: %v\n", ns, err)
+	} else {
+		fmt.Fprintf(w, "\n--- recent events in %s (Warning only) ---\n", ns)
+		for _, e := range events.Items {
+			if e.Type != corev1.EventTypeWarning {
+				continue
+			}
+			fmt.Fprintf(w, "  %s %s/%s %s: %s\n", e.LastTimestamp.Format(time.RFC3339), e.InvolvedObject.Kind, e.InvolvedObject.Name, e.Reason, e.Message)
+		}
+	}
+	fmt.Fprintf(w, "===== end diagnostics =====\n\n")
+}
+
+func describeContainerState(s corev1.ContainerState) string {
+	switch {
+	case s.Waiting != nil:
+		return fmt.Sprintf("Waiting(reason=%q message=%q)", s.Waiting.Reason, s.Waiting.Message)
+	case s.Terminated != nil:
+		return fmt.Sprintf("Terminated(exit=%d reason=%q message=%q)", s.Terminated.ExitCode, s.Terminated.Reason, s.Terminated.Message)
+	case s.Running != nil:
+		return fmt.Sprintf("Running(since=%s)", s.Running.StartedAt.Format(time.RFC3339))
+	}
+	return "<unknown>"
+}
+
+// dumpPodLogs prints the tail of each container's logs. If the container has
+// restarted, also prints the tail of the previous container's logs (--previous)
+// since that's where the crash cause lives.
+func dumpPodLogs(ctx context.Context, cs kubernetes.Interface, p corev1.Pod) {
+	w := GinkgoWriter
+	const tail = int64(50)
+	containers := append([]corev1.Container{}, p.Spec.InitContainers...)
+	containers = append(containers, p.Spec.Containers...)
+	for _, ctr := range containers {
+		streamPodLog(ctx, cs, p, ctr.Name, false, tail)
+		// If this container has restarted, the prior log is likely the one with the cause.
+		for _, st := range append(p.Status.InitContainerStatuses, p.Status.ContainerStatuses...) {
+			if st.Name == ctr.Name && st.RestartCount > 0 {
+				streamPodLog(ctx, cs, p, ctr.Name, true, tail)
+				break
+			}
+		}
+	}
+	_ = w
+}
+
+func streamPodLog(ctx context.Context, cs kubernetes.Interface, p corev1.Pod, container string, previous bool, tail int64) {
+	w := GinkgoWriter
+	tag := "current"
+	if previous {
+		tag = "previous"
+	}
+	fmt.Fprintf(w, "  --- logs %s container=%q (tail=%d) ---\n", tag, container, tail)
+	req := cs.CoreV1().Pods(p.Namespace).GetLogs(p.Name, &corev1.PodLogOptions{
+		Container: container,
+		Previous:  previous,
+		TailLines: &tail,
+	})
+	stream, err := req.Stream(ctx)
+	if err != nil {
+		fmt.Fprintf(w, "    (no logs: %v)\n", err)
+		return
+	}
+	defer stream.Close()
+	buf := make([]byte, 4096)
+	for {
+		n, readErr := stream.Read(buf)
+		if n > 0 {
+			fmt.Fprintf(w, "    %s", string(buf[:n]))
+		}
+		if readErr != nil {
+			break
+		}
+	}
+	fmt.Fprintln(w)
 }
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {

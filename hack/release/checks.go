@@ -79,6 +79,10 @@ var checkVersionFormat = func(ctx context.Context, c *cli.Command) (context.Cont
 }
 
 var checkVersion = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	if !c.Bool(versionCheckFlag.Name) {
+		logrus.Warn("Skipping version check, this is not recommended for releases")
+		return ctx, nil
+	}
 	ctx, err := checkVersionFormat(ctx, c)
 	if err != nil {
 		return ctx, err

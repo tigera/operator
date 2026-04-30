@@ -116,14 +116,18 @@ func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
 	// know that it should be substituted later during validation.
 	cniConfig = strings.ReplaceAll(cniConfig, "__CNI_MTU__", "-1")
 
+	// libcni v1.3.0 accepts a JSON object without a "plugins" key as an empty
+	// conflist (returning success with len(Plugins) == 0) rather than an error,
+	// so treat that case as if conflist parsing failed and fall through to
+	// single-conf parsing.
 	confList, err := libcni.ConfListFromBytes([]byte(cniConfig))
-	if err == nil {
+	if err == nil && len(confList.Plugins) > 0 {
 		return confList, nil
 	}
 
-	// if an error occurred, try parsing it as a single item. The legacy single-conf
-	// format is deprecated by the CNI spec but may still exist on clusters being
-	// migrated from older Calico installations.
+	// try parsing as a single item. The legacy single-conf format is deprecated
+	// by the CNI spec but may still exist on clusters being migrated from older
+	// Calico installations.
 	conf, err := libcni.NetworkPluginConfFromBytes([]byte(cniConfig))
 	if err != nil {
 		return nil, err

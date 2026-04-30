@@ -995,7 +995,7 @@ var _ = Describe("Installation validation tests", func() {
 
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled"))
+				Expect(err.Error()).To(Equal("installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled"))
 			})
 		})
 		Context("Calico CNI", func() {
@@ -1010,14 +1010,14 @@ var _ = Describe("Installation validation tests", func() {
 				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+				Expect(err.Error()).To(Equal("services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 			})
 
 			It("should return an error if instance.Spec.ServiceCIDRs is not configured", func() {
 				instance.Spec.ServiceCIDRs = []string{}
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
+				Expect(err.Error()).To(Equal("installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows"))
 			})
 
 			It("should return an error if IP pool encapsulation is IPIP", func() {
@@ -1049,7 +1049,7 @@ var _ = Describe("Installation validation tests", func() {
 				k8sapi.Endpoint = k8sapi.ServiceEndpoint{}
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(Equal("Services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
+				Expect(err.Error()).To(Equal("services endpoint configmap 'kubernetes-services-endpoint' does not have all required information for Calico Windows daemonset configuration"))
 			})
 
 			It("should not return an error if instance.Spec.ServiceCIDRs is not configured", func() {

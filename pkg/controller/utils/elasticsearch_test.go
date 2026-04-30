@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	"github.com/olivere/elastic/v7"
 	apps "k8s.io/api/apps/v1"
@@ -274,7 +274,7 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 
 				jsonFile, err := os.Open("test_files/01_put_policy.json")
 				Expect(err).To(BeNil())
-				defer jsonFile.Close()
+				defer func() { _ = jsonFile.Close() }()
 				expectedBody, _ := io.ReadAll(jsonFile)
 				Expect(actualBody).To(MatchJSON(expectedBody))
 
@@ -292,7 +292,7 @@ func (t *testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) 
 				jsonFile, err = os.Open("test_files/02_put_policy_readonly.json")
 			}
 			Expect(err).To(BeNil())
-			defer jsonFile.Close()
+			defer func() { _ = jsonFile.Close() }()
 			expectedBody, _ := io.ReadAll(jsonFile)
 			Expect(actualBody).To(MatchJSON(expectedBody))
 

@@ -19,7 +19,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -696,9 +696,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		for _, container := range deployment.Spec.Template.Spec.Containers {
 			if container.Name == kubecontrollers.EsKubeController {
 				for _, env := range container.Env {
-					if env.Name == "OIDC_AUTH_USERNAME_PREFIX" {
+					switch env.Name {
+					case "OIDC_AUTH_USERNAME_PREFIX":
 						usernamePrefix = env.Value
-					} else if env.Name == "OIDC_AUTH_GROUP_PREFIX" {
+					case "OIDC_AUTH_GROUP_PREFIX":
 						groupPrefix = env.Value
 					}
 				}

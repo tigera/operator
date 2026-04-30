@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,7 +93,7 @@ func DefaultOperatorCASignerName() string {
 // is updated.
 func AnnotationHash(i interface{}) string {
 	h := sha1.New()
-	_, _ = h.Write([]byte(fmt.Sprintf("%q", i)))
+	_, _ = fmt.Fprintf(h, "%q", i)
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 

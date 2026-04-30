@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2023 Tigera, Inc. All rights reserved.
+// Copyright (c) 2020, 2023,2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	"github.com/onsi/ginkgo/reporters"
 	uzap "go.uber.org/zap"

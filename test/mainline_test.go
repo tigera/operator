@@ -556,36 +556,36 @@ func dumpCalicoSystemDiagnostics(cs kubernetes.Interface) {
 	defer cancel()
 
 	w := GinkgoWriter
-	fmt.Fprintf(w, "\n===== diagnostics: %s namespace state =====\n", ns)
+	_, _ = fmt.Fprintf(w, "\n===== diagnostics: %s namespace state =====\n", ns)
 
 	if ds, err := cs.AppsV1().DaemonSets(ns).Get(ctx, "calico-node", metav1.GetOptions{}); err != nil {
-		fmt.Fprintf(w, "DaemonSet calico-node: get failed: %v\n", err)
+		_, _ = fmt.Fprintf(w, "DaemonSet calico-node: get failed: %v\n", err)
 	} else {
 		s := ds.Status
-		fmt.Fprintf(w, "DaemonSet calico-node: desired=%d current=%d ready=%d available=%d updated=%d misscheduled=%d\n",
+		_, _ = fmt.Fprintf(w, "DaemonSet calico-node: desired=%d current=%d ready=%d available=%d updated=%d misscheduled=%d\n",
 			s.DesiredNumberScheduled, s.CurrentNumberScheduled, s.NumberReady, s.NumberAvailable, s.UpdatedNumberScheduled, s.NumberMisscheduled)
 	}
 
 	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		fmt.Fprintf(w, "list pods in %s failed: %v\n", ns, err)
+		_, _ = fmt.Fprintf(w, "list pods in %s failed: %v\n", ns, err)
 	} else {
 		for _, p := range pods.Items {
-			fmt.Fprintf(w, "\n--- pod %s/%s phase=%s node=%s ---\n", p.Namespace, p.Name, p.Status.Phase, p.Spec.NodeName)
+			_, _ = fmt.Fprintf(w, "\n--- pod %s/%s phase=%s node=%s ---\n", p.Namespace, p.Name, p.Status.Phase, p.Spec.NodeName)
 			for _, cond := range p.Status.Conditions {
 				if cond.Status == corev1.ConditionTrue {
 					continue
 				}
-				fmt.Fprintf(w, "  not-true condition: %s=%s reason=%q message=%q\n", cond.Type, cond.Status, cond.Reason, cond.Message)
+				_, _ = fmt.Fprintf(w, "  not-true condition: %s=%s reason=%q message=%q\n", cond.Type, cond.Status, cond.Reason, cond.Message)
 			}
 			containerStatuses := append([]corev1.ContainerStatus{}, p.Status.InitContainerStatuses...)
 			containerStatuses = append(containerStatuses, p.Status.ContainerStatuses...)
 			for _, cs := range containerStatuses {
-				fmt.Fprintf(w, "  container %q ready=%v restarts=%d state=%s\n",
+				_, _ = fmt.Fprintf(w, "  container %q ready=%v restarts=%d state=%s\n",
 					cs.Name, cs.Ready, cs.RestartCount, describeContainerState(cs.State))
 				if cs.LastTerminationState.Terminated != nil {
 					t := cs.LastTerminationState.Terminated
-					fmt.Fprintf(w, "    last termination: exit=%d signal=%d reason=%q message=%q\n",
+					_, _ = fmt.Fprintf(w, "    last termination: exit=%d signal=%d reason=%q message=%q\n",
 						t.ExitCode, t.Signal, t.Reason, t.Message)
 				}
 			}
@@ -594,17 +594,17 @@ func dumpCalicoSystemDiagnostics(cs kubernetes.Interface) {
 	}
 
 	if events, err := cs.CoreV1().Events(ns).List(ctx, metav1.ListOptions{Limit: 50}); err != nil {
-		fmt.Fprintf(w, "\nlist events in %s failed: %v\n", ns, err)
+		_, _ = fmt.Fprintf(w, "\nlist events in %s failed: %v\n", ns, err)
 	} else {
-		fmt.Fprintf(w, "\n--- recent events in %s (Warning only) ---\n", ns)
+		_, _ = fmt.Fprintf(w, "\n--- recent events in %s (Warning only) ---\n", ns)
 		for _, e := range events.Items {
 			if e.Type != corev1.EventTypeWarning {
 				continue
 			}
-			fmt.Fprintf(w, "  %s %s/%s %s: %s\n", e.LastTimestamp.Format(time.RFC3339), e.InvolvedObject.Kind, e.InvolvedObject.Name, e.Reason, e.Message)
+			_, _ = fmt.Fprintf(w, "  %s %s/%s %s: %s\n", e.LastTimestamp.Format(time.RFC3339), e.InvolvedObject.Kind, e.InvolvedObject.Name, e.Reason, e.Message)
 		}
 	}
-	fmt.Fprintf(w, "===== end diagnostics =====\n\n")
+	_, _ = fmt.Fprintf(w, "===== end diagnostics =====\n\n")
 }
 
 func describeContainerState(s corev1.ContainerState) string {
@@ -646,7 +646,7 @@ func streamPodLog(ctx context.Context, cs kubernetes.Interface, p corev1.Pod, co
 	if previous {
 		tag = "previous"
 	}
-	fmt.Fprintf(w, "  --- logs %s container=%q (tail=%d) ---\n", tag, container, tail)
+	_, _ = fmt.Fprintf(w, "  --- logs %s container=%q (tail=%d) ---\n", tag, container, tail)
 	req := cs.CoreV1().Pods(p.Namespace).GetLogs(p.Name, &corev1.PodLogOptions{
 		Container: container,
 		Previous:  previous,
@@ -654,21 +654,21 @@ func streamPodLog(ctx context.Context, cs kubernetes.Interface, p corev1.Pod, co
 	})
 	stream, err := req.Stream(ctx)
 	if err != nil {
-		fmt.Fprintf(w, "    (no logs: %v)\n", err)
+		_, _ = fmt.Fprintf(w, "    (no logs: %v)\n", err)
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	buf := make([]byte, 4096)
 	for {
 		n, readErr := stream.Read(buf)
 		if n > 0 {
-			fmt.Fprintf(w, "    %s", string(buf[:n]))
+			_, _ = fmt.Fprintf(w, "    %s", string(buf[:n]))
 		}
 		if readErr != nil {
 			break
 		}
 	}
-	fmt.Fprintln(w)
+	_, _ = fmt.Fprintln(w)
 }
 
 func verifyCRDsExist(c client.Client, variant operator.ProductVariant) {

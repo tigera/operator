@@ -12,16 +12,16 @@ NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then e
 NATIVE_OS := $(shell uname -s | tr A-Z a-z)
 
 # The version of kustomize we use for generating bundles
-KUSTOMIZE_VERSION = v5.6.0
+KUSTOMIZE_VERSION = v5.8.1
 KUSTOMIZE_DOWNLOAD_URL = https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F$(KUSTOMIZE_VERSION)/kustomize_$(KUSTOMIZE_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
 
 # Our version of operator-sdk
-OPERATOR_SDK_VERSION = v1.39.2
+OPERATOR_SDK_VERSION = v1.42.2
 OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(NATIVE_OS)_$(NATIVE_ARCH)
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.20.1
+HELM3_VERSION = v3.20.2
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.1-llvm20.1.8-k8s1.35.3
-CALICO_BASE_VER ?= ubi9-1774634880
+GO_BUILD_VER?=1.26.2-llvm20.1.8-k8s1.35.4
+CALICO_BASE_VER ?= ubi9-1776708455
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')

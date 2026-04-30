@@ -26,11 +26,11 @@ import (
 
 // check that the git working tree is clean.
 var checkGitClean = func(ctx context.Context) (context.Context, error) {
-	version, err := command.GitVersion()
+	out, err := command.Git("status", "--porcelain")
 	if err != nil {
-		return ctx, fmt.Errorf("error getting git version: %w", err)
+		return ctx, fmt.Errorf("checking git working tree status: %w", err)
 	}
-	if strings.Contains(version, "dirty") {
+	if strings.TrimSpace(out) != "" {
 		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
 	}
 	return ctx, nil
@@ -45,7 +45,10 @@ var checkVersionMatchesGitVersion = func(ctx context.Context, c *cli.Command) (c
 		checkLog.Debug("Skipping version check for hashrelease")
 		return ctx, nil
 	}
-	gitVer, err := command.GitVersion()
+	// Not using command.GitVersion() so that on a clean tagged HEAD it returns bare "vX.Y.Z"
+	// for accurate comparison against the user-provided version.
+	// command.GitVersion() uses --long for build-identifier purposes and would always append "-0-g<sha>".
+	gitVer, err := command.Git("describe", "--tags", "--abbrev=12", "--dirty")
 	if err != nil {
 		return ctx, fmt.Errorf("getting git version: %w", err)
 	}

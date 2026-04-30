@@ -121,11 +121,13 @@ func unmarshalCNIConfList(cniConfig string) (*libcni.NetworkConfigList, error) {
 		return confList, nil
 	}
 
-	// if an error occurred, try parsing it as a single item
-	conf, err := libcni.ConfFromBytes([]byte(cniConfig))
+	// if an error occurred, try parsing it as a single item. The legacy single-conf
+	// format is deprecated by the CNI spec but may still exist on clusters being
+	// migrated from older Calico installations.
+	conf, err := libcni.NetworkPluginConfFromBytes([]byte(cniConfig))
 	if err != nil {
 		return nil, err
 	}
 
-	return libcni.ConfListFromConf(conf)
+	return libcni.ConfListFromConf(conf) //nolint:staticcheck // no non-deprecated equivalent for wrapping a single-conf as a conflist
 }

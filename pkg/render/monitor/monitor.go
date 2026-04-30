@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1473,7 +1473,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 		// permissions to the service account. But if the user does not want to use our defaults, it can change the
 		// bearerTokenSecret to one of their choosing. In that case, it is up to the user to provide the required access.
 		// See also api/v1/monitor_types.go.
-		if ep.BearerTokenSecret.LocalObjectReference.Name == TigeraExternalPrometheus {
+		if ep.BearerTokenSecret.Name == TigeraExternalPrometheus {
 			needsRBAC = true
 		}
 	}

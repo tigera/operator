@@ -130,7 +130,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	default:
 		// The specified CNI plugin is not supported by this version of the operator.
-		return fmt.Errorf("Invalid value '%s' for spec.cni.type, it should be one of %s",
+		return fmt.Errorf("invalid value '%s' for spec.cni.type, it should be one of %s",
 			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
 	}
 
@@ -173,7 +173,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					case operatorv1.EncapsulationNone:
 						// Unencapsulated currently requires BGP to be running in order to program routes.
 						if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
-							return fmt.Errorf("Unencapsulated IP pools require that BGP is enabled")
+							return fmt.Errorf("unencapsulated IP pools require that BGP is enabled")
 						}
 					}
 				case operatorv1.IPAMPluginHostLocal:
@@ -207,10 +207,10 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		// VPP specific validation
 		if instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP {
 			if instance.Spec.Variant != operatorv1.Calico {
-				return fmt.Errorf("The VPP dataplane only supports the Calico variant (configured: %s)", instance.Spec.Variant)
+				return fmt.Errorf("the VPP dataplane only supports the Calico variant (configured: %s)", instance.Spec.Variant)
 			}
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
-				return fmt.Errorf("The VPP dataplane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
+				return fmt.Errorf("the VPP dataplane only supports the Calico CNI (configured: %s)", instance.Spec.CNI.Type)
 			}
 			if instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled {
 				return fmt.Errorf("VPP requires BGP to be enabled")
@@ -286,33 +286,33 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	// Verify that the flexvolume path is valid - either "None" (to disable) or a valid absolute path.
 	if instance.Spec.FlexVolumePath != "None" && !path.IsAbs(instance.Spec.FlexVolumePath) {
-		return fmt.Errorf("Installation spec.FlexVolumePath '%s' is not an absolute path",
+		return fmt.Errorf("installation spec.FlexVolumePath '%s' is not an absolute path",
 			instance.Spec.FlexVolumePath)
 	}
 
 	// Verify that the kubeletVolumePluginPath is valid - either "None" (to disable) or a valid absolute path.
 	if instance.Spec.KubeletVolumePluginPath != "None" && !path.IsAbs(instance.Spec.KubeletVolumePluginPath) {
-		return fmt.Errorf("Installation spec.KubeletVolumePluginPath '%s' is not an absolute path",
+		return fmt.Errorf("installation spec.KubeletVolumePluginPath '%s' is not an absolute path",
 			instance.Spec.KubeletVolumePluginPath)
 	}
 
 	// We only support RollingUpdate for the node daemonset strategy.
 	if instance.Spec.NodeUpdateStrategy.Type != appsv1.RollingUpdateDaemonSetStrategyType {
-		return fmt.Errorf("Installation spec.NodeUpdateStrategy.type '%s' is not supported",
+		return fmt.Errorf("installation spec.NodeUpdateStrategy.type '%s' is not supported",
 			instance.Spec.NodeUpdateStrategy.RollingUpdate)
 	}
 
 	if instance.Spec.ControlPlaneNodeSelector != nil {
 		if v, ok := instance.Spec.ControlPlaneNodeSelector["beta.kubernetes.io/os"]; ok && v != "linux" {
-			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'beta.kubernetes.io/os=%s' is not supported", v)
+			return fmt.Errorf("installation spec.ControlPlaneNodeSelector 'beta.kubernetes.io/os=%s' is not supported", v)
 		}
 		if v, ok := instance.Spec.ControlPlaneNodeSelector["kubernetes.io/os"]; ok && v != "linux" {
-			return fmt.Errorf("Installation spec.ControlPlaneNodeSelector 'kubernetes.io/os=%s' is not supported", v)
+			return fmt.Errorf("installation spec.ControlPlaneNodeSelector 'kubernetes.io/os=%s' is not supported", v)
 		}
 	}
 
 	if instance.Spec.ControlPlaneReplicas != nil && *instance.Spec.ControlPlaneReplicas <= 0 {
-		return fmt.Errorf("Installation spec.ControlPlaneReplicas should be greater than 0")
+		return fmt.Errorf("installation spec.ControlPlaneReplicas should be greater than 0")
 	}
 
 	validComponentNames := map[operatorv1.ComponentName]struct{}{
@@ -323,7 +323,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 
 	for _, resource := range instance.Spec.ComponentResources {
 		if _, ok := validComponentNames[resource.ComponentName]; !ok {
-			return fmt.Errorf("Installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
+			return fmt.Errorf("installation spec.ComponentResources.ComponentName %s is not supported", resource.ComponentName)
 		}
 	}
 
@@ -336,7 +336,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if ds := instance.Spec.CalicoNodeDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeDaemonSetContainer, node.ValidateCalicoNodeDaemonSetInitContainer)
 		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoNodeDaemonSet is not valid: %w", err)
+			return fmt.Errorf("installation spec.CalicoNodeDaemonSet is not valid: %w", err)
 		}
 	}
 
@@ -344,7 +344,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if ds := instance.Spec.CalicoNodeWindowsDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, node.ValidateCalicoNodeWindowsDaemonSetContainer, node.ValidateCalicoNodeWindowsDaemonSetInitContainer)
 		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
+			return fmt.Errorf("installation spec.CalicoNodeWindowsDaemonSet is not valid: %w", err)
 		}
 	}
 
@@ -352,7 +352,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if deploy := instance.Spec.CalicoKubeControllersDeployment; deploy != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, kubecontrollers.ValidateCalicoKubeControllersDeploymentContainer, validation.NoContainersDefined)
 		if err != nil {
-			return fmt.Errorf("Installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
+			return fmt.Errorf("installation spec.CalicoKubeControllersDeployment is not valid: %w", err)
 		}
 	}
 
@@ -360,7 +360,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if deploy := instance.Spec.TyphaDeployment; deploy != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(deploy, typha.ValidateTyphaDeploymentContainer, typha.ValidateTyphaDeploymentInitContainer)
 		if err != nil {
-			return fmt.Errorf("Installation spec.TyphaDeployment is not valid: %w", err)
+			return fmt.Errorf("installation spec.TyphaDeployment is not valid: %w", err)
 		}
 	}
 
@@ -368,24 +368,24 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if ds := instance.Spec.CSINodeDriverDaemonSet; ds != nil {
 		err := validation.ValidateReplicatedPodResourceOverrides(ds, csinodedriver.ValidateCSINodeDriverDaemonSetContainer, validation.NoContainersDefined)
 		if err != nil {
-			return fmt.Errorf("Installation spec.CSINodeDriverDaemonSet is not valid: %w", err)
+			return fmt.Errorf("installation spec.CSINodeDriverDaemonSet is not valid: %w", err)
 		}
 	}
 
 	// Verify CNILogging to not exist for non-calico cni
 	if cni := instance.Spec.CNI.Type; cni != operatorv1.PluginCalico {
 		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
-			return fmt.Errorf("Installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
+			return fmt.Errorf("installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
 		}
 	}
 
 	if common.WindowsEnabled(instance.Spec) {
 		if k8sapi.Endpoint.Host == "" || k8sapi.Endpoint.Port == "" {
-			return fmt.Errorf("Services endpoint configmap '%s' does not have all required information for Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName)
+			return fmt.Errorf("services endpoint configmap '%s' does not have all required information for Calico Windows daemonset configuration", render.K8sSvcEndpointConfigMapName)
 		}
 		if instance.Spec.CNI.Type == operatorv1.PluginCalico {
 			if len(instance.Spec.ServiceCIDRs) == 0 {
-				return fmt.Errorf("Installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows")
+				return fmt.Errorf("installation spec.ServiceCIDRs must be provided when using Calico CNI on Windows")
 			}
 			if instance.Spec.CalicoNetwork != nil {
 				if v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools); v4pool != nil {
@@ -397,16 +397,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	} else {
 		if instance.Spec.WindowsNodes != nil {
-			return fmt.Errorf("Installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled")
+			return fmt.Errorf("installation spec.WindowsNodes is not valid and should not be provided when Calico for Windows is disabled")
 		}
 	}
 
 	if operatorv1.IsFIPSModeEnabled(instance.Spec.FIPSMode) && instance.Spec.Variant == operatorv1.TigeraSecureEnterprise {
-		return fmt.Errorf("Installation spec.FIPSMode=%v combined with spec.Variant=%s is not supported", *instance.Spec.FIPSMode, instance.Spec.Variant)
+		return fmt.Errorf("installation spec.FIPSMode=%v combined with spec.Variant=%s is not supported", *instance.Spec.FIPSMode, instance.Spec.Variant)
 	}
 
 	if instance.Spec.KubernetesProvider != operatorv1.ProviderAKS && instance.Spec.Azure != nil {
-		return fmt.Errorf("Installation spec.Azure should be set only for AKS provider")
+		return fmt.Errorf("installation spec.Azure should be set only for AKS provider")
 	}
 
 	return nil

@@ -22,7 +22,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	apps "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -293,11 +293,12 @@ func getTigeraStatus(client client.Client, name string) (*operator.TigeraStatus,
 func assertAvailable(ts *operator.TigeraStatus) error {
 	var available, degraded, progressing bool
 	for _, condition := range ts.Status.Conditions {
-		if condition.Type == operator.ComponentAvailable {
+		switch condition.Type {
+		case operator.ComponentAvailable:
 			available = condition.Status == operator.ConditionTrue
-		} else if condition.Type == operator.ComponentDegraded {
+		case operator.ComponentDegraded:
 			degraded = condition.Status == operator.ConditionTrue
-		} else if condition.Type == operator.ComponentProgressing {
+		case operator.ComponentProgressing:
 			progressing = condition.Status == operator.ConditionTrue
 		}
 	}

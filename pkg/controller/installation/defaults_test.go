@@ -22,7 +22,7 @@ import (
 
 	. "github.com/onsi/ginkgo"
 	"github.com/onsi/ginkgo/extensions/table"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 	operator "github.com/tigera/operator/api/v1"
 	crdv1 "github.com/tigera/operator/pkg/apis/crd.projectcalico.org/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -107,7 +107,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		false_ := false
 		var twentySeven int32 = 27
 		var oneTwoThree int32 = 123
-		var one intstr.IntOrString = intstr.FromInt(1)
+		var one = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10
@@ -199,7 +199,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var nodeMetricsPort int32 = 9081
 		false_ := false
 		var twentySeven int32 = 27
-		var one intstr.IntOrString = intstr.FromInt(1)
+		var one = intstr.FromInt(1)
 		var replicas int32 = 3
 		var logFileMaxCount uint32 = 5
 		var logFileMaxAgeDays uint32 = 10

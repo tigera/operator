@@ -28,7 +28,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
-	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/apis"
@@ -301,7 +300,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 		// Check if we need to do any cleanup.
 		client := mgr.GetClient()
-		instance := &v1.Installation{}
+		instance := &operatortigeraiov1.Installation{}
 		retries := 0
 		for {
 			if err := client.Get(ctx, utils.DefaultInstanceKey, instance); errors.IsNotFound(err) {
@@ -490,8 +489,12 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 	// The kubernetes in-cluster functions don't let you override the apiserver
 	// directly; gotta "pass" it via environment vars.
 	log.Info("Overriding kubernetes api to %s", apiURL)
-	os.Setenv("KUBERNETES_SERVICE_HOST", url.Hostname())
-	os.Setenv("KUBERNETES_SERVICE_PORT", url.Port())
+	if err := os.Setenv("KUBERNETES_SERVICE_HOST", url.Hostname()); err != nil {
+		return err
+	}
+	if err := os.Setenv("KUBERNETES_SERVICE_PORT", url.Port()); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -528,7 +531,7 @@ func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) erro
 		}
 		b, err := yaml.Marshal(v)
 		if err != nil {
-			return fmt.Errorf("Failed to Marshal %s: %v", v.Name, err)
+			return fmt.Errorf("failed to marshal %s: %v", v.Name, err)
 		}
 		if !first {
 			fmt.Println("---")
@@ -540,7 +543,7 @@ func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) erro
 	}
 	// Indicates nothing was printed so we couldn't find the requested outputType
 	if first {
-		return fmt.Errorf("No CRD matching %s", outputType)
+		return fmt.Errorf("no CRD matching %s", outputType)
 	}
 
 	return nil
@@ -573,7 +576,7 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 	for {
 		select {
 		case <-to:
-			return fmt.Errorf("Timeout waiting for pre-delete hook")
+			return fmt.Errorf("timeout waiting for pre-delete hook")
 		default:
 			if err := c.Get(ctx, utils.DefaultInstanceKey, installation); errors.IsNotFound(err) {
 				// It's gone! We can return.

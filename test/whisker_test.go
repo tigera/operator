@@ -26,7 +26,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	. "github.com/onsi/ginkgo"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 

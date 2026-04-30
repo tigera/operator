@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -121,7 +120,7 @@ func AutoDiscoverProvider(ctx context.Context, clientset kubernetes.Interface) (
 func isOpenshift(c kubernetes.Interface) (bool, error) {
 	resources, err := c.Discovery().ServerResourcesForGroupVersion("config.openshift.io/v1")
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if kerrors.IsNotFound(err) {
 			return false, nil
 		}
 		return false, err

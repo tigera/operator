@@ -17,7 +17,6 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
-	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	v1 "k8s.io/api/apps/v1"
@@ -43,6 +42,7 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -459,30 +459,21 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// Classify each Gateway by its class's controllerName. The map is seeded
-	// from Spec.GatewayClasses first so Gateways created before the class is
-	// rendered still classify correctly; existing GatewayClass resources fill
-	// in any we didn't seed (e.g. raw classes outside the CR).
-	classController := make(map[string]string, len(gcList.Items)+len(gatewayAPI.Spec.GatewayClasses)+1)
-	classController[gatewayapi.NamespacedGatewayClassName] = gatewayapi.NamespacedControllerName
+	// Collect namespaces hosting a Gateway whose class is ours (controllerName
+	// matches, or it's declared in Spec.GatewayClasses).
+	ownedClass := make(map[string]bool, len(gatewayAPI.Spec.GatewayClasses)+1)
+	ownedClass[gatewayapi.GatewayClassName] = true
 	for _, c := range gatewayAPI.Spec.GatewayClasses {
-		if c.Name == gatewayapi.NamespacedGatewayClassName {
-			continue
-		}
-		classController[c.Name] = gatewayapi.LegacyControllerName
+		ownedClass[c.Name] = true
 	}
 	for i := range gcList.Items {
-		if _, seeded := classController[gcList.Items[i].Name]; !seeded {
-			classController[gcList.Items[i].Name] = string(gcList.Items[i].Spec.ControllerName)
+		if string(gcList.Items[i].Spec.ControllerName) == gatewayapi.ControllerName {
+			ownedClass[gcList.Items[i].Name] = true
 		}
 	}
 	nsSet := set.New[string]()
 	for i := range gwList.Items {
-		className := string(gwList.Items[i].Spec.GatewayClassName)
-		switch classController[className] {
-		case gatewayapi.LegacyControllerName:
-			gatewayConfig.HasLegacyGateways = true
-		case gatewayapi.NamespacedControllerName:
+		if ownedClass[string(gwList.Items[i].Spec.GatewayClassName)] {
 			nsSet.Insert(gwList.Items[i].Namespace)
 		}
 	}
@@ -501,25 +492,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			}
 		} else if !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading gateway namespaces ClusterRoleBinding", err, log)
-			return reconcile.Result{}, err
-		}
-	}
-
-	// If tigera-gateway is mid-teardown, skip the legacy render this reconcile
-	// by treating HasLegacyGateways as false — otherwise every object would log
-	// "Namespace is terminating, skipping creation". The teardown-branch deletes
-	// are no-ops against already-terminating objects.
-	legacyNamespaceTerminating := false
-	if gatewayConfig.HasLegacyGateways {
-		ns := &corev1.Namespace{}
-		err = r.client.Get(ctx, types.NamespacedName{Name: gatewayapi.LegacyControllerNamespace}, ns)
-		switch {
-		case err == nil && ns.GetDeletionTimestamp() != nil:
-			reqLogger.V(1).Info("tigera-gateway is terminating; deferring legacy render until cascade completes")
-			legacyNamespaceTerminating = true
-			gatewayConfig.HasLegacyGateways = false
-		case err != nil && !errors.IsNotFound(err):
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking tigera-gateway namespace", err, log)
 			return reconcile.Result{}, err
 		}
 	}
@@ -552,13 +524,6 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
-	// If we skipped the legacy render (namespace mid-teardown), requeue so we
-	// don't wait for the periodic tick to retry.
-	if legacyNamespaceTerminating {
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
-	}
-
-	// Update the status of the GatewayAPI instance and StatusManager.
 	return reconcile.Result{}, nil
 }
 
@@ -629,6 +594,6 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurat
 // The bool return value indicates if the finalizer is Set
 func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}}
+	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.CalicoNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
 }

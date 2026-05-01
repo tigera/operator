@@ -754,6 +754,14 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 		}
 	}
 
+	// device_type tells the Calico CNI plugin which virtual device to create for
+	// the pod interface. Only emit when explicitly set to Netkit: leaving it out
+	// keeps the default (veth) behavior and avoids churning existing CNI configs.
+	if c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType == operatorv1.LinuxPodInterfaceNetkit {
+		calicoPluginConfig["device_type"] = "netkit"
+	}
+
 	return calicoPluginConfig
 }
 

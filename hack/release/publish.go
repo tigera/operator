@@ -40,6 +40,7 @@ var publishCommand = &cli.Command{
 		registryFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
+		versionCheckFlag,
 		createGithubReleaseFlag,
 		githubTokenFlag,
 		draftGithubReleaseFlag,

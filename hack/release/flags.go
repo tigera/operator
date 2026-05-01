@@ -441,3 +441,10 @@ var skipRepoCheckFlag = &cli.BoolFlag{
 	Sources: cli.EnvVars("SKIP_REPO_CHECK"),
 	Value:   false,
 }
+
+var versionCheckFlag = &cli.BoolWithInverseFlag{
+	Name:    "version-check",
+	Usage:   "Check that the provided version is valid and matches the git version. (development and testing purposes only)",
+	Sources: cli.EnvVars("VERSION_CHECK"),
+	Value:   true,
+}

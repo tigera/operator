@@ -63,19 +63,12 @@ var (
 	log = logf.Log.WithName("gateway_api")
 )
 
-// Legacy* name the tigera-gateway install. Slated for deprecation; to retire
-// it, drop these constants with legacyObjects and its callers.
+// Single envoy-gateway install in calico-system with deploy.type=GatewayNamespace,
+// so proxies run in each Gateway's own namespace.
 const (
-	LegacyControllerNamespace = "tigera-gateway"
-	LegacyReleaseName         = "tigera-gateway-api"
-	LegacyControllerName      = "gateway.envoyproxy.io/gatewayclass-controller"
-	LegacyGatewayClassName    = "tigera-gateway-class"
-
-	// Namespaced* name the calico-system install: controller there,
-	// deploy.type=GatewayNamespace, proxies in each Gateway's own namespace.
-	NamespacedReleaseName      = "tigera-gateway-api-ns"
-	NamespacedControllerName   = "gateway.envoyproxy.io/gatewayclass-controller-ns"
-	NamespacedGatewayClassName = "tigera-gateway-class-ns"
+	ReleaseName      = "tigera-gateway-api"
+	ControllerName   = "gateway.envoyproxy.io/gatewayclass-controller"
+	GatewayClassName = "tigera-gateway-class"
 
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
 	EnvoyGatewayPolicySelector = "app.kubernetes.io/name == 'gateway-helm' || app == 'certgen'"
@@ -202,37 +195,23 @@ func isReservedOperatorNamespace(ns string) bool {
 	return ns == common.CalicoNamespace || ns == common.OperatorNamespace()
 }
 
-// The operator only ever does two chart renders. The chart output is
-// deterministic, so each is cached by its own sync.Once on first use.
-// Callers must deep-copy any object they intend to mutate.
+// Chart output is deterministic for our single render, so it's cached by
+// sync.Once. Callers must deep-copy any object they intend to mutate.
 var (
-	legacyChartOnce    sync.Once
-	legacyChartResults *gatewayAPIResources
-	legacyChartErr     error
-
-	namespacedChartOnce    sync.Once
-	namespacedChartResults *gatewayAPIResources
-	namespacedChartErr     error
+	chartOnce    sync.Once
+	chartResults *gatewayAPIResources
+	chartErr     error
 )
 
-func legacyChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
-	legacyChartOnce.Do(func() {
-		legacyChartResults, legacyChartErr = renderChart(scheme, LegacyReleaseName, LegacyControllerNamespace, "", "")
+func chartResourcesFor(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
+	chartOnce.Do(func() {
+		chartResults, chartErr = renderChart(scheme, ReleaseName, common.CalicoNamespace, "", "GatewayNamespace")
 	})
-	return legacyChartResults, legacyChartErr
+	return chartResults, chartErr
 }
 
-func namespacedChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
-	namespacedChartOnce.Do(func() {
-		namespacedChartResults, namespacedChartErr = renderChart(scheme, NamespacedReleaseName, common.CalicoNamespace, NamespacedControllerName, "GatewayNamespace")
-	})
-	return namespacedChartResults, namespacedChartErr
-}
-
-// renderChart renders the embedded Envoy Gateway helm chart using the Helm SDK.
-// releaseName + namespace go to Helm as Release.Name / Release.Namespace. controllerName
-// overrides config.envoyGateway.gateway.controllerName when non-empty. deployType
-// overrides config.envoyGateway.provider.kubernetes.deploy.type when non-empty.
+// renderChart renders the embedded Envoy Gateway helm chart. controllerName and
+// deployType override the equivalent config.envoyGateway values when non-empty.
 func renderChart(scheme *runtime.Scheme, releaseName, namespace, controllerName, deployType string) (*gatewayAPIResources, error) {
 	chart, err := loader.LoadArchive(bytes.NewReader(gatewayHelmChart))
 	if err != nil {
@@ -378,7 +357,7 @@ func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResource
 }
 
 func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
-	resources, err := legacyChart(scheme)
+	resources, err := chartResourcesFor(scheme)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
 	}
@@ -404,7 +383,7 @@ func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (es
 // GatewayAPICRDs returns the k8s GatewayAPI CRDs and the Envoy CRDs together,
 // necessary for the deployment of Calico Gateway API.
 func GatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
-	resources, err := legacyChart(scheme)
+	resources, err := chartResourcesFor(scheme)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
 	}
@@ -429,16 +408,12 @@ type GatewayAPIImplementationConfig struct {
 	CurrentGatewayClasses  set.Set[string]
 	IncludeV3NetworkPolicy bool
 
-	// GatewayNamespaces is the list of namespaces containing a Gateway that targets
-	// the calico-system controller (Enterprise only).
+	// GatewayNamespaces is the list of namespaces containing a Gateway managed by
+	// this operator (Enterprise only).
 	GatewayNamespaces []string
 	// CurrentGatewayNamespaces tracks previously provisioned namespaces for cleanup
 	// when Gateways are removed.
 	CurrentGatewayNamespaces set.Set[string]
-
-	// HasLegacyGateways is true when at least one Gateway resolves to the
-	// tigera-gateway controllerName. False → the install is torn down.
-	HasLegacyGateways bool
 }
 
 type gatewayAPIImplementationComponent struct {
@@ -449,25 +424,16 @@ type gatewayAPIImplementationComponent struct {
 	wafHTTPFilterImage  string
 	L7LogCollectorImage string
 
-	// Pre-rendered helm chart results for the two installs.
-	legacy     *gatewayAPIResources
-	namespaced *gatewayAPIResources
+	// Pre-rendered helm chart resources.
+	chart *gatewayAPIResources
 }
 
 func GatewayAPIImplementationComponent(cfg *GatewayAPIImplementationConfig) (render.Component, error) {
-	legacy, err := legacyChart(cfg.Scheme)
+	chart, err := chartResourcesFor(cfg.Scheme)
 	if err != nil {
-		return nil, fmt.Errorf("failed to render gateway-helm chart (legacy tigera-gateway): %w", err)
+		return nil, fmt.Errorf("failed to render gateway-helm chart: %w", err)
 	}
-	namespaced, err := namespacedChart(cfg.Scheme)
-	if err != nil {
-		return nil, fmt.Errorf("failed to render gateway-helm chart (namespaced calico-system): %w", err)
-	}
-	return &gatewayAPIImplementationComponent{
-		cfg:        cfg,
-		legacy:     legacy,
-		namespaced: namespaced,
-	}, nil
+	return &gatewayAPIImplementationComponent{cfg: cfg, chart: chart}, nil
 }
 
 func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -526,81 +492,48 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	var objs, objsToDelete []client.Object
 	openShift := pr.cfg.Installation.KubernetesProvider.IsOpenShift()
 
-	// DEPRECATION: kept only while legacy Gateways exist; retire by deleting
-	// this block along with legacyObjects and the Legacy* constants.
-	if pr.cfg.HasLegacyGateways {
-		objs = append(objs, pr.legacyObjects()...)
-		// User-declared GatewayClasses target the tigera-gateway controller. Skip the
-		// namespaced class if the user also declared it; the caller auto-provisions it.
-		for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
-			className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
-			if className == NamespacedGatewayClassName {
-				continue
-			}
-			proxy := pr.envoyProxyConfig(className, LegacyControllerNamespace, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
-			objs = append(objs, proxy, pr.gatewayClass(className, LegacyControllerName, proxy))
-			pr.cfg.CurrentGatewayClasses.Delete(className)
-		}
-	} else {
-		objsToDelete = append(objsToDelete, pr.legacyTeardownObjects()...)
-	}
-
-	// Allow policy for the calico-system controller to punch through the core
+	// Allow policy for the controller in calico-system to punch through the core
 	// Installation's default-deny.
 	if pr.cfg.IncludeV3NetworkPolicy {
 		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
 	}
 
-	// Helm-rendered resources for the calico-system controller.
-	objs = append(objs, pr.controllerObjects(pr.namespaced, false)...)
+	// Helm-rendered envoy-gateway controller in calico-system.
+	objs = append(objs, pr.controllerObjects()...)
 
-	// Auto-provision the calico-system class so users can create Gateways in their own
-	// namespaces without declaring a GatewayClass in the GatewayAPI CR.
-	nsClassSpec := &operatorv1.GatewayClassSpec{Name: NamespacedGatewayClassName}
-	nsProxy := pr.envoyProxyConfig(NamespacedGatewayClassName, common.CalicoNamespace, nil, nsClassSpec)
-	objs = append(objs, nsProxy, pr.gatewayClass(NamespacedGatewayClassName, NamespacedControllerName, nsProxy))
-	pr.cfg.CurrentGatewayClasses.Delete(NamespacedGatewayClassName)
-
-	// Clean up the deprecated combined waf-http-filter ClusterRole/ClusterRoleBinding
-	// that pre-dated the cluster-scoped vs gateway-resources split. Unconditional so
-	// upgrades from older Enterprise installs always converge, and harmless on OSS.
-	objsToDelete = append(objsToDelete,
-		&rbacv1.ClusterRole{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
-		},
-		&rbacv1.ClusterRoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
-		},
-	)
-
-	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
-		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
-		objsToDelete = append(objsToDelete,
-			&gapi.GatewayClass{
-				TypeMeta:   metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: gcName},
-			},
-			&envoyapi.EnvoyProxy{
-				TypeMeta:   metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
-				ObjectMeta: metav1.ObjectMeta{Name: gcName, Namespace: LegacyControllerNamespace},
-			},
-		)
+	// Auto-provision the default GatewayClass unless the user already declared it
+	// in Spec.GatewayClasses (in which case the loop below honours their overrides).
+	hasDefault := false
+	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
+		if pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name == GatewayClassName {
+			hasDefault = true
+			break
+		}
+	}
+	if !hasDefault {
+		defaultClassSpec := &operatorv1.GatewayClassSpec{Name: GatewayClassName}
+		defaultProxy := pr.envoyProxyConfig(GatewayClassName, common.CalicoNamespace, nil, defaultClassSpec)
+		objs = append(objs, defaultProxy, pr.gatewayClass(GatewayClassName, ControllerName, defaultProxy))
+		pr.cfg.CurrentGatewayClasses.Delete(GatewayClassName)
 	}
 
-	// Shared WAF ClusterRoles (Enterprise). Kept across tigera-gateway teardown
-	// because the per-namespace SAs still bind to them.
+	// User-declared GatewayClasses targeting our controller.
+	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
+		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
+		proxy := pr.envoyProxyConfig(className, common.CalicoNamespace, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))
+		objs = append(objs, proxy, pr.gatewayClass(className, ControllerName, proxy))
+		pr.cfg.CurrentGatewayClasses.Delete(className)
+	}
+
 	if pr.cfg.Installation.Variant.IsEnterprise() {
+		// Shared WAF ClusterRoles bound by per-namespace SAs.
 		objs = append(objs,
 			pr.wafHttpFilterClusterScopedRole(),
 			pr.wafHttpFilterGatewayResourcesRole(),
 		)
-	}
 
-	// Per-namespace Enterprise resources for namespaces containing a Gateway that
-	// targets the namespaced controller (populated by the GatewayAPI controller).
-	if pr.cfg.Installation.Variant.IsEnterprise() {
+		// Per-namespace resources for namespaces containing a Gateway managed by
+		// this operator (populated by the GatewayAPI controller).
 		for _, ns := range pr.cfg.GatewayNamespaces {
 			objs = append(objs,
 				pr.gatewayNamespaceSA(ns),
@@ -616,7 +549,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
 		}
 
-		// Clean up resources for namespaces that no longer have a namespaced-class Gateway.
+		// Clean up resources for namespaces that no longer host a Gateway.
 		if pr.cfg.CurrentGatewayNamespaces != nil {
 			currentNS := set.New(pr.cfg.GatewayNamespaces...)
 			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
@@ -641,67 +574,50 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		}
 	}
 
+	// Upgrade cleanup: drop the legacy tigera-gateway install (Namespace cascade
+	// reaps in-namespace resources) and the deprecated waf-http-filter CR/CRB.
+	objsToDelete = append(objsToDelete,
+		&corev1.Namespace{
+			TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"},
+		},
+		&admissionregv1.MutatingWebhookConfiguration{
+			TypeMeta:   metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"},
+		},
+		&rbacv1.ClusterRole{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
+		},
+		&rbacv1.ClusterRoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: wafFilterName},
+		},
+	)
+
+	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
+		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
+		objsToDelete = append(objsToDelete,
+			&gapi.GatewayClass{
+				TypeMeta:   metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: gcName},
+			},
+			&envoyapi.EnvoyProxy{
+				TypeMeta:   metav1.TypeMeta{Kind: "EnvoyProxy", APIVersion: "gateway.envoyproxy.io/v1alpha1"},
+				ObjectMeta: metav1.ObjectMeta{Name: gcName, Namespace: common.CalicoNamespace},
+			},
+		)
+	}
+
 	log.V(1).Info("GatewayAPI rendering", "num_current", len(objs), "num_delete", len(objsToDelete))
 	return objs, objsToDelete
 }
 
-// legacyObjects returns every resource tied to the tigera-gateway install.
-// Grouped together so the install can be retired in a single delete pass.
-// User-declared GatewayClasses are rendered by Objects, not here.
-func (pr *gatewayAPIImplementationComponent) legacyObjects() []client.Object {
-	var objs []client.Object
-
-	// Bootstrap the tigera-gateway namespace; we own it.
-	objs = append(objs,
-		render.CreateNamespace(
-			LegacyControllerNamespace,
-			pr.cfg.Installation.KubernetesProvider,
-			render.PSSPrivileged, // HostPath volume for l7-collector logs
-			pr.cfg.Installation.Azure,
-		),
-		render.CreateOperatorSecretsRoleBinding(LegacyControllerNamespace),
-	)
-	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LegacyControllerNamespace, pr.cfg.PullSecrets...)...)...)
-
-	// Helm-rendered envoy-gateway controller in tigera-gateway.
-	objs = append(objs, pr.controllerObjects(pr.legacy, true)...)
-
-	// Legacy-only WAF bits: SA in tigera-gateway + the CRBs that bind it. The
-	// shared ClusterRoles are rendered outside (Enterprise, unconditional).
-	if pr.cfg.Installation.Variant.IsEnterprise() {
-		objs = append(objs,
-			pr.wafHttpFilterServiceAccount(),
-			pr.wafHttpFilterClusterScopedCRB(),
-			pr.wafHttpFilterGatewayResourcesCRB(),
-		)
-	}
-
-	return objs
-}
-
-// legacyTeardownObjects returns the retirement delete list: Namespace +
-// cluster-scoped objects (the cascade handles the rest), plus the Deployment
-// so the component handler calls status.RemoveDeployments on it. Queuing
-// Secrets/RoleBindings explicitly would 403 once the tigera-operator-secrets
-// RoleBinding is cascaded; Deployment delete goes via cluster-wide perms.
-func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects() []client.Object {
-	var objs []client.Object
-	for _, obj := range pr.legacyObjects() {
-		if _, isNamespace := obj.(*corev1.Namespace); isNamespace || obj.GetNamespace() == "" {
-			objs = append(objs, obj)
-			continue
-		}
-		if _, isDeployment := obj.(*appsv1.Deployment); isDeployment {
-			objs = append(objs, obj)
-		}
-	}
-	return objs
-}
-
-// controllerObjects returns the helm-rendered resources for one envoy-gateway
-// install. applyCustomEG=true applies user CustomEnvoyGateway + image/pull-secret
-// overrides to the EnvoyGateway ConfigMap (tigera-gateway controller only).
-func (pr *gatewayAPIImplementationComponent) controllerObjects(resources *gatewayAPIResources, applyCustomEG bool) []client.Object {
+// controllerObjects returns the helm-rendered resources for the envoy-gateway
+// install, with user customisations applied to the EnvoyGateway ConfigMap and
+// the controller Deployment + certgen Job.
+func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object {
+	resources := pr.chart
 	var objs []client.Object
 
 	// SA + cluster-scoped RBAC + webhooks + namespaced RBAC.
@@ -730,7 +646,7 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects(resources *gatewa
 
 	// EnvoyGateway ConfigMap.
 	var envoyGatewayConfig *envoyapi.EnvoyGateway
-	if applyCustomEG && pr.cfg.CustomEnvoyGateway != nil {
+	if pr.cfg.CustomEnvoyGateway != nil {
 		envoyGatewayConfig = pr.cfg.CustomEnvoyGateway
 	} else {
 		envoyGatewayConfig = resources.envoyGatewayConfig.DeepCopyObject().(*envoyapi.EnvoyGateway)
@@ -1165,12 +1081,11 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 
 func (pr *gatewayAPIImplementationComponent) gatewayClass(className, controllerName string, proxyConfig *envoyapi.EnvoyProxy) *gapi.GatewayClass {
 	// Provision a GatewayClass that references the EnvoyProxy config and the controllerName
-	// that the gateway controller expects.
+	// that the gateway controller expects. GatewayClass is cluster-scoped so namespace is informational.
 	return &gapi.GatewayClass{
 		TypeMeta: metav1.TypeMeta{Kind: "GatewayClass", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      className,
-			Namespace: LegacyControllerNamespace,
+			Name: className,
 		},
 		Spec: gapi.GatewayClassSpec{
 			ControllerName: gapi.GatewayController(controllerName),
@@ -1226,17 +1141,6 @@ func applyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operato
 	}
 }
 
-// wafHttpFilterServiceAccount creates the ServiceAccount for WAF HTTP Filter
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      wafFilterName,
-			Namespace: LegacyControllerNamespace,
-		},
-	}
-}
-
 const (
 	wafFilterClusterScopedRoleName    = wafFilterName + "-cluster-scoped"
 	wafFilterGatewayResourcesRoleName = wafFilterName + "-gateway-resources"
@@ -1266,8 +1170,8 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedRole() *r
 }
 
 // wafHttpFilterGatewayResourcesRole grants read access to namespaced Gateway
-// API resources (used by the L7 Log Collector). Bound cluster-wide in
-// tigera-gateway; per-namespace for proxies in Gateway namespaces.
+// API resources (used by the L7 Log Collector), bound per-namespace via
+// gatewayNamespaceRoleBinding so each proxy can only read its own namespace.
 func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
@@ -1284,54 +1188,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole()
 	}
 }
 
-// wafHttpFilterClusterScopedCRB binds the cluster-scoped ClusterRole to the WAF HTTP
-// Filter ServiceAccount in tigera-gateway.
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterScopedCRB() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: wafFilterClusterScopedRoleName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     wafFilterClusterScopedRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      wafFilterName,
-				Namespace: LegacyControllerNamespace,
-			},
-		},
-	}
-}
-
-// wafHttpFilterGatewayResourcesCRB binds the gateway-resources ClusterRole
-// cluster-wide to the SA in tigera-gateway (proxies there serve all namespaces).
-func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesCRB() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: wafFilterGatewayResourcesRoleName,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     wafFilterGatewayResourcesRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      wafFilterName,
-				Namespace: LegacyControllerNamespace,
-			},
-		},
-	}
-}
-
-// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace,
-// used by proxies that the calico-system controller deploys there.
+// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace.
 func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},

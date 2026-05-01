@@ -17,6 +17,7 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -170,7 +171,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionDeployment(),
 	)
 
-	if !c.cfg.ManagedCluster {
+	if c.cfg.ManagementCluster {
+		// Only needed on management clusters.
 		objs = append(objs, c.managedClustersWatchRoleBinding())
 	}
 	if c.cfg.Tenant.MultiTenant() {
@@ -185,6 +187,22 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// allow-tigera Tier was renamed to calico-system
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("intrusion-detection-controller", c.cfg.Namespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
+	}
+
+	if !c.cfg.ManagementCluster {
+		// These aren't needed unless we're a management cluster. Delete
+		// both variants in case a cluster switches from management to
+		// standalone (or to clean up bindings rendered by older versions).
+		objsToDelete = append(objsToDelete,
+			&rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: IntrusionDetectionManagedClustersWatchRoleBindingName, Namespace: c.cfg.Namespace},
+			},
+			&rbacv1.ClusterRoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: IntrusionDetectionManagedClustersWatchRoleBindingName},
+			},
+		)
 	}
 
 	if !c.cfg.ManagedCluster && !c.cfg.Tenant.MultiTenant() {
@@ -701,6 +719,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		{
 			Name:  "LINSEED_TOKEN",
 			Value: GetLinseedTokenPath(c.cfg.ManagedCluster),
+		},
+		{
+			Name:  "MANAGEMENT_CLUSTER",
+			Value: strconv.FormatBool(c.cfg.ManagementCluster),
 		},
 	}
 

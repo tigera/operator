@@ -90,6 +90,7 @@ var buildCommand = &cli.Command{
 		enterpriseGitBranchFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
+		versionCheckFlag,
 		extensionTimeoutFlag,
 	},
 	Before: buildBefore,

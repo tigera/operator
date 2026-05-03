@@ -191,8 +191,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentAPIServer.Image,
-					components.ComponentAPIServer.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
@@ -206,8 +206,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCSRInitContainer.Image,
-					components.ComponentTigeraCSRInitContainer.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 		})
 		It("should use images from imageset", func() {
 			installation.Spec.CertificateManagement = certificateManagement
@@ -217,9 +217,8 @@ var _ = Describe("apiserver controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/apiserver", Digest: "sha256:apiserverhash"},
+						{Image: "tigera/calico", Digest: "sha256:calicohash"},
 						{Image: "tigera/queryserver", Digest: "sha256:queryserverhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -252,8 +251,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentAPIServer.Image,
-					"sha256:apiserverhash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:calicohash")))
 			qserver := test.GetContainer(d.Spec.Template.Spec.Containers, "tigera-queryserver")
 			Expect(qserver).ToNot(BeNil())
 			Expect(qserver.Image).To(Equal(
@@ -266,8 +265,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(csrinit.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCSRInitContainer.Image,
-					"sha256:calicocsrinithash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:calicohash")))
 		})
 
 		It("should not add OwnerReference to user-supplied apiserver TLS cert secrets", func() {

@@ -244,7 +244,7 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:dashboardhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

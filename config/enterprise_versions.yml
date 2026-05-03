@@ -126,6 +126,12 @@ components:
   envoy:
     image: envoy
     version: master
+  dikastes:
+    image: dikastes
+    version: master
+  queryserver:
+    image: queryserver
+    version: master
   l7-admission-controller:
     image: l7-admission-controller
     version: master

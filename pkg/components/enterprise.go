@@ -258,6 +258,22 @@ var (
 		variant:   enterpriseVariant,
 	}
 
+	ComponentDikastes = Component{
+		Version:   "master",
+		Image:     "dikastes",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
+	ComponentQueryServer = Component{
+		Version:   "master",
+		Image:     "queryserver",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
 	ComponentL7AdmissionController = Component{
 		Version:   "master",
 		Image:     "l7-admission-controller",
@@ -413,6 +429,8 @@ var (
 		ComponentL7Collector,
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
+		ComponentDikastes,
+		ComponentQueryServer,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,

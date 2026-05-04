@@ -70,11 +70,11 @@ func ConfigureLogging(c *cli.Command) {
 	logrus.AddHook(rotateFileHook)
 }
 
-// WithLogging wraps a cli.ActionFunc with automatic log file configuration
+// WithLogging wraps a cli.BeforeFunc with automatic log file configuration
 // derived from the command's full name (e.g. "release branch" -> "release-branch.log").
-func WithLogging(action cli.ActionFunc) cli.ActionFunc {
-	return func(ctx context.Context, c *cli.Command) error {
+func WithLogging(before cli.BeforeFunc) cli.BeforeFunc {
+	return func(ctx context.Context, c *cli.Command) (context.Context, error) {
 		ConfigureLogging(c)
-		return action(ctx, c)
+		return before(ctx, c)
 	}
 }

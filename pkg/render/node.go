@@ -1213,7 +1213,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "flexvol"},
+		Command:         []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--target", "/host/driver/uds"},
 		ImagePullPolicy: ImagePullPolicy(),
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,

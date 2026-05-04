@@ -3440,7 +3440,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)))
 		}
-		Expect(flexvolContainer.Command).To(Equal([]string{"/usr/bin/calico", "component", "flexvol"}))
+		Expect(flexvolContainer.Command).To(Equal([]string{"/usr/bin/calico", "component", "flexvol", "install", "--target", "/host/driver/uds"}))
 
 		Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 		Expect(*flexvolContainer.SecurityContext.Privileged).To(BeTrue())

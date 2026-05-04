@@ -45,13 +45,11 @@ var releaseFromCommand = &cli.Command{
 		skipValidationFlag,
 	},
 	Before: releaseFromBefore,
-	Action: releaseFromAction,
+	Action: middleware.WithLogging(releaseFromAction),
 }
 
 // Pre-action for "release from" command.
 var releaseFromBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	middleware.ConfigureLogging(c)
-
 	if c.Bool(skipValidationFlag.Name) {
 		logrus.Warnf("Skipping %s validation as requested.", c.Name)
 		return ctx, nil

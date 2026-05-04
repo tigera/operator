@@ -35,9 +35,6 @@ var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
 	CSRImage string
-	// CSRImageCombined indicates that CSRImage refers to the combined calico/calico image, in which case
-	// the key-cert-provisioner entrypoint is dispatched via a Cobra subcommand rather than the image default.
-	CSRImageCombined bool
 
 	Name      string
 	Namespace string
@@ -178,7 +175,6 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 		k.DNSNames,
 		namespace,
 		securityContext,
-		k.CSRImageCombined,
 	)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer

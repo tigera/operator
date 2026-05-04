@@ -91,14 +91,8 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	// Goldmane is only ever deployed for Calico OSS, which always uses the combined calico/calico image.
-	img, ok := components.CombinedCalicoImage(c.cfg.Installation)
-	if !ok {
-		return fmt.Errorf("goldmane is only supported on Calico OSS installations")
-	}
-
 	var err error
-	c.goldmaneImage, err = components.GetReference(img, reg, path, prefix, is)
+	c.goldmaneImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 

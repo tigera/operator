@@ -108,13 +108,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-
-	// Whisker is only ever deployed for Calico OSS, which always uses the combined calico/calico image.
-	img, ok := components.CombinedCalicoImage(c.cfg.Installation)
-	if !ok {
-		return fmt.Errorf("whisker is only supported on Calico OSS installations")
-	}
-	c.whiskerBackendImage, err = components.GetReference(img, reg, path, prefix, is)
+	c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 

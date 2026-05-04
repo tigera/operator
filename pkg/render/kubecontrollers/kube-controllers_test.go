@@ -261,7 +261,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
-		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
@@ -342,7 +342,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// The Deployment should have the correct configuration.
 		dp := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
-		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name: "ENABLED_CONTROLLERS", Value: "authorization,elasticsearchconfiguration",
@@ -418,7 +418,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
-		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 	})
 	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise", func() {
 		var defaultMode int32 = 420
@@ -509,7 +509,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
 		Expect(dp.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolume))
 
-		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 	})
 
 	It("should render all es-calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
@@ -566,7 +566,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
-		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/kube-controllers:" + components.ComponentTigeraKubeControllers.Version))
+		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(HaveLen(25), "cluster role should have 25 rules")

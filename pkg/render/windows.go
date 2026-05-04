@@ -60,10 +60,9 @@ type WindowsConfiguration struct {
 }
 
 type windowsComponent struct {
-	cfg              *WindowsConfiguration
-	cniImage         string
-	nodeImage        string
-	useCombinedImage bool
+	cfg       *WindowsConfiguration
+	cniImage  string
+	nodeImage string
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -84,9 +83,6 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	} else {
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIWindows, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeWindows, reg, path, prefix, is))
-		// OSS calico-node.exe dispatches via Cobra subcommands ("node health",
-		// "node shutdown", etc.); Enterprise still uses the legacy flag style.
-		c.useCombinedImage = true
 	}
 
 	if len(errMsgs) != 0 {
@@ -751,12 +747,8 @@ func (c *windowsComponent) windowsVolumeMounts() []corev1.VolumeMount {
 
 // windowsLivenessReadinessProbes creates the node's liveness and readiness probes.
 func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
-	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
-	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
-	if c.useCombinedImage {
-		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-live"}
-		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-ready"}
-	}
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-ready"}
 
 	lp := &corev1.Probe{
 		ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: livenessCmd}},
@@ -775,14 +767,11 @@ func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *cor
 
 // windowsLifecycle creates the node's postStart and preStop hooks.
 func (c *windowsComponent) windowsLifecycle() *corev1.Lifecycle {
-	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
-	if c.useCombinedImage {
-		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "shutdown"}
+	return &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
+			Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "shutdown"},
+		}},
 	}
-	lc := &corev1.Lifecycle{
-		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
-	}
-	return lc
 }
 
 // nodeWindowsResources creates the windows node's resource requirements.

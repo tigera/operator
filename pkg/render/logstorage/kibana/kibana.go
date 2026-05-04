@@ -283,7 +283,6 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
 			Namespace,
 			sc,
-			false,
 		)
 
 		initContainers = append(initContainers, csrInitContainer)

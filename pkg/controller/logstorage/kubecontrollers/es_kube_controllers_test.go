@@ -258,13 +258,13 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 			Spec: operatorv1.ImageSetSpec{
 				Images: []operatorv1.Image{
 					{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-					{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
+					{Image: "tigera/calico", Digest: "sha256:kubecontrollershash"},
 					{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 					{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 					{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 					{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
 					{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
-					{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+					{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 				},
 			},
 		})).ToNot(HaveOccurred())
@@ -286,7 +286,7 @@ var _ = Describe("LogStorage ES kube-controllers controller", func() {
 		Expect(test.GetResource(cli, &dep)).To(BeNil())
 		kc := test.GetContainer(dep.Spec.Template.Spec.Containers, kubecontrollers.EsKubeController)
 		Expect(kc).ToNot(BeNil())
-		Expect(kc.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraKubeControllers.Image, "sha256:kubecontrollershash")))
+		Expect(kc.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, "sha256:kubecontrollershash")))
 	})
 
 	Context("External ES mode", func() {

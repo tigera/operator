@@ -196,8 +196,8 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("test-registry.com/%s%s:%s",
 				components.TigeraImagePath,
-				components.ComponentTigeraWebhooks.Image,
-				components.ComponentTigeraWebhooks.Version)))
+				components.ComponentTigeraCalico.Image,
+				components.ComponentTigeraCalico.Version)))
 	})
 
 	It("should register ManagedCluster webhook and MCM flags on management clusters", func() {

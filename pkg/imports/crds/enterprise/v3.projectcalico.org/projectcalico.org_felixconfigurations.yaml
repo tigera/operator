@@ -1478,6 +1478,18 @@ spec:
                     ExcludeL7SourceInfo - Aggregate over all other fields ignoring the source aggregated name, namespace, and type.
                   pattern: ^(?i)(IncludeL7SourceInfo|IncludeL7SourceInfoNoPort|ExcludeL7SourceInfo)?$
                   type: string
+                l7LogsFileAggregationTLSSNI:
+                  description: |-
+                    L7LogsFileAggregationTLSSNI controls whether the TLS Server Name Indication (SNI)
+                    participates in the aggregation key for L7 logs. SNI is high-cardinality (one per
+                    remote host), analogous to the HTTP url field, so this toggle plays the same role
+                    for TLS that L7LogsFileAggregationTrimURL plays for HTTP.
+                    Accepted values:
+                    IncludeL7TLSSNI - Include the SNI in the aggregation key.
+                    ExcludeL7TLSSNI - Aggregate over all other fields ignoring the SNI entirely.
+                    [Default: IncludeL7TLSSNI - SNI is part of the aggregation key]
+                  pattern: ^(?i)(IncludeL7TLSSNI|ExcludeL7TLSSNI)?$
+                  type: string
                 l7LogsFileAggregationTrimURL:
                   description: |-
                     L7LogsFileAggregationTrimURL is used to choose the type of aggregation for the url on L7 log entries.
@@ -1527,6 +1539,13 @@ spec:
                     [Default: 300s]
                   pattern: ^([0-9]+(\\.[0-9]+)?(ms|s|m|h))*$
                   type: string
+                l7ObservabilityEnabled:
+                  description: |-
+                    L7ObservabilityEnabled enables eBPF-based L7 HTTP and TLS observability.
+                    Attaches fentry/fexit probes to tcp_sendmsg / tcp_recvmsg / tcp_close,
+                    independent of the dataplane mode (works with eBPF, iptables, or
+                    nftables). Requires kernel 5.17+ (for bpf_loop). [Default: false]
+                  type: boolean
                 liveMigrationRouteConvergenceTime:
                   description: |-
                     LiveMigrationRouteConvergenceTime is the time to keep elevated route priority after a

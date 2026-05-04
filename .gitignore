@@ -103,3 +103,6 @@ ut/
 
 # Logs
 *.log
+
+# Release summary output
+hack/release/_output

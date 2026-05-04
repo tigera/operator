@@ -70,8 +70,7 @@ type component struct {
 	cfg *Configuration
 
 	// Images.
-	webhooksImage    string
-	useCombinedImage bool
+	webhooksImage string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -80,12 +79,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	if img, ok := components.CombinedCalicoImage(c.cfg.Installation); ok {
-		c.useCombinedImage = true
-		c.webhooksImage, err = components.GetReference(img, reg, path, prefix, is)
-	} else {
-		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
-	}
+	c.webhooksImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -141,6 +135,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Containers: []corev1.Container{{
 						Name:            WebhooksName,
 						Image:           c.webhooksImage,
+						Command:         []string{components.CalicoBinaryPath, "component", "webhooks"},
 						SecurityContext: securtyContext,
 						Args: []string{
 							"webhook",
@@ -178,10 +173,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				},
 			},
 		},
-	}
-
-	if c.useCombinedImage {
-		dep.Spec.Template.Spec.Containers[0].Command = []string{components.CalicoBinaryPath, "component", "webhooks"}
 	}
 
 	// On management clusters, pass flags so the ManagedCluster webhook can

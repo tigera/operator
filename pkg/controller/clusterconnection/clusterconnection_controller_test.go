@@ -248,16 +248,16 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Expect(dexC.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentGuardian.Image,
-					components.ComponentGuardian.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/guardian", Digest: "sha256:guardianhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:guardianhash"},
+						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -280,7 +280,7 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Expect(apiserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentGuardian.Image,
+					components.ComponentTigeraCalico.Image,
 					"sha256:guardianhash")))
 		})
 	})

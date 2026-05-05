@@ -4283,6 +4283,25 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                              patch:
+                                description: |-
+                                  KubernetesPatchSpec defines how to perform the patch operation.
+                                  Note that `value` can be an in-line YAML document, as can be seen in e.g. (the example of patching the Envoy proxy Deployment)[https://gateway.envoyproxy.io/docs/tasks/operations/customize-envoyproxy/#patching-deployment-for-envoyproxy].
+                                  Note also that, currently, strings containing literal JSON are _rejected_.
+                                properties:
+                                  type:
+                                    description: |-
+                                      Type is the type of merge operation to perform
+                                      By default, StrategicMerge is used as the patch type.
+                                    type: string
+                                  value:
+                                    description:
+                                      Object contains the raw configuration
+                                      for merged object
+                                    x-kubernetes-preserve-unknown-fields: true
+                                required:
+                                  - value
+                                type: object
                             type: object
                         type: object
                       name:

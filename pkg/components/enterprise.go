@@ -279,14 +279,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentTigeraPrometheusService = Component{
-		Version:   "master",
-		Image:     "prometheus-service",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentCoreOSAlertmanager = Component{
 		Version: "v0.30.1",
 		variant: enterpriseVariant,
@@ -415,7 +407,6 @@ var (
 		ComponentDikastes,
 		ComponentQueryServer,
 		ComponentPrometheus,
-		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,

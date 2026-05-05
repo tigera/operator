@@ -98,9 +98,6 @@ components:
   alertmanager:
     image: alertmanager
     version: master
-  tigera-prometheus-service:
-    image: prometheus-service
-    version: master
   deep-packet-inspection:
     image: deep-packet-inspection
     version: master

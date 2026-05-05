@@ -312,15 +312,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "tigera-prometheus-service" }}
-	ComponentTigeraPrometheusService = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "coreos-alertmanager" }}
 	ComponentCoreOSAlertmanager = Component{
 		Version: "{{ .Version }}",

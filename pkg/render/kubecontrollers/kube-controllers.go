@@ -332,7 +332,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		},
 		{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets", "ipamconfigurations"},
+			Resources: []string{"blockaffinities", "ipamblocks", "ipamhandles", "networksets", "ipamconfigurations", "ipamconfigs"},
 			Verbs:     []string{"get", "list", "create", "update", "delete", "watch"},
 		},
 		{

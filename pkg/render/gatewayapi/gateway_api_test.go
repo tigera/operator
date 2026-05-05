@@ -803,6 +803,129 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
 	})
 
+	It("passes GatewayService.Spec.Patch through to the EnvoyProxy's KubernetesServiceSpec", func() {
+		patchYAML := `
+type: JSONMerge
+value:
+  spec:
+    ports:
+    - name: http-80
+      nodePort: 30008
+      port: 80
+      protocol: TCP
+      targetPort: 10080
+    - name: https-443
+      nodePort: 30004
+      port: 443
+      protocol: TCP
+      targetPort: 10443
+`
+		patch := &envoyapi.KubernetesPatchSpec{}
+		Expect(yaml.Unmarshal([]byte(patchYAML), patch)).NotTo(HaveOccurred())
+
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							Patch: patch,
+						},
+					},
+				}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		ep, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ep.Spec.Provider).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService.Patch).To(Equal(patch))
+	})
+
+	// https://github.com/tigera/operator/issues/4717
+	It("supports setting ipFamilyPolicy on the gateway Service via GatewayService.Spec.Patch", func() {
+		patchYAML := `
+type: StrategicMerge
+value:
+  spec:
+    ipFamilyPolicy: RequireDualStack
+`
+		patch := &envoyapi.KubernetesPatchSpec{}
+		Expect(yaml.Unmarshal([]byte(patchYAML), patch)).NotTo(HaveOccurred())
+
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							Patch: patch,
+						},
+					},
+				}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		ep, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ep.Spec.Provider).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService.Patch).To(Equal(patch))
+	})
+
+	// https://github.com/tigera/operator/issues/4718
+	It("supports setting healthCheckNodePort on the gateway Service via GatewayService.Spec.Patch", func() {
+		patchYAML := `
+type: StrategicMerge
+value:
+  spec:
+    healthCheckNodePort: 12345
+`
+		patch := &envoyapi.KubernetesPatchSpec{}
+		Expect(yaml.Unmarshal([]byte(patchYAML), patch)).NotTo(HaveOccurred())
+
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							Patch: patch,
+						},
+					},
+				}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		ep, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ep.Spec.Provider).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService.Patch).To(Equal(patch))
+	})
+
 	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.Calico,

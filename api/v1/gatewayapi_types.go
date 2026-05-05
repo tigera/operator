@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -508,4 +509,7 @@ type GatewayServiceSpec struct {
 
 	// +optional
 	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
+
+	// +optional
+	Patch *envoyapi.KubernetesPatchSpec `json:"patch,omitempty"`
 }

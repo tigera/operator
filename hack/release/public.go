@@ -19,6 +19,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
 	"github.com/urfave/cli/v3"
 )
 
@@ -38,7 +40,7 @@ var publicCommand = &cli.Command{
 }
 
 var publicBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	configureLogging(c)
+	middleware.ConfigureLogging(c)
 
 	var err error
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
@@ -61,7 +63,7 @@ var publicBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (con
 })
 
 var publicAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	repoRootDir, err := gitDir()
+	repoRootDir, err := command.GitDir()
 	if err != nil {
 		return fmt.Errorf("getting repo root dir: %w", err)
 	}

@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"fmt"
 	"html/template"
@@ -29,7 +30,12 @@ import (
 	"github.com/blang/semver/v4"
 	"github.com/google/go-github/v53/github"
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/versions"
 )
+
+//go:embed templates/release-notes.md.gotmpl
+var releaseNoteTemplate string
 
 // Issue labels
 const (
@@ -294,15 +300,20 @@ func (r *GithubRelease) collectReleaseNotes(ctx context.Context, local bool) (*R
 	data := &ReleaseNoteData{
 		Date: time.Now().Format("02 Jan 2006"), // assume today's date for the release.
 	}
-	dir, err := gitDir()
+	dir, err := command.GitDir()
 	if err != nil {
 		return data, fmt.Errorf("getting git directory: %s", err)
 	}
-	versions, err := calicoVersions(fmt.Sprintf("%s/%s", r.Org, r.Repo), dir, r.Version, local)
+	var vers versions.Versions
+	if local {
+		vers, err = versions.ConfigVersions(dir)
+	} else {
+		vers, err = versions.GitRefConfigVersions(r.Version)
+	}
 	if err != nil {
 		return data, fmt.Errorf("retrieving release versions: %s", err)
 	}
-	data.Versions = versions
+	data.Versions = vers.ToMap()
 	log := logrus.WithField("org", r.Org).WithField("repo", r.Repo).WithField("version", r.Version)
 	issues, err := r.releaseNoteIssues(ctx)
 	if err != nil {

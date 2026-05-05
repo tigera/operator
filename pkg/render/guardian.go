@@ -142,11 +142,7 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
-	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
-	}
+	c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -501,6 +497,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 		{
 			Name:            GuardianContainerName,
 			Image:           c.image,
+			Command:         []string{components.CalicoBinaryPath, "component", "guardian"},
 			ImagePullPolicy: ImagePullPolicy(),
 			Env:             envVars,
 			VolumeMounts:    c.volumeMounts(),

@@ -141,6 +141,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	csiContainer := corev1.Container{
 		Name:            CSIContainerName,
 		Image:           c.csiImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "csi"},
 		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
@@ -182,6 +183,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	registrarContainer := corev1.Container{
 		Name:            CSIRegistrarContainerName,
 		Image:           c.csiRegistrarImage,
+		Command:         []string{"/usr/bin/csi-node-driver-registrar"},
 		ImagePullPolicy: ImagePullPolicy(),
 		Args: []string{
 			"--v=5",
@@ -377,32 +379,12 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.csiImage, err = components.GetReference(components.ComponentTigeraCSI, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-
-		c.csiRegistrarImage, err = components.GetReference(components.ComponentTigeraCSINodeDriverRegistrar, reg, path, prefix, is)
-	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSIFIPS, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrarFIPS, reg, path, prefix, is)
-		} else {
-			c.csiImage, err = components.GetReference(components.ComponentCalicoCSI, reg, path, prefix, is)
-			if err != nil {
-				return err
-			}
-
-			c.csiRegistrarImage, err = components.GetReference(components.ComponentCalicoCSIRegistrar, reg, path, prefix, is)
-		}
+	c.csiImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if err != nil {
+		return err
 	}
-
-	return err
+	c.csiRegistrarImage = c.csiImage
+	return nil
 }
 
 func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {

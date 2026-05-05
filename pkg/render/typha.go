@@ -99,19 +99,8 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
-	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
-		} else {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
-		}
-	}
-	if err != nil {
-		return err
-	}
-	return nil
+	c.typhaImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	return err
 }
 
 func (c *typhaComponent) SupportedOSType() rmeta.OSType {
@@ -573,6 +562,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		Name:            TyphaContainerName,
 		Image:           c.typhaImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "typha"},
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),
 		VolumeMounts:    c.typhaVolumeMounts(),

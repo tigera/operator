@@ -34,7 +34,8 @@ import (
 var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
-	CSRImage  string
+	CSRImage string
+
 	Name      string
 	Namespace string
 	// Golang's x509 package uses the 'any' type for all private and public keys. See x509.CreateCertificate() for more.
@@ -173,7 +174,8 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 		corev1.TLSCertKey,
 		k.DNSNames,
 		namespace,
-		securityContext)
+		securityContext,
+	)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer
 }

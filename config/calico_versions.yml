@@ -23,8 +23,6 @@ components:
     version: master
   csi:
     version: master
-  csi-node-driver-registrar:
-    version: master
   key-cert-provisioner:
     version: master
   whisker:
@@ -48,4 +46,6 @@ components:
   istio-proxyv2:
     version: master
   webhooks:
+    version: master
+  calico:
     version: master

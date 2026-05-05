@@ -16,6 +16,7 @@ package kubecontrollers
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -66,6 +67,10 @@ const (
 	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
 	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
 	KubeControllerPrometheusTLSSecret                  = "calico-kube-controllers-metrics-tls"
+
+	// KubeControllersHealthPort is the port the kube-controllers HealthAggregator listens on when run from the
+	// combined calico binary. The legacy per-component image uses file-based health checks instead.
+	KubeControllersHealthPort = 9440
 )
 
 type KubeControllersConfiguration struct {
@@ -236,15 +241,7 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.image, err = components.GetReference(components.ComponentTigeraKubeControllers, reg, path, prefix, is)
-	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.image, err = components.GetReference(components.ComponentCalicoKubeControllersFIPS, reg, path, prefix, is)
-		} else {
-			c.image, err = components.GetReference(components.ComponentCalicoKubeControllers, reg, path, prefix, is)
-		}
-	}
+	c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -589,36 +586,40 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	sc.RunAsUser = ptr.To(int64(999))
 	sc.RunAsGroup = ptr.To(int64(0))
 
+	readinessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", KubeControllersHealthPort), "--type=readiness"},
+			},
+		},
+		TimeoutSeconds: 10,
+	}
+	livenessProbe := &corev1.Probe{
+		ProbeHandler: corev1.ProbeHandler{
+			Exec: &corev1.ExecAction{
+				Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", KubeControllersHealthPort), "--type=liveness"},
+			},
+		},
+		FailureThreshold:    6,
+		InitialDelaySeconds: 10,
+		TimeoutSeconds:      10,
+	}
+	containerCommand := []string{
+		components.CalicoBinaryPath,
+		"component",
+		"kube-controllers",
+		fmt.Sprintf("--health-port=%d", KubeControllersHealthPort),
+	}
+
 	container := corev1.Container{
 		Name:            c.kubeControllerName,
 		Image:           c.image,
+		Command:         containerCommand,
 		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
 		Resources:       c.kubeControllersResources(),
-		ReadinessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/usr/bin/check-status",
-						"-r",
-					},
-				},
-			},
-			TimeoutSeconds: 10,
-		},
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				Exec: &corev1.ExecAction{
-					Command: []string{
-						"/usr/bin/check-status",
-						"-l",
-					},
-				},
-			},
-			FailureThreshold:    6,
-			InitialDelaySeconds: 10,
-			TimeoutSeconds:      10,
-		},
+		ReadinessProbe:  readinessProbe,
+		LivenessProbe:   livenessProbe,
 		SecurityContext: sc,
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
@@ -638,9 +639,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace, sc))
 	}
-	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
+	tolerations := appendUniqueTolerations(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+		tolerations = appendUniqueTolerations(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 	podSpec := corev1.PodSpec{
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -682,6 +683,16 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		rcomp.ApplyDeploymentOverrides(&d, overrides)
 	}
 	return &d
+}
+
+func appendUniqueTolerations(tolerations []corev1.Toleration, toAppend ...corev1.Toleration) []corev1.Toleration {
+	for _, toleration := range toAppend {
+		if slices.Contains(tolerations, toleration) {
+			continue
+		}
+		tolerations = append(tolerations, toleration)
+	}
+	return tolerations
 }
 
 func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.ClusterRoleBinding {

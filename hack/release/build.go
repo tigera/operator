@@ -25,30 +25,11 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
+	"github.com/tigera/operator/hack/release/internal/versions"
 	"github.com/urfave/cli/v3"
 )
-
-// Component image variables
-const (
-	calicoRegistryConfigKey      = "CalicoRegistry"
-	calicoImagePathConfigKey     = "CalicoImagePath"
-	enterpriseRegistryConfigKey  = "TigeraRegistry"
-	enterpriseImagePathConfigKey = "TigeraImagePath"
-	operatorRegistryConfigKey    = "OperatorRegistry"
-	operatorImagePathConfigKey   = "OperatorImagePath"
-)
-
-var componentImageConfigRelPath = "pkg/components/images.go"
-
-// Mapping of component image keys to descriptions
-var componentImageConfigMap = map[string]string{
-	calicoRegistryConfigKey:      "Calico Registry",
-	calicoImagePathConfigKey:     "Calico Image Path",
-	enterpriseRegistryConfigKey:  "Enterprise Registry",
-	enterpriseImagePathConfigKey: "Enterprise Image Path",
-	operatorRegistryConfigKey:    "Operator Registry",
-	operatorImagePathConfigKey:   "Operator Image Path",
-}
 
 // Build context keys
 const (
@@ -90,6 +71,7 @@ var buildCommand = &cli.Command{
 		enterpriseGitBranchFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
+		versionCheckFlag,
 		extensionTimeoutFlag,
 	},
 	Before: buildBefore,
@@ -103,7 +85,7 @@ var buildCleanupFns []func(ctx context.Context) error
 
 // Pre-action for release build command.
 var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	configureLogging(c)
+	middleware.ConfigureLogging(c)
 
 	// Start with a clean slate for build cleanup functions.
 	buildCleanupFns = nil
@@ -202,7 +184,7 @@ var buildBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (cont
 
 // Action for release build command.
 var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	repoRootDir, err := gitDir()
+	repoRootDir, err := command.GitDir()
 	if err != nil {
 		return fmt.Errorf("getting git directory: %w", err)
 	}
@@ -242,7 +224,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 		buildLog = buildLog.WithField("hashrelease", true)
 		buildEnv = append(buildEnv, fmt.Sprintf("GIT_VERSION=%s", c.String(versionFlag.Name)))
 		buildCleanupFns = append(buildCleanupFns, func(ctx context.Context) error {
-			if out, err := gitInDir(repoRootDir, append([]string{"checkout", "-f"}, changedFiles...)...); err != nil {
+			if out, err := command.GitInDir(repoRootDir, append([]string{"checkout", "-f"}, defaultChangedFiles...)...); err != nil {
 				logrus.Error(out)
 				return fmt.Errorf("resetting git state in repo after hashrelease build: %w", err)
 			}
@@ -258,7 +240,7 @@ var buildAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error
 
 	// Build the Operator and verify the build
 	buildLog.Info("Building Operator")
-	if out, err := makeInDir(repoRootDir, "release-build", buildEnv...); err != nil {
+	if out, err := command.MakeInDir(repoRootDir, "release-build", buildEnv...); err != nil {
 		buildLog.Error(out)
 		return fmt.Errorf("building Operator: %w", err)
 	}
@@ -298,7 +280,7 @@ var buildAfter = cli.AfterFunc(func(ctx context.Context, c *cli.Command) error {
 // List images in the built operator image for debugging purposes.
 func listImages(registry, image, version string) {
 	fqImage := fmt.Sprintf("%s:%s-%s", path.Join(registry, image), version, runtime.GOARCH)
-	out, err := runCommand("docker", []string{"run", "--rm", fqImage, "--print-images", "list"}, nil)
+	out, err := command.Run("docker", []string{"run", "--rm", fqImage, "--print-images", "list"}, nil)
 	if err != nil {
 		logrus.Error(out)
 		logrus.Errorf("listing images: %v", err)
@@ -310,7 +292,7 @@ func listImages(registry, image, version string) {
 // Verify that the built operator image contains the expected version.
 func assertOperatorImageVersion(registry, image, expectedVersion string) error {
 	fqImage := fmt.Sprintf("%s:%s-%s", path.Join(registry, image), expectedVersion, runtime.GOARCH)
-	out, err := runCommand("docker", []string{"run", "--rm", fqImage, "--version"}, nil)
+	out, err := command.Run("docker", []string{"run", "--rm", fqImage, "--version"}, nil)
 	if err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("getting operator image version: %w", err)
@@ -336,33 +318,33 @@ var setupHashreleaseBuild = func(ctx context.Context, c *cli.Command, repoRootDi
 	image := c.String(imageFlag.Name)
 	if image != defaultImage {
 		imageParts := strings.SplitN(c.String(imageFlag.Name), "/", 2)
-		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, operatorImagePathConfigKey, addTrailingSlash(imageParts[0])); err != nil {
+		if err := versions.ModifyComponentImageConfig(repoRootDir, versions.ComponentImageConfigRelPath, versions.OperatorImagePathConfigKey, addTrailingSlash(imageParts[0])); err != nil {
 			return fmt.Errorf("updating Operator image path: %w", err)
 		}
 	}
 	registry := c.String(registryFlag.Name)
 	if registry != "" && registry != defaultRegistry {
-		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, operatorRegistryConfigKey, addTrailingSlash(registry)); err != nil {
+		if err := versions.ModifyComponentImageConfig(repoRootDir, versions.ComponentImageConfigRelPath, versions.OperatorRegistryConfigKey, addTrailingSlash(registry)); err != nil {
 			return fmt.Errorf("updating Operator registry: %w", err)
 		}
 	}
 	if registry := c.String(calicoRegistryFlag.Name); registry != "" {
-		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, calicoRegistryConfigKey, addTrailingSlash(registry)); err != nil {
+		if err := versions.ModifyComponentImageConfig(repoRootDir, versions.ComponentImageConfigRelPath, versions.CalicoRegistryConfigKey, addTrailingSlash(registry)); err != nil {
 			return fmt.Errorf("updating Calico registry: %w", err)
 		}
 	}
 	if imagePath := c.String(calicoImagePathFlag.Name); imagePath != "" {
-		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, calicoImagePathConfigKey, imagePath); err != nil {
+		if err := versions.ModifyComponentImageConfig(repoRootDir, versions.ComponentImageConfigRelPath, versions.CalicoImagePathConfigKey, imagePath); err != nil {
 			return fmt.Errorf("updating Calico image path: %w", err)
 		}
 	}
 	if registry := c.String(enterpriseRegistryFlag.Name); registry != "" {
-		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, addTrailingSlash(registry)); err != nil {
+		if err := versions.ModifyComponentImageConfig(repoRootDir, versions.ComponentImageConfigRelPath, versions.EnterpriseRegistryConfigKey, addTrailingSlash(registry)); err != nil {
 			return fmt.Errorf("updating Enterprise registry: %w", err)
 		}
 	}
 	if imagePath := c.String(enterpriseImagePathFlag.Name); imagePath != "" {
-		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseImagePathConfigKey, imagePath); err != nil {
+		if err := versions.ModifyComponentImageConfig(repoRootDir, versions.ComponentImageConfigRelPath, versions.EnterpriseImagePathConfigKey, imagePath); err != nil {
 			return fmt.Errorf("updating Enterprise image path: %w", err)
 		}
 	}
@@ -380,8 +362,8 @@ var setupHashreleaseBuild = func(ctx context.Context, c *cli.Command, repoRootDi
 		genMakeTargets = append(genMakeTargets, "gen-versions-calico")
 		switch bt {
 		case versionBuild:
-			if err := updateConfigVersions(repoRootDir, calicoConfig, c.String(calicoVersionFlag.Name)); err != nil {
-				return fmt.Errorf("updating Calico config versions: %w", err)
+			if err := versions.UpdateCalicoConfigVersion(repoRootDir, c.String(calicoVersionFlag.Name)); err != nil {
+				return err
 			}
 		case versionsBuild:
 			genEnv = append(genEnv, fmt.Sprintf("OS_VERSIONS=%s", c.String(calicoVersionsConfigFlag.Name)))
@@ -391,33 +373,16 @@ var setupHashreleaseBuild = func(ctx context.Context, c *cli.Command, repoRootDi
 		genMakeTargets = append(genMakeTargets, "gen-versions-enterprise")
 		switch bt {
 		case versionBuild:
-			if err := updateConfigVersions(repoRootDir, enterpriseConfig, c.String(enterpriseVersionFlag.Name)); err != nil {
-				return fmt.Errorf("updating Enterprise config versions: %w", err)
+			if err := versions.UpdateEnterpriseConfigVersion(repoRootDir, c.String(enterpriseVersionFlag.Name)); err != nil {
+				return err
 			}
 		case versionsBuild:
 			genEnv = append(genEnv, fmt.Sprintf("EE_VERSIONS=%s", c.String(enterpriseVersionsConfigFlag.Name)))
 		}
 	}
-	if out, err := makeInDir(repoRootDir, strings.Join(genMakeTargets, " "), genEnv...); err != nil {
+	if out, err := command.MakeInDir(repoRootDir, strings.Join(genMakeTargets, " "), genEnv...); err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("generating versions: %w", err)
-	}
-	return nil
-}
-
-// Modify variables in the specified component image config file.
-func modifyComponentImageConfig(repoRootDir, imageConfigRelPath, configKey, newValue string) error {
-	// Check the configKey is valid
-	desc, ok := componentImageConfigMap[configKey]
-	if !ok {
-		return fmt.Errorf("invalid component image config key: %s", configKey)
-	}
-
-	logrus.WithField("repoDir", repoRootDir).WithField(configKey, newValue).Infof("Updating %s in %s", desc, imageConfigRelPath)
-
-	if out, err := runCommandInDir(repoRootDir, "sed", []string{"-i", fmt.Sprintf(`s|%[1]s.*=.*".*"|%[1]s = "%[2]s"|`, regexp.QuoteMeta(configKey), regexp.QuoteMeta(newValue)), imageConfigRelPath}, nil); err != nil {
-		logrus.Error(out)
-		return fmt.Errorf("failed to update %s in %s: %w", desc, imageConfigRelPath, err)
 	}
 	return nil
 }
@@ -518,12 +483,12 @@ func (r *hashreleaseRepo) clone() (string, error) {
 	}).Infof("Cloning %s repo at git hash", r.Product)
 
 	// Create a treeless clone that gives access to the commit history without downloading all the blobs.
-	if _, err := git("clone", "--filter=tree:0", "--no-checkout", "-b", r.branch, fmt.Sprintf("git@github.com:%s.git", r.repo), repoTmpDir); err != nil {
+	if _, err := command.Git("clone", "--filter=tree:0", "--no-checkout", "-b", r.branch, fmt.Sprintf("git@github.com:%s.git", r.repo), repoTmpDir); err != nil {
 		return "", fmt.Errorf("cloning %s git repo intotemp dir: %w", r.Product, err)
 	}
 
 	// Detached checkout of the commit we want; this will automatically fetch whatever blobs we need
-	if _, err := gitInDir(repoTmpDir, "switch", "--detach", gitHash); err != nil {
+	if _, err := command.GitInDir(repoTmpDir, "switch", "--detach", gitHash); err != nil {
 		return "", fmt.Errorf("switching %s repo to detached commit %s: %w", r.Product, gitHash, err)
 	}
 	logrus.WithField("dir", repoTmpDir).Debugf("Successfully cloned %s repo", r.Product)

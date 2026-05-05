@@ -408,8 +408,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraKubeControllers.Image,
-						components.ComponentTigeraKubeControllers.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 
 				d = appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -425,16 +425,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(typha.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraTypha.Image,
-						components.ComponentTigeraTypha.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						components.ComponentTigeraCSRInitContainer.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -458,29 +458,29 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(fv.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraFlexVolume.Image,
-						components.ComponentTigeraFlexVolume.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCNI.Image,
-						components.ComponentTigeraCNI.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						components.ComponentTigeraCSRInitContainer.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						components.ComponentTigeraCSRInitContainer.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
 				Expect(bpfInit.Image).To(Equal(
@@ -495,14 +495,8 @@ var _ = Describe("Testing core-controller installation", func() {
 					ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
-							{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
-							{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
+							{Image: "tigera/calico", Digest: "sha256:tigeracalicohash"},
 							{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
-							{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
-							{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
-							{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-							{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
-							{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 						},
 					},
 				}
@@ -525,8 +519,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraKubeControllers.Image,
-						"sha256:tigerakubecontrollerhash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 
 				d = appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -542,16 +536,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(typha.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraTypha.Image,
-						"sha256:tigeratyphahash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						"sha256:calicocsrinithash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -575,29 +569,29 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(fv.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraFlexVolume.Image,
-						"sha256:calicoflexvolhash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCNI.Image,
-						"sha256:tigeracnihash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						"sha256:calicocsrinithash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						"sha256:calicocsrinithash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
@@ -647,8 +641,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraKubeControllers.Image,
-						components.ComponentTigeraKubeControllers.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 			})
 
 			It("should update version", func() {

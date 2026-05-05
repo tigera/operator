@@ -206,8 +206,8 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCSRInitContainer.Image,
-					components.ComponentTigeraCSRInitContainer.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -226,7 +226,7 @@ var _ = Describe("packet capture controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
+						{Image: "tigera/calico", Digest: "sha256:calicocsrinithash"},
 						{Image: "tigera/packetcapture", Digest: "sha256:packetcapturehash"},
 					},
 				},
@@ -256,7 +256,7 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCalico.Image,
 					"sha256:calicocsrinithash")))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},

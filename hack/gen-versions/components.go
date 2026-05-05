@@ -41,7 +41,6 @@ var (
 		"calicoctl":                   "ctl",
 		"flexvol":                     "pod2daemon-flexvol",
 		"csi":                         "csi",
-		"csi-node-driver-registrar":   "node-driver-registrar",
 		"typha":                       "typha",
 		"key-cert-provisioner":        "key-cert-provisioner",
 		"apiserver":                   "apiserver",
@@ -64,10 +63,10 @@ var (
 		"istio-ztunnel":               "istio-ztunnel",
 		"istio-proxyv2":               "istio-proxyv2",
 		"webhooks":                    "webhooks",
+		"calico":                      "calico",
 	}
 
 	ignoredImages = map[string]struct{}{
-		"calico":            {},
 		"networking-calico": {},
 		"calico-private":    {},
 		"manager-proxy":     {},

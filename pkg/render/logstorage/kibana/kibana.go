@@ -243,6 +243,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		"xpack.fleet.isAirGapped":    true,
 		"xpack.fleet.packages":       []string{},
 		"xpack.fleet.registryUrl":    "http://localhost:5601",
+		// Without this, upgrades from Kibana 7.x crashloop on orphan `ingest_manager_settings` docs.
+		"migrations.discardUnknownObjects": components.ComponentEckKibana.Version,
 		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
 		// See: https://www.elastic.co/guide/en/kibana/8.19/settings.html
 		"newsfeed.enabled": false,
@@ -280,7 +282,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			corev1.TLSCertKey,
 			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
 			Namespace,
-			sc)
+			sc,
+		)
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{

@@ -17,21 +17,14 @@ package main
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
+	"github.com/tigera/operator/hack/release/internal/versions"
 	"github.com/urfave/cli/v3"
-	"gopkg.in/yaml.v3"
 )
-
-// Patterns for components to exclude from version updates
-var excludedComponentsPatterns = []string{
-	`^coreos-.*`,
-	`^eck-.*`,
-}
 
 // Command to prepare repo for a new release.
 var prepCommand = &cli.Command{
@@ -62,7 +55,7 @@ to point to local repositories for Calico and Enterprise respectively.`,
 	},
 	Before: prepBefore,
 	Action: prepAction,
-	After:  branchAfter,
+	After:  branchCutAfter,
 }
 
 // validatePrepRefs checks the required refs for release prep:
@@ -83,11 +76,11 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 	if calicoVersion != "" {
 		return ctx, nil
 	}
-	dir, err := gitDir()
+	dir, err := command.GitDir()
 	if err != nil {
 		return ctx, fmt.Errorf("error getting git directory: %w", err)
 	}
-	versions, err := calicoConfigVersions(dir, calicoConfig)
+	versions, err := versions.CalicoConfigVersions(dir)
 	if err != nil {
 		return ctx, fmt.Errorf("error retrieving Calico version: %w", err)
 	}
@@ -95,7 +88,7 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 	if valid, err := isReleaseVersionFormat(calicoVersion); err != nil {
 		return ctx, fmt.Errorf("error validating Calico version format: %w", err)
 	} else if !valid {
-		return ctx, fmt.Errorf("every release must contain a released Calico version, but found %s in %s", calicoVersion, calicoConfig)
+		return ctx, fmt.Errorf("every release must contain a released Calico version, but found %s", calicoVersion)
 	}
 
 	// check that the ref for calico and/or enterprise provided exists as a tag in the specified remote repository
@@ -116,11 +109,11 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 			logrus.Warnf("Local directory provided for %s, skipping remote ref validation", check.flag)
 			continue
 		}
-		out, err := git("ls-remote", "--tags", fmt.Sprintf("git@github.com:%s", check.repo), check.tag)
+		out, err := command.GitLsRemoteTags(fmt.Sprintf("git@github.com:%s", check.repo), check.tag)
 		if err != nil {
 			return ctx, fmt.Errorf("checking if ref %q exists in %s: %w", check.tag, check.repo, err)
 		}
-		if !refExistsInRemote(out, check.tag) {
+		if !command.GitRefExistsInRemote(out, check.tag) {
 			return ctx, fmt.Errorf("ref %q not found as a tag in %s", check.tag, check.repo)
 		}
 	}
@@ -146,7 +139,7 @@ var validatePrepRefs = func(ctx context.Context, c *cli.Command) (context.Contex
 
 // prepContextValuesFunc sets context values for the prep command based on CLI flags.
 var prepContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	baseBranch, err := git("branch", "--show-current")
+	baseBranch, err := command.Git("branch", "--show-current")
 	if err != nil {
 		return ctx, fmt.Errorf("getting current branch: %w", err)
 	}
@@ -175,7 +168,7 @@ var prepContextValuesFunc = func(ctx context.Context, c *cli.Command) (context.C
 var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
 	var err error
 
-	ctx, err = branchBeforeCommon(ctx, c, prepContextValuesFunc, validatePrepRefs)
+	ctx, err = branchCutBeforeCommon(ctx, c, prepContextValuesFunc, validatePrepRefs)
 	if err != nil {
 		return ctx, err
 	}
@@ -188,7 +181,7 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 })
 
 // Action executed for release prep command.
-var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
+var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command) error {
 	baseBranch, err := contextString(ctx, baseBranchCtxKey)
 	if err != nil {
 		return err
@@ -201,7 +194,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	if err != nil {
 		return err
 	}
-	repoRootDir, err := branchActionCommon(ctx, c, fmt.Sprintf("build: %s release", version))
+	repoRootDir, err := branchCutActionCommon(ctx, c, nil, fmt.Sprintf("build: %s release", version))
 	if err != nil {
 		return err
 	}
@@ -216,13 +209,13 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	// Push branch to remote
 	gitRemote := c.String(gitRemoteFlag.Name)
 	logrus.Debugf("Pushing branch %s to %s", prepBranch, gitRemote)
-	if out, err := git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
+	if out, err := command.Git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
 		logrus.Error(out)
 		return fmt.Errorf("error pushing branch %s to remote %s: %w", prepBranch, gitRemote, err)
 	}
 
 	// Attempt to create PR for the release prep branch
-	remoteURL, err := git("config", "--get", fmt.Sprintf("remote.%s.url", gitRemote))
+	remoteURL, err := command.Git("config", "--get", fmt.Sprintf("remote.%s.url", gitRemote))
 	if err != nil {
 		return fmt.Errorf("error getting remote URL for %s: %w", gitRemote, err)
 	}
@@ -260,7 +253,7 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 		}...)
 	}
 	logrus.WithField("args", strings.Join(args, " ")).Debug("Creating PR for release preparation")
-	if pr, err := runCommandInDir(repoRootDir, "hack/bin/gh", args, nil); err != nil {
+	if pr, err := command.RunInDir(repoRootDir, "hack/bin/gh", args, nil); err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
 			return fmt.Errorf("failed to create PR: %w", err)
 		}
@@ -277,90 +270,3 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 	}
 	return manageStreamMilestone(ctx, c.String(githubTokenFlag.Name))
 })
-
-func excludedComponent(name string) bool {
-	for _, pattern := range excludedComponentsPatterns {
-		matched, err := regexp.MatchString(pattern, name)
-		if err != nil {
-			continue
-		}
-		if matched {
-			return true
-		}
-	}
-	return false
-}
-
-// Update the versions in the given config file located in dir to the specified version
-// while preserving comments and ordering in the YAML file.
-func updateConfigVersions(dir, relPath, version string) error {
-	absPath := filepath.Join(dir, relPath)
-	content, err := os.ReadFile(absPath)
-	if err != nil {
-		return fmt.Errorf("error reading %s: %w", absPath, err)
-	}
-
-	// Use yaml.Node to preserve comments and order when modifying the file
-	var doc yaml.Node
-	if err := yaml.Unmarshal(content, &doc); err != nil {
-		return fmt.Errorf("error parsing %s: %w", relPath, err)
-	}
-	var root *yaml.Node
-	if doc.Kind == yaml.DocumentNode && len(doc.Content) > 0 {
-		root = doc.Content[0]
-	} else {
-		root = &doc
-	}
-	if root.Kind != yaml.MappingNode {
-		return fmt.Errorf("unexpected YAML structure in %s: root is not a mapping", relPath)
-	}
-	for i := 0; i < len(root.Content); i += 2 {
-		keyNode := root.Content[i]
-		valNode := root.Content[i+1]
-
-		// Update title
-		if strings.EqualFold(keyNode.Value, "title") {
-			valNode.Value = version
-			valNode.Tag = "!!str" // ensure it is treated as a string
-			continue
-		}
-
-		// Update component versions
-		if strings.EqualFold(keyNode.Value, "components") && valNode.Kind == yaml.MappingNode {
-			for j := 0; j < len(valNode.Content); j += 2 {
-				nameNode := valNode.Content[j]
-				compNode := valNode.Content[j+1] // should be a mapping node
-
-				// Skip components that are excluded from version updates
-				if excludedComponent(nameNode.Value) {
-					continue
-				}
-
-				// Find "version" node and update its value
-				for k := 0; k < len(compNode.Content); k += 2 {
-					kNode := compNode.Content[k]
-					vNode := compNode.Content[k+1]
-					if strings.EqualFold(kNode.Value, "version") {
-						vNode.Value = version
-						vNode.Tag = "!!str"
-						break
-					}
-				}
-			}
-		}
-	}
-
-	// Write updated YAML preserving node order and original comments.
-	file, err := os.OpenFile(absPath, os.O_WRONLY|os.O_TRUNC|os.O_CREATE, 0o644)
-	if err != nil {
-		return fmt.Errorf("error opening %s for writing: %w", absPath, err)
-	}
-	defer func() { _ = file.Close() }()
-	enc := yaml.NewEncoder(file)
-	defer func() { _ = enc.Close() }()
-	enc.SetIndent(2)
-	if err := enc.Encode(&doc); err != nil {
-		return fmt.Errorf("error writing updated versions to %s: %w", absPath, err)
-	}
-	return nil
-}

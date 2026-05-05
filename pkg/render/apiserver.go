@@ -166,11 +166,17 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	errMsgs := []string{}
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.apiServerImage, err = components.GetReference(components.ComponentAPIServer, reg, path, prefix, is)
+	enterprise := c.cfg.Installation.Variant.IsEnterprise()
+	if enterprise || c.cfg.RequiresAggregationServer {
+		c.apiServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
+	}
+
+	if enterprise {
+		// queryserver and dikastes don't yet ship as part of the combined calico image
+		// in enterprise, so resolve them from their own component images.
 		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
@@ -185,18 +191,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 				errMsgs = append(errMsgs, err.Error())
 			}
 			c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-		}
-	} else if c.cfg.RequiresAggregationServer {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServerFIPS, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-		} else {
-			c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
@@ -1179,6 +1173,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServer := corev1.Container{
 		Name:            string(APIServerContainerName),
 		Image:           c.apiServerImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "apiserver"},
 		ImagePullPolicy: ImagePullPolicy(),
 		Args:            c.startUpArgs(),
 		Env:             env,

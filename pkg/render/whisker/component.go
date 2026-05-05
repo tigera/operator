@@ -108,13 +108,8 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-
-	c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	return err
 }
 
 func (c *Component) SupportedOSType() rmeta.OSType {
@@ -203,6 +198,7 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 		Name:            WhiskerBackendContainerName,
 		Image:           c.whiskerBackendImage,
 		ImagePullPolicy: render.ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},

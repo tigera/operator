@@ -15,24 +15,15 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	_ "embed"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
-	"github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
-)
 
-//go:embed templates/release-notes.md.gotmpl
-var releaseNoteTemplate string
+	"github.com/tigera/operator/hack/release/internal/versions"
+)
 
 var (
 	defaultRegistry = quayRegistry
@@ -45,12 +36,6 @@ const (
 
 	mainRepo      = "tigera/operator"
 	operatorImage = "tigera/operator"
-
-	tmplGithubFileURL = `https://github.com/{gitRepo}/raw/{gitHashOrTag}/{filePath}`
-
-	configDir        = "config"
-	calicoConfig     = configDir + "/calico_versions.yml"
-	enterpriseConfig = configDir + "/enterprise_versions.yml"
 
 	releaseFormat           = `^v\d+\.\d+\.\d+$`
 	enterpriseReleaseFormat = `^v\d+\.\d+\.\d+(-\d+\.\d+)?$`
@@ -77,74 +62,9 @@ func contextString(ctx context.Context, key contextKey) (string, error) {
 	return v, nil
 }
 
-type Component struct {
-	Version string `yaml:"version"`
-	Image   string `yaml:"image,omitempty"`
-}
-
-type CalicoVersion struct {
-	Title      string               `yaml:"title"`
-	Components map[string]Component `yaml:"components"`
-}
-
-func gitVersion() (string, error) {
-	return git("describe", "--tags", "--always", "--long", "--abbrev=12", "--dirty")
-}
-
-func gitDir() (string, error) {
-	return git("rev-parse", "--show-toplevel")
-}
-
-func git(args ...string) (string, error) {
-	return runCommand("git", args, nil)
-}
-
-func gitInDir(dir string, args ...string) (string, error) {
-	return runCommandInDir(dir, "git", args, nil)
-}
-
-func makeInDir(dir string, targets string, env ...string) (string, error) {
-	logrus.WithFields(logrus.Fields{
-		"targets": targets,
-		"dir":     dir,
-	}).Info("Running make")
-	return runCommandInDir(dir, "make", strings.Fields(targets), env)
-}
-
-func runCommand(name string, args, env []string) (string, error) {
-	return runCommandInDir("", name, args, env)
-}
-
-func runCommandInDir(dir, name string, args, env []string) (string, error) {
-	cmd := exec.Command(name, args...)
-	if len(env) != 0 {
-		cmd.Env = env
-	}
-	cmd.Dir = dir
-	var outb, errb bytes.Buffer
-	if logrus.IsLevelEnabled(logrus.DebugLevel) {
-		// If debug level is enabled, also write to stdout.
-		cmd.Stdout = io.MultiWriter(os.Stdout, &outb)
-		cmd.Stderr = io.MultiWriter(os.Stderr, &errb)
-	} else {
-		// Otherwise, just capture the output to return.
-		cmd.Stdout = io.MultiWriter(&outb)
-		cmd.Stderr = io.MultiWriter(&errb)
-	}
-	logrus.WithFields(logrus.Fields{
-		"cmd": cmd.String(),
-		"dir": dir,
-	}).Debugf("Running %s command", name)
-	err := cmd.Run()
-	if err != nil {
-		errDesc := fmt.Sprintf(`running command "%s %s"`, name, strings.Join(args, " "))
-		if dir != "" {
-			errDesc += fmt.Sprintf(" in directory %s", dir)
-		}
-		err = fmt.Errorf("%s: %w \n%s", errDesc, err, strings.TrimSpace(errb.String()))
-	}
-	return strings.TrimSpace(outb.String()), err
-}
+type (
+	CalicoVersion = versions.CalicoVersion
+)
 
 func addRepoInfoToCtx(ctx context.Context, repo string) (context.Context, error) {
 	if ctx.Value(githubOrgCtxKey) != nil && ctx.Value(githubRepoCtxKey) != nil {
@@ -157,59 +77,6 @@ func addRepoInfoToCtx(ctx context.Context, repo string) (context.Context, error)
 	ctx = context.WithValue(ctx, githubOrgCtxKey, parts[0])
 	ctx = context.WithValue(ctx, githubRepoCtxKey, parts[1])
 	return ctx, nil
-}
-
-func calicoConfigVersions(dir, filePath string) (CalicoVersion, error) {
-	fullPath := fmt.Sprintf("%s/%s", dir, filePath)
-	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		return CalicoVersion{}, fmt.Errorf("reading version file %s: %w", fullPath, err)
-	}
-	var version CalicoVersion
-	if err := yaml.Unmarshal(data, &version); err != nil {
-		return CalicoVersion{}, fmt.Errorf("unmarshaling version file %s: %w", fullPath, err)
-	}
-	return version, nil
-}
-
-// Retrieves the Calico and Calico Enterprise versions included in this release.
-func calicoVersions(repo, rootDir, operatorVersion string, local bool) (map[string]string, error) {
-	versions := make(map[string]string)
-
-	if local && rootDir == "" {
-		return versions, fmt.Errorf("rootDir must be specified when using local flag")
-	} else if !local {
-		tmpDir, err := os.MkdirTemp("", fmt.Sprintf("operator-%s-*", operatorVersion))
-		if err != nil {
-			return versions, fmt.Errorf("creating temp directory: %s", err)
-		}
-		defer func() { _ = os.RemoveAll(tmpDir) }()
-		if err := os.MkdirAll(filepath.Join(tmpDir, configDir), os.ModePerm); err != nil {
-			return versions, fmt.Errorf("creating config directory (%s) in %s: %w", configDir, tmpDir, err)
-		}
-		rootDir = tmpDir
-		if err := retrieveBaseVersionConfig(repo, operatorVersion, rootDir); err != nil {
-			return versions, fmt.Errorf("retrieving version config: %s", err)
-		}
-	}
-
-	calicoVer, err := calicoConfigVersions(rootDir, calicoConfig)
-	if err != nil {
-		return versions, fmt.Errorf("retrieving Calico version: %s", err)
-	}
-	if isReleaseVersion, err := isReleaseVersionFormat(calicoVer.Title); err == nil && isReleaseVersion {
-		versions["Calico"] = calicoVer.Title
-	} else {
-		return versions, fmt.Errorf("the Calico version specified (%s) is not a valid release version: %w", calicoVer.Title, err)
-	}
-	enterpriseVer, err := calicoConfigVersions(rootDir, enterpriseConfig)
-	if err != nil {
-		return versions, fmt.Errorf("retrieving Enterprise version: %s", err)
-	}
-	if isReleaseVersion, err := isEnterpriseReleaseVersionFormat(enterpriseVer.Title); err == nil && isReleaseVersion {
-		versions["Calico Enterprise"] = enterpriseVer.Title
-	}
-	return versions, nil
 }
 
 // isValidReleaseVersion validates the operator release version format.
@@ -235,7 +102,7 @@ func isEnterpriseReleaseVersionFormat(version string) (bool, error) {
 }
 
 func isPrereleaseVersion(rootDir string) (bool, error) {
-	enterpriseVer, err := calicoConfigVersions(rootDir, enterpriseConfig)
+	enterpriseVer, err := versions.EnterpriseConfigVersions(rootDir)
 	if err != nil {
 		return false, fmt.Errorf("retrieving Enterprise version: %s", err)
 	}

@@ -76,13 +76,30 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect GKE based on API resource networking.gke.io existence", func() {
-		c := fake.NewClientset()
+		c := fake.NewClientset(&corev1.Node{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "gke-node",
+				Labels: map[string]string{
+					"cloud.google.com/gke-nodepool": "default-pool",
+				},
+			},
+		})
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "networking.gke.io/v1",
 		}}
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderGKE))
+	})
+
+	It("should not detect GKE based only on API resource networking.gke.io existence", func() {
+		c := fake.NewClientset()
+		c.Resources = []*metav1.APIResourceList{{
+			GroupVersion: "networking.gke.io/v1",
+		}}
+		p, e := AutoDiscoverProvider(context.Background(), c)
+		Expect(e).To(BeNil())
+		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
 
 	It("should detect TKG based on API resource core.tanzu.vmware.com existence", func() {

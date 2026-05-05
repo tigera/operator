@@ -131,14 +131,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentLinseed = Component{
-		Version:   "master",
-		Image:     "linseed",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentFluentd = Component{
 		Version:   "master",
 		Image:     "fluentd",
@@ -430,7 +422,6 @@ var (
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentLinseed,
 		ComponentL7AdmissionController,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,

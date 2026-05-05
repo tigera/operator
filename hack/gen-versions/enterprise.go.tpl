@@ -145,15 +145,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "linseed" }}
-	ComponentLinseed = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with .Components.fluentd }}
 	ComponentFluentd = Component{
 		Version:   "{{ .Version }}",

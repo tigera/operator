@@ -24,9 +24,6 @@ components:
   ui-apis:
     image: ui-apis
     version: master
-  linseed:
-    image: linseed
-    version: master
   es-gateway:
     image: es-gateway
     version: master

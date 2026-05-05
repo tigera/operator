@@ -262,7 +262,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 						{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 						{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 						{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
-						{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
+						{Image: "tigera/calico", Digest: "sha256:linseedhash"},
 						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
@@ -283,7 +283,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
-			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentLinseed.Image, "sha256:linseedhash")))
+			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, "sha256:linseedhash")))
 		})
 	})
 
@@ -485,7 +485,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 						{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 						{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
 						{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
-						{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
+						{Image: "tigera/calico", Digest: "sha256:linseedhash"},
 						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
@@ -506,7 +506,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
-			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentLinseed.Image, "sha256:linseedhash")))
+			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, "sha256:linseedhash")))
 		})
 
 		Context("External ES mode", func() {

@@ -54,9 +54,6 @@ components:
   waf-http-filter:
     image: waf-http-filter
     version: master
-  webhooks-processor:
-    image: webhooks-processor
-    version: master
   compliance-controller:
     image: compliance-controller
     version: master

@@ -137,7 +137,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.webhooksProcessorImage, err = components.GetReference(components.ComponentSecurityEventWebhooksProcessor, reg, path, prefix, is)
+	c.webhooksProcessorImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -688,6 +688,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 		Name:            "webhooks-processor",
 		Image:           c.webhooksProcessorImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "webhooks-processor"},
 		Env:             envVars,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,

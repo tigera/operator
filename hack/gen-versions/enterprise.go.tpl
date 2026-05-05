@@ -181,15 +181,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "webhooks-processor" }}
-	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = Component{
 		Version:   "{{ .Version }}",
@@ -432,7 +423,6 @@ var (
 		ComponentFluentdWindows,
 		ComponentIntrusionDetectionController,
 		ComponentWAFHTTPFilter,
-		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

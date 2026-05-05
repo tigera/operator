@@ -163,14 +163,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:   "master",
-		Image:     "webhooks-processor",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentKibana = Component{
 		Version:   "master",
 		Image:     "kibana",
@@ -386,7 +378,6 @@ var (
 		ComponentFluentdWindows,
 		ComponentIntrusionDetectionController,
 		ComponentWAFHTTPFilter,
-		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

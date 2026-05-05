@@ -52,6 +52,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
@@ -128,6 +129,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 					return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 				}
 			}
+		}
+
+		// On managed clusters the apiserver bundle needs to trust guardian's serving cert,
+		// whose chain includes the management cluster's tigera-operator-signer CA propagated
+		// via the ES gateway public secret. Reconcile when that secret changes.
+		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}
 
 		// Watch for changes to authentication
@@ -392,6 +400,24 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		} else if prometheusCertificate != nil {
 			trustedBundle.AddCertificates(prometheusCertificate)
+		}
+
+		// On a managed cluster, the queryserver sidecar talks to Linseed via guardian
+		// (LINSEED_URL=https://guardian.calico-system.svc). Guardian terminates that TLS
+		// using the management cluster's tunnel cert, signed by the management cluster's
+		// tigera-operator-signer CA. The local apiserver-ca-bundle only contains the
+		// local signer, which has the same Subject DN — Go's x509 verifier picks the
+		// local one as the candidate parent and fails with "crypto/rsa: verification error".
+		// Pull the management-cluster CA chain (propagated to the managed cluster as part
+		// of the ES gateway public secret) into the bundle so verification succeeds.
+		if managementClusterConnection != nil {
+			esGatewayCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", relasticsearch.PublicCertSecret), err, reqLogger)
+				return reconcile.Result{}, err
+			} else if esGatewayCertificate != nil {
+				trustedBundle.AddCertificates(esGatewayCertificate)
+			}
 		}
 
 		var authenticationCR *operatorv1.Authentication

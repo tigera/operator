@@ -203,14 +203,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentManagerProxy = Component{
-		Version:   "master",
-		Image:     "voltron",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentPacketCapture = Component{
 		Version:   "master",
 		Image:     "packetcapture",
@@ -422,7 +414,6 @@ var (
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
-		ComponentManagerProxy,
 		ComponentPacketCapture,
 		ComponentPolicyRecommendation,
 		ComponentEgressGateway,

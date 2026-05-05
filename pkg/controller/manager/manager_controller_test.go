@@ -640,8 +640,8 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentManagerProxy.Image,
-							components.ComponentManagerProxy.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 				})
 				It("should use images from imageset", func() {
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -651,7 +651,7 @@ var _ = Describe("Manager controller tests", func() {
 							Images: []operatorv1.Image{
 								{Image: "tigera/manager", Digest: "sha256:managerhash"},
 								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
-								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
+								{Image: "tigera/calico", Digest: "sha256:voltronhash"},
 								{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
@@ -694,7 +694,7 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentManagerProxy.Image,
+							components.ComponentTigeraCalico.Image,
 							"sha256:voltronhash")))
 				})
 			})

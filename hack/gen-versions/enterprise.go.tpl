@@ -226,15 +226,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with .Components.voltron }}
-	ComponentManagerProxy = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "packetcapture" }}
 	ComponentPacketCapture = Component{
 		Version:   "{{ .Version }}",
@@ -472,7 +463,6 @@ var (
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
-		ComponentManagerProxy,
 		ComponentPacketCapture,
 		ComponentPolicyRecommendation,
 		ComponentEgressGateway,

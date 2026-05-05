@@ -6,9 +6,6 @@ components:
   manager:
     image: manager
     version: master
-  voltron:
-    image: voltron
-    version: master
   calico:
     image: calico
     version: master

@@ -226,15 +226,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "policy-recommendation" }}
-	ComponentPolicyRecommendation = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "egress-gateway" }}
 	ComponentEgressGateway = Component{
 		Version:   "{{ .Version }}",
@@ -446,7 +437,6 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentPacketCapture,
-		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentGatewayL7Collector,

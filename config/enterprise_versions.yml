@@ -81,9 +81,6 @@ components:
   packetcapture:
     image: packetcapture
     version: master
-  policy-recommendation:
-    image: policy-recommendation
-    version: master
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:

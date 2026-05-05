@@ -203,14 +203,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentPolicyRecommendation = Component{
-		Version:   "master",
-		Image:     "policy-recommendation",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentEgressGateway = Component{
 		Version:   "master",
 		Image:     "egress-gateway",
@@ -399,7 +391,6 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentPacketCapture,
-		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentGatewayL7Collector,

@@ -199,7 +199,6 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
-	c.nodeImage = "lucastigera/calient-node:bpf-l7"
 	return nil
 }
 
@@ -1256,7 +1255,7 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "ebpf-bootstrap",
 		Image:           c.nodeImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.bpffsEnvvars(),
 		Command:         command,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1339,7 +1338,7 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
-		ImagePullPolicy: corev1.PullAlways,
+		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),

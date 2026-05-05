@@ -100,7 +100,6 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.typhaImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-	c.typhaImage = "lucastigera/calient-typha:bpf-l7"
 	return err
 }
 

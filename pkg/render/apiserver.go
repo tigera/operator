@@ -200,7 +200,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
-	c.apiServerImage = "lucastigera/calient-apiserver:bpf-l7"
 	return nil
 }
 

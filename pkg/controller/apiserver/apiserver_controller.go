@@ -130,6 +130,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			}
 		}
 
+		if err = utils.AddSecretsWatch(c, render.VoltronLinseedPublicCert, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
+		}
+
 		// Watch for changes to authentication
 		err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -394,6 +398,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			trustedBundle.AddCertificates(prometheusCertificate)
 		}
 
+		if managementClusterConnection != nil {
+			voltronLinseedCert, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", render.VoltronLinseedPublicCert), err, reqLogger)
+				return reconcile.Result{}, err
+			} else if voltronLinseedCert != nil {
+				trustedBundle.AddCertificates(voltronLinseedCert)
+			}
+		}
+
 		var authenticationCR *operatorv1.Authentication
 		// Fetch the Authentication spec. If present, we use it to configure user authentication.
 		authenticationCR, err = utils.GetAuthentication(ctx, r.client)
@@ -480,6 +494,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                  r.opts.MultiTenant,
 		KeyValidatorConfig:           keyValidatorConfig,
 		KubernetesVersion:            r.opts.KubernetesVersion,
+		ClusterDomain:                r.opts.ClusterDomain,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
 		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}

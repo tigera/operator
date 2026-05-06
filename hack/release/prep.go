@@ -53,7 +53,7 @@ to point to local repositories for Calico and Enterprise respectively.`,
 		githubTokenFlag,
 		localFlag,
 	},
-	Before: prepBefore,
+	Before: middleware.WithLogging(prepBefore),
 	Action: prepAction,
 	After:  branchCutAfter,
 }
@@ -181,29 +181,27 @@ var prepBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (conte
 })
 
 // Action executed for release prep command.
-var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command) error {
+var prepAction = middleware.WithSummary("release-prep", func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+	version := c.String(versionFlag.Name)
 	baseBranch, err := contextString(ctx, baseBranchCtxKey)
 	if err != nil {
-		return err
-	}
-	version, err := contextString(ctx, versionCtxKey)
-	if err != nil {
-		return err
+		return version, nil, err
 	}
 	prepBranch, err := contextString(ctx, branchNameCtxKey)
 	if err != nil {
-		return err
+		return version, nil, err
 	}
 	repoRootDir, err := branchCutActionCommon(ctx, c, nil, fmt.Sprintf("build: %s release", version))
 	if err != nil {
-		return err
+		return version, nil, err
 	}
+	outputs := map[string]any{"branch": prepBranch}
 
 	// If local flag is set, skip pushing prep branch and creating PR
 	if c.Bool(localFlag.Name) {
 		logrus.WithField("branch", prepBranch).Warn("Local flag set, no remote changes will be made")
 		logrus.Infof("Branch for releasing %s (%s) is ready to be pushed and a PR created", version, prepBranch)
-		return nil
+		return version, outputs, nil
 	}
 
 	// Push branch to remote
@@ -211,23 +209,23 @@ var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command
 	logrus.Debugf("Pushing branch %s to %s", prepBranch, gitRemote)
 	if out, err := command.Git("push", "--force", "--set-upstream", gitRemote, prepBranch); err != nil {
 		logrus.Error(out)
-		return fmt.Errorf("error pushing branch %s to remote %s: %w", prepBranch, gitRemote, err)
+		return version, outputs, fmt.Errorf("error pushing branch %s to remote %s: %w", prepBranch, gitRemote, err)
 	}
 
 	// Attempt to create PR for the release prep branch
 	remoteURL, err := command.Git("config", "--get", fmt.Sprintf("remote.%s.url", gitRemote))
 	if err != nil {
-		return fmt.Errorf("error getting remote URL for %s: %w", gitRemote, err)
+		return version, outputs, fmt.Errorf("error getting remote URL for %s: %w", gitRemote, err)
 	}
 	githubUser := strings.Split(remoteURL[strings.Index(remoteURL, "git@github.com:")+len("git@github.com:"):strings.LastIndex(remoteURL, ".git")], "/")[0]
 
 	githubOrg, err := contextString(ctx, githubOrgCtxKey)
 	if err != nil {
-		return err
+		return version, outputs, err
 	}
 	githubRepo, err := contextString(ctx, githubRepoCtxKey)
 	if err != nil {
-		return err
+		return version, outputs, err
 	}
 	headBranch := prepBranch
 	if githubUser != githubOrg {
@@ -255,7 +253,7 @@ var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command
 	logrus.WithField("args", strings.Join(args, " ")).Debug("Creating PR for release preparation")
 	if pr, err := command.RunInDir(repoRootDir, "hack/bin/gh", args, nil); err != nil {
 		if !strings.Contains(err.Error(), "already exists") {
-			return fmt.Errorf("failed to create PR: %w", err)
+			return version, outputs, fmt.Errorf("failed to create PR: %w", err)
 		}
 		logrus.Warnf("PR already exists. Find PR at: https://github.com/%s/%s/pulls?q=is%%3Aopen+head%%3A%s", githubOrg, githubRepo, prepBranch)
 	} else {
@@ -264,9 +262,12 @@ var prepAction = middleware.WithLogging(func(ctx context.Context, c *cli.Command
 
 	// Skip milestone management if requested or if using a forked repo
 	if c.Bool(skipMilestoneFlag.Name) {
-		return nil
+		return version, outputs, nil
 	} else if c.String(gitRepoFlag.Name) != mainRepo && !c.Bool(skipRepoCheckFlag.Name) {
-		return fmt.Errorf("cannot manage milestones when forked repo (%s); either use the main repo (%s) or set flag to skip repo check", c.String(gitRepoFlag.Name), mainRepo)
+		return version, outputs, fmt.Errorf("cannot manage milestones when forked repo (%s); either use the main repo (%s) or set flag to skip repo check", c.String(gitRepoFlag.Name), mainRepo)
 	}
-	return manageStreamMilestone(ctx, c.String(githubTokenFlag.Name))
+	if err := manageStreamMilestone(ctx, c.String(githubTokenFlag.Name)); err != nil {
+		return version, outputs, err
+	}
+	return version, outputs, nil
 })

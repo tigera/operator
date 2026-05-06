@@ -37,42 +37,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "compliance-controller" }}
-	ComponentComplianceController = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "compliance-reporter" }}
-	ComponentComplianceReporter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "compliance-server" }}
-	ComponentComplianceServer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "compliance-snapshotter" }}
-	ComponentComplianceSnapshotter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "deep-packet-inspection" }}
 	ComponentDeepPacketInspection = Component{
 		Version:   "{{ .Version }}",
@@ -365,10 +329,6 @@ var (
 	EnterpriseImages = []Component{
 		ComponentTigeraCalico,
 		ComponentComplianceBenchmarker,
-		ComponentComplianceController,
-		ComponentComplianceReporter,
-		ComponentComplianceServer,
-		ComponentComplianceSnapshotter,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,

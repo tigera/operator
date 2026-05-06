@@ -51,18 +51,6 @@ components:
   waf-http-filter:
     image: waf-http-filter
     version: master
-  compliance-controller:
-    image: compliance-controller
-    version: master
-  compliance-reporter:
-    image: compliance-reporter
-    version: master
-  compliance-snapshotter:
-    image: compliance-snapshotter
-    version: master
-  compliance-server:
-    image: compliance-server
-    version: master
   compliance-benchmarker:
     image: compliance-benchmarker
     version: master

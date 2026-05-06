@@ -36,38 +36,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentComplianceController = Component{
-		Version:   "master",
-		Image:     "compliance-controller",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceReporter = Component{
-		Version:   "master",
-		Image:     "compliance-reporter",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceServer = Component{
-		Version:   "master",
-		Image:     "compliance-server",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceSnapshotter = Component{
-		Version:   "master",
-		Image:     "compliance-snapshotter",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentDeepPacketInspection = Component{
 		Version:   "master",
 		Image:     "deep-packet-inspection",
@@ -325,10 +293,6 @@ var (
 	EnterpriseImages = []Component{
 		ComponentTigeraCalico,
 		ComponentComplianceBenchmarker,
-		ComponentComplianceController,
-		ComponentComplianceReporter,
-		ComponentComplianceServer,
-		ComponentComplianceSnapshotter,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,

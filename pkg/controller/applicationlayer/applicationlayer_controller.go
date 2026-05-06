@@ -234,6 +234,21 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
+	// Fetch the license key so we can gate IngressGateway (WAF v2/v3) features.
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -303,6 +318,55 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// WAF v2/v3: render admission webhook, BFF, and frontend module when the
+	// gateway-addons license feature is present. This feature gates
+	// Tigera-built add-ons; the bare ingress gateway data path is unlicensed.
+	if utils.IsFeatureActive(license, common.GatewayAddonsFeature) {
+		// TODO(Plan 2 wire-up): provision cert pairs for the webhook and BFF and
+		// obtain image references from ImageSet/Installation before enabling these
+		// render calls. The calls are stubbed here to establish the control-flow
+		// shape; uncomment once cert pair and image wiring is in place:
+		//
+		//   webhookCertPair := <provisioned cert pair>
+		//   bffCertPair     := <provisioned cert pair>
+		//   wafWebhookImage := <image from components>
+		//   wafBFFImage     := <image from components>
+		//
+		//   if err = ch.CreateOrUpdateOrDelete(ctx,
+		//       render.NewCreationPassthrough(applicationlayer.WAFAdmissionWebhookComponents(installationSpec, wafWebhookImage, webhookCertPair)...), r.status); err != nil {
+		//       r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating WAF webhook resources", err, reqLogger)
+		//       return reconcile.Result{}, err
+		//   }
+		//   if err = ch.CreateOrUpdateOrDelete(ctx,
+		//       render.NewCreationPassthrough(applicationlayer.WAFBFFComponents(installationSpec, wafBFFImage, bffCertPair)...), r.status); err != nil {
+		//       r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating WAF BFF resources", err, reqLogger)
+		//       return reconcile.Result{}, err
+		//   }
+		//   if err = ch.CreateOrUpdateOrDelete(ctx,
+		//       render.NewCreationPassthrough(applicationlayer.WAFFrontendModuleRegistration(installationSpec)...), r.status); err != nil {
+		//       r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating WAF frontend module resources", err, reqLogger)
+		//       return reconcile.Result{}, err
+		//   }
+
+		if err = defaultApplicationLayerKubeCC(ctx, r.client); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "failed to default KubeControllersConfiguration ApplicationLayer", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		// IngressGateway feature is not licensed; skip WAF v2/v3 rendering.
+		// This is not an error condition: WAF v1 (sidecar / ModSecurity / L7 log
+		// collector) is gated separately and continues to reconcile normally.
+		// TigeraStatus degradation for a missing-license is appropriate only when
+		// the ApplicationLayer CR explicitly requests a v2/v3 feature; that CR field
+		// does not exist yet (tracked by TODO below). Until then, we log and continue.
+		//
+		// TODO(Task 5): when a GatewayWAF field is added to ApplicationLayerSpec,
+		// gate this degraded emission on that field being enabled:
+		//   r.status.SetDegraded(operatorv1.ResourceNotReady,
+		//       "Calico Enterprise license is missing the IngressGateway feature", nil, reqLogger)
+		reqLogger.V(4).Info("IngressGateway license feature not present; WAF v2/v3 components will not be rendered")
 	}
 
 	// Clear the degraded bit if we've reached this far.

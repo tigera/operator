@@ -218,14 +218,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentL7AdmissionController = Component{
-		Version:   "master",
-		Image:     "l7-admission-controller",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentCoreOSPrometheus = Component{
 		Version: "v3.9.1",
 		variant: enterpriseVariant,
@@ -368,7 +360,6 @@ var (
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentL7AdmissionController,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,

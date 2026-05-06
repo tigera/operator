@@ -108,9 +108,6 @@ components:
   dikastes:
     image: dikastes
     version: master
-  l7-admission-controller:
-    image: l7-admission-controller
-    version: master
   egress-gateway:
     image: egress-gateway
     version: master

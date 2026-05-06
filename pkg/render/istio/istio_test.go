@@ -281,6 +281,58 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(foundIstiodRule).To(BeTrue(), "Expected egress rule for istiod service")
 		})
 
+		It("should add pod-selector egress rules when BPF dataplane is enabled", func() {
+			bpfDataplane := operatorv1.LinuxDataplaneBPF
+			cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{
+				LinuxDataplane: &bpfDataplane,
+			}
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getCalicoTestImageSet())).ShouldNot(HaveOccurred())
+			objsToCreate, _ := component.Objects()
+
+			// Verify istiod policy has egress rule to ztunnel pods
+			istiodPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioIstiodPolicyName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(istiodPolicy.Spec.Egress).To(HaveLen(2))
+			Expect(istiodPolicy.Spec.Egress[1].Destination.Selector).To(Equal(
+				networkpolicy.KubernetesAppSelector(istio.IstioZTunnelDaemonSetName),
+			))
+
+			// Verify ztunnel policy has pod-selector egress rule to istiod
+			ztunnelPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioZTunnelPolicyName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			foundPodSelectorRule := false
+			for _, rule := range ztunnelPolicy.Spec.Egress {
+				if rule.Destination.Selector == networkpolicy.KubernetesAppSelector(istio.IstioIstiodDeploymentName) {
+					foundPodSelectorRule = true
+					break
+				}
+			}
+			Expect(foundPodSelectorRule).To(BeTrue(), "Expected pod-selector egress rule for istiod when BPF enabled")
+		})
+
+		It("should not add pod-selector egress rules when BPF dataplane is not enabled", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getCalicoTestImageSet())).ShouldNot(HaveOccurred())
+			objsToCreate, _ := component.Objects()
+
+			// Verify istiod policy has only 1 egress rule (kube API server)
+			istiodPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioIstiodPolicyName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(istiodPolicy.Spec.Egress).To(HaveLen(1))
+
+			// Verify ztunnel policy has no pod-selector rule for istiod
+			ztunnelPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, istio.IstioZTunnelPolicyName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			for _, rule := range ztunnelPolicy.Spec.Egress {
+				Expect(rule.Destination.Selector).NotTo(Equal(
+					networkpolicy.KubernetesAppSelector(istio.IstioIstiodDeploymentName),
+				), "Should not have pod-selector egress rule for istiod when BPF is not enabled")
+			}
+		})
+
 		It("should set TRANSPARENT_NETWORK_POLICIES env var on ztunnel", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())

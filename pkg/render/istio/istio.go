@@ -52,6 +52,7 @@ type IstioComponent struct {
 	IstioInstallCNIImage string
 	IstioZTunnelImage    string
 	IstioProxyv2Image    string
+	L7CollectorImage     string
 
 	resources *IstioResources
 }
@@ -211,6 +212,10 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		if err != nil {
 			return err
 		}
+		c.L7CollectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
 	} else {
 		c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
 		if err != nil {
@@ -307,6 +312,13 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.Istiod...)
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
+
+	// Waypoint L7 logging is Enterprise-only. The three resources live in the
+	// Istio system namespace so Istio's deployment controller applies them as
+	// class defaults to every Gateway using the istio-waypoint GatewayClass.
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		objs = append(objs, L7WaypointObjects(c.cfg.IstioNamespace, c.L7CollectorImage)...)
+	}
 
 	return objs, toDelete
 }

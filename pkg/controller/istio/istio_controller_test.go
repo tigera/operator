@@ -67,6 +67,7 @@ var _ = Describe("Istio controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(autoscalingv2.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		istio.AddEnvoyFilterToScheme(scheme)
 
 		ctx = context.Background()
 		objTrackerWithCalls = test.NewObjectTrackerWithCalls(scheme)
@@ -789,6 +790,7 @@ var _ = Describe("Istio controller tests", func() {
 						{Image: "tigera/istio-install-cni", Digest: "sha256:cni123"},
 						{Image: "tigera/istio-ztunnel", Digest: "sha256:ztunnel123"},
 						{Image: "tigera/istio-proxyv2", Digest: "sha256:proxyv2123"},
+						{Image: "tigera/l7-collector", Digest: "sha256:l7collector123"},
 					},
 				},
 			}

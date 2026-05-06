@@ -113,10 +113,11 @@ type IntrusionDetectionConfiguration struct {
 	TrustedCertBundle            certificatemanagement.TrustedBundleRO
 	IntrusionDetectionCertSecret certificatemanagement.KeyPairInterface
 
-	Namespace       string
-	BindNamespaces  []string
-	Tenant          *operatorv1.Tenant
-	ExternalElastic bool
+	Namespace          string
+	BindNamespaces     []string
+	Tenant             *operatorv1.Tenant
+	ExternalElastic    bool
+	ThreatFeedsDomains []string
 }
 
 type intrusionDetectionComponent struct {
@@ -1050,6 +1051,17 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerCalicoSystemPo
 		},
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
+	// Allow egress to threat feed HTTP pull domains.
+	if len(c.cfg.ThreatFeedsDomains) > 0 {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Domains: c.cfg.ThreatFeedsDomains,
+				Ports:   networkpolicy.Ports(443),
+			},
+		})
+	}
 	if c.cfg.ManagedCluster {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

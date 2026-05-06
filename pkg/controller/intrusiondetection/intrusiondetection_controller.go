@@ -17,6 +17,10 @@ package intrusiondetection
 import (
 	"context"
 	"fmt"
+	"maps"
+	"net/url"
+	"slices"
+	"sort"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 
@@ -71,9 +75,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	licenseAPIReady := &utils.ReadyFlag{}
 	dpiAPIReady := &utils.ReadyFlag{}
 	tierWatchReady := &utils.ReadyFlag{}
+	threatFeedAPIReady := &utils.ReadyFlag{}
 
 	// Create the reconciler
-	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, tierWatchReady)
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, dpiAPIReady, tierWatchReady, threatFeedAPIReady)
 
 	// Create a new controller
 	c, err := ctrlruntime.NewController("intrusiondetection-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
@@ -100,6 +105,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			[]client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 		policiesToWatch = append(policiesToWatch, types.NamespacedName{Name: dpi.DeepPacketInspectionPolicyName, Namespace: dpi.DeepPacketInspectionNamespace})
 	}
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, threatFeedAPIReady,
+		[]client.Object{&v3.GlobalThreatFeed{TypeMeta: metav1.TypeMeta{Kind: v3.KindGlobalThreatFeed}}})
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policiesToWatch)
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
@@ -160,15 +167,16 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, dpiAPIReady *utils.ReadyFlag, tierWatchReady *utils.ReadyFlag, threatFeedAPIReady *utils.ReadyFlag) reconcile.Reconciler {
 	r := &ReconcileIntrusionDetection{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		status:          status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
-		licenseAPIReady: licenseAPIReady,
-		dpiAPIReady:     dpiAPIReady,
-		tierWatchReady:  tierWatchReady,
-		opts:            opts,
+		client:             mgr.GetClient(),
+		scheme:             mgr.GetScheme(),
+		status:             status.New(mgr.GetClient(), tigeraStatusName, opts.KubernetesVersion),
+		licenseAPIReady:    licenseAPIReady,
+		dpiAPIReady:        dpiAPIReady,
+		tierWatchReady:     tierWatchReady,
+		threatFeedAPIReady: threatFeedAPIReady,
+		opts:               opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -181,13 +189,14 @@ var _ reconcile.Reconciler = &ReconcileIntrusionDetection{}
 type ReconcileIntrusionDetection struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client          client.Client
-	scheme          *runtime.Scheme
-	status          status.StatusManager
-	licenseAPIReady *utils.ReadyFlag
-	dpiAPIReady     *utils.ReadyFlag
-	tierWatchReady  *utils.ReadyFlag
-	opts            options.ControllerOptions
+	client             client.Client
+	scheme             *runtime.Scheme
+	status             status.StatusManager
+	licenseAPIReady    *utils.ReadyFlag
+	dpiAPIReady        *utils.ReadyFlag
+	tierWatchReady     *utils.ReadyFlag
+	threatFeedAPIReady *utils.ReadyFlag
+	opts               options.ControllerOptions
 }
 
 func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.IntrusionDetection, error) {
@@ -439,6 +448,18 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
+	// Collect domains from GlobalThreatFeed HTTP pull URLs so that the network policy
+	// allows the intrusion-detection-controller to reach them.
+	var threatFeedsDomains []string
+	if r.threatFeedAPIReady.IsReady() {
+		globalThreatFeeds := &v3.GlobalThreatFeedList{}
+		if err := r.client.List(ctx, globalThreatFeeds); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve GlobalThreatFeed resources", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		threatFeedsDomains = threatFeedPullDomains(globalThreatFeeds.Items)
+	}
+
 	reqLogger.V(3).Info("rendering components")
 	// Render the desired objects from the CRD and create or update them.
 	hasNoLicense := !utils.IsFeatureActive(license, common.ThreatDefenseFeature)
@@ -459,6 +480,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		Tenant:                       tenant,
 		ExternalElastic:              r.opts.ElasticExternal,
 		SyslogForwardingIsEnabled:    syslogForwardingIsEnabled(lc),
+		ThreatFeedsDomains:           threatFeedsDomains,
 	}
 	setUp := render.NewSetup(&render.SetUpConfiguration{
 		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
@@ -665,4 +687,29 @@ func (r *ReconcileIntrusionDetection) fillDefaults(ctx context.Context, ids *ope
 	}
 
 	return nil
+}
+
+// threatFeedPullDomains extracts unique hostnames from GlobalThreatFeed HTTP pull
+// URLs so that the network policy can allow egress to those domains.
+func threatFeedPullDomains(feeds []v3.GlobalThreatFeed) []string {
+	seen := map[string]struct{}{}
+	for i := range feeds {
+		feed := &feeds[i]
+		if feed.Spec.Pull == nil || feed.Spec.Pull.HTTP == nil {
+			continue
+		}
+		if feed.Spec.Mode != nil && *feed.Spec.Mode == v3.ThreatFeedModeDisabled {
+			continue
+		}
+		u, err := url.Parse(feed.Spec.Pull.HTTP.URL)
+		if err != nil || u.Hostname() == "" {
+			continue
+		}
+		seen[u.Hostname()] = struct{}{}
+	}
+	domains := slices.Collect(maps.Keys(seen))
+	// Sorts the domains to ensure no change detected in the network policy
+	// if the order of the domains changes.
+	sort.Strings(domains)
+	return domains
 }

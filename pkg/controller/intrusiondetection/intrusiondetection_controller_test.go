@@ -103,12 +103,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 
 		r = ReconcileIntrusionDetection{
-			client:          c,
-			scheme:          scheme,
-			status:          mockStatus,
-			licenseAPIReady: &utils.ReadyFlag{},
-			dpiAPIReady:     &utils.ReadyFlag{},
-			tierWatchReady:  &utils.ReadyFlag{},
+			client:             c,
+			scheme:             scheme,
+			status:             mockStatus,
+			licenseAPIReady:    &utils.ReadyFlag{},
+			dpiAPIReady:        &utils.ReadyFlag{},
+			tierWatchReady:     &utils.ReadyFlag{},
+			threatFeedAPIReady: &utils.ReadyFlag{},
 			opts: options.ControllerOptions{
 				DetectedProvider: operatorv1.ProviderNone,
 			},
@@ -323,12 +324,13 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			readyFlag = &utils.ReadyFlag{}
 			readyFlag.MarkAsReady()
 			r = ReconcileIntrusionDetection{
-				client:          c,
-				scheme:          scheme,
-				status:          mockStatus,
-				licenseAPIReady: readyFlag,
-				dpiAPIReady:     readyFlag,
-				tierWatchReady:  readyFlag,
+				client:             c,
+				scheme:             scheme,
+				status:             mockStatus,
+				licenseAPIReady:    readyFlag,
+				dpiAPIReady:        readyFlag,
+				tierWatchReady:     readyFlag,
+				threatFeedAPIReady: readyFlag,
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderNone,
 				},
@@ -803,6 +805,72 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(pullSecrets.OwnerReferences).To(HaveLen(1))
 			pullSecret := pullSecrets.OwnerReferences[0]
 			Expect(pullSecret.Kind).To(Equal("Tenant"))
+		})
+	})
+
+	Context("threatFeedPullDomains", func() {
+		enabled := v3.ThreatFeedModeEnabled
+		disabled := v3.ThreatFeedModeDisabled
+
+		It("should extract unique hostnames from enabled feeds with HTTP pull URLs", func() {
+			feeds := []v3.GlobalThreatFeed{
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://feeds.example.com/v1/ips"}},
+					},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://intel.threatprovider.io/domains"}},
+					},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Mode: &enabled,
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://feeds.example.com/v2/domains"}},
+					},
+				},
+			}
+			domains := threatFeedPullDomains(feeds)
+			Expect(domains).To(Equal([]string{"feeds.example.com", "intel.threatprovider.io"}))
+		})
+
+		It("should skip disabled feeds", func() {
+			feeds := []v3.GlobalThreatFeed{
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Mode: &disabled,
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://disabled.example.com/ips"}},
+					},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://enabled.example.com/ips"}},
+					},
+				},
+			}
+			domains := threatFeedPullDomains(feeds)
+			Expect(domains).To(Equal([]string{"enabled.example.com"}))
+		})
+
+		It("should skip feeds without HTTP pull configured", func() {
+			feeds := []v3.GlobalThreatFeed{
+				{
+					Spec: v3.GlobalThreatFeedSpec{},
+				},
+				{
+					Spec: v3.GlobalThreatFeedSpec{
+						Pull: &v3.Pull{HTTP: &v3.HTTPPull{URL: "https://valid.example.com/ips"}},
+					},
+				},
+			}
+			domains := threatFeedPullDomains(feeds)
+			Expect(domains).To(Equal([]string{"valid.example.com"}))
+		})
+
+		It("should return empty for no feeds", func() {
+			domains := threatFeedPullDomains(nil)
+			Expect(domains).To(BeEmpty())
 		})
 	})
 })

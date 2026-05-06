@@ -500,6 +500,7 @@ const (
 // creates for the pod-side interface on Linux nodes.
 //
 // One of: Veth, Netkit
+// +kubebuilder:validation:Enum=Veth;Netkit
 type LinuxPodInterfaceType string
 
 const (
@@ -703,7 +704,6 @@ type CalicoNetworkSpec struct {
 	// plugin.
 	// Default: Veth
 	// +optional
-	// +kubebuilder:validation:Enum=Veth;Netkit
 	LinuxPodInterfaceType *LinuxPodInterfaceType `json:"linuxPodInterfaceType,omitempty"`
 
 	// Sysctl configures sysctl parameters for tuning plugin

@@ -348,6 +348,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.ContainerIPForwarding = override.ContainerIPForwarding
 	}
 
+	switch compareFields(out.LinuxPodInterfaceType, override.LinuxPodInterfaceType) {
+	case BOnlySet, Different:
+		out.LinuxPodInterfaceType = override.LinuxPodInterfaceType
+	}
+
 	switch compareFields(out.Sysctl, override.Sysctl) {
 	case BOnlySet, Different:
 		out.Sysctl = override.Sysctl

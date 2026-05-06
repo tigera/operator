@@ -217,15 +217,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "l7-collector" }}
-	ComponentL7Collector = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "gateway-l7-collector" }}
 	ComponentGatewayL7Collector = Component{
 		Version:  "{{ .Version }}",
@@ -409,7 +400,6 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentEgressGateway,
-		ComponentL7Collector,
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,
@@ -420,7 +410,6 @@ var (
 		ComponentTigeraCNIWindows,
 		ComponentElasticsearchMetrics,
 		ComponentESGateway,
-		ComponentLinseed,
 		ComponentL7AdmissionController,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,

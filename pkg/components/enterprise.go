@@ -195,14 +195,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentL7Collector = Component{
-		Version:   "master",
-		Image:     "l7-collector",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentGatewayL7Collector = Component{
 		Version:  "master",
 		Image:    "gateway-l7-collector",
@@ -366,7 +358,6 @@ var (
 		ComponentManager,
 		ComponentDex,
 		ComponentEgressGateway,
-		ComponentL7Collector,
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,

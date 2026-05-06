@@ -573,6 +573,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"egressgatewaypolicies",
 					"externalnetworks",
 					"licensekeys",
+					"networks",
 					"packetcaptures",
 					"remoteclusterconfigurations",
 				},
@@ -649,6 +650,14 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 		},
+	}
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			// The CNI plugin resolves Network resources to configure L2 VM bridge attachments.
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get"},
+		})
 	}
 	return role
 }

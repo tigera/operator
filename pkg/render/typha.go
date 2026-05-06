@@ -358,6 +358,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"externalnetworks",
 					"egressgatewaypolicies",
 					"bfdconfigurations",
+					"networks",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},

@@ -36,6 +36,10 @@ const (
 	EgressAccessControlFeature = "egress-access-control"
 	// PolicyRecommendation feature name
 	PolicyRecommendationFeature = "policy-recommendation"
+	// GatewayAddonsFeature gates Tigera-built add-ons that layer on top of an
+	// ingress gateway (e.g. WAF v2/v3 admission webhook, BFF, frontend module).
+	// The bare ingress gateway data path is NOT licensed by this feature.
+	GatewayAddonsFeature = "ingress-gateway-addons"
 	// MultipleOwnersLabel used to indicate multiple owner references.
 	// If the render code places this label on an object, the object mergeState machinery will merge owner
 	// references with any that already exist on the object rather than replace the owner references. Further

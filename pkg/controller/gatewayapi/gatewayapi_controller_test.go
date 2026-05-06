@@ -225,12 +225,13 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("checking the component handlers")
-		Expect(fakeComponentHandlers).To(HaveLen(2))
+		Expect(fakeComponentHandlers).To(HaveLen(3))
 		Expect(fakeComponentHandlers[0].createOnly).To(BeTrue())
 		Expect(fakeComponentHandlers[1].createOnly).To(BeFalse())
+		Expect(fakeComponentHandlers[2].createOnly).To(BeFalse())
 
 		By("checking that the custom EnvoyGateway was passed through")
-		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
+		gatewayAPIImplementationConfig := fakeComponentHandlers[2].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyGateway).NotTo(BeNil())
 		Expect(*gatewayAPIImplementationConfig.CustomEnvoyGateway).To(Equal(*envoyGateway))
 	})
@@ -300,7 +301,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("checking that the custom EnvoyGateway was passed through")
-		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
+		gatewayAPIImplementationConfig := fakeComponentHandlers[2].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyGateway).NotTo(BeNil())
 		Expect(*gatewayAPIImplementationConfig.CustomEnvoyGateway).To(Equal(*envoyGateway))
 	})
@@ -467,12 +468,13 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		By("checking the component handlers")
-		Expect(fakeComponentHandlers).To(HaveLen(2))
+		Expect(fakeComponentHandlers).To(HaveLen(3))
 		Expect(fakeComponentHandlers[0].createOnly).To(BeTrue())
 		Expect(fakeComponentHandlers[1].createOnly).To(BeFalse())
+		Expect(fakeComponentHandlers[2].createOnly).To(BeFalse())
 
 		By("checking that the custom EnvoyProxies were passed through")
-		gatewayAPIImplementationConfig := fakeComponentHandlers[1].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
+		gatewayAPIImplementationConfig := fakeComponentHandlers[2].lastComponent.(gatewayapi.GatewayAPIImplementationConfigInterface).GetConfig()
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyProxies).NotTo(BeNil())
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyProxies).To(HaveKeyWithValue("custom-class-1", envoyProxy1))
 		Expect(gatewayAPIImplementationConfig.CustomEnvoyProxies).To(HaveKeyWithValue("custom-class-2", envoyProxy2))
@@ -534,6 +536,56 @@ var _ = Describe("Gateway API controller tests", func() {
 		).Return()
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).Should(HaveOccurred())
+
+		By("checking the tigera-gateway namespace was still rendered before the EnvoyProxyRef failure")
+		// Regression: previously, an EnvoyProxyRef pointing at a not-yet-existent EnvoyProxy in
+		// tigera-gateway caused reconcile to early-return before the namespace was created,
+		// deadlocking the user (they couldn't create the EnvoyProxy because the namespace
+		// didn't exist). The namespace must now be rendered before EnvoyProxyRef resolution.
+		Expect(fakeComponentHandlers).To(HaveLen(2))
+		Expect(fakeComponentHandlers[0].createOnly).To(BeTrue())
+		Expect(fakeComponentHandlers[1].createOnly).To(BeFalse())
+		nsObjs, _ := fakeComponentHandlers[1].lastComponent.Objects()
+		Expect(nsObjs).To(HaveLen(1))
+		Expect(nsObjs[0]).To(BeAssignableToTypeOf(&corev1.Namespace{}))
+		Expect(nsObjs[0].GetName()).To(Equal("tigera-gateway"))
+	})
+
+	It("renders the tigera-gateway namespace when only an EnvoyProxyRef is configured and the EnvoyProxy is missing", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		By("applying a GatewayAPI CR with an EnvoyProxyRef but no matching EnvoyProxy")
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "custom-class-1",
+					EnvoyProxyRef: &operatorv1.NamespacedName{
+						Namespace: "tigera-gateway",
+						Name:      "missing-proxy",
+					},
+				}},
+			},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		mockStatus.On(
+			"SetDegraded",
+			operatorv1.ResourceReadError,
+			"Error reading EnvoyProxyRef",
+			"envoyproxies.gateway.envoyproxy.io \"missing-proxy\" not found",
+			mock.Anything,
+		).Return()
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).Should(HaveOccurred())
+
+		By("verifying the namespace component still ran (CRDs + namespace, no nonCRD impl)")
+		Expect(fakeComponentHandlers).To(HaveLen(2))
+		nsObjs, _ := fakeComponentHandlers[1].lastComponent.Objects()
+		Expect(nsObjs).To(HaveLen(1))
+		Expect(nsObjs[0]).To(BeAssignableToTypeOf(&corev1.Namespace{}))
+		Expect(nsObjs[0].GetName()).To(Equal("tigera-gateway"))
 	})
 
 	It("handles when both GatewayKind and an incompatible EnvoyProxy are specified", func() {

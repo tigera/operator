@@ -52,6 +52,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/authentication"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
@@ -128,6 +129,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 					return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 				}
 			}
+		}
+
+		if err = utils.AddSecretsWatch(c, relasticsearch.PublicCertSecret, common.OperatorNamespace()); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
 		}
 
 		// Watch for changes to authentication
@@ -392,6 +397,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		} else if prometheusCertificate != nil {
 			trustedBundle.AddCertificates(prometheusCertificate)
+		}
+
+		if managementClusterConnection != nil {
+			esGatewayCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", relasticsearch.PublicCertSecret), err, reqLogger)
+				return reconcile.Result{}, err
+			} else if esGatewayCertificate != nil {
+				trustedBundle.AddCertificates(esGatewayCertificate)
+			}
 		}
 
 		var authenticationCR *operatorv1.Authentication

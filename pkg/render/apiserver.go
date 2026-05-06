@@ -1277,7 +1277,6 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
-	// Linseed client configuration for policy activity enrichment.
 	linseedURL := fmt.Sprintf("https://tigera-linseed.%s.svc", ElasticsearchNamespace)
 	if c.cfg.ManagementClusterConnection != nil {
 		linseedURL = "https://guardian.calico-system.svc"
@@ -1287,6 +1286,9 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
 	)
+	if c.cfg.ManagementClusterConnection != nil {
+		env = append(env, corev1.EnvVar{Name: "CLUSTER_ID", Value: ""})
+	}
 	if c.cfg.TrustedBundle != nil {
 		env = append(env, corev1.EnvVar{Name: "LINSEED_CA", Value: c.cfg.TrustedBundle.MountPath()})
 	}

@@ -208,15 +208,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "packetcapture" }}
-	ComponentPacketCapture = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "egress-gateway" }}
 	ComponentEgressGateway = Component{
 		Version:   "{{ .Version }}",
@@ -417,7 +408,6 @@ var (
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
-		ComponentPacketCapture,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentGatewayL7Collector,

@@ -187,14 +187,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentPacketCapture = Component{
-		Version:   "master",
-		Image:     "packetcapture",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentEgressGateway = Component{
 		Version:   "master",
 		Image:     "egress-gateway",
@@ -373,7 +365,6 @@ var (
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
-		ComponentPacketCapture,
 		ComponentEgressGateway,
 		ComponentL7Collector,
 		ComponentGatewayL7Collector,

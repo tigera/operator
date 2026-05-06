@@ -175,9 +175,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if enterprise {
-		// queryserver and dikastes don't yet ship as part of the combined calico image
-		// in enterprise, so resolve them from their own component images.
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		c.queryServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -1307,6 +1305,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		Name:            string(TigeraAPIServerQueryServerContainerName),
 		Image:           c.queryServerImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "queryserver"},
 		Env:             env,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

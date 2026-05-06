@@ -261,15 +261,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "queryserver" }}
-	ComponentQueryServer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "l7-admission-controller" }}
 	ComponentL7AdmissionController = Component{
 		Version:   "{{ .Version }}",
@@ -432,9 +423,7 @@ var (
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,
-		ComponentQueryServer,
 		ComponentPrometheus,
-		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,

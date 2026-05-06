@@ -36,6 +36,8 @@ const (
 	EgressAccessControlFeature = "egress-access-control"
 	// PolicyRecommendation feature name
 	PolicyRecommendationFeature = "policy-recommendation"
+	// IngressGatewayFeature enables WAF v2/v3 (admission webhook, BFF, frontend module).
+	IngressGatewayFeature = "ingress-gateway"
 	// MultipleOwnersLabel used to indicate multiple owner references.
 	// If the render code places this label on an object, the object mergeState machinery will merge owner
 	// references with any that already exist on the object rather than replace the owner references. Further

@@ -129,3 +129,11 @@ func disableBPFHostConntrackBypass(fc *v3.FelixConfiguration) {
 	hostConntrackBypassDisabled := false
 	fc.Spec.BPFHostConntrackBypass = &hostConntrackBypassDisabled
 }
+
+// disableBPFKubeProxyHealthz disables Felix's BPF kube-proxy healthz server by setting
+// BPFKubeProxyHealthzPort to 0. Use when Calico runs in BPF mode but the platform's
+// kube-proxy is still running (e.g. AKS) and holds the default port (10256).
+func disableBPFKubeProxyHealthz(fc *v3.FelixConfiguration) {
+	port := 0
+	fc.Spec.BPFKubeProxyHealthzPort = &port
+}

@@ -115,14 +115,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentUIAPIs = Component{
-		Version:   "master",
-		Image:     "ui-apis",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentESGateway = Component{
 		Version:   "master",
 		Image:     "es-gateway",
@@ -341,7 +333,6 @@ var (
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
 		ComponentElasticsearchOperator,
-		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentIntrusionDetectionController,

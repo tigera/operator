@@ -652,6 +652,7 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 		},
 	}
 	if c.cfg.Installation.Variant.IsEnterprise() {
+		// The Network resource is only available in Enterprise / Cloud at this time.
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"networks"},

@@ -264,6 +264,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		if instance.Spec.CalicoNetwork.LinuxPodInterfaceType != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.linuxPodInterfaceType is supported only for Calico CNI")
+			}
+		}
+
 		if instance.Spec.CalicoNetwork.Sysctl != nil {
 			// CNI tuning plugin
 			pluginData := instance.Spec.CalicoNetwork.Sysctl

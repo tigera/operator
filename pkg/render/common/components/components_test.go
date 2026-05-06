@@ -605,6 +605,7 @@ var _ = Describe("Common components render tests", func() {
 				expected := defaultedDaemonSet()
 				Expect(expected.Spec.Template.Spec.Containers).To(HaveLen(2))
 				expected.Spec.Template.Spec.Containers[0].Resources = resources1
+				expected.Annotations[CustomOverridesAnnotation] = "resources"
 				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
 				Expect(result).To(Equal(expected))
 			}),
@@ -1072,6 +1073,7 @@ var _ = Describe("Common components render tests", func() {
 				expected := defaultedDeployment()
 				Expect(expected.Spec.Template.Spec.Containers).To(HaveLen(2))
 				expected.Spec.Template.Spec.Containers[0].Resources = resources1
+				expected.Annotations[CustomOverridesAnnotation] = "resources"
 				Expect(result.Spec.Template.Spec.Containers).To(ContainElements(expected.Spec.Template.Spec.Containers))
 				Expect(result).To(Equal(expected))
 			}),
@@ -1262,6 +1264,95 @@ var _ = Describe("Common components render tests", func() {
 		for _, c := range d.Spec.Template.Spec.Containers {
 			Expect(c.Resources).To(Equal(overrideResources), "container %q should have overridden resources", c.Name)
 		}
+	})
+
+	Describe("custom-overrides annotation", func() {
+		It("should set annotation when readiness probe override is applied", func() {
+			d := appsv1.Deployment{}
+			d.Spec.Template.Spec.Containers = []corev1.Container{
+				{
+					Name:  "compliance-server",
+					Image: "test-image",
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/health"}},
+					},
+				},
+			}
+
+			period := int32(30)
+			overrides := &v1.ComplianceServerDeployment{
+				Spec: &v1.ComplianceServerDeploymentSpec{
+					Template: &v1.ComplianceServerDeploymentPodTemplateSpec{
+						Spec: &v1.ComplianceServerDeploymentPodSpec{
+							Containers: []v1.ComplianceServerDeploymentContainer{
+								{
+									Name:           "compliance-server",
+									ReadinessProbe: &v1.ProbeOverride{PeriodSeconds: &period},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			ApplyDeploymentOverrides(&d, overrides)
+			Expect(d.Annotations).To(HaveKeyWithValue(CustomOverridesAnnotation, "readinessProbe"))
+		})
+
+		It("should set annotation with multiple override types", func() {
+			d := appsv1.Deployment{}
+			d.Spec.Template.Spec.Containers = []corev1.Container{
+				{
+					Name:  "compliance-server",
+					Image: "test-image",
+					ReadinessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/health"}},
+					},
+					LivenessProbe: &corev1.Probe{
+						ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/health"}},
+					},
+				},
+			}
+
+			period := int32(30)
+			overrideResources := corev1.ResourceRequirements{
+				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
+			}
+			overrides := &v1.ComplianceServerDeployment{
+				Spec: &v1.ComplianceServerDeploymentSpec{
+					Template: &v1.ComplianceServerDeploymentPodTemplateSpec{
+						Spec: &v1.ComplianceServerDeploymentPodSpec{
+							Containers: []v1.ComplianceServerDeploymentContainer{
+								{
+									Name:           "compliance-server",
+									ReadinessProbe: &v1.ProbeOverride{PeriodSeconds: &period},
+									LivenessProbe:  &v1.ProbeOverride{PeriodSeconds: &period},
+									Resources:      &overrideResources,
+								},
+							},
+						},
+					},
+				},
+			}
+
+			ApplyDeploymentOverrides(&d, overrides)
+			ann := d.Annotations[CustomOverridesAnnotation]
+			Expect(ann).To(ContainSubstring("readinessProbe"))
+			Expect(ann).To(ContainSubstring("livenessProbe"))
+			Expect(ann).To(ContainSubstring("resources"))
+		})
+
+		It("should not set annotation when no probe or resource overrides", func() {
+			d := appsv1.Deployment{}
+			d.Spec.Template.Spec.Containers = []corev1.Container{
+				{Name: "compliance-server", Image: "test-image"},
+			}
+			overrides := &v1.ComplianceServerDeployment{
+				Spec: &v1.ComplianceServerDeploymentSpec{},
+			}
+			ApplyDeploymentOverrides(&d, overrides)
+			Expect(d.Annotations).NotTo(HaveKey(CustomOverridesAnnotation))
+		})
 	})
 })
 

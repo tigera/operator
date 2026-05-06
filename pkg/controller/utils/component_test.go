@@ -16,6 +16,7 @@ package utils
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -2015,6 +2016,61 @@ var _ = Describe("Component handler tests", func() {
 				corev1.VolumeMount{Name: "y"},
 				corev1.VolumeMount{Name: "z"},
 			))
+		})
+	})
+
+	Context("unsupported ignore annotation", func() {
+		It("should return errObjectIgnored from createOrUpdateObject when object has ignore annotation", func() {
+			ds := &apps.DaemonSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ignored-ds",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"unsupported.operator.tigera.io/ignore": "true",
+					},
+				},
+				Spec: apps.DaemonSetSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "test"}},
+						Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "c", Image: "img"}}},
+					},
+				},
+			}
+			Expect(c.Create(ctx, ds)).NotTo(HaveOccurred())
+
+			rendered := ds.DeepCopy()
+			rendered.Annotations = nil
+			rendered.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind("DaemonSet"))
+			err := handler.(*componentHandler).createOrUpdateObject(ctx, rendered, rmeta.OSTypeLinux)
+			Expect(stderrors.Is(err, errObjectIgnored)).To(BeTrue())
+		})
+
+		It("should not return an error from CreateOrUpdateOrDelete when object has ignore annotation", func() {
+			cm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ignored-cm",
+					Namespace: "default",
+					Annotations: map[string]string{
+						"unsupported.operator.tigera.io/ignore": "true",
+					},
+				},
+			}
+			Expect(c.Create(ctx, cm)).NotTo(HaveOccurred())
+
+			rendered := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ignored-cm",
+					Namespace: "default",
+				},
+				Data: map[string]string{"key": "value"},
+			}
+			fc := &fakeComponent{
+				objs:            []client.Object{rendered},
+				supportedOSType: rmeta.OSTypeLinux,
+			}
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).NotTo(HaveOccurred())
 		})
 	})
 })

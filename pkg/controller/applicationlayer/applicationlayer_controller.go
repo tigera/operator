@@ -234,6 +234,21 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
+	// Fetch the license key so we can gate IngressGateway (WAF v2/v3) features.
+	if !r.licenseAPIReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for LicenseKeyAPI to be ready", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	license, err := utils.FetchLicenseKey(ctx, r.client)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -303,6 +318,63 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	if err = ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// WAF v2/v3 BFF + frontend module render unconditionally. They are UI
+	// surfaces; license-absent simply means the UI shows an empty / "license
+	// required" state. Always-rendered UI keeps the Manager experience
+	// consistent and does not leak the license boundary into UI assembly.
+	//
+	// TODO(Plan 2 wire-up): cert pair (BFF) + image references must be
+	// resolved before these calls can run. Stubbed here:
+	//
+	//   bffCertPair := <provisioned cert pair>
+	//   wafBFFImage := <image from components>
+	//
+	//   if err = ch.CreateOrUpdateOrDelete(ctx,
+	//       render.NewCreationPassthrough(applicationlayer.WAFBFFComponents(installationSpec, wafBFFImage, bffCertPair)...), r.status); err != nil {
+	//       r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating WAF BFF resources", err, reqLogger)
+	//       return reconcile.Result{}, err
+	//   }
+	//   if err = ch.CreateOrUpdateOrDelete(ctx,
+	//       render.NewCreationPassthrough(applicationlayer.WAFFrontendModuleRegistration(installationSpec)...), r.status); err != nil {
+	//       r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating WAF frontend module resources", err, reqLogger)
+	//       return reconcile.Result{}, err
+	//   }
+
+	// Admission webhook + KubeCC defaulting are gated on the gateway-addons
+	// license feature. The webhook enforces validation that is part of the
+	// licensed feature; the KubeCC field activates the kube-controllers
+	// reconcilers that perform Envoy filter attachment. The bare ingress
+	// gateway data path is NOT licensed by this feature.
+	if utils.IsFeatureActive(license, common.GatewayAddonsFeature) {
+		// TODO(Plan 2 wire-up): cert pair + image for the webhook need to
+		// be resolved. Stubbed:
+		//
+		//   webhookCertPair := <provisioned cert pair>
+		//   wafWebhookImage := <image from components>
+		//
+		//   if err = ch.CreateOrUpdateOrDelete(ctx,
+		//       render.NewCreationPassthrough(applicationlayer.WAFAdmissionWebhookComponents(installationSpec, wafWebhookImage, webhookCertPair)...), r.status); err != nil {
+		//       r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating WAF webhook resources", err, reqLogger)
+		//       return reconcile.Result{}, err
+		//   }
+
+		if err = defaultApplicationLayerKubeCC(ctx, r.client); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "failed to default KubeControllersConfiguration ApplicationLayer", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		// gateway-addons feature is not licensed; skip webhook render +
+		// KubeCC defaulting. BFF + frontend module above already rendered
+		// regardless. WAF v1 (sidecar / ModSecurity / L7 log collector) is
+		// gated separately and continues to reconcile normally.
+		//
+		// TODO(Task 5): when a GatewayWAF field is added to ApplicationLayerSpec,
+		// gate a degraded emission on that field being enabled:
+		//   r.status.SetDegraded(operatorv1.ResourceNotReady,
+		//       "Calico Enterprise license is missing the gateway-addons feature", nil, reqLogger)
+		reqLogger.V(4).Info("gateway-addons license feature not present; WAF v2/v3 webhook + KubeCC defaulting will not run (BFF + frontend always render)")
 	}
 
 	// Clear the degraded bit if we've reached this far.

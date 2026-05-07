@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/cloudflare/cfssl/log"
+
 	"github.com/tigera/operator/pkg/common"
 )
 
@@ -91,13 +93,17 @@ func getCertificateFromFile(certFile, keyFile string) func(*tls.ClientHelloInfo)
 }
 
 // loadClientCAFromFile reads a PEM CA certificate file and returns an x509.CertPool.
-// Returns an empty pool if the file doesn't exist yet (optional volume mount).
+// Returns an empty pool if the file doesn't exist yet (optional volume mount) or
+// can't be parsed; the error is logged so the failure mode isn't silent.
 func loadClientCAFromFile(caFile string) *x509.CertPool {
 	pool := x509.NewCertPool()
 	caPEM, err := os.ReadFile(caFile)
 	if err != nil {
+		log.Errorf("failed to read metrics client CA from %s: %s", caFile, err)
 		return pool
 	}
-	pool.AppendCertsFromPEM(caPEM)
+	if !pool.AppendCertsFromPEM(caPEM) {
+		log.Errorf("metrics client CA file %s contained no valid PEM certificates", caFile)
+	}
 	return pool
 }

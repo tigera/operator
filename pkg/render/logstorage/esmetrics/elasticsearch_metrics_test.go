@@ -60,6 +60,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			installation := &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderOpenShift,
 				Registry:           "testregistry.com/",
+				Variant:            operatorv1.TigeraSecureEnterprise,
 			}
 
 			esConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)
@@ -93,7 +94,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			Expect(component.ResolveImages(&operatorv1.ImageSet{
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{{
-						Image:  "tigera/elasticsearch-metrics",
+						Image:  "tigera/calico",
 						Digest: "testdigest",
 					}},
 				},
@@ -163,8 +164,8 @@ var _ = Describe("Elasticsearch metrics", func() {
 							ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pullsecret"}},
 							Containers: []corev1.Container{{
 								Name:    ElasticsearchMetricsName,
-								Image:   "testregistry.com/tigera/elasticsearch-metrics@testdigest",
-								Command: []string{"/bin/elasticsearch_exporter"},
+								Image:   "testregistry.com/tigera/calico@testdigest",
+								Command: []string{"/usr/bin/calico", "component", "elasticsearch-metrics"},
 								Args: []string{
 									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",

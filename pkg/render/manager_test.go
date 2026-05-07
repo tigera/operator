@@ -130,9 +130,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		manager := deployment.Spec.Template.Spec.Containers[3]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/manager:" + components.ComponentManager.Version))
-		Expect(uiAPIs.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
-		Expect(dashboard.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
-		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
+		Expect(uiAPIs.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
+		Expect(dashboard.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
+		Expect(voltron.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
 
 		// manager container
 		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -203,9 +203,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(dashboard.VolumeMounts[1].MountPath).To(Equal(fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)))
 
 		Expect(dashboard.ReadinessProbe).NotTo(BeNil())
-		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/dashboard-api", "-ready"}))
+		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/calico", "component", "dashboards", "ready"}))
 		Expect(dashboard.LivenessProbe).NotTo(BeNil())
-		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/dashboard-api", "-ready"}))
+		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/calico", "component", "dashboards", "ready"}))
 
 		Expect(dashboard.SecurityContext).NotTo(BeNil())
 		Expect(*dashboard.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())

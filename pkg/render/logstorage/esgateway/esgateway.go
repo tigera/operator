@@ -92,7 +92,7 @@ func (e *esGateway) ResolveImages(is *operatorv1.ImageSet) error {
 	var err error
 	errMsgs := []string{}
 
-	e.esGatewayImage, err = components.GetReference(components.ComponentESGateway, reg, path, prefix, is)
+	e.esGatewayImage, err = components.GetReference(components.CombinedCalicoImage(e.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -254,6 +254,7 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 					Name:            DeploymentName,
 					Image:           e.esGatewayImage,
 					ImagePullPolicy: render.ImagePullPolicy(),
+					Command:         []string{components.CalicoBinaryPath, "component", "es-gateway"},
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					ReadinessProbe: &corev1.Probe{

@@ -42,6 +42,9 @@ components:
   es-curator:
     image: es-curator
     version: master
+  intrusion-detection-controller:
+    image: intrusion-detection-controller
+    version: master
   compliance-benchmarker:
     image: compliance-benchmarker
     version: master

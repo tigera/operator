@@ -132,7 +132,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	var errMsgs []string
 	var err error
 
-	c.controllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}

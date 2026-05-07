@@ -18,10 +18,10 @@
 package components
 
 var (
-	EnterpriseRelease string = "master"
+	EnterpriseRelease string = "test-build"
 
 	ComponentTigeraCalico = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "calico",
 		Registry:  "",
 		imagePath: "",
@@ -29,7 +29,7 @@ var (
 	}
 
 	ComponentComplianceBenchmarker = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "compliance-benchmarker",
 		Registry:  "",
 		imagePath: "",
@@ -37,7 +37,7 @@ var (
 	}
 
 	ComponentDeepPacketInspection = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "deep-packet-inspection",
 		Registry:  "",
 		imagePath: "",
@@ -45,17 +45,17 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version: "8.19.10",
+		Version: "8.19.12",
 		variant: enterpriseVariant,
 	}
 
 	ComponentEckKibana = Component{
-		Version: "8.19.10",
+		Version: "8.19.12",
 		variant: enterpriseVariant,
 	}
 
 	ComponentElasticTseeInstaller = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "intrusion-detection-job-installer",
 		Registry:  "",
 		imagePath: "",
@@ -63,7 +63,7 @@ var (
 	}
 
 	ComponentElasticsearch = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "elasticsearch",
 		Registry:  "",
 		imagePath: "",
@@ -71,12 +71,12 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.3.2",
 		variant: enterpriseVariant,
 	}
 
 	ComponentElasticsearchOperator = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "eck-operator",
 		Registry:  "",
 		imagePath: "",
@@ -84,7 +84,7 @@ var (
 	}
 
 	ComponentFluentd = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "fluentd",
 		Registry:  "",
 		imagePath: "",
@@ -92,15 +92,23 @@ var (
 	}
 
 	ComponentFluentdWindows = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "fluentd-windows",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
-ComponentKibana = Component{
-		Version:   "master",
+	ComponentIntrusionDetectionController = Component{
+		Version:   "test-build",
+		Image:     "intrusion-detection-controller",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
+	ComponentKibana = Component{
+		Version:   "test-build",
 		Image:     "kibana",
 		Registry:  "",
 		imagePath: "",
@@ -108,7 +116,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentManager = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "manager",
 		Registry:  "",
 		imagePath: "",
@@ -116,7 +124,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentDex = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "dex",
 		Registry:  "",
 		imagePath: "",
@@ -124,7 +132,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentEgressGateway = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "egress-gateway",
 		Registry:  "",
 		imagePath: "",
@@ -132,14 +140,14 @@ ComponentKibana = Component{
 	}
 
 	ComponentGatewayL7Collector = Component{
-		Version:  "master",
+		Version:  "test-build",
 		Image:    "gateway-l7-collector",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "envoy",
 		Registry:  "",
 		imagePath: "",
@@ -147,7 +155,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentDikastes = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "dikastes",
 		Registry:  "",
 		imagePath: "",
@@ -160,7 +168,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentPrometheus = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "prometheus",
 		Registry:  "",
 		imagePath: "",
@@ -173,7 +181,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentPrometheusAlertmanager = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "alertmanager",
 		Registry:  "",
 		imagePath: "",
@@ -181,7 +189,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentTigeraNode = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "node",
 		Registry:  "",
 		imagePath: "",
@@ -189,7 +197,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentTigeraNodeWindows = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "node-windows",
 		Registry:  "",
 		imagePath: "",
@@ -197,7 +205,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentTigeraCNIWindows = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "cni-windows",
 		Registry:  "",
 		imagePath: "",
@@ -205,7 +213,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentGatewayAPIEnvoyGateway = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "envoy-gateway",
 		Registry:  "",
 		imagePath: "",
@@ -213,7 +221,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentGatewayAPIEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "envoy-proxy",
 		Registry:  "",
 		imagePath: "",
@@ -221,7 +229,7 @@ ComponentKibana = Component{
 	}
 
 	ComponentGatewayAPIEnvoyRatelimit = Component{
-		Version:   "master",
+		Version:   "test-build",
 		Image:     "envoy-ratelimit",
 		Registry:  "",
 		imagePath: "",
@@ -229,28 +237,28 @@ ComponentKibana = Component{
 	}
 
 	ComponentIstioPilot = Component{
-		Version:  "master",
+		Version:  "test-build",
 		Image:    "istio-pilot",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioInstallCNI = Component{
-		Version:  "master",
+		Version:  "test-build",
 		Image:    "istio-install-cni",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioZTunnel = Component{
-		Version:  "master",
+		Version:  "test-build",
 		Image:    "istio-ztunnel",
 		Registry: "",
 		variant:  enterpriseVariant,
 	}
 
 	ComponentIstioProxyv2 = Component{
-		Version:  "master",
+		Version:  "test-build",
 		Image:    "istio-proxyv2",
 		Registry: "",
 		variant:  enterpriseVariant,
@@ -267,6 +275,7 @@ ComponentKibana = Component{
 		ComponentElasticsearchOperator,
 		ComponentFluentd,
 		ComponentFluentdWindows,
+		ComponentIntrusionDetectionController,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

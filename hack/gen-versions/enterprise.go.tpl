@@ -109,6 +109,15 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
+{{ with index .Components "intrusion-detection-controller" }}
+	ComponentIntrusionDetectionController = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   enterpriseVariant,
+	}
+{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = Component{
 		Version:   "{{ .Version }}",
@@ -299,6 +308,7 @@ var (
 		ComponentElasticsearchOperator,
 		ComponentFluentd,
 		ComponentFluentdWindows,
+		ComponentIntrusionDetectionController,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

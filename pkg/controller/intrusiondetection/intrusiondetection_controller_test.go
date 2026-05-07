@@ -223,8 +223,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCalico.Image,
-					components.ComponentTigeraCalico.Version)))
+					components.ComponentIntrusionDetectionController.Image,
+					components.ComponentIntrusionDetectionController.Version)))
 
 			training_pt := corev1.PodTemplate{
 				TypeMeta: metav1.TypeMeta{
@@ -266,6 +266,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/deep-packet-inspection", Digest: "sha256:deeppacketinspectionhash"},
+						{Image: "tigera/intrusion-detection-controller", Digest: "sha256:intrusiondetectioncontrollerhash"},
 						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
@@ -288,8 +289,8 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCalico.Image,
-					"sha256:deadbeef0123456789")))
+					components.ComponentIntrusionDetectionController.Image,
+					"sha256:intrusiondetectioncontrollerhash")))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},

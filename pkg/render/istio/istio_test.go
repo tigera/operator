@@ -66,6 +66,7 @@ func getEnterpriseTestImageSet() *operatorv1.ImageSet {
 				{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
 				{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
 				{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
+				{Image: "tigera/l7-collector", Digest: "sha256:test-l7-collector-digest"},
 			},
 		},
 	}
@@ -844,6 +845,50 @@ var _ = Describe("Istio Component Rendering", func() {
 			// Verify that the fake image has been replaced
 			for _, data := range configMap.Data {
 				Expect(data).NotTo(ContainSubstring("fake.io/fakeimg/proxyv2:faketag"))
+			}
+		})
+
+		It("should emit waypoint L7 logging resources only for Enterprise variant", func() {
+			// Enterprise: all three L7 waypoint resources must appear in the
+			// Istio root namespace, with the l7-collector image resolved onto
+			// the defaults ConfigMap.
+			cfg.Installation.Variant = operatorv1.CalicoEnterprise
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getEnterpriseTestImageSet())).To(Succeed())
+
+			objsToCreate, _ := component.Objects()
+
+			defaults, err := rtest.GetResourceOfType[*corev1.ConfigMap](
+				objsToCreate, istio.L7WaypointDefaultsConfigMapName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(defaults.Labels).To(HaveKeyWithValue(
+				"gateway.istio.io/defaults-for-class", istio.IstioWaypointGatewayClass))
+			expectedImage, _ := components.GetReference(components.ComponentL7Collector,
+				cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix,
+				getEnterpriseTestImageSet())
+			Expect(defaults.Data["deployment"]).To(ContainSubstring(expectedImage))
+			Expect(defaults.Data["deployment"]).To(ContainSubstring("--mode=waypoint"))
+
+			_, err = rtest.GetResourceOfType[*istio.EnvoyFilter](
+				objsToCreate, istio.L7WaypointALSFilterName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = rtest.GetResourceOfType[*istio.EnvoyFilter](
+				objsToCreate, istio.L7WaypointSrcPortFilterName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Calico (OSS) variant: none of the three resources should appear,
+			// regardless of image resolution outcome.
+			cfg.Installation.Variant = operatorv1.Calico
+			_, component, err = istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getCalicoTestImageSet())).To(Succeed())
+
+			objsToCreate, _ = component.Objects()
+			for _, o := range objsToCreate {
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointDefaultsConfigMapName))
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointALSFilterName))
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointSrcPortFilterName))
 			}
 		})
 	})

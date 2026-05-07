@@ -463,6 +463,21 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 	return applicationLayer, nil
 }
 
+// Return the Istio CR if present. No error is returned if it was not found.
+func GetIstio(ctx context.Context, c client.Client) (*operatorv1.Istio, error) {
+	istio := &operatorv1.Istio{}
+
+	err := c.Get(ctx, DefaultInstanceKey, istio)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return istio, nil
+}
+
 // Return the ManagementCluster CR if present. No error is returned if it was not found.
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}

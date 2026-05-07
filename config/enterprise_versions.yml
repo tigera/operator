@@ -42,9 +42,6 @@ components:
   es-curator:
     image: es-curator
     version: master
-  waf-http-filter:
-    image: waf-http-filter
-    version: master
   compliance-benchmarker:
     image: compliance-benchmarker
     version: master

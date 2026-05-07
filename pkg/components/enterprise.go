@@ -99,15 +99,7 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-ComponentWAFHTTPFilter = Component{
-		Version:   "master",
-		Image:     "waf-http-filter",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentKibana = Component{
+ComponentKibana = Component{
 		Version:   "master",
 		Image:     "kibana",
 		Registry:  "",
@@ -275,7 +267,6 @@ ComponentWAFHTTPFilter = Component{
 		ComponentElasticsearchOperator,
 		ComponentFluentd,
 		ComponentFluentdWindows,
-		ComponentWAFHTTPFilter,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

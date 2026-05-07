@@ -443,7 +443,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 		if err != nil {
 			return err
 		}
-		pr.wafHTTPFilterImage, err = components.GetReference(components.ComponentWAFHTTPFilter, reg, path, prefix, is)
+		pr.wafHTTPFilterImage, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -767,14 +767,15 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
 			// Add or update the Init Container to the deployment
 			wafHTTPFilter := corev1.Container{
-				Name:  wafFilterName,
-				Image: pr.wafHTTPFilterImage,
+				Name:    wafFilterName,
+				Image:   pr.wafHTTPFilterImage,
+				Command: []string{components.CalicoBinaryPath, "component", "waf-http-filter"},
 				Args: []string{
-					"-logFileDirectory",
+					"--logFileDirectory",
 					"/var/log/calico/waf",
-					"-logFileName",
+					"--logFileName",
 					"waf.log",
-					"-socketPath",
+					"--socketPath",
 					"/var/run/waf-http-filter/extproc.sock",
 				},
 				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),

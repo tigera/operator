@@ -109,15 +109,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "waf-http-filter" }}
-	ComponentWAFHTTPFilter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with .Components.kibana }}
 	ComponentKibana = Component{
 		Version:   "{{ .Version }}",
@@ -308,7 +299,6 @@ var (
 		ComponentElasticsearchOperator,
 		ComponentFluentd,
 		ComponentFluentdWindows,
-		ComponentWAFHTTPFilter,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,

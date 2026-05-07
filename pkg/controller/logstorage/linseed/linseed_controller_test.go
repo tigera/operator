@@ -257,11 +257,9 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-						{Image: "tigera/calico", Digest: "sha256:kubecontrollershash"},
 						{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 						{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 						{Image: "tigera/calico", Digest: "sha256:linseedhash"},
-						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -478,11 +476,9 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-						{Image: "tigera/calico", Digest: "sha256:kubecontrollershash"},
 						{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 						{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
 						{Image: "tigera/calico", Digest: "sha256:linseedhash"},
-						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

@@ -1043,8 +1043,6 @@ var _ = Describe("LogStorage controller", func() {
 								{Image: "tigera/calico", Digest: "sha256:kubecontrollershash"},
 								{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 								{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
-								{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
-								{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
 					})).ToNot(HaveOccurred())

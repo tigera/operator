@@ -1087,11 +1087,6 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		resources, _ := component.Objects()
 
-		svc, ok := rtest.GetResource(resources, "tigera-linseed", "calico-system", "", "v1", "Service").(*corev1.Service)
-		Expect(ok).To(BeTrue(), "expected tigera-linseed Service in calico-system")
-		Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeExternalName))
-		Expect(svc.Spec.ExternalName).To(Equal("guardian.calico-system.svc.cluster.local"))
-
 		rb, ok := rtest.GetResource(resources, "tigera-linseed", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 		Expect(ok).To(BeTrue(), "expected tigera-linseed RoleBinding in calico-system")
 		Expect(rb.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
@@ -1110,7 +1105,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			}
 		}
 		Expect(qs).NotTo(BeNil())
-		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.calico-system.svc.cluster.local"}))
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: "https://guardian.calico-system.svc"}))
 		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "CLUSTER_ID", Value: ""}))
 		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"}))
 		Expect(qs.VolumeMounts).To(ContainElement(corev1.VolumeMount{

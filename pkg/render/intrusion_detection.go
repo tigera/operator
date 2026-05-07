@@ -132,12 +132,12 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 	var errMsgs []string
 	var err error
 
-	c.controllerImage, err = components.GetReference(components.ComponentIntrusionDetectionController, reg, path, prefix, is)
+	c.controllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.webhooksProcessorImage, err = components.GetReference(components.ComponentSecurityEventWebhooksProcessor, reg, path, prefix, is)
+	c.webhooksProcessorImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -688,6 +688,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 		Name:            "webhooks-processor",
 		Image:           c.webhooksProcessorImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "webhooks-processor"},
 		Env:             envVars,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
@@ -769,14 +770,16 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		Name:            "controller",
 		Image:           c.controllerImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "intrusion-detection-controller"},
 		Env:             envs,
-		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/usr/bin/healthz",
-						"liveness",
+						components.CalicoBinaryPath,
+						"health",
+						"--port=50000",
+						"--type=liveness",
 					},
 				},
 			},

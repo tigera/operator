@@ -140,22 +140,22 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, prefix, is)
+	c.snapshotterImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, prefix, is)
+	c.serverImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, prefix, is)
+	c.controllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, prefix, is)
+	c.reporterImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -486,6 +486,7 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 					Name:            ComplianceControllerName,
 					Image:           c.controllerImage,
 					ImagePullPolicy: ImagePullPolicy(),
+					Command:         []string{components.CalicoBinaryPath, "component", "compliance-controller"},
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -686,6 +687,7 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 						Name:            "reporter",
 						Image:           c.reporterImage,
 						ImagePullPolicy: ImagePullPolicy(),
+						Command:         []string{components.CalicoBinaryPath, "component", "compliance-reporter"},
 						Env:             envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
@@ -893,6 +895,7 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 				{
 					Name:            ComplianceServerName,
 					Image:           c.serverImage,
+					Command:         []string{components.CalicoBinaryPath, "component", "compliance-server"},
 					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
@@ -1107,6 +1110,7 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 					Name:            ComplianceSnapshotterName,
 					Image:           c.snapshotterImage,
 					ImagePullPolicy: ImagePullPolicy(),
+					Command:         []string{components.CalicoBinaryPath, "component", "compliance-snapshotter"},
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{

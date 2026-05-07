@@ -97,7 +97,7 @@ func (pr *policyRecommendationComponent) ResolveImages(is *operatorv1.ImageSet) 
 	prefix := pr.cfg.Installation.ImagePrefix
 
 	var err error
-	pr.image, err = components.GetReference(components.ComponentPolicyRecommendation, reg, path, prefix, is)
+	pr.image, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -361,6 +361,7 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		Name:            "policy-recommendation-controller",
 		Image:           pr.image,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "policy-recommendation"},
 		Env:             envs,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,

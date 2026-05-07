@@ -68,6 +68,7 @@ var _ = Describe("ES Gateway rendering tests", func() {
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
+				Variant:              operatorv1.TigeraSecureEnterprise,
 			}
 			replicas = 2
 			kp, bundle := getTLS(cli, installation)

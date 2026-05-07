@@ -21,9 +21,6 @@ components:
   fluentd-windows:
     image: fluentd-windows
     version: master
-  es-gateway:
-    image: es-gateway
-    version: master
   dex:
     image: dex
     version: master

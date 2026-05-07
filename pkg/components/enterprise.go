@@ -83,14 +83,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentESGateway = Component{
-		Version:   "master",
-		Image:     "es-gateway",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentFluentd = Component{
 		Version:   "master",
 		Image:     "fluentd",
@@ -296,7 +288,6 @@ ComponentWAFHTTPFilter = Component{
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
-		ComponentESGateway,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,

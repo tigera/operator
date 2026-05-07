@@ -234,6 +234,12 @@ type kubeControllersComponent struct {
 	kubeControllerCalicoSystemPolicy *v3.NetworkPolicy
 
 	enabledControllers []string
+
+	// wasmImage is the fully-resolved OCI reference for the Coraza WAF wasm
+	// binary (Enterprise only). Surfaced to the kube-controllers binary via
+	// the WASM_IMAGE env var; consumed by the applicationlayer reconcilers
+	// in tigera/calico-private to program WAF policy attachments.
+	wasmImage string
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -242,7 +248,16 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-	return err
+	if err != nil {
+		return err
+	}
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.wasmImage, err = components.GetReference(components.ComponentCorazaWASM, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
@@ -618,6 +633,14 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+
+		// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
+		// wasm OCI reference from this env var to program WAF policy attachments.
+		// Empty when ResolveImages was not called for the Calico variant; the
+		// reconciler stamps Programmed=False/WASMUnavailable in that case.
+		if c.wasmImage != "" {
+			env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
 		}
 	}
 

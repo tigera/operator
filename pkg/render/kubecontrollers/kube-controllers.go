@@ -154,7 +154,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
 			},
 		)
-		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage", "applicationlayer")
 	}
 
 	return &kubeControllersComponent{
@@ -468,6 +468,59 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
+		},
+		// Application-layer (gateway-addons) reconcilers reconcile WAF resources
+		// against Gateway API targetRefs and emit events on the policy objects.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies", "globalwafpolicies",
+				"wafplugins", "globalwafplugins",
+				"wafvalidationpolicies", "globalwafvalidationpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies/status", "globalwafpolicies/status",
+				"wafplugins/status", "globalwafplugins/status",
+				"wafvalidationpolicies/status", "globalwafvalidationpolicies/status",
+			},
+			Verbs: []string{"get", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies/finalizers", "globalwafpolicies/finalizers",
+				"wafplugins/finalizers", "globalwafplugins/finalizers",
+				"wafvalidationpolicies/finalizers", "globalwafvalidationpolicies/finalizers",
+			},
+			Verbs: []string{"update"},
+		},
+		{
+			// Validate Gateway API targetRefs and surface attachment status.
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes", "tcproutes", "tlsroutes", "grpcroutes"},
+			Verbs:     []string{"get", "list", "watch", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways/status", "httproutes/status", "tcproutes/status", "tlsroutes/status", "grpcroutes/status"},
+			Verbs:     []string{"get", "update", "patch"},
+		},
+		// controller-runtime Reconcilers (e.g. the applicationlayer manager) record
+		// events on watched objects via Recorder.Eventf; both core and events.k8s.io
+		// API groups are emitted depending on the kubernetes version.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		},
+		{
+			APIGroups: []string{"events.k8s.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
 		},
 	}
 

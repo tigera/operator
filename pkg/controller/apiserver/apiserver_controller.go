@@ -403,7 +403,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", render.VoltronLinseedPublicCert), err, reqLogger)
 				return reconcile.Result{}, err
-			} else if voltronLinseedCert != nil {
+			}
+			if voltronLinseedCert != nil {
 				trustedBundle.AddCertificates(voltronLinseedCert)
 			}
 		}

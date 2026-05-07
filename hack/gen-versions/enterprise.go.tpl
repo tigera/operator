@@ -246,15 +246,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "elasticsearch-metrics" }}
-	ComponentElasticsearchMetrics = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "gateway-api-envoy-gateway" }}
 	ComponentGatewayAPIEnvoyGateway = Component{
 		Version:   "{{ .Version }}",
@@ -339,7 +330,6 @@ var (
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
-		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,

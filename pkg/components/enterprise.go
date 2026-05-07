@@ -220,14 +220,6 @@ ComponentWAFHTTPFilter = Component{
 		variant:   enterpriseVariant,
 	}
 
-	ComponentElasticsearchMetrics = Component{
-		Version:   "master",
-		Image:     "elasticsearch-metrics",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentGatewayAPIEnvoyGateway = Component{
 		Version:   "master",
 		Image:     "envoy-gateway",
@@ -304,7 +296,6 @@ ComponentWAFHTTPFilter = Component{
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
-		ComponentElasticsearchMetrics,
 		ComponentESGateway,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,

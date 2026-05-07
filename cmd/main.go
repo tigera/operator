@@ -289,9 +289,13 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 				// is created by the operator after pod start, so an eager one-shot
 				// load would leave the trust pool permanently empty.
 				cfg.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+					pool, err := loadClientCAFromFile(metricsTLSCAFile())
+					if err != nil {
+						return nil, err
+					}
 					c := cfg.Clone()
 					c.ClientAuth = clientAuth
-					c.ClientCAs = loadClientCAFromFile(metricsTLSCAFile())
+					c.ClientCAs = pool
 					return c, nil
 				}
 			},

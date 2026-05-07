@@ -537,6 +537,22 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"events"},
 			Verbs:     []string{"create", "patch"},
 		},
+		// Application-layer reconciler replicates the WAF wasm pull Secret from
+		// the controller namespace (calico-system) into each WAFPolicy's
+		// namespace so the rendered EnvoyExtensionPolicy can reference it. Also
+		// replicates CA-cert ConfigMaps when WASM_CA_CERT is set.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets", "configmaps"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Application-layer reconciler emits one EnvoyExtensionPolicy per WAF
+		// targetRef to bind the Coraza wasm filter at the gateway / route.
+		{
+			APIGroups: []string{"gateway.envoyproxy.io"},
+			Resources: []string{"envoyextensionpolicies"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
 	}
 
 	if cfg.ManagementClusterConnection != nil {

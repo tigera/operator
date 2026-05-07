@@ -283,8 +283,17 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			func(cfg *tls.Config) {
 				cfg.GetCertificate = getCert
 				cfg.ClientAuth = clientAuth
-				cfg.ClientCAs = loadClientCAFromFile(metricsTLSCAFile())
 				cfg.MinVersion = minVersion
+				// Re-read ClientCAs per connection so kubelet volume updates and CA
+				// rotations are picked up without an operator restart. The CA Secret
+				// is created by the operator after pod start, so an eager one-shot
+				// load would leave the trust pool permanently empty.
+				cfg.GetConfigForClient = func(*tls.ClientHelloInfo) (*tls.Config, error) {
+					c := cfg.Clone()
+					c.ClientAuth = clientAuth
+					c.ClientCAs = loadClientCAFromFile(metricsTLSCAFile())
+					return c, nil
+				}
 			},
 		}
 	}

@@ -107,15 +107,7 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentIntrusionDetectionController = Component{
-		Version:   "master",
-		Image:     "intrusion-detection-controller",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentWAFHTTPFilter = Component{
+ComponentWAFHTTPFilter = Component{
 		Version:   "master",
 		Image:     "waf-http-filter",
 		Registry:  "",
@@ -299,7 +291,6 @@ var (
 		ComponentElasticsearchOperator,
 		ComponentFluentd,
 		ComponentFluentdWindows,
-		ComponentIntrusionDetectionController,
 		ComponentWAFHTTPFilter,
 		ComponentKibana,
 		ComponentManager,

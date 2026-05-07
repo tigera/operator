@@ -45,9 +45,6 @@ components:
   es-curator:
     image: es-curator
     version: master
-  intrusion-detection-controller:
-    image: intrusion-detection-controller
-    version: master
   waf-http-filter:
     image: waf-http-filter
     version: master

@@ -118,15 +118,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "intrusion-detection-controller" }}
-	ComponentIntrusionDetectionController = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "waf-http-filter" }}
 	ComponentWAFHTTPFilter = Component{
 		Version:   "{{ .Version }}",
@@ -335,7 +326,6 @@ var (
 		ComponentElasticsearchOperator,
 		ComponentFluentd,
 		ComponentFluentdWindows,
-		ComponentIntrusionDetectionController,
 		ComponentWAFHTTPFilter,
 		ComponentKibana,
 		ComponentManager,

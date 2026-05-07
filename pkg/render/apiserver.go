@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -325,7 +326,6 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 	if c.cfg.ManagementClusterConnection != nil {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects,
-			c.externalLinseedService(),
 			c.externalLinseedRoleBinding(),
 		)
 	}
@@ -1279,11 +1279,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
-	// Linseed client configuration for policy activity enrichment.
-	linseedURL := fmt.Sprintf("https://tigera-linseed.%s.svc", ElasticsearchNamespace)
-	if c.cfg.ManagementClusterConnection != nil {
-		linseedURL = fmt.Sprintf("https://tigera-linseed.%s.svc.%s", APIServerNamespace, c.cfg.ClusterDomain)
-	}
+	linseedURL := relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace, c.cfg.ManagementClusterConnection != nil, false)
 	env = append(env,
 		corev1.EnvVar{Name: "LINSEED_URL", Value: linseedURL},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
@@ -1341,20 +1337,6 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		VolumeMounts:    volumeMounts,
 	}
 	return container
-}
-
-func (c *apiServerComponent) externalLinseedService() *corev1.Service {
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "tigera-linseed",
-			Namespace: APIServerNamespace,
-		},
-		Spec: corev1.ServiceSpec{
-			Type:         corev1.ServiceTypeExternalName,
-			ExternalName: fmt.Sprintf("%s.%s.svc.%s", GuardianServiceName, GuardianNamespace, c.cfg.ClusterDomain),
-		},
-	}
 }
 
 func (c *apiServerComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {

@@ -658,6 +658,24 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		if c.wasmImage != "" {
 			env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
 		}
+
+		// WASM_PULL_SECRET names the imagePullSecret the reconciler replicates
+		// from the kube-controllers namespace into a WAFPolicy's namespace so
+		// the rendered EnvoyExtensionPolicy can pull the wasm OCI artifact from
+		// a private Tigera registry. Source the name from the first
+		// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
+		// installs reuse whatever pull secret operator already attaches here.
+		if len(c.cfg.Installation.ImagePullSecrets) > 0 {
+			env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.Installation.ImagePullSecrets[0].Name})
+		}
+
+		// WASM_CA_CERT names the trusted CA bundle ConfigMap (already mounted
+		// on this Deployment via TrustedBundle) that the reconciler replicates
+		// alongside WASM_PULL_SECRET so the EnvoyExtensionPolicy wasm fetcher
+		// trusts the registry's TLS chain.
+		if c.cfg.TrustedBundle != nil {
+			env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: certificatemanagement.TrustedCertConfigMapName})
+		}
 	}
 
 	if c.cfg.MetricsServerTLS != nil {

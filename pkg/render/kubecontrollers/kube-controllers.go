@@ -154,7 +154,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
 			},
 		)
-		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage", "applicationlayer")
 	}
 
 	return &kubeControllersComponent{
@@ -234,6 +234,12 @@ type kubeControllersComponent struct {
 	kubeControllerCalicoSystemPolicy *v3.NetworkPolicy
 
 	enabledControllers []string
+
+	// wasmImage is the fully-resolved OCI reference for the Coraza WAF wasm
+	// binary (Enterprise only). Surfaced to the kube-controllers binary via
+	// the WASM_IMAGE env var; consumed by the applicationlayer reconcilers
+	// in tigera/calico-private to program WAF policy attachments.
+	wasmImage string
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -242,7 +248,16 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-	return err
+	if err != nil {
+		return err
+	}
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.wasmImage, err = components.GetReference(components.ComponentCorazaWASM, reg, path, prefix, is)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
@@ -469,6 +484,75 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
+		// Application-layer (gateway-addons) reconcilers reconcile WAF resources
+		// against Gateway API targetRefs and emit events on the policy objects.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies", "globalwafpolicies",
+				"wafplugins", "globalwafplugins",
+				"wafvalidationpolicies", "globalwafvalidationpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies/status", "globalwafpolicies/status",
+				"wafplugins/status", "globalwafplugins/status",
+				"wafvalidationpolicies/status", "globalwafvalidationpolicies/status",
+			},
+			Verbs: []string{"get", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies/finalizers", "globalwafpolicies/finalizers",
+				"wafplugins/finalizers", "globalwafplugins/finalizers",
+				"wafvalidationpolicies/finalizers", "globalwafvalidationpolicies/finalizers",
+			},
+			Verbs: []string{"update"},
+		},
+		{
+			// Validate Gateway API targetRefs and surface attachment status.
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes", "tcproutes", "tlsroutes", "grpcroutes"},
+			Verbs:     []string{"get", "list", "watch", "update", "patch"},
+		},
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways/status", "httproutes/status", "tcproutes/status", "tlsroutes/status", "grpcroutes/status"},
+			Verbs:     []string{"get", "update", "patch"},
+		},
+		// controller-runtime Reconcilers (e.g. the applicationlayer manager) record
+		// events on watched objects via Recorder.Eventf; both core and events.k8s.io
+		// API groups are emitted depending on the kubernetes version.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		},
+		{
+			APIGroups: []string{"events.k8s.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		},
+		// Application-layer reconciler replicates the WAF wasm pull Secret from
+		// the controller namespace (calico-system) into each WAFPolicy's
+		// namespace so the rendered EnvoyExtensionPolicy can reference it. Also
+		// replicates CA-cert ConfigMaps when WASM_CA_CERT is set.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets", "configmaps"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Application-layer reconciler emits one EnvoyExtensionPolicy per WAF
+		// targetRef to bind the Coraza wasm filter at the gateway / route.
+		{
+			APIGroups: []string{"gateway.envoyproxy.io"},
+			Resources: []string{"envoyextensionpolicies"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
 	}
 
 	if cfg.ManagementClusterConnection != nil {
@@ -565,6 +649,14 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
+		}
+
+		// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
+		// wasm OCI reference from this env var to program WAF policy attachments.
+		// Empty when ResolveImages was not called for the Calico variant; the
+		// reconciler stamps Programmed=False/WASMUnavailable in that case.
+		if c.wasmImage != "" {
+			env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
 		}
 	}
 

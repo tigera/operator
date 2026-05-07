@@ -266,6 +266,14 @@ var (
 		variant:   enterpriseVariant,
 	}
 
+	ComponentCorazaWASM = Component{
+		Version:   "master",
+		Image:     "coraza-wasm",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
 	ComponentQueryServer = Component{
 		Version:   "master",
 		Image:     "queryserver",
@@ -430,6 +438,7 @@ var (
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,
+		ComponentCorazaWASM,
 		ComponentQueryServer,
 		ComponentPrometheus,
 		ComponentTigeraPrometheusService,

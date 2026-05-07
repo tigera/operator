@@ -1079,6 +1079,56 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", []string{"calico-system", "tigera-system", "calico-apiserver"})))
 	})
 
+	It("should render Linseed routing for the queryserver when ManagementClusterConnection is set", func() {
+		cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+		cfg.ClusterDomain = "cluster.local"
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		svc, ok := rtest.GetResource(resources, "tigera-linseed", "calico-system", "", "v1", "Service").(*corev1.Service)
+		Expect(ok).To(BeTrue(), "expected tigera-linseed Service in calico-system")
+		Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeExternalName))
+		Expect(svc.Spec.ExternalName).To(Equal("guardian.calico-system.svc.cluster.local"))
+
+		rb, ok := rtest.GetResource(resources, "tigera-linseed", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(ok).To(BeTrue(), "expected tigera-linseed RoleBinding in calico-system")
+		Expect(rb.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
+		Expect(rb.Subjects).To(ConsistOf(rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      render.GuardianServiceAccountName,
+			Namespace: render.GuardianNamespace,
+		}))
+
+		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		var qs *corev1.Container
+		for i := range deploy.Spec.Template.Spec.Containers {
+			if deploy.Spec.Template.Spec.Containers[i].Name == "tigera-queryserver" {
+				qs = &deploy.Spec.Template.Spec.Containers[i]
+			}
+		}
+		Expect(qs).NotTo(BeNil())
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: "https://tigera-linseed.calico-system.svc.cluster.local"}))
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "CLUSTER_ID", Value: ""}))
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"}))
+		Expect(qs.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      render.LinseedTokenVolumeName,
+			MountPath: render.LinseedVolumeMountPath,
+		}))
+
+		var tokenVol *corev1.Volume
+		for i := range deploy.Spec.Template.Spec.Volumes {
+			if deploy.Spec.Template.Spec.Volumes[i].Name == render.LinseedTokenVolumeName {
+				tokenVol = &deploy.Spec.Template.Spec.Volumes[i]
+			}
+		}
+		Expect(tokenVol).NotTo(BeNil())
+		Expect(tokenVol.Secret).NotTo(BeNil())
+		Expect(tokenVol.Secret.SecretName).To(Equal("calico-apiserver-tigera-linseed-token"))
+	})
+
 	Context("calico-system rendering", func() {
 		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
 

@@ -52,6 +52,12 @@ const (
 	DexTLSSecretName = "tigera-dex-tls"
 	DexClientId      = "tigera-manager"
 	DexPolicyName    = networkpolicy.CalicoComponentPolicyPrefix + "dex"
+
+	// TigeraCAPublicSecretName holds a copy of the operator's CA certificate (from tigera-ca-private)
+	// in calico-system. It exists so that an OpenShift Ingress fronting the manager can reference it
+	// via the destination-CA-certificate annotation on a reencrypt route. Only rendered when the
+	// Authentication CR is configured to use the OpenShift IDP.
+	TigeraCAPublicSecretName = "tigera-ca-public"
 )
 
 var DexEntityRule = networkpolicy.CreateEntityRule(DexNamespace, DexObjectName, DexPort)
@@ -73,6 +79,10 @@ type DexComponentConfiguration struct {
 	DeleteDex     bool
 	TLSKeyPair    certificatemanagement.KeyPairInterface
 	TrustedBundle certificatemanagement.TrustedBundle
+
+	// TigeraCAKeyPair is the operator CA keypair (backed by tigera-ca-private). Its certificate is
+	// copied into the tigera-ca-public Secret when the OpenShift IDP is configured.
+	TigeraCAKeyPair certificatemanagement.KeyPairInterface
 
 	Authentication *operatorv1.Authentication
 
@@ -157,10 +167,39 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, certificatemanagement.CSRClusterRoleBinding(DexObjectName, DexNamespace))
 	}
 
+	if c.cfg.Authentication != nil && c.cfg.Authentication.Spec.Openshift != nil {
+		objs = append(objs, c.tigeraCAPublicSecret())
+	} else {
+		objectsToDelete = append(objectsToDelete, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: TigeraCAPublicSecretName, Namespace: common.CalicoNamespace},
+		})
+	}
+
 	if c.cfg.DeleteDex {
 		return nil, append(objs, objectsToDelete...)
 	}
 	return objs, objectsToDelete
+}
+
+// tigeraCAPublicSecret returns an Opaque Secret in calico-system with the operator's CA certificate
+// under the tls.crt key. The customer points an Ingress at it via the
+// route.openshift.io/destination-ca-certificate-secret annotation, and OpenShift's
+// ingress-to-route controller copies this into the generated reencrypt Route's destinationCACertificate.
+// Both the Ingress and this Secret must live in calico-system (same-namespace lookup in the upstream
+// controller). Type Opaque (not kubernetes.io/tls) because we have no private key to pair with the cert.
+func (c *dexComponent) tigeraCAPublicSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      TigeraCAPublicSecretName,
+			Namespace: common.CalicoNamespace,
+		},
+		Type: corev1.SecretTypeOpaque,
+		Data: map[string][]byte{
+			corev1.TLSCertKey: c.cfg.TigeraCAKeyPair.GetCertificatePEM(),
+		},
+	}
 }
 
 func (c *dexComponent) Ready() bool {

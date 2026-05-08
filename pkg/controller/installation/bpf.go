@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 )
 
 // bpfValidateAnnotations validate Felix Configuration annotations match BPF Enabled spec for all scenarios.
@@ -134,6 +135,5 @@ func disableBPFHostConntrackBypass(fc *v3.FelixConfiguration) {
 // BPFKubeProxyHealthzPort to 0. Use when Calico runs in BPF mode but the platform's
 // kube-proxy is still running (e.g. AKS) and holds the default port (10256).
 func disableBPFKubeProxyHealthz(fc *v3.FelixConfiguration) {
-	port := 0
-	fc.Spec.BPFKubeProxyHealthzPort = &port
+	fc.Spec.BPFKubeProxyHealthzPort = ptr.To(0)
 }

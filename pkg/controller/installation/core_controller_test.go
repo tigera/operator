@@ -1553,6 +1553,73 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFHostConntrackBypass).To(BeFalse())
 		})
 
+		It("should set BPFKubeProxyHealthzPort to 0 when BPF is enabled and operator does not manage kube-proxy", func() {
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).NotTo(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(0))
+		})
+
+		It("should not set BPFKubeProxyHealthzPort when BPF is disabled", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).To(BeNil())
+		})
+
+		It("should not set BPFKubeProxyHealthzPort when BPF is enabled and operator manages kube-proxy", func() {
+			network := operator.LinuxDataplaneBPF
+			kpManagement := operator.KubeProxyManagementEnabled
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+				LinuxDataplane:      &network,
+				KubeProxyManagement: &kpManagement,
+			}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).To(BeNil())
+		})
+
+		It("should not overwrite an existing user-set BPFKubeProxyHealthzPort", func() {
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+
+			userPort := 12345
+			Expect(c.Create(ctx, &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       v3.FelixConfigurationSpec{BPFKubeProxyHealthzPort: &userPort},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).NotTo(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(12345))
+		})
+
 		It("should set BPFEnabled to ture on FelixConfiguration if BPF is enabled on installation", func() {
 			createNodeDaemonSet()
 

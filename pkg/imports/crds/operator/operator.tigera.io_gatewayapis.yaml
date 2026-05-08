@@ -4285,9 +4285,14 @@ spec:
                                 type: array
                               patch:
                                 description: |-
-                                  KubernetesPatchSpec defines how to perform the patch operation.
-                                  Note that `value` can be an in-line YAML document, as can be seen in e.g. (the example of patching the Envoy proxy Deployment)[https://gateway.envoyproxy.io/docs/tasks/operations/customize-envoyproxy/#patching-deployment-for-envoyproxy].
-                                  Note also that, currently, strings containing literal JSON are _rejected_.
+                                  Patch allows the Service for a gateway to be patched in ways that aren't more explicitly
+                                  supported by the fields above.  For example, the following YAML could be used to set the
+                                  Service's healthCheckNodePort:
+                                    patch:
+                                      type: StrategicMerge
+                                      value:
+                                        spec:
+                                          healthCheckNodePort: 12345
                                 properties:
                                   type:
                                     description: |-

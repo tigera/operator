@@ -510,6 +510,16 @@ type GatewayServiceSpec struct {
 	// +optional
 	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
 
+	// Patch allows the Service for a gateway to be patched in ways that aren't more explicitly
+	// supported by the fields above.  For example, the following YAML could be used to set the
+	// Service's healthCheckNodePort:
+	//
+	//   patch:
+	//     type: StrategicMerge
+	//     value:
+	//       spec:
+	//         healthCheckNodePort: 12345
+	//
 	// +optional
 	Patch *envoyapi.KubernetesPatchSpec `json:"patch,omitempty"`
 }

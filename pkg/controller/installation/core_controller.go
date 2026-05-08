@@ -322,9 +322,25 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
 
-	// Create a Typha autoscaler.
+	// Create a Typha autoscaler. Stale pod IP recovery defers to the current
+	// Installation.Spec.StalePodIPRecovery setting on each tick (default-on if unset).
+	// If the Installation can't be read for any reason, fail-open and let the recovery
+	// run — it's the safer behavior for the kubelet bug we're working around.
+	mgrClient := mgr.GetClient()
 	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
+	typhaScaler := newTyphaAutoscaler(
+		opts.K8sClientset,
+		nodeIndexInformer,
+		typhaListWatch,
+		statusManager,
+		typhaAutoscalerOptionStalePodIPRecoveryEnabled(func() bool {
+			inst := &operatorv1.Installation{}
+			if err := mgrClient.Get(opts.ShutdownContext, types.NamespacedName{Name: "default"}, inst); err != nil {
+				return true
+			}
+			return operatorv1.IsStalePodIPRecoveryEnabled(inst.Spec.StalePodIPRecovery)
+		}),
+	)
 
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),

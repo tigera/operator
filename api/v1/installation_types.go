@@ -140,6 +140,17 @@ type InstallationSpec struct {
 	// +optional
 	NodeUpdateStrategy appsv1.DaemonSetUpdateStrategy `json:"nodeUpdateStrategy,omitempty"`
 
+	// StalePodIPRecovery enables automatic detection and deletion of host-networked Calico pods
+	// (calico-typha, calico-node, calico-node-windows) whose status.podIPs no longer matches their
+	// node's current InternalIP. When stale pod IPs are detected (e.g., after a node reboot pulls
+	// a new DHCP lease), the operator deletes affected pods so the Deployment / DaemonSet
+	// controllers recreate them with the correct IP. This works around an upstream Kubernetes
+	// limitation where status.podIPs is immutable for hostNetwork pods.
+	// Default: Enabled
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	// +optional
+	StalePodIPRecovery *StalePodIPRecoveryType `json:"stalePodIPRecovery,omitempty"`
+
 	// Deprecated. Please use CalicoNodeDaemonSet, TyphaDeployment, and KubeControllersDeployment.
 	// ComponentResources can be used to customize the resource requirements for each component.
 	// Node, Typha, and KubeControllers are supported for installations.
@@ -328,6 +339,15 @@ type FIPSMode string
 const (
 	FIPSModeEnabled  FIPSMode = "Enabled"
 	FIPSModeDisabled FIPSMode = "Disabled"
+)
+
+// StalePodIPRecoveryType controls whether the operator automatically detects and recreates
+// host-networked Calico pods with stale status.podIPs after a node IP change.
+type StalePodIPRecoveryType string
+
+const (
+	StalePodIPRecoveryEnabled  StalePodIPRecoveryType = "Enabled"
+	StalePodIPRecoveryDisabled StalePodIPRecoveryType = "Disabled"
 )
 
 // Deprecated. Please use TyphaDeployment instead.
@@ -1075,6 +1095,12 @@ func IsFIPSModeEnabled(mode *FIPSMode) bool {
 // IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
 func IsFIPSModeEnabledString(mode *FIPSMode) string {
 	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
+}
+
+// IsStalePodIPRecoveryEnabled returns whether stale pod IP recovery is enabled. The behavior
+// is default-on, so a nil reference means enabled.
+func IsStalePodIPRecoveryEnabled(s *StalePodIPRecoveryType) bool {
+	return s == nil || *s == StalePodIPRecoveryEnabled
 }
 
 type WindowsNodeSpec struct {

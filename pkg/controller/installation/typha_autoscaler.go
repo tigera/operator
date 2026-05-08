@@ -58,6 +58,10 @@ type typhaAutoscaler struct {
 	typhaIndexer   cache.Store
 	nonClusterHost bool
 
+	// stalePodIPRecoveryEnabled returns whether the operator should detect and delete
+	// host-networked pods with stale status.podIPs each tick. Default-on if nil.
+	stalePodIPRecoveryEnabled func() bool
+
 	// Number of currently running replicas.
 	activeReplicas int32
 }
@@ -75,6 +79,15 @@ func typhaAutoscalerOptionPeriod(syncPeriod time.Duration) typhaAutoscalerOption
 func typhaAutoscalerOptionNonclusterHost(nonClusterHost bool) typhaAutoscalerOption {
 	return func(t *typhaAutoscaler) {
 		t.nonClusterHost = nonClusterHost
+	}
+}
+
+// typhaAutoscalerOptionStalePodIPRecoveryEnabled provides a getter that the autoscaler will
+// call each tick to determine whether stale-IP pod recovery is enabled. If unset, recovery
+// is always enabled.
+func typhaAutoscalerOptionStalePodIPRecoveryEnabled(enabled func() bool) typhaAutoscalerOption {
+	return func(t *typhaAutoscaler) {
+		t.stalePodIPRecoveryEnabled = enabled
 	}
 }
 
@@ -164,27 +177,32 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 				// cycle, calico-node deletions are skipped to give the new Typha a
 				// clean window to come up before churning calico-node pods that
 				// depend on it.
-				typhaBatch := t.resolveTyphaMaxUnavailable()
-				deletedTypha := t.deleteStaleHostNetworkPods(
-					"calico-typha",
-					fmt.Sprintf("%s=%s", render.AppLabelName, render.TyphaK8sAppName),
-					typhaBatch,
-				) > 0
-				if !deletedTypha {
-					// Linux and Windows DaemonSets are paced independently of each
-					// other.
-					linuxBatch := t.resolveDaemonSetMaxUnavailable(render.CalicoNodeObjectName)
-					t.deleteStaleHostNetworkPods(
-						"calico-node",
-						fmt.Sprintf("%s=%s", render.AppLabelName, render.CalicoNodeObjectName),
-						linuxBatch,
-					)
-					windowsBatch := t.resolveDaemonSetMaxUnavailable(render.WindowsNodeObjectName)
-					t.deleteStaleHostNetworkPods(
-						"calico-node-windows",
-						fmt.Sprintf("%s=%s", render.AppLabelName, render.WindowsNodeObjectName),
-						windowsBatch,
-					)
+				//
+				// Skip the entire check if stale-IP recovery has been disabled
+				// via Installation.Spec.StalePodIPRecovery.
+				if t.stalePodIPRecoveryEnabled == nil || t.stalePodIPRecoveryEnabled() {
+					typhaBatch := t.resolveTyphaMaxUnavailable()
+					deletedTypha := t.deleteStaleHostNetworkPods(
+						"calico-typha",
+						fmt.Sprintf("%s=%s", render.AppLabelName, render.TyphaK8sAppName),
+						typhaBatch,
+					) > 0
+					if !deletedTypha {
+						// Linux and Windows DaemonSets are paced independently of each
+						// other.
+						linuxBatch := t.resolveDaemonSetMaxUnavailable(render.CalicoNodeObjectName)
+						t.deleteStaleHostNetworkPods(
+							"calico-node",
+							fmt.Sprintf("%s=%s", render.AppLabelName, render.CalicoNodeObjectName),
+							linuxBatch,
+						)
+						windowsBatch := t.resolveDaemonSetMaxUnavailable(render.WindowsNodeObjectName)
+						t.deleteStaleHostNetworkPods(
+							"calico-node-windows",
+							fmt.Sprintf("%s=%s", render.AppLabelName, render.WindowsNodeObjectName),
+							windowsBatch,
+						)
+					}
 				}
 			case errCh := <-t.triggerRunChan:
 				if err := t.autoscaleReplicas(); err != nil {

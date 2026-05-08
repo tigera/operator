@@ -286,6 +286,10 @@ var _ = Describe("Test typha autoscaler ", func() {
 		)
 
 		BeforeEach(func() {
+			// The autoscaler may degrade if the first tick fires before nodes are
+			// added by the test body (race against ta.start). We don't care about
+			// scaling behavior in these tests; allow any SetDegraded call.
+			statusManager.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 			ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 			ta.start(ctx)
 		})
@@ -449,6 +453,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		var ta *typhaAutoscaler
 
 		BeforeEach(func() {
+			// Allow any degradation that may happen due to race with autoscaler ticks.
+			statusManager.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
 			ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 			ta.start(ctx)
 		})
@@ -561,6 +567,90 @@ var _ = Describe("Test typha autoscaler ", func() {
 
 			// 10% of 100 = 10.
 			Expect(ta.resolveDaemonSetMaxUnavailable("calico-node")).To(Equal(10))
+		})
+	})
+
+	Context("stalePodIPRecoveryEnabled gate", func() {
+		const (
+			typhaSelector      = "k8s-app=calico-typha"
+			calicoNodeSelector = "k8s-app=calico-node"
+		)
+
+		BeforeEach(func() {
+			// The autoscaler may degrade if there aren't enough linux nodes to satisfy
+			// the expected typha scale. We don't care about scaling behavior here, so
+			// allow any SetDegraded call.
+			statusManager.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
+		})
+
+		// stale-node has InternalIP 10.0.0.2; pods are placed on it with podIP 10.0.0.1
+		// to make them stale.
+		ensureStaleNode := func() {
+			if _, err := c.CoreV1().Nodes().Get(ctx, "stale-node", metav1.GetOptions{}); err == nil {
+				return
+			}
+			node := CreateNode(c, "stale-node", map[string]string{"kubernetes.io/os": "linux"}, nil)
+			node.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeInternalIP, Address: "10.0.0.2"}}
+			_, err := c.CoreV1().Nodes().UpdateStatus(ctx, node, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		createStalePod := func(name, k8sApp string) {
+			ensureStaleNode()
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: name, Namespace: "calico-system",
+					Labels: map[string]string{"k8s-app": k8sApp},
+				},
+				Spec:   corev1.PodSpec{NodeName: "stale-node"},
+				Status: corev1.PodStatus{PodIPs: []corev1.PodIP{{IP: "10.0.0.1"}}},
+			}
+			pod, err := c.CoreV1().Pods("calico-system").Create(ctx, pod, metav1.CreateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+			pod.Status.PodIPs = []corev1.PodIP{{IP: "10.0.0.1"}}
+			_, err = c.CoreV1().Pods("calico-system").UpdateStatus(ctx, pod, metav1.UpdateOptions{})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		listPods := func(selector string) []corev1.Pod {
+			pods, err := c.CoreV1().Pods("calico-system").List(ctx, metav1.ListOptions{LabelSelector: selector})
+			Expect(err).NotTo(HaveOccurred())
+			return pods.Items
+		}
+
+		It("nil getter (default) is treated as enabled", func() {
+			ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
+			ta.start(ctx)
+
+			createStalePod("typha-abc", "calico-typha")
+			Eventually(func() int { return len(listPods(typhaSelector)) }, 5*time.Second).Should(Equal(0))
+		})
+
+		It("getter returning true allows deletions to proceed", func() {
+			ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager,
+				typhaAutoscalerOptionPeriod(10*time.Millisecond),
+				typhaAutoscalerOptionStalePodIPRecoveryEnabled(func() bool { return true }),
+			)
+			ta.start(ctx)
+
+			createStalePod("typha-abc", "calico-typha")
+			Eventually(func() int { return len(listPods(typhaSelector)) }, 5*time.Second).Should(Equal(0))
+		})
+
+		It("getter returning false suppresses all deletions", func() {
+			ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager,
+				typhaAutoscalerOptionPeriod(10*time.Millisecond),
+				typhaAutoscalerOptionStalePodIPRecoveryEnabled(func() bool { return false }),
+			)
+			ta.start(ctx)
+
+			createStalePod("typha-abc", "calico-typha")
+			createStalePod("calico-node-abc", "calico-node")
+
+			// Wait long enough for several ticks; nothing should be deleted.
+			Consistently(func() int {
+				return len(listPods(typhaSelector)) + len(listPods(calicoNodeSelector))
+			}, 200*time.Millisecond, 20*time.Millisecond).Should(Equal(2))
 		})
 	})
 })

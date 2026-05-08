@@ -216,7 +216,9 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				},
 			},
 		},
-		SecurityContext: securitycontext.NewRootContext(false),
+		// Privileged is required here for SELinux compat on OpenShift/RHEL: a non-privileged registrar 
+		// (container_t) cannot connect to the UDS created by the privileged calico-csi container (spc_t).
+		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "socket-dir",

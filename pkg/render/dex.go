@@ -54,9 +54,9 @@ const (
 	DexPolicyName    = networkpolicy.TigeraComponentPolicyPrefix + "allow-tigera-dex"
 
 	// TigeraCAPublicSecretName holds a copy of the operator's CA certificate (from tigera-ca-private)
-	// in calico-system. It exists so that an OpenShift Ingress fronting the manager can reference it
-	// via the destination-CA-certificate annotation on a reencrypt route. Only rendered when the
-	// Authentication CR is configured to use the OpenShift IDP.
+	// in the manager namespace. It exists so that an OpenShift Ingress fronting the manager can
+	// reference it via the destination-CA-certificate annotation on a reencrypt route. Only rendered
+	// when the Authentication CR is configured to use the OpenShift IDP.
 	TigeraCAPublicSecretName = "tigera-ca-public"
 )
 
@@ -169,7 +169,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	} else {
 		objectsToDelete = append(objectsToDelete, &corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: TigeraCAPublicSecretName, Namespace: common.CalicoNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: TigeraCAPublicSecretName, Namespace: ManagerNamespace},
 		})
 	}
 
@@ -179,18 +179,19 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 	return objs, objectsToDelete
 }
 
-// tigeraCAPublicSecret returns an Opaque Secret in calico-system with the operator's CA certificate
-// under the tls.crt key. The customer points an Ingress at it via the
+// tigeraCAPublicSecret returns an Opaque Secret in the manager namespace with the operator's CA
+// certificate under the tls.crt key. The customer points an Ingress at it via the
 // route.openshift.io/destination-ca-certificate-secret annotation, and OpenShift's
 // ingress-to-route controller copies this into the generated reencrypt Route's destinationCACertificate.
-// Both the Ingress and this Secret must live in calico-system (same-namespace lookup in the upstream
-// controller). Type Opaque (not kubernetes.io/tls) because we have no private key to pair with the cert.
+// Both the Ingress and this Secret must live in the same namespace as the manager Service
+// (same-namespace lookup in the upstream controller). Type Opaque (not kubernetes.io/tls) because we
+// have no private key to pair with the cert.
 func (c *dexComponent) tigeraCAPublicSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      TigeraCAPublicSecretName,
-			Namespace: common.CalicoNamespace,
+			Namespace: ManagerNamespace,
 		},
 		Type: corev1.SecretTypeOpaque,
 		Data: map[string][]byte{

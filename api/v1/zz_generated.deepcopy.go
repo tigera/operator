@@ -5982,6 +5982,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		**out = **in
 	}
 	in.NodeUpdateStrategy.DeepCopyInto(&out.NodeUpdateStrategy)
+	if in.StalePodIPRecovery != nil {
+		in, out := &in.StalePodIPRecovery, &out.StalePodIPRecovery
+		*out = new(StalePodIPRecoveryType)
+		**out = **in
+	}
 	if in.ComponentResources != nil {
 		in, out := &in.ComponentResources, &out.ComponentResources
 		*out = make([]ComponentResource, len(*in))

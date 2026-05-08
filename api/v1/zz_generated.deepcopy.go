@@ -1285,6 +1285,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 		*out = new(ContainerIPForwardingType)
 		**out = **in
 	}
+	if in.LinuxPodInterfaceType != nil {
+		in, out := &in.LinuxPodInterfaceType, &out.LinuxPodInterfaceType
+		*out = new(LinuxPodInterfaceType)
+		**out = **in
+	}
 	if in.Sysctl != nil {
 		in, out := &in.Sysctl, &out.Sysctl
 		*out = make([]Sysctl, len(*in))

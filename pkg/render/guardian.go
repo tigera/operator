@@ -504,7 +504,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/health",
+						Path: "/liveness",
 						Port: intstr.FromInt(9080),
 					},
 				},
@@ -513,7 +513,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/health",
+						Path: "/readiness",
 						Port: intstr.FromInt(9080),
 					},
 				},

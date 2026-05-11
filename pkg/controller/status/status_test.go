@@ -1158,7 +1158,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueCrashLoopBackOff))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1184,7 +1184,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).To(ContainSubstring("possible liveness probe failure"))
 		})
@@ -1203,7 +1203,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueImagePull))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1223,7 +1223,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueTerminated))
 		})
@@ -1234,7 +1234,7 @@ var _ = Describe("Status reporting tests", func() {
 				Spec:       corev1.PodSpec{},
 				Status:     corev1.PodStatus{Phase: corev1.PodFailed},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePodFailed))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1251,7 +1251,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueNotReady))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1272,7 +1272,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePending))
 			Expect(issues[0].severity).To(Equal(severityProgressing))
@@ -1285,7 +1285,7 @@ var _ = Describe("Status reporting tests", func() {
 				Spec:       corev1.PodSpec{},
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePending))
 			Expect(issues[0].severity).To(Equal(severityProgressing))
@@ -1316,7 +1316,7 @@ var _ = Describe("Status reporting tests", func() {
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			})).NotTo(HaveOccurred())
 
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(HaveLen(2))
 		})
 
@@ -1331,7 +1331,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "")
 			Expect(issues).To(BeEmpty())
 		})
 	})

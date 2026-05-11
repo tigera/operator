@@ -27,7 +27,6 @@ import (
 	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -118,9 +117,8 @@ var _ = Describe("ComponentRendering", func() {
 							Tolerations:        append(rmeta.TolerateCriticalAddonsAndControlPlane, rmeta.TolerateGKEARM64NoSchedule),
 							Containers: []corev1.Container{
 								{
-									Name:            whisker.WhiskerContainerName,
-									Image:           "quay.io/calico/whisker:master",
-									ImagePullPolicy: render.ImagePullPolicy(),
+									Name:  whisker.WhiskerContainerName,
+									Image: "quay.io/calico/whisker:master",
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "CALICO_VERSION", Value: "test-calico-version"},
@@ -138,10 +136,9 @@ var _ = Describe("ComponentRendering", func() {
 									},
 								},
 								{
-									Name:            whisker.WhiskerBackendContainerName,
-									Image:           "quay.io/calico/calico:master",
-									Command:         []string{"/usr/bin/calico", "component", "whisker-backend"},
-									ImagePullPolicy: render.ImagePullPolicy(),
+									Name:    whisker.WhiskerBackendContainerName,
+									Image:   "quay.io/calico/calico:master",
+									Command: []string{"/usr/bin/calico", "component", "whisker-backend"},
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "3002"},

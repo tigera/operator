@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -230,8 +231,27 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// system as specified by the osType.
 	ensureOSSchedulingRestrictions(obj, osType)
 
-	// Make sure any objects with images also have an image pull policy.
-	modifyPodSpec(obj, setImagePullPolicy)
+	// Look up the InstallationSpec once and reuse it for the passes that need it
+	// (image pull policy and TLS ciphers), so we don't pay for the same Get twice.
+	// Objects without a pod spec (e.g. NetworkPolicy, Tier) don't need it.
+	var installationSpec *operatorv1.InstallationSpec
+	if hasPodSpec(obj) {
+		if _, spec, err := GetInstallationSpec(ctx, c.client); err == nil {
+			installationSpec = spec
+		}
+	}
+
+	// Make sure any objects with images also have an image pull policy. If the user has
+	// configured a pull policy on the Installation, override every container's policy with
+	// it — the user's choice (e.g. for air-gapped clusters) must win over operator defaults.
+	// Otherwise, fill in IfNotPresent for any container that does not already set a policy.
+	var configuredPolicy *v1.PullPolicy
+	if installationSpec != nil {
+		configuredPolicy = installationSpec.ImagePullPolicy
+	}
+	modifyPodSpec(obj, func(podSpec *v1.PodSpec) {
+		setImagePullPolicy(podSpec, configuredPolicy)
+	})
 	// Order volumes and volume mounts
 	modifyPodSpec(obj, orderVolumes)
 	modifyPodSpec(obj, orderVolumeMounts)
@@ -242,7 +262,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Make sure we have our standard selector and pod labels
 	setStandardSelectorAndLabels(obj, c.cr)
 
-	if err := ensureTLSCiphers(ctx, obj, c.client); err != nil {
+	if err := ensureTLSCiphers(obj, installationSpec); err != nil {
 		return fmt.Errorf("failed to set TLS Ciphers: %w", err)
 	}
 
@@ -770,6 +790,16 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 	}
 }
 
+// hasPodSpec reports whether the given object carries a pod spec that modifyPodSpec can reach.
+func hasPodSpec(obj client.Object) bool {
+	switch obj.(type) {
+	case *v1.PodTemplate, *apps.Deployment, *apps.DaemonSet, *apps.StatefulSet,
+		*batchv1.CronJob, *batchv1.Job, *kbv1.Kibana, *esv1.Elasticsearch:
+		return true
+	}
+	return false
+}
+
 // modifyPodSpec is a helper for pulling out pod specifications from an arbitrary object.
 func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 	switch x := obj.(type) {
@@ -796,17 +826,33 @@ func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 	}
 }
 
-// setImagePullPolicy ensures that an image pull policy is set if not set already.
-func setImagePullPolicy(podSpec *v1.PodSpec) {
-	for i := range podSpec.Containers {
-		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
-			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
+// setImagePullPolicy applies an image pull policy to all containers and init containers in
+// the given pod spec. If configuredPolicy is non-nil it is applied to every container,
+// overriding any policy the renderer set — this is what lets a user force IfNotPresent or
+// Never for air-gapped clusters. If configuredPolicy is nil, containers that do not already
+// specify a policy fall back to IfNotPresent.
+func setImagePullPolicy(podSpec *v1.PodSpec, configuredPolicy *v1.PullPolicy) {
+	apply := func(c *v1.Container) {
+		switch {
+		case configuredPolicy != nil:
+			c.ImagePullPolicy = *configuredPolicy
+		case c.ImagePullPolicy == "":
+			c.ImagePullPolicy = v1.PullIfNotPresent
 		}
+	}
+	for i := range podSpec.Containers {
+		apply(&podSpec.Containers[i])
+	}
+	for i := range podSpec.InitContainers {
+		apply(&podSpec.InitContainers[i])
 	}
 }
 
 // ensureTLSCiphers sets the TLSCipherSuites configuration as a Env Var to the Deployments and DaemonSets.
-func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) error {
+func ensureTLSCiphers(obj client.Object, installationSpec *operatorv1.InstallationSpec) error {
+	if installationSpec == nil {
+		return nil
+	}
 	var containers []v1.Container
 	switch obj := obj.(type) {
 	case *apps.Deployment:
@@ -815,15 +861,6 @@ func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) e
 		containers = obj.Spec.Template.Spec.Containers
 	default:
 		return nil
-	}
-
-	_, installationSpec, err := GetInstallationSpec(ctx, c)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		} else {
-			return err
-		}
 	}
 
 	for i := range containers {

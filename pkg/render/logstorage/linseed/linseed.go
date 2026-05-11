@@ -460,7 +460,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				{
 					Name:            DeploymentName,
 					Image:           l.linseedImage,
-					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: sc,

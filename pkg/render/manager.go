@@ -508,7 +508,6 @@ func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
 		Name:            ManagerName,
 		Image:           c.managerImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
@@ -669,7 +668,6 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.voltronImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
@@ -703,7 +701,6 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 	return corev1.Container{
 		Name:            DashboardAPIName,
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{"/usr/bin/dashboard-api"},
 		Env:             env,
 		VolumeMounts:    mounts,
@@ -794,7 +791,6 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	return corev1.Container{
 		Name:            UIAPIsName,
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,

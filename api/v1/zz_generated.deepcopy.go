@@ -5937,6 +5937,11 @@ func (in *InstallationSpec) DeepCopyInto(out *InstallationSpec) {
 		*out = make([]corev1.LocalObjectReference, len(*in))
 		copy(*out, *in)
 	}
+	if in.ImagePullPolicy != nil {
+		in, out := &in.ImagePullPolicy, &out.ImagePullPolicy
+		*out = new(corev1.PullPolicy)
+		**out = **in
+	}
 	if in.CNI != nil {
 		in, out := &in.CNI, &out.CNI
 		*out = new(CNISpec)

@@ -615,7 +615,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		Name:            c.kubeControllerName,
 		Image:           c.image,
 		Command:         containerCommand,
-		ImagePullPolicy: render.ImagePullPolicy(),
 		Env:             env,
 		Resources:       c.kubeControllersResources(),
 		ReadinessProbe:  readinessProbe,

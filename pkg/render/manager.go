@@ -508,7 +508,6 @@ func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
 		Name:            ManagerName,
 		Image:           c.managerImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
@@ -669,7 +668,6 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.voltronImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "voltron"},
 		Env:             env,
 		VolumeMounts:    mounts,
@@ -704,7 +702,6 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 	return corev1.Container{
 		Name:            DashboardAPIName,
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "dashboards"},
 		Env:             env,
 		VolumeMounts:    mounts,
@@ -795,7 +792,6 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	return corev1.Container{
 		Name:            UIAPIsName,
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "ui-apis"},
 		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),

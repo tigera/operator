@@ -235,7 +235,6 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 						{
 							Name:            ElasticsearchMetricsName,
 							Image:           e.esMetricsImage,
-							ImagePullPolicy: render.ImagePullPolicy(),
 							SecurityContext: sc,
 							Command:         []string{components.CalicoBinaryPath, "component", "elasticsearch-metrics"},
 							Args: []string{

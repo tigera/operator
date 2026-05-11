@@ -485,7 +485,6 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 				{
 					Name:            ComplianceControllerName,
 					Image:           c.controllerImage,
-					ImagePullPolicy: ImagePullPolicy(),
 					Command:         []string{components.CalicoBinaryPath, "component", "compliance-controller"},
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
@@ -686,7 +685,6 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 					{
 						Name:            "reporter",
 						Image:           c.reporterImage,
-						ImagePullPolicy: ImagePullPolicy(),
 						Command:         []string{components.CalicoBinaryPath, "component", "compliance-reporter"},
 						Env:             envVars,
 						LivenessProbe: &corev1.Probe{
@@ -896,7 +894,6 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 					Name:            ComplianceServerName,
 					Image:           c.serverImage,
 					Command:         []string{components.CalicoBinaryPath, "component", "compliance-server"},
-					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
@@ -1109,7 +1106,6 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 				{
 					Name:            ComplianceSnapshotterName,
 					Image:           c.snapshotterImage,
-					ImagePullPolicy: ImagePullPolicy(),
 					Command:         []string{components.CalicoBinaryPath, "component", "compliance-snapshotter"},
 					Env:             envVars,
 					LivenessProbe: &corev1.Probe{
@@ -1316,7 +1312,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				{
 					Name:            ComplianceBenchmarkerName,
 					Image:           c.benchmarkerImage,
-					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: sc,
 					VolumeMounts:    volMounts,

@@ -30,7 +30,6 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -140,10 +139,9 @@ var _ = Describe("ComponentRendering", func() {
 							Tolerations:        append(rmeta.TolerateCriticalAddonsAndControlPlane, rmeta.TolerateGKEARM64NoSchedule),
 							Containers: []corev1.Container{
 								{
-									Name:            goldmane.GoldmaneContainerName,
-									Image:           "quay.io/calico/calico:master",
-									Command:         []string{"/usr/bin/calico", "component", "goldmane"},
-									ImagePullPolicy: render.ImagePullPolicy(),
+									Name:    goldmane.GoldmaneContainerName,
+									Image:   "quay.io/calico/calico:master",
+									Command: []string{"/usr/bin/calico", "component", "goldmane"},
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "7443"},

@@ -520,7 +520,6 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
 			Image:              &mc.alertmanagerImage,
-			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
 			Replicas:           mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas,
@@ -641,7 +640,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					{
 						Name:            "authn-proxy",
 						Image:           mc.prometheusServiceImage,
-						ImagePullPolicy: render.ImagePullPolicy(),
 						Command:         []string{components.CalicoBinaryPath, "component", "prometheus-service"},
 						Ports: []corev1.ContainerPort{
 							{
@@ -672,7 +670,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					},
 				},
 				Image:            &mc.prometheusImage,
-				ImagePullPolicy:  render.ImagePullPolicy(),
 				ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 				InitContainers:   initContainers,
 				// ListenLocal makes the Prometheus server listen on loopback, so that it

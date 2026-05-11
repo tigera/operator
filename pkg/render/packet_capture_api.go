@@ -304,7 +304,6 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	return corev1.Container{
 		Name:            PacketCaptureContainerName,
 		Image:           pc.image,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "packetcapture"},
 		LivenessProbe:   pc.healthProbe(),
 		ReadinessProbe:  pc.healthProbe(),

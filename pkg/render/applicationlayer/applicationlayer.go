@@ -273,7 +273,6 @@ func (c *component) containers() []corev1.Container {
 		proxy := corev1.Container{
 			Name:            ProxyContainerName,
 			Image:           c.config.proxyImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
 			Command: []string{
 				"envoy", "-c", "/etc/envoy/envoy-config.yaml",
 			},
@@ -290,7 +289,6 @@ func (c *component) containers() []corev1.Container {
 		collector := corev1.Container{
 			Name:            L7CollectorContainerName,
 			Image:           c.config.collectorImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
 			Command:         []string{components.CalicoBinaryPath, "component", "l7-collector"},
 			Env:             c.collectorEnv(),
 			SecurityContext: securitycontext.NewRootContext(false),
@@ -351,7 +349,6 @@ func (c *component) containers() []corev1.Container {
 		dikastes := corev1.Container{
 			Name:            DikastesContainerName,
 			Image:           c.config.dikastesImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
 			Command:         commandArgs,
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},

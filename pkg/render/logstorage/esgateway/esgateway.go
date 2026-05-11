@@ -253,7 +253,6 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 				{
 					Name:            DeploymentName,
 					Image:           e.esGatewayImage,
-					ImagePullPolicy: render.ImagePullPolicy(),
 					Command:         []string{components.CalicoBinaryPath, "component", "es-gateway"},
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,

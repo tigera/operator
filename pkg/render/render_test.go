@@ -208,12 +208,6 @@ var _ = Describe("Rendering tests", func() {
 		}
 	})
 
-	It("should render IfNotPresent image pull policy", func() {
-		// This test ensures we don't accidentally commit a change that switches the
-		// default image pull policy to Always as part of development.
-		Expect(render.ImagePullPolicy()).To(Equal(corev1.PullIfNotPresent))
-	})
-
 	It("should render all resources for a default configuration", func() {
 		// For this scenario, we expect the basic resources
 		// created by the controller without any optional ones. These include:

@@ -483,10 +483,9 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceControllerName,
-					Image:           c.controllerImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:  ComplianceControllerName,
+					Image: c.controllerImage,
+					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -683,10 +682,9 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				InitContainers:     initContainers,
 				Containers: []corev1.Container{
 					{
-						Name:            "reporter",
-						Image:           c.reporterImage,
-						ImagePullPolicy: ImagePullPolicy(),
-						Env:             envVars,
+						Name:  "reporter",
+						Image: c.reporterImage,
+						Env:   envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
@@ -891,10 +889,9 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceServerName,
-					Image:           c.serverImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:  ComplianceServerName,
+					Image: c.serverImage,
+					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1104,10 +1101,9 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceSnapshotterName,
-					Image:           c.snapshotterImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:  ComplianceSnapshotterName,
+					Image: c.snapshotterImage,
+					Env:   envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1312,7 +1308,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				{
 					Name:            ComplianceBenchmarkerName,
 					Image:           c.benchmarkerImage,
-					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: sc,
 					VolumeMounts:    volMounts,

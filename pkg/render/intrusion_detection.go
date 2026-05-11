@@ -687,7 +687,6 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 	return corev1.Container{
 		Name:            "webhooks-processor",
 		Image:           c.webhooksProcessorImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             envVars,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
@@ -766,10 +765,9 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	}
 
 	return corev1.Container{
-		Name:            "controller",
-		Image:           c.controllerImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Env:             envs,
+		Name:  "controller",
+		Image: c.controllerImage,
+		Env:   envs,
 		// Needed for permissions to write to the audit log
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{

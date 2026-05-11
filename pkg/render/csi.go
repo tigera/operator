@@ -139,10 +139,9 @@ func (c *csiComponent) csiAffinities() *corev1.Affinity {
 func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
 	csiContainer := corev1.Container{
-		Name:            CSIContainerName,
-		Image:           c.csiImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "csi"},
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:    CSIContainerName,
+		Image:   c.csiImage,
+		Command: []string{components.CalicoBinaryPath, "component", "csi"},
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
 			"--loglevel=$(LOG_LEVEL)",
@@ -181,10 +180,9 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 
 	// Construct "csi-node-driver-registrar" container
 	registrarContainer := corev1.Container{
-		Name:            CSIRegistrarContainerName,
-		Image:           c.csiRegistrarImage,
-		Command:         []string{"/usr/bin/csi-node-driver-registrar"},
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:    CSIRegistrarContainerName,
+		Image:   c.csiRegistrarImage,
+		Command: []string{"/usr/bin/csi-node-driver-registrar"},
 		Args: []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",

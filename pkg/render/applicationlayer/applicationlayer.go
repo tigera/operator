@@ -271,9 +271,8 @@ func (c *component) containers() []corev1.Container {
 			"NET_RAW",
 		}
 		proxy := corev1.Container{
-			Name:            ProxyContainerName,
-			Image:           c.config.proxyImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
+			Name:  ProxyContainerName,
+			Image: c.config.proxyImage,
 			Command: []string{
 				"envoy", "-c", "/etc/envoy/envoy-config.yaml",
 			},
@@ -290,7 +289,6 @@ func (c *component) containers() []corev1.Container {
 		collector := corev1.Container{
 			Name:            L7CollectorContainerName,
 			Image:           c.config.collectorImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
 			Env:             c.collectorEnv(),
 			SecurityContext: securitycontext.NewRootContext(false),
 			VolumeMounts:    c.collectorVolMounts(),
@@ -348,10 +346,9 @@ func (c *component) containers() []corev1.Container {
 		}
 
 		dikastes := corev1.Container{
-			Name:            DikastesContainerName,
-			Image:           c.config.dikastesImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
-			Command:         commandArgs,
+			Name:    DikastesContainerName,
+			Image:   c.config.dikastesImage,
+			Command: commandArgs,
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
 				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},

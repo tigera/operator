@@ -609,8 +609,7 @@ func expectedVolumes() []corev1.Volume {
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:            Name,
-			ImagePullPolicy: render.ImagePullPolicy(),
+			Name: Name,
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				AllowPrivilegeEscalation: ptr.To(false),

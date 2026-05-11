@@ -97,6 +97,14 @@ type InstallationSpec struct {
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
+	// ImagePullPolicy is the pull policy applied to containers in pods rendered by the operator
+	// that do not explicitly set their own pull policy. If unset, defaults to IfNotPresent.
+	// This is useful in air-gapped environments where images are pre-loaded onto nodes and
+	// must not be re-pulled from a remote registry.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	ImagePullPolicy *v1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
 	// KubernetesProvider specifies a particular provider of the Kubernetes platform and enables provider-specific configuration.
 	// If the specified value is empty, the Operator will attempt to automatically determine the current provider.
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but

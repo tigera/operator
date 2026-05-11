@@ -191,9 +191,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		return []corev1.Container{
 			{
-				Name:            render.PacketCaptureContainerName,
-				Image:           fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
-				ImagePullPolicy: render.ImagePullPolicy(),
+				Name:  render.PacketCaptureContainerName,
+				Image: fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.To(false),
 					Capabilities: &corev1.Capabilities{

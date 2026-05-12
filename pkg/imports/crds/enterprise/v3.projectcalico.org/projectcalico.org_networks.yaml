@@ -1,0 +1,247 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.18.0
+  name: networks.projectcalico.org
+spec:
+  group: projectcalico.org
+  names:
+    kind: Network
+    listKind: NetworkList
+    plural: networks
+    singular: network
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v3
+      schema:
+        openAPIV3Schema:
+          description: |-
+            Network defines a logical network within a Calico cluster.  Each Network has a type
+            (VRF, ...) that determines how pods on that network are isolated and how
+            their traffic is routed.
+          properties:
+            apiVersion:
+              description: |-
+                APIVersion defines the versioned schema of this representation of an object.
+                Servers should convert recognized schemas to the latest internal value, and
+                may reject unrecognized values.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+              type: string
+            kind:
+              description: |-
+                Kind is a string value representing the REST resource this object represents.
+                Servers may infer this from the endpoint the client submits requests to.
+                Cannot be updated.
+                In CamelCase.
+                More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: |-
+                NetworkSpec contains the specification for a Network resource.  Exactly one of the
+                network-type fields (vrf, ...) must be set.
+              maxProperties: 1
+              minProperties: 1
+              properties:
+                vrf:
+                  description: |-
+                    VRF network configuration.
+                    Pods interfaces on a VRF network are isolated in a Linux VRF and can only access their own VRF.
+                  properties:
+                    hostConfig:
+                      description: |-
+                        HostConfig defines per-node configuration for this VRF network.  At least one entry
+                        must be specified.  When multiple entries are present (e.g. one per rack), they must
+                        have disjoint nodeSelectors although this is not enforced.  For a given node, the
+                        first matching entry is applied and all others are ignored.
+
+                        The list is stored and served as a JSON array; Kubernetes preserves the
+                        order in which entries were submitted (including across Server-Side
+                        Apply merges keyed on nodeSelector), so the result of `kubectl get -oyaml`
+                        is authoritative for "first match wins".  Single-actor edits keep the
+                        order users see in the YAML they edit.
+                      items:
+                        description: |-
+                          VRFHostConfig provides node-specific VRF settings which may vary across different hosts
+                          in the cluster.
+                        properties:
+                          hostInterfaces:
+                            description: |-
+                              Interfaces on the node to attach to the VRF.  The IP address, and local routes
+                              for that IP address will move into the VRF routing table.  At least one interface
+                              should be specified to allow pods in the VRF to communicate outside the node.
+                            items:
+                              description: |-
+                                InterfaceMatch identifies a network interface.  Exactly one match
+                                criterion must be set.
+                              maxProperties: 1
+                              minProperties: 1
+                              properties:
+                                name:
+                                  description: |-
+                                    Name matches a network interface by its exact device name
+                                    (e.g. "bond0", "eth1", "ens192").
+                                  maxLength: 15
+                                  minLength: 1
+                                  type: string
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                          nodeSelector:
+                            default: ""
+                            description: |-
+                              NodeSelector is a Calico selector expression that determines which nodes this
+                              configuration applies to.  If omitted, the entry applies to all nodes.
+                              When multiple HostConfig entries are present, the first entry whose selector
+                              matches a given node wins.
+                            type: string
+                          routeTableIndex:
+                            description: |-
+                              RouteTableIndex is the Linux kernel routing table number to use for this VRF.
+                              Must be unique on these nodes, must not overlap with the RouteTableRanges in
+                              FelixConfiguration, and must not collide with tables used by other software on
+                              the node.  Tables 253 (default), 254 (main), and 255 (local) are reserved by
+                              the kernel.
+                            format: int32
+                            maximum: 2147483647
+                            minimum: 1
+                            type: integer
+                          staticRoutes:
+                            description: |-
+                              StaticRoutes are additional routes programmed into the VRF routing table, beyond
+                              the pod routes that Felix manages automatically and routes derived from VRF
+                              interface addresses.
+                            items:
+                              description:
+                                VRFStaticRoute defines a static route to
+                                program in a VRF routing table.
+                              properties:
+                                action:
+                                  description: |-
+                                    Action determines how traffic matching this route is handled.  Exactly one action
+                                    field must be set.
+                                  maxProperties: 1
+                                  minProperties: 1
+                                  properties:
+                                    nextHop:
+                                      description: |-
+                                        NextHop forwards matching traffic to the specified gateway IP.  The address must be
+                                        reachable on the subnet of one of the VRF interfaces on the node.
+                                      type: string
+                                  type: object
+                                destination:
+                                  description: |-
+                                    Destination is the CIDR prefix for this route.  Use "0.0.0.0/0" or "::/0" for a
+                                    default route.
+                                  type: string
+                              required:
+                                - action
+                                - destination
+                              type: object
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        required:
+                          - routeTableIndex
+                        type: object
+                      maxItems: 100
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-map-keys:
+                        - nodeSelector
+                      x-kubernetes-list-type: map
+                    routing:
+                      description:
+                        Routing controls cluster-wide routing behaviour for
+                        this VRF network.
+                      properties:
+                        inClusterMode:
+                          default: Local
+                          description: |-
+                            InClusterMode controls how Felix programs routes to pods on remote nodes inside
+                            the VRF routing table.
+
+                            - Local: Felix programs routes to VRF pods local to this node;
+                              routing to pods on other nodes must be handled by BGP.
+                          enum:
+                            - Local
+                          type: string
+                      type: object
+                  required:
+                    - hostConfig
+                  type: object
+              type: object
+            status:
+              description: NetworkStatus reports the observed state of the Network resource.
+              properties:
+                conditions:
+                  description:
+                    Conditions is a list of conditions that apply to this
+                    network.
+                  items:
+                    description:
+                      Condition contains details for one aspect of the current
+                      state of this API Resource.
+                    properties:
+                      lastTransitionTime:
+                        description: |-
+                          lastTransitionTime is the last time the condition transitioned from one status to another.
+                          This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                        format: date-time
+                        type: string
+                      message:
+                        description: |-
+                          message is a human readable message indicating details about the transition.
+                          This may be an empty string.
+                        maxLength: 32768
+                        type: string
+                      observedGeneration:
+                        description: |-
+                          observedGeneration represents the .metadata.generation that the condition was set based upon.
+                          For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                          with respect to the current state of the instance.
+                        format: int64
+                        minimum: 0
+                        type: integer
+                      reason:
+                        description: |-
+                          reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                          Producers of specific condition types may define expected values and meanings for this field,
+                          and whether the values are considered a guaranteed API.
+                          The value should be a CamelCase string.
+                          This field may not be empty.
+                        maxLength: 1024
+                        minLength: 1
+                        pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                        type: string
+                      status:
+                        description: status of the condition, one of True, False, Unknown.
+                        enum:
+                          - "True"
+                          - "False"
+                          - Unknown
+                        type: string
+                      type:
+                        description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                        maxLength: 316
+                        pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                        type: string
+                    required:
+                      - lastTransitionTime
+                      - message
+                      - reason
+                      - status
+                      - type
+                    type: object
+                  type: array
+                  x-kubernetes-list-type: atomic
+              type: object
+          required:
+            - spec
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}

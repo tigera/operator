@@ -626,22 +626,22 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(dashboard.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							components.ComponentUIAPIs.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							components.ComponentUIAPIs.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentManagerProxy.Image,
-							components.ComponentManagerProxy.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 				})
 				It("should use images from imageset", func() {
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -650,8 +650,6 @@ var _ = Describe("Manager controller tests", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/manager", Digest: "sha256:managerhash"},
-								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
-								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
 								{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
@@ -680,22 +678,22 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(dashboard.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							"sha256:uiapihash")))
+							components.ComponentTigeraCalico.Image,
+							"sha256:deadbeef0123456789")))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							"sha256:uiapihash")))
+							components.ComponentTigeraCalico.Image,
+							"sha256:deadbeef0123456789")))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentManagerProxy.Image,
-							"sha256:voltronhash")))
+							components.ComponentTigeraCalico.Image,
+							"sha256:deadbeef0123456789")))
 				})
 			})
 

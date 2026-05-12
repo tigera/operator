@@ -198,8 +198,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(qserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentQueryServer.Image,
-					components.ComponentQueryServer.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 			Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(2))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
@@ -218,7 +218,6 @@ var _ = Describe("apiserver controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/calico", Digest: "sha256:calicohash"},
-						{Image: "tigera/queryserver", Digest: "sha256:queryserverhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -258,8 +257,8 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(qserver.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentQueryServer.Image,
-					"sha256:queryserverhash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:calicohash")))
 			csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, "calico-apiserver-certs-key-cert-provisioner")
 			Expect(csrinit).ToNot(BeNil())
 			Expect(csrinit.Image).To(Equal(

@@ -137,7 +137,7 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	// Calculate the image(s) to use for Linseed, given user registry configuration.
-	l.linseedImage, err = components.GetReference(components.ComponentLinseed, reg, path, prefix, is)
+	l.linseedImage, err = components.GetReference(components.CombinedCalicoImage(l.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -461,13 +461,14 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 					Name:            DeploymentName,
 					Image:           l.linseedImage,
 					ImagePullPolicy: render.ImagePullPolicy(),
+					Command:         []string{components.CalicoBinaryPath, "component", "linseed"},
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,
 					SecurityContext: sc,
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							Exec: &corev1.ExecAction{
-								Command: []string{"/linseed", "-ready"},
+								Command: []string{components.CalicoBinaryPath, "component", "linseed", "ready"},
 							},
 						},
 						InitialDelaySeconds: 10,
@@ -475,7 +476,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							Exec: &corev1.ExecAction{
-								Command: []string{"/linseed", "-live"},
+								Command: []string{components.CalicoBinaryPath, "component", "linseed", "live"},
 							},
 						},
 						InitialDelaySeconds: 10,

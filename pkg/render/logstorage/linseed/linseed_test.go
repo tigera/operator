@@ -38,6 +38,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -1030,6 +1031,7 @@ func expectedContainers() []corev1.Container {
 		{
 			Name:            DeploymentName,
 			ImagePullPolicy: render.ImagePullPolicy(),
+			Command:         []string{components.CalicoBinaryPath, "component", "linseed"},
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				AllowPrivilegeEscalation: ptr.To(false),
@@ -1042,7 +1044,7 @@ func expectedContainers() []corev1.Container {
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/linseed", "-ready"},
+						Command: []string{components.CalicoBinaryPath, "component", "linseed", "ready"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -1050,7 +1052,7 @@ func expectedContainers() []corev1.Container {
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/linseed", "-live"},
+						Command: []string{components.CalicoBinaryPath, "component", "linseed", "live"},
 					},
 				},
 				InitialDelaySeconds: 10,

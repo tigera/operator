@@ -37,42 +37,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "compliance-controller" }}
-	ComponentComplianceController = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "compliance-reporter" }}
-	ComponentComplianceReporter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "compliance-server" }}
-	ComponentComplianceServer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "compliance-snapshotter" }}
-	ComponentComplianceSnapshotter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "deep-packet-inspection" }}
 	ComponentDeepPacketInspection = Component{
 		Version:   "{{ .Version }}",
@@ -127,33 +91,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "ui-apis" }}
-	ComponentUIAPIs = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "es-gateway" }}
-	ComponentESGateway = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "linseed" }}
-	ComponentLinseed = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with .Components.fluentd }}
 	ComponentFluentd = Component{
 		Version:   "{{ .Version }}",
@@ -174,24 +111,6 @@ var (
 {{- end }}
 {{ with index .Components "intrusion-detection-controller" }}
 	ComponentIntrusionDetectionController = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "waf-http-filter" }}
-	ComponentWAFHTTPFilter = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "webhooks-processor" }}
-	ComponentSecurityEventWebhooksProcessor = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -226,44 +145,8 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with .Components.voltron }}
-	ComponentManagerProxy = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "packetcapture" }}
-	ComponentPacketCapture = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "policy-recommendation" }}
-	ComponentPolicyRecommendation = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "egress-gateway" }}
 	ComponentEgressGateway = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "l7-collector" }}
-	ComponentL7Collector = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -297,24 +180,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "queryserver" }}
-	ComponentQueryServer = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "l7-admission-controller" }}
-	ComponentL7AdmissionController = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
 		Version: "{{ .Version }}",
@@ -323,15 +188,6 @@ var (
 {{- end }}
 {{ with index .Components "prometheus" }}
 	ComponentPrometheus = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "tigera-prometheus-service" }}
-	ComponentTigeraPrometheusService = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -374,15 +230,6 @@ var (
 {{- end }}
 {{ with index .Components "tigera-cni-windows" }}
 	ComponentTigeraCNIWindows = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
-{{ with index .Components "elasticsearch-metrics" }}
-	ComponentElasticsearchMetrics = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -455,42 +302,25 @@ var (
 	EnterpriseImages = []Component{
 		ComponentTigeraCalico,
 		ComponentComplianceBenchmarker,
-		ComponentComplianceController,
-		ComponentComplianceReporter,
-		ComponentComplianceServer,
-		ComponentComplianceSnapshotter,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
 		ComponentElasticsearchOperator,
-		ComponentUIAPIs,
 		ComponentFluentd,
 		ComponentFluentdWindows,
 		ComponentIntrusionDetectionController,
-		ComponentWAFHTTPFilter,
-		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
-		ComponentManagerProxy,
-		ComponentPacketCapture,
-		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
-		ComponentL7Collector,
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,
-		ComponentQueryServer,
 		ComponentPrometheus,
-		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
-		ComponentElasticsearchMetrics,
-		ComponentESGateway,
-		ComponentLinseed,
-		ComponentL7AdmissionController,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,

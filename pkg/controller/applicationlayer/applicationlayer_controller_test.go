@@ -274,7 +274,7 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(l7collector).ToNot(BeNil())
 			Expect(l7collector.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
 				components.TigeraImagePath,
-				components.ComponentL7Collector.Image, components.ComponentL7Collector.Version)))
+				components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)))
 
 			By("ensuring that felix configuration updated to enabled")
 			fc := v3.FelixConfiguration{

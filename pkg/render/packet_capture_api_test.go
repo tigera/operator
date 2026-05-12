@@ -79,7 +79,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		},
 	}}
 	// Installation with minimal setup
-	defaultInstallation := operatorv1.InstallationSpec{}
+	defaultInstallation := operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 
 	// Rendering packet capture resources
 	renderPacketCapture := func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
@@ -192,7 +192,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		return []corev1.Container{
 			{
 				Name:            render.PacketCaptureContainerName,
-				Image:           fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
+				Image:           fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
+				Command:         []string{components.CalicoBinaryPath, "component", "packetcapture"},
 				ImagePullPolicy: render.ImagePullPolicy(),
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.To(false),
@@ -350,6 +351,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Value:    "bar",
 		}
 		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			Variant:                 operatorv1.CalicoEnterprise,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}, nil)
 
@@ -362,6 +364,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	It("should render toleration on GKE", func() {
 		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			Variant:            operatorv1.CalicoEnterprise,
 			KubernetesProvider: operatorv1.ProviderGKE,
 		}, nil)
 		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -376,6 +379,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			Variant:            operatorv1.CalicoEnterprise,
 			KubernetesProvider: operatorv1.ProviderOpenShift,
 		}, nil)
 
@@ -391,7 +395,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	It("should render all resources for an installation with certificate management", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
-		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+		installation := operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 
 		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -460,7 +464,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		It("should override container's resource request and render init container with default values", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
-			installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+			installation := operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 
 			certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())

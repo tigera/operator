@@ -1405,12 +1405,15 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 	}
 
 	if c.cfg.ManagementClusterConnection != nil {
+		// Optional: the Secret is delivered over the Guardian tunnel, which can't be
+		// established until calico-apiserver is Ready.
 		volumes = append(volumes, corev1.Volume{
 			Name: LinseedTokenVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName: fmt.Sprintf(LinseedTokenSecret, "calico-apiserver"),
 					Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Optional:   ptr.To(true),
 				},
 			},
 		})

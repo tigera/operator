@@ -187,8 +187,8 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(pcContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentPacketCapture.Image,
-					components.ComponentPacketCapture.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 			Expect(pcContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
 				{
 					Name:      packetCaptureSecret.Name,
@@ -227,7 +227,6 @@ var _ = Describe("packet capture controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/calico", Digest: "sha256:calicocsrinithash"},
-						{Image: "tigera/packetcapture", Digest: "sha256:packetcapturehash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -249,8 +248,8 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(pcContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentPacketCapture.Image,
-					"sha256:packetcapturehash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:calicocsrinithash")))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(

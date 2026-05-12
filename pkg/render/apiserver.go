@@ -175,14 +175,12 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if enterprise {
-		// queryserver and dikastes don't yet ship as part of the combined calico image
-		// in enterprise, so resolve them from their own component images.
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		c.queryServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		if c.cfg.IsSidecarInjectionEnabled() {
-			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			c.l7AdmissionControllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
@@ -1307,6 +1305,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		Name:            string(TigeraAPIServerQueryServerContainerName),
 		Image:           c.queryServerImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "queryserver"},
 		Env:             env,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
@@ -2257,6 +2256,7 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 		Name:            string(L7AdmissionControllerContainerName),
 		Image:           c.l7AdmissionControllerImage,
 		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "L7ADMCTRL_TLSCERTPATH",

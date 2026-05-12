@@ -200,7 +200,7 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
+	mc.prometheusServiceImage, err = components.GetReference(components.CombinedCalicoImage(mc.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -642,6 +642,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 						Name:            "authn-proxy",
 						Image:           mc.prometheusServiceImage,
 						ImagePullPolicy: render.ImagePullPolicy(),
+						Command:         []string{components.CalicoBinaryPath, "component", "prometheus-service"},
 						Ports: []corev1.ContainerPort{
 							{
 								ContainerPort: PrometheusProxyPort,

@@ -60,7 +60,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 			installation := &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderOpenShift,
 				Registry:           "testregistry.com/",
-				Variant:            operatorv1.TigeraSecureEnterprise,
+				Variant:            operatorv1.CalicoEnterprise,
 			}
 
 			esConfig = relasticsearch.NewClusterConfig("cluster", 1, 1, 1)

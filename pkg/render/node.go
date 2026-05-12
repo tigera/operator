@@ -573,6 +573,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"egressgatewaypolicies",
 					"externalnetworks",
 					"licensekeys",
+					"networks",
 					"packetcaptures",
 					"remoteclusterconfigurations",
 				},
@@ -649,6 +650,14 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 		},
+	}
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		// The Network resource is only available in Enterprise / Cloud at this time.
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get"},
+		})
 	}
 	return role
 }
@@ -747,6 +756,14 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 			"type":   "grpc",
 			"socket": "unix:///var/run/calico/cni-server.sock",
 		}
+	}
+
+	// device_type tells the Calico CNI plugin which virtual device to create for
+	// the pod interface. Only emit when explicitly set to Netkit: leaving it out
+	// keeps the default (veth) behavior and avoids churning existing CNI configs.
+	if c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType == operatorv1.LinuxPodInterfaceNetkit {
+		calicoPluginConfig["device_type"] = "netkit"
 	}
 
 	return calicoPluginConfig

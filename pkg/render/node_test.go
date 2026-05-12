@@ -2443,6 +2443,69 @@ var _ = Describe("Node rendering tests", func() {
 }`, enableIPv4, enableIPv6)))
 			})
 
+			It("should render device_type=netkit in the cni config when LinuxPodInterface is Netkit", func() {
+				nk := operatorv1.LinuxPodInterfaceNetkit
+				defaultInstance.CalicoNetwork.LinuxPodInterfaceType = &nk
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+				cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+				Expect(cniCmResource).ToNot(BeNil())
+				cniCm := cniCmResource.(*corev1.ConfigMap)
+				Expect(cniCm.Data["config"]).To(MatchJSON(fmt.Sprintf(`{
+  "name": "k8s-pod-network",
+  "cniVersion": "0.3.1",
+  "plugins": [
+    {
+      "type": "calico",
+      "calico_api_group": "",
+      "datastore_type": "kubernetes",
+      "mtu": 0,
+      "nodename_file_optional": false,
+      "log_level": "Debug",
+      "log_file_path": "/var/log/calico/cni/cni.log",
+      "log_file_max_size": 1,
+      "log_file_max_age": 5,
+      "log_file_max_count": 5,
+      "device_type": "netkit",
+      "ipam": {
+          "type": "calico-ipam",
+          "assign_ipv4" : "%t",
+          "assign_ipv6" : "%t"
+      },
+      "container_settings": {
+          "allow_ip_forwarding": false
+      },
+      "policy_setup_timeout_seconds": 0,
+      "endpoint_status_dir": "/var/run/calico/endpoint-status",
+      "policy": {
+          "type": "k8s"
+      },
+      "kubernetes": {
+          "kubeconfig": "__KUBECONFIG_FILEPATH__"
+      }
+    },
+    {"type": "portmap", "snat": true, "capabilities": {"portMappings": true}}
+  ]
+}`, enableIPv4, enableIPv6)))
+			})
+
+			It("should not emit device_type in the cni config when LinuxPodInterface is Veth (default)", func() {
+				veth := operatorv1.LinuxPodInterfaceVeth
+				defaultInstance.CalicoNetwork.LinuxPodInterfaceType = &veth
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
+
+				cniCmResource := rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")
+				Expect(cniCmResource).ToNot(BeNil())
+				cniCm := cniCmResource.(*corev1.ConfigMap)
+				Expect(cniCm.Data["config"]).NotTo(ContainSubstring("device_type"))
+			})
+
 			It("should render cni config with host-local", func() {
 				defaultInstance.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
 				component := render.Node(&cfg)

@@ -21,6 +21,7 @@ limitations under the License.
 package v1
 
 import (
+	"github.com/envoyproxy/gateway/api/v1alpha1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	appsv1 "k8s.io/api/apps/v1"
@@ -1283,6 +1284,11 @@ func (in *CalicoNetworkSpec) DeepCopyInto(out *CalicoNetworkSpec) {
 	if in.ContainerIPForwarding != nil {
 		in, out := &in.ContainerIPForwarding, &out.ContainerIPForwarding
 		*out = new(ContainerIPForwardingType)
+		**out = **in
+	}
+	if in.LinuxPodInterfaceType != nil {
+		in, out := &in.LinuxPodInterfaceType, &out.LinuxPodInterfaceType
+		*out = new(LinuxPodInterfaceType)
 		**out = **in
 	}
 	if in.Sysctl != nil {
@@ -5130,6 +5136,11 @@ func (in *GatewayServiceSpec) DeepCopyInto(out *GatewayServiceSpec) {
 		in, out := &in.LoadBalancerIP, &out.LoadBalancerIP
 		*out = new(string)
 		**out = **in
+	}
+	if in.Patch != nil {
+		in, out := &in.Patch, &out.Patch
+		*out = new(v1alpha1.KubernetesPatchSpec)
+		(*in).DeepCopyInto(*out)
 	}
 }
 

@@ -1105,6 +1105,9 @@ func applyEnvoyProxyServiceOverrides(ep *envoyapi.EnvoyProxy, overrides *operato
 			if overrides.Spec.LoadBalancerIP != nil {
 				ep.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP = overrides.Spec.LoadBalancerIP
 			}
+			if overrides.Spec.Patch != nil {
+				ep.Spec.Provider.Kubernetes.EnvoyService.Patch = overrides.Spec.Patch
+			}
 		}
 	}
 }

@@ -2215,7 +2215,15 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{baseNP},
 		}
 
+		// Two Get calls are issued up-front to load the InstallationSpec
+		// (one for the Installation, one for the overlay).
+		installationGets := func() {
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+		}
+
 		It("NetworkPolicy updates are omitted if there is no change", func() {
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2224,7 +2232,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(1))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("NetworkPolicy updates are applied if there is a change", func() {
@@ -2236,6 +2244,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2250,7 +2259,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 
@@ -2271,7 +2280,15 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{baseTier},
 		}
 
+		// Two Get calls are issued up-front to load the InstallationSpec
+		// (one for the Installation, one for the overlay).
+		installationGets := func() {
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+		}
+
 		It("Tier updates are omitted if there is no change", func() {
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2280,7 +2297,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(1))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("Tier updates are applied if there is a change", func() {
@@ -2293,6 +2310,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2307,7 +2325,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 })

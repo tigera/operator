@@ -233,18 +233,12 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 	// Look up the InstallationSpec once and reuse it for the passes that need it
 	// (image pull policy and TLS ciphers), so we don't pay for the same Get twice.
-	// Objects without a pod spec (e.g. NetworkPolicy, Tier) don't need it.
 	var installationSpec *operatorv1.InstallationSpec
-	if hasPodSpec(obj) {
-		if _, spec, err := GetInstallationSpec(ctx, c.client); err == nil {
-			installationSpec = spec
-		}
+	if _, spec, err := GetInstallationSpec(ctx, c.client); err == nil {
+		installationSpec = spec
 	}
 
-	// Make sure any objects with images also have an image pull policy. If the user has
-	// configured a pull policy on the Installation, override every container's policy with
-	// it — the user's choice (e.g. for air-gapped clusters) must win over operator defaults.
-	// Otherwise, fill in IfNotPresent for any container that does not already set a policy.
+	// Set image pull policy based on user input, if specified.
 	var configuredPolicy *v1.PullPolicy
 	if installationSpec != nil {
 		configuredPolicy = installationSpec.ImagePullPolicy
@@ -788,16 +782,6 @@ func mergeState(desired client.Object, current runtime.Object) client.Object {
 		// Default to just using the desired state, with an updated RV.
 		return desired
 	}
-}
-
-// hasPodSpec reports whether the given object carries a pod spec that modifyPodSpec can reach.
-func hasPodSpec(obj client.Object) bool {
-	switch obj.(type) {
-	case *v1.PodTemplate, *apps.Deployment, *apps.DaemonSet, *apps.StatefulSet,
-		*batchv1.CronJob, *batchv1.Job, *kbv1.Kibana, *esv1.Elasticsearch:
-		return true
-	}
-	return false
 }
 
 // modifyPodSpec is a helper for pulling out pod specifications from an arbitrary object.

@@ -460,7 +460,6 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				{
 					Name:            DeploymentName,
 					Image:           l.linseedImage,
-					ImagePullPolicy: render.ImagePullPolicy(),
 					Command:         []string{components.CalicoBinaryPath, "component", "linseed"},
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,

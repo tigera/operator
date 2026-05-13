@@ -687,7 +687,6 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 	return corev1.Container{
 		Name:            "webhooks-processor",
 		Image:           c.webhooksProcessorImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "webhooks-processor"},
 		Env:             envVars,
 		SecurityContext: securitycontext.NewNonRootContext(),
@@ -769,7 +768,6 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	return corev1.Container{
 		Name:            "controller",
 		Image:           c.controllerImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "intrusion-detection-controller"},
 		Env:             envs,
 		LivenessProbe: &corev1.Probe{

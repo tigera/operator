@@ -235,7 +235,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
 		Image:           c.goldmaneImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "goldmane"},
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),

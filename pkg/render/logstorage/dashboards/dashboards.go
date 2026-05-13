@@ -283,7 +283,6 @@ func (d *dashboards) Job() *batchv1.Job {
 				{
 					Name:            Name,
 					Image:           d.image,
-					ImagePullPolicy: render.ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: securitycontext.NewNonRootContext(),
 					VolumeMounts:    volumeMounts,

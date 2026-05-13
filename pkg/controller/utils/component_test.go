@@ -35,6 +35,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -603,7 +604,7 @@ var _ = Describe("Component handler tests", func() {
 					},
 				}
 				Expect(c.Create(ctx, installation)).To(BeNil())
-				Expect(ensureTLSCiphers(ctx, obj, c)).To(BeNil())
+				Expect(ensureTLSCiphers(obj, &installation.Spec)).To(BeNil())
 
 				var containers []corev1.Container
 				switch o := obj.(type) {
@@ -693,7 +694,7 @@ var _ = Describe("Component handler tests", func() {
 		)
 	})
 	DescribeTable("ensuring ImagePullPolicy is set", func(obj client.Object) {
-		modifyPodSpec(obj, setImagePullPolicy)
+		modifyPodSpec(obj, func(p *corev1.PodSpec) { setImagePullPolicy(p, nil) })
 
 		switch o := obj.(type) {
 		case *apps.Deployment:
@@ -741,6 +742,30 @@ var _ = Describe("Component handler tests", func() {
 			},
 		),
 	)
+
+	Describe("setImagePullPolicy", func() {
+		It("fills missing policies with IfNotPresent and leaves explicit policies alone when no policy is configured", func() {
+			ps := &corev1.PodSpec{
+				Containers:     []corev1.Container{{Image: "a"}, {Image: "b", ImagePullPolicy: corev1.PullAlways}},
+				InitContainers: []corev1.Container{{Image: "init"}},
+			}
+			setImagePullPolicy(ps, nil)
+			Expect(ps.Containers[0].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
+			Expect(ps.Containers[1].ImagePullPolicy).To(Equal(corev1.PullAlways), "should not override an explicitly set policy")
+			Expect(ps.InitContainers[0].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
+		})
+
+		It("overrides every container's policy when a policy is configured on the Installation", func() {
+			ps := &corev1.PodSpec{
+				Containers:     []corev1.Container{{Image: "a"}, {Image: "b", ImagePullPolicy: corev1.PullAlways}},
+				InitContainers: []corev1.Container{{Image: "init", ImagePullPolicy: corev1.PullAlways}},
+			}
+			setImagePullPolicy(ps, ptr.To(corev1.PullNever))
+			Expect(ps.Containers[0].ImagePullPolicy).To(Equal(corev1.PullNever))
+			Expect(ps.Containers[1].ImagePullPolicy).To(Equal(corev1.PullNever), "configured policy must win over renderer defaults")
+			Expect(ps.InitContainers[0].ImagePullPolicy).To(Equal(corev1.PullNever))
+		})
+	})
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
 		Expect(handler.CreateOrUpdateOrDelete(ctx, component, sm)).ShouldNot(HaveOccurred())
@@ -2190,7 +2215,15 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{baseNP},
 		}
 
+		// Two Get calls are issued up-front to load the InstallationSpec
+		// (one for the Installation, one for the overlay).
+		installationGets := func() {
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+		}
+
 		It("NetworkPolicy updates are omitted if there is no change", func() {
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2199,7 +2232,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(1))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("NetworkPolicy updates are applied if there is a change", func() {
@@ -2211,6 +2244,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2225,7 +2259,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 
@@ -2246,7 +2280,15 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{baseTier},
 		}
 
+		// Two Get calls are issued up-front to load the InstallationSpec
+		// (one for the Installation, one for the overlay).
+		installationGets := func() {
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+		}
+
 		It("Tier updates are omitted if there is no change", func() {
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2255,7 +2297,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(1))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("Tier updates are applied if there is a change", func() {
@@ -2268,6 +2310,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2282,7 +2325,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 })

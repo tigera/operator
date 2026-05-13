@@ -18,6 +18,7 @@ import (
 	"reflect"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
@@ -58,6 +59,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	case BOnlySet, Different:
 		inst.ImagePullSecrets = make([]v1.LocalObjectReference, len(override.ImagePullSecrets))
 		copy(inst.ImagePullSecrets, override.ImagePullSecrets)
+	}
+
+	switch compareFields(inst.ImagePullPolicy, override.ImagePullPolicy) {
+	case BOnlySet, Different:
+		inst.ImagePullPolicy = ptr.To(*override.ImagePullPolicy)
 	}
 
 	switch compareFields(inst.KubernetesProvider, override.KubernetesProvider) {

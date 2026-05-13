@@ -561,7 +561,6 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	return corev1.Container{
 		Name:            TyphaContainerName,
 		Image:           c.typhaImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "typha"},
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),

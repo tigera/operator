@@ -483,11 +483,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceControllerName,
-					Image:           c.controllerImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Command:         []string{components.CalicoBinaryPath, "component", "compliance-controller"},
-					Env:             envVars,
+					Name:    ComplianceControllerName,
+					Image:   c.controllerImage,
+					Command: []string{components.CalicoBinaryPath, "component", "compliance-controller"},
+					Env:     envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -684,11 +683,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				InitContainers:     initContainers,
 				Containers: []corev1.Container{
 					{
-						Name:            "reporter",
-						Image:           c.reporterImage,
-						ImagePullPolicy: ImagePullPolicy(),
-						Command:         []string{components.CalicoBinaryPath, "component", "compliance-reporter"},
-						Env:             envVars,
+						Name:    "reporter",
+						Image:   c.reporterImage,
+						Command: []string{components.CalicoBinaryPath, "component", "compliance-reporter"},
+						Env:     envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
@@ -893,11 +891,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceServerName,
-					Image:           c.serverImage,
-					Command:         []string{components.CalicoBinaryPath, "component", "compliance-server"},
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:    ComplianceServerName,
+					Image:   c.serverImage,
+					Command: []string{components.CalicoBinaryPath, "component", "compliance-server"},
+					Env:     envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1107,11 +1104,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceSnapshotterName,
-					Image:           c.snapshotterImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Command:         []string{components.CalicoBinaryPath, "component", "compliance-snapshotter"},
-					Env:             envVars,
+					Name:    ComplianceSnapshotterName,
+					Image:   c.snapshotterImage,
+					Command: []string{components.CalicoBinaryPath, "component", "compliance-snapshotter"},
+					Env:     envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1316,7 +1312,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				{
 					Name:            ComplianceBenchmarkerName,
 					Image:           c.benchmarkerImage,
-					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: sc,
 					VolumeMounts:    volMounts,

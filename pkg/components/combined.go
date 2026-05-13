@@ -18,9 +18,12 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// CalicoBinaryPath is the absolute path to the combined "calico" binary inside the calico/calico image.
-// Components deployed from the combined image invoke this binary via Command / probe exec.
-const CalicoBinaryPath = "/usr/bin/calico"
+// CalicoBinaryPath is the command used to invoke the combined "calico" binary inside
+// the calico/calico image. Bare command so it resolves via PATH, which keeps us
+// agnostic to where the binary actually lives — both the legacy Dockerfile build
+// (/usr/bin/calico) and the ko-built image (/ko-app/calico) put the containing
+// directory on PATH.
+const CalicoBinaryPath = "calico"
 
 // CombinedCalicoImage returns the combined calico/calico Component for the given installation.
 // The right Component is selected based on the installation variant (Calico OSS vs. Calico Enterprise)

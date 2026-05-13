@@ -165,7 +165,7 @@ var _ = Describe("Elasticsearch metrics", func() {
 							Containers: []corev1.Container{{
 								Name:    ElasticsearchMetricsName,
 								Image:   "testregistry.com/tigera/calico@testdigest",
-								Command: []string{"/usr/bin/calico", "component", "elasticsearch-metrics"},
+								Command: []string{"calico", "component", "elasticsearch-metrics"},
 								Args: []string{
 									"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 									"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",

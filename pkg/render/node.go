@@ -576,6 +576,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"egressgatewaypolicies",
 					"externalnetworks",
 					"licensekeys",
+					"networks",
 					"packetcaptures",
 					"remoteclusterconfigurations",
 				},
@@ -652,6 +653,14 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 		},
+	}
+	if c.cfg.Installation.Variant == operatorv1.TigeraSecureEnterprise {
+		// The Network resource is only available in Enterprise / Cloud at this time.
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get"},
+		})
 	}
 	return role
 }

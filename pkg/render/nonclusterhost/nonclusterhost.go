@@ -164,6 +164,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 				"ippools",
 				"licensekeys",
 				"networkpolicies",
+				"networks",
 				"networksets",
 				"packetcaptures",
 				"remoteclusterconfigurations",

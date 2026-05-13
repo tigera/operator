@@ -191,9 +191,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		return []corev1.Container{
 			{
-				Name:            render.PacketCaptureContainerName,
-				Image:           fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
-				Command:         []string{components.CalicoBinaryPath, "component", "packetcapture"},
+				Name:    render.PacketCaptureContainerName,
+				Image:   fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
+				Command: []string{components.CalicoBinaryPath, "component", "packetcapture"},
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.To(false),
 					Capabilities: &corev1.Capabilities{

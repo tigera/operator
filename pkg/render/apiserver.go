@@ -1176,12 +1176,12 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
 	apiServer := corev1.Container{
-		Name:            string(APIServerContainerName),
-		Image:           c.apiServerImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "apiserver"},
-		Args:            c.startUpArgs(),
-		Env:             env,
-		VolumeMounts:    volumeMounts,
+		Name:         string(APIServerContainerName),
+		Image:        c.apiServerImage,
+		Command:      []string{components.CalicoBinaryPath, "component", "apiserver"},
+		Args:         c.startUpArgs(),
+		Env:          env,
+		VolumeMounts: volumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1316,10 +1316,10 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:            string(TigeraAPIServerQueryServerContainerName),
-		Image:           c.queryServerImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "queryserver"},
-		Env:             env,
+		Name:    string(TigeraAPIServerQueryServerContainerName),
+		Image:   c.queryServerImage,
+		Command: []string{components.CalicoBinaryPath, "component", "queryserver"},
+		Env:     env,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -2303,9 +2303,9 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	l7AdmssCtrl := corev1.Container{
-		Name:            string(L7AdmissionControllerContainerName),
-		Image:           c.l7AdmissionControllerImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
+		Name:    string(L7AdmissionControllerContainerName),
+		Image:   c.l7AdmissionControllerImage,
+		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "L7ADMCTRL_TLSCERTPATH",

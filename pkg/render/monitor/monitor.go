@@ -638,9 +638,9 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				},
 				Containers: []corev1.Container{
 					{
-						Name:            "authn-proxy",
-						Image:           mc.prometheusServiceImage,
-						Command:         []string{components.CalicoBinaryPath, "component", "prometheus-service"},
+						Name:    "authn-proxy",
+						Image:   mc.prometheusServiceImage,
+						Command: []string{components.CalicoBinaryPath, "component", "prometheus-service"},
 						Ports: []corev1.ContainerPort{
 							{
 								ContainerPort: PrometheusProxyPort,

@@ -1029,8 +1029,8 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:            DeploymentName,
-			Command:         []string{components.CalicoBinaryPath, "component", "linseed"},
+			Name:    DeploymentName,
+			Command: []string{components.CalicoBinaryPath, "component", "linseed"},
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				AllowPrivilegeEscalation: ptr.To(false),

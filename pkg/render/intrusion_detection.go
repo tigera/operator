@@ -766,10 +766,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	}
 
 	return corev1.Container{
-		Name:            "controller",
-		Image:           c.controllerImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "intrusion-detection-controller"},
-		Env:             envs,
+		Name:    "controller",
+		Image:   c.controllerImage,
+		Command: []string{components.CalicoBinaryPath, "component", "intrusion-detection-controller"},
+		Env:     envs,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

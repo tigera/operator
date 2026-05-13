@@ -39,9 +39,12 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
@@ -67,6 +70,14 @@ var _ = Describe("Gateway API controller tests", func() {
 		// Create a client that will have a CRUD interface of k8s objects.
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
+
+		// Seed the operator CA secret in the fake client so that certificatemanager.Create
+		// (called by ReconcileGatewayAPI.Reconcile to build the trusted bundle) does not
+		// fail with "CA secret does not exist".
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operatorv1.InstallationSpec{

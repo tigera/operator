@@ -1289,7 +1289,9 @@ var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
 	It("does not panic on nil PDB", func() {
 		Expect(func() {
 			ApplyPodDisruptionBudgetOverrides(nil, &v1.PodDisruptionBudgetOverride{
-				MinAvailable: ptr.To(intstr.FromInt(2)),
+				Spec: &v1.PodDisruptionBudgetOverrideSpec{
+					MinAvailable: ptr.To(intstr.FromInt(2)),
+				},
 			})
 		}).ToNot(Panic())
 	})
@@ -1297,7 +1299,9 @@ var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
 	It("applies only UnhealthyPodEvictionPolicy and preserves default MaxUnavailable", func() {
 		policy := policyv1.AlwaysAllow
 		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
-			UnhealthyPodEvictionPolicy: &policy,
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				UnhealthyPodEvictionPolicy: &policy,
+			},
 		})
 		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
 		Expect(pdb.Spec.MinAvailable).To(BeNil())
@@ -1306,7 +1310,9 @@ var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
 
 	It("clears MaxUnavailable when MinAvailable is set", func() {
 		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
-			MinAvailable: ptr.To(intstr.FromInt(2)),
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable: ptr.To(intstr.FromInt(2)),
+			},
 		})
 		Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
 		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
@@ -1316,7 +1322,9 @@ var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
 		pdb.Spec.MaxUnavailable = nil
 		pdb.Spec.MinAvailable = ptr.To(intstr.FromInt(3))
 		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
-			MaxUnavailable: ptr.To(intstr.FromString("50%")),
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MaxUnavailable: ptr.To(intstr.FromString("50%")),
+			},
 		})
 		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromString("50%"))))
 		Expect(pdb.Spec.MinAvailable).To(BeNil())
@@ -1325,8 +1333,10 @@ var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
 	It("applies MinAvailable + UnhealthyPodEvictionPolicy together", func() {
 		policy := policyv1.AlwaysAllow
 		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
-			MinAvailable:               ptr.To(intstr.FromInt(2)),
-			UnhealthyPodEvictionPolicy: &policy,
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable:               ptr.To(intstr.FromInt(2)),
+				UnhealthyPodEvictionPolicy: &policy,
+			},
 		})
 		Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
 		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
@@ -1336,9 +1346,34 @@ var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
 	It("never mutates the selector", func() {
 		original := pdb.Spec.Selector.DeepCopy()
 		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
-			MinAvailable: ptr.To(intstr.FromInt(2)),
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable: ptr.To(intstr.FromInt(2)),
+			},
 		})
 		Expect(pdb.Spec.Selector).To(Equal(original))
+	})
+
+	It("merges metadata labels and annotations onto the PDB", func() {
+		pdb.Labels = map[string]string{"existing": "label"}
+		pdb.Annotations = map[string]string{"existing": "ann"}
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Metadata: &v1.Metadata{
+				Labels:      map[string]string{"new": "label"},
+				Annotations: map[string]string{"new": "ann"},
+			},
+		})
+		Expect(pdb.Labels).To(Equal(map[string]string{"existing": "label", "new": "label"}))
+		Expect(pdb.Annotations).To(Equal(map[string]string{"existing": "ann", "new": "ann"}))
+	})
+
+	It("treats a nil Spec as no spec override", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Metadata: &v1.Metadata{Labels: map[string]string{"a": "b"}},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+		Expect(pdb.Labels).To(HaveKeyWithValue("a", "b"))
 	})
 })
 

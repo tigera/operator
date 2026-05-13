@@ -22,8 +22,19 @@ import (
 // PodDisruptionBudgetOverride allows overriding select fields on an operator-managed
 // PodDisruptionBudget. The PDB's selector, name, and namespace are managed by the
 // operator and cannot be overridden.
-// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
 type PodDisruptionBudgetOverride struct {
+	// Metadata is a subset of a Kubernetes object's metadata that is added to the PodDisruptionBudget.
+	// +optional
+	Metadata *Metadata `json:"metadata,omitempty"`
+
+	// Spec is the specification of the PodDisruptionBudget.
+	// +optional
+	Spec *PodDisruptionBudgetOverrideSpec `json:"spec,omitempty"`
+}
+
+// PodDisruptionBudgetOverrideSpec defines the desired state of an operator-managed PodDisruptionBudget.
+// +kubebuilder:validation:XValidation:rule="!(has(self.minAvailable) && has(self.maxUnavailable))",message="minAvailable and maxUnavailable are mutually exclusive"
+type PodDisruptionBudgetOverrideSpec struct {
 	// MinAvailable is the minimum number of pods (as an integer or percentage) that
 	// must remain available during a disruption. Mutually exclusive with MaxUnavailable.
 	// +optional

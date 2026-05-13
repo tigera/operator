@@ -818,7 +818,9 @@ var _ = Describe("Typha rendering tests", func() {
 		It("applies UnhealthyPodEvictionPolicy override and preserves default MaxUnavailable", func() {
 			policy := policyv1.AlwaysAllow
 			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
-				UnhealthyPodEvictionPolicy: &policy,
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					UnhealthyPodEvictionPolicy: &policy,
+				},
 			}
 			pdb := getPDB()
 			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
@@ -828,7 +830,9 @@ var _ = Describe("Typha rendering tests", func() {
 
 		It("applies MinAvailable override and clears MaxUnavailable", func() {
 			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
-				MinAvailable: ptr.To(intstr.FromInt(2)),
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					MinAvailable: ptr.To(intstr.FromInt(2)),
+				},
 			}
 			pdb := getPDB()
 			Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
@@ -837,11 +841,25 @@ var _ = Describe("Typha rendering tests", func() {
 
 		It("applies MaxUnavailable percentage override", func() {
 			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
-				MaxUnavailable: ptr.To(intstr.FromString("50%")),
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					MaxUnavailable: ptr.To(intstr.FromString("50%")),
+				},
 			}
 			pdb := getPDB()
 			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromString("50%"))))
 			Expect(pdb.Spec.MinAvailable).To(BeNil())
+		})
+
+		It("applies metadata labels and annotations", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"custom": "label"},
+					Annotations: map[string]string{"custom": "ann"},
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Labels).To(HaveKeyWithValue("custom", "label"))
+			Expect(pdb.Annotations).To(HaveKeyWithValue("custom", "ann"))
 		})
 	})
 })

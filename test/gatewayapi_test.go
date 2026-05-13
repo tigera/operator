@@ -36,8 +36,11 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/internal/controller"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/dns"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -84,6 +87,14 @@ var _ = Describe("GatewayAPI tests", func() {
 			Spec:       corev1.NamespaceSpec{},
 		}
 		err = c.Create(context.Background(), ns)
+		if err != nil && !kerror.IsAlreadyExists(err) {
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		By("Seeding the operator CA secret (normally created by the core controller, which is not running in this FV suite)")
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		err = c.Create(context.Background(), certificateManager.KeyPair().Secret(common.OperatorNamespace()))
 		if err != nil && !kerror.IsAlreadyExists(err) {
 			Expect(err).NotTo(HaveOccurred())
 		}

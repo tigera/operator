@@ -182,7 +182,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	registrarContainer := corev1.Container{
 		Name:    CSIRegistrarContainerName,
 		Image:   c.csiRegistrarImage,
-		Command: []string{"/usr/bin/csi-node-driver-registrar"},
+		Command: []string{"csi-node-driver-registrar"},
 		Args: []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",

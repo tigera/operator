@@ -40,6 +40,8 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -274,12 +276,28 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Build a trust bundle containing public CA roots (extracted from the operator's
+	// UBI base image) plus the Calico operator CA. Envoy-gateway pulls wasm OCI
+	// images and envoy-proxy may originate TLS to public upstreams, JWT/OIDC
+	// providers, and tracing exporters -- none of which work without public CAs.
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create gateway trust bundle", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
 		Installation:          installationSpec,
 		PullSecrets:           pullSecrets,
 		GatewayAPI:            gatewayAPI,
 		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
 		CurrentGatewayClasses: set.New[string](),
+		TrustedBundle:         trustedBundle,
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {

@@ -797,12 +797,12 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 		bundleMounts := pr.cfg.TrustedBundle.VolumeMounts(pr.SupportedOSType())
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet != nil {
 			ds := envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet
-			ds.Pod.Volumes = appendVolumeIfMissing(ds.Pod.Volumes, bundleVolume)
-			ds.Container.VolumeMounts = appendVolumeMountsIfMissing(ds.Container.VolumeMounts, bundleMounts)
+			ds.Pod.Volumes = append(ds.Pod.Volumes, bundleVolume)
+			ds.Container.VolumeMounts = append(ds.Container.VolumeMounts, bundleMounts...)
 		} else {
 			dep := envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment
-			dep.Pod.Volumes = appendVolumeIfMissing(dep.Pod.Volumes, bundleVolume)
-			dep.Container.VolumeMounts = appendVolumeMountsIfMissing(dep.Container.VolumeMounts, bundleMounts)
+			dep.Pod.Volumes = append(dep.Pod.Volumes, bundleVolume)
+			dep.Container.VolumeMounts = append(dep.Container.VolumeMounts, bundleMounts...)
 		}
 	}
 
@@ -1126,28 +1126,6 @@ type GatewayAPIImplementationConfigInterface interface {
 
 func (pr *gatewayAPIImplementationComponent) GetConfig() *GatewayAPIImplementationConfig {
 	return pr.cfg
-}
-
-func appendVolumeIfMissing(volumes []corev1.Volume, v corev1.Volume) []corev1.Volume {
-	for _, existing := range volumes {
-		if existing.Name == v.Name {
-			return volumes
-		}
-	}
-	return append(volumes, v)
-}
-
-func appendVolumeMountsIfMissing(mounts []corev1.VolumeMount, toAdd []corev1.VolumeMount) []corev1.VolumeMount {
-	existing := make(map[string]struct{}, len(mounts))
-	for _, m := range mounts {
-		existing[m.Name+":"+m.MountPath] = struct{}{}
-	}
-	for _, m := range toAdd {
-		if _, ok := existing[m.Name+":"+m.MountPath]; !ok {
-			mounts = append(mounts, m)
-		}
-	}
-	return mounts
 }
 
 // applyEnvoyProxyServiceOverrides applies the overrides to the given EnvoyProxy.

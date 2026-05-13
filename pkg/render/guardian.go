@@ -495,12 +495,11 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:            GuardianContainerName,
-			Image:           c.image,
-			Command:         []string{components.CalicoBinaryPath, "component", "guardian"},
-			ImagePullPolicy: ImagePullPolicy(),
-			Env:             envVars,
-			VolumeMounts:    c.volumeMounts(),
+			Name:         GuardianContainerName,
+			Image:        c.image,
+			Command:      []string{components.CalicoBinaryPath, "component", "guardian"},
+			Env:          envVars,
+			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{

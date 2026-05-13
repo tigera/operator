@@ -251,12 +251,11 @@ func (e *esGateway) esGatewayDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            DeploymentName,
-					Image:           e.esGatewayImage,
-					ImagePullPolicy: render.ImagePullPolicy(),
-					Command:         []string{components.CalicoBinaryPath, "component", "es-gateway"},
-					Env:             envVars,
-					VolumeMounts:    volumeMounts,
+					Name:         DeploymentName,
+					Image:        e.esGatewayImage,
+					Command:      []string{components.CalicoBinaryPath, "component", "es-gateway"},
+					Env:          envVars,
+					VolumeMounts: volumeMounts,
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{

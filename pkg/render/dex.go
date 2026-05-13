@@ -321,7 +321,6 @@ func (c *dexComponent) deployment() client.Object {
 						{
 							Name:            DexObjectName,
 							Image:           c.image,
-							ImagePullPolicy: ImagePullPolicy(),
 							Env:             envVars,
 							LivenessProbe:   c.probe(),
 							SecurityContext: sc,

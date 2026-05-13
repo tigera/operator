@@ -185,6 +185,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.TyphaDeployment = mergeTyphaDeployment(inst.TyphaDeployment, override.TyphaDeployment)
 	}
 
+	switch compareFields(inst.TyphaPodDisruptionBudget, override.TyphaPodDisruptionBudget) {
+	case BOnlySet, Different:
+		inst.TyphaPodDisruptionBudget = override.TyphaPodDisruptionBudget.DeepCopy()
+	}
+
 	switch compareFields(inst.CalicoWindowsUpgradeDaemonSet, override.CalicoWindowsUpgradeDaemonSet) {
 	case BOnlySet:
 		inst.CalicoWindowsUpgradeDaemonSet = override.CalicoWindowsUpgradeDaemonSet.DeepCopy()

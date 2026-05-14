@@ -86,6 +86,8 @@ spec:
                   type: string
                 maxRestartTime:
                   type: string
+                network:
+                  type: string
                 nextHopMode:
                   enum:
                     - Auto
@@ -175,6 +177,11 @@ spec:
                   rule:
                     (!has(self.localWorkloadSelector) || size(self.localWorkloadSelector)
                     == 0) || (has(self.asNumber) && self.asNumber != 0)
+                - message: network and externalNetwork cannot both be set
+                  reason: FieldValueForbidden
+                  rule:
+                    (!has(self.network) || size(self.network) == 0) || (!has(self.externalNetwork)
+                    || size(self.externalNetwork) == 0)
           required:
             - metadata
             - spec

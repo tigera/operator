@@ -1130,7 +1130,7 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 		},
 		Rules: []rbacv1.PolicyRule{
 			{
-				APIGroups: []string{"crd.projectcalico.org"},
+				APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
 				Resources: []string{"licensekeys"},
 				Verbs:     []string{"get", "watch"},
 			},

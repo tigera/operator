@@ -1263,7 +1263,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 		// Check license key access for WAF
 		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		}))

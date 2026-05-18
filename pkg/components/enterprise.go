@@ -212,6 +212,14 @@ var (
 		variant:   enterpriseVariant,
 	}
 
+	ComponentTigeraCNIPlugins = Component{
+		Version:   "master",
+		Image:     "cni-plugins",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
 	ComponentGatewayAPIEnvoyGateway = Component{
 		Version:   "master",
 		Image:     "envoy-gateway",
@@ -288,6 +296,7 @@ var (
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
+		ComponentTigeraCNIPlugins,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,

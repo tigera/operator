@@ -60,7 +60,9 @@ spec:
                     used in custom BGP templates
                   type: object
                 externalNetwork:
-                  description: Name of the external network to which this peer belongs.
+                  description:
+                    Name of the external network to which this peer belongs.  Cannot
+                    be set if network is set.
                   type: string
                 failureDetectionMode:
                   description: |-
@@ -109,6 +111,11 @@ spec:
                     restart timeout when RestartMode is "GracefulRestart", and as the LLGR stale time when
                     RestartMode is "LongLivedGracefulRestart".  When not specified, the BIRD defaults are
                     used, which are 120s for "GracefulRestart" and 3600s for "LongLivedGracefulRestart".
+                  type: string
+                network:
+                  description:
+                    Name of the network to which this peer belongs.  Cannot
+                    be set if externalNetwork is set.
                   type: string
                 nextHopMode:
                   description: |-
@@ -282,6 +289,11 @@ spec:
                   rule:
                     "!has(self.keepOriginalNextHop) || !self.keepOriginalNextHop ||
                     !has(self.nextHopMode)"
+                - message: network and externalNetwork cannot both be set
+                  reason: FieldValueForbidden
+                  rule:
+                    (!has(self.network) || size(self.network) == 0) || (!has(self.externalNetwork)
+                    || size(self.externalNetwork) == 0)
           type: object
       served: true
       storage: true

@@ -194,8 +194,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
 				components.TigeraImagePath,
-				components.ComponentPolicyRecommendation.Image,
-				components.ComponentPolicyRecommendation.Version)))
+				components.ComponentTigeraCalico.Image,
+				components.ComponentTigeraCalico.Version)))
 		})
 
 		It("should use images from imageset", func() {
@@ -203,7 +203,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/policy-recommendation", Digest: "sha256:policyrecommendationcontrollerhash"},
+						{Image: "tigera/calico", Digest: "sha256:policyrecommendationcontrollerhash"},
 						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
@@ -226,7 +226,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentPolicyRecommendation.Image,
+					components.ComponentTigeraCalico.Image,
 					"sha256:policyrecommendationcontrollerhash")))
 		})
 	})

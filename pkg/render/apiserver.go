@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -140,6 +141,7 @@ type APIServerConfiguration struct {
 	MultiTenant                  bool
 	KeyValidatorConfig           authentication.KeyValidatorConfig
 	KubernetesVersion            *common.VersionInfo
+	ClusterDomain                string
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
@@ -175,14 +177,12 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if enterprise {
-		// queryserver and dikastes don't yet ship as part of the combined calico image
-		// in enterprise, so resolve them from their own component images.
-		c.queryServerImage, err = components.GetReference(components.ComponentQueryServer, reg, path, prefix, is)
+		c.queryServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 		if c.cfg.IsSidecarInjectionEnabled() {
-			c.l7AdmissionControllerImage, err = components.GetReference(components.ComponentL7AdmissionController, reg, path, prefix, is)
+			c.l7AdmissionControllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 			if err != nil {
 				errMsgs = append(errMsgs, err.Error())
 			}
@@ -321,6 +321,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects, c.sidecarMutatingWebhookConfig())
 	} else {
 		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
+	}
+	if c.cfg.ManagementClusterConnection != nil {
+		namespacedEnterpriseObjects = append(namespacedEnterpriseObjects,
+			c.externalLinseedRoleBinding(),
+		)
 	}
 
 	// Compile the final arrays based on the variant.
@@ -1171,13 +1176,12 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServerTargetPort := getContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
 	apiServer := corev1.Container{
-		Name:            string(APIServerContainerName),
-		Image:           c.apiServerImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "apiserver"},
-		ImagePullPolicy: ImagePullPolicy(),
-		Args:            c.startUpArgs(),
-		Env:             env,
-		VolumeMounts:    volumeMounts,
+		Name:         string(APIServerContainerName),
+		Image:        c.apiServerImage,
+		Command:      []string{components.CalicoBinaryPath, "component", "apiserver"},
+		Args:         c.startUpArgs(),
+		Env:          env,
+		VolumeMounts: volumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1272,16 +1276,18 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
 	}
 
-	// Linseed client configuration for policy activity enrichment.
-	linseedURL := fmt.Sprintf("https://tigera-linseed.%s.svc", ElasticsearchNamespace)
-	if c.cfg.ManagementClusterConnection != nil {
-		linseedURL = "https://guardian.calico-system.svc"
-	}
+	linseedURL := relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, ElasticsearchNamespace, c.cfg.ManagementClusterConnection != nil, false)
 	env = append(env,
 		corev1.EnvVar{Name: "LINSEED_URL", Value: linseedURL},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
 	)
+	if c.cfg.ManagementClusterConnection != nil {
+		env = append(env,
+			corev1.EnvVar{Name: "CLUSTER_ID", Value: ""},
+			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: GetLinseedTokenPath(true)},
+		)
+	}
 	if c.cfg.TrustedBundle != nil {
 		env = append(env, corev1.EnvVar{Name: "LINSEED_CA", Value: c.cfg.TrustedBundle.MountPath()})
 	}
@@ -1302,12 +1308,18 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 	if c.cfg.TrustedBundle != nil {
 		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
+	if c.cfg.ManagementClusterConnection != nil {
+		volumeMounts = append(volumeMounts, corev1.VolumeMount{
+			Name:      LinseedTokenVolumeName,
+			MountPath: LinseedVolumeMountPath,
+		})
+	}
 
 	container := corev1.Container{
-		Name:            string(TigeraAPIServerQueryServerContainerName),
-		Image:           c.queryServerImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Env:             env,
+		Name:    string(TigeraAPIServerQueryServerContainerName),
+		Image:   c.queryServerImage,
+		Command: []string{components.CalicoBinaryPath, "component", "queryserver"},
+		Env:     env,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				HTTPGet: &corev1.HTTPGetAction{
@@ -1322,6 +1334,28 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 		VolumeMounts:    volumeMounts,
 	}
 	return container
+}
+
+func (c *apiServerComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: APIServerNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     TigeraLinseedSecretsClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      GuardianServiceAccountName,
+				Namespace: GuardianNamespace,
+			},
+		},
+	}
 }
 
 // apiServerVolumes creates the volumes used by the API server deployment.
@@ -1365,6 +1399,21 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 
 	if c.cfg.Installation.Variant.IsEnterprise() && c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
+	}
+
+	if c.cfg.ManagementClusterConnection != nil {
+		// Optional: the Secret is delivered over the Guardian tunnel, which can't be
+		// established until calico-apiserver is Ready.
+		volumes = append(volumes, corev1.Volume{
+			Name: LinseedTokenVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: fmt.Sprintf(LinseedTokenSecret, "calico-apiserver"),
+					Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
+					Optional:   ptr.To(true),
+				},
+			},
+		})
 	}
 
 	return volumes
@@ -2254,9 +2303,9 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	l7AdmssCtrl := corev1.Container{
-		Name:            string(L7AdmissionControllerContainerName),
-		Image:           c.l7AdmissionControllerImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:    string(L7AdmissionControllerContainerName),
+		Image:   c.l7AdmissionControllerImage,
+		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "L7ADMCTRL_TLSCERTPATH",

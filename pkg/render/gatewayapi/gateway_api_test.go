@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -844,6 +845,192 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(*ep4.Spec.Provider.Kubernetes.EnvoyService.LoadBalancerIP).To(Equal(lbIP))
 	})
 
+	It("passes GatewayService.Spec.Patch through to the EnvoyProxy's KubernetesServiceSpec", func() {
+		patchYAML := `
+type: JSONMerge
+value:
+  spec:
+    ports:
+    - name: http-80
+      nodePort: 30008
+      port: 80
+      protocol: TCP
+      targetPort: 10080
+    - name: https-443
+      nodePort: 30004
+      port: 443
+      protocol: TCP
+      targetPort: 10443
+`
+		patch := &envoyapi.KubernetesPatchSpec{}
+		Expect(yaml.Unmarshal([]byte(patchYAML), patch)).NotTo(HaveOccurred())
+
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							Patch: patch,
+						},
+					},
+				}},
+			},
+		}
+		gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		ep, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ep.Spec.Provider).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService.Patch).To(Equal(patch))
+	})
+
+	// https://github.com/tigera/operator/issues/4717
+	It("supports setting ipFamilyPolicy on the gateway Service via GatewayService.Spec.Patch", func() {
+		patchYAML := `
+type: StrategicMerge
+value:
+  spec:
+    ipFamilyPolicy: RequireDualStack
+`
+		patch := &envoyapi.KubernetesPatchSpec{}
+		Expect(yaml.Unmarshal([]byte(patchYAML), patch)).NotTo(HaveOccurred())
+
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							Patch: patch,
+						},
+					},
+				}},
+			},
+		}
+		gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		ep, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ep.Spec.Provider).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService.Patch).To(Equal(patch))
+	})
+
+	// https://github.com/tigera/operator/issues/4718
+	It("supports setting healthCheckNodePort on the gateway Service via GatewayService.Spec.Patch", func() {
+		patchYAML := `
+type: StrategicMerge
+value:
+  spec:
+    healthCheckNodePort: 12345
+`
+		patch := &envoyapi.KubernetesPatchSpec{}
+		Expect(yaml.Unmarshal([]byte(patchYAML), patch)).NotTo(HaveOccurred())
+
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{
+					Name: "tigera-gateway-class",
+					GatewayService: &operatorv1.GatewayService{
+						Spec: &operatorv1.GatewayServiceSpec{
+							Patch: patch,
+						},
+					},
+				}},
+			},
+		}
+		gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:   gatewayAPI,
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gatewayComp.ResolveImages(nil)).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		ep, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ep.Spec.Provider).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService).NotTo(BeNil())
+		Expect(ep.Spec.Provider.Kubernetes.EnvoyService.Patch).To(Equal(patch))
+	})
+
+	It("mounts the trust bundle on envoy-gateway and envoy-proxy when provided", func() {
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.Calico,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
+		Expect(err).NotTo(HaveOccurred())
+		gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:        testScheme(),
+			Installation:  installation,
+			GatewayAPI:    gatewayAPI,
+			TrustedBundle: bundle,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// The bundle ConfigMap is materialised in the gateway namespace.
+		bundleCM, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(bundleCM.Data).To(HaveKey(certificatemanagement.TrustedCertConfigMapKeyName))
+
+		// The envoy-gateway controller mounts the bundle.
+		controller, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, "envoy-gateway", common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		volNames := []string{}
+		for _, v := range controller.Spec.Template.Spec.Volumes {
+			volNames = append(volNames, v.Name)
+		}
+		Expect(volNames).To(ContainElement(certificatemanagement.TrustedCertConfigMapName))
+		mountPaths := []string{}
+		for _, m := range controller.Spec.Template.Spec.Containers[0].VolumeMounts {
+			mountPaths = append(mountPaths, m.MountPath)
+		}
+		Expect(mountPaths).To(ContainElement("/etc/pki/tls/certs"))
+
+		// The envoy-proxy data plane (patched via EnvoyProxy) mounts the bundle.
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", common.CalicoNamespace)
+		Expect(err).NotTo(HaveOccurred())
+		dep := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(dep).NotTo(BeNil())
+		proxyVolNames := []string{}
+		for _, v := range dep.Pod.Volumes {
+			proxyVolNames = append(proxyVolNames, v.Name)
+		}
+		Expect(proxyVolNames).To(ContainElement(certificatemanagement.TrustedCertConfigMapName))
+		proxyMountPaths := []string{}
+		for _, m := range dep.Container.VolumeMounts {
+			proxyMountPaths = append(proxyMountPaths, m.MountPath)
+		}
+		Expect(proxyMountPaths).To(ContainElement("/etc/pki/tls/certs"))
+	})
+
 	It("should not deploy waf-http-filter or l7-log-collector for open-source", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.Calico,
@@ -1318,7 +1505,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(csRole.Rules).To(HaveLen(2))
 		Expect(csRole.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		}))

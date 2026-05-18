@@ -140,22 +140,22 @@ func (c *complianceComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.snapshotterImage, err = components.GetReference(components.ComponentComplianceSnapshotter, reg, path, prefix, is)
+	c.snapshotterImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.serverImage, err = components.GetReference(components.ComponentComplianceServer, reg, path, prefix, is)
+	c.serverImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.controllerImage, err = components.GetReference(components.ComponentComplianceController, reg, path, prefix, is)
+	c.controllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.reporterImage, err = components.GetReference(components.ComponentComplianceReporter, reg, path, prefix, is)
+	c.reporterImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -483,10 +483,10 @@ func (c *complianceComponent) complianceControllerDeployment() *appsv1.Deploymen
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceControllerName,
-					Image:           c.controllerImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:    ComplianceControllerName,
+					Image:   c.controllerImage,
+					Command: []string{components.CalicoBinaryPath, "component", "compliance-controller"},
+					Env:     envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -683,10 +683,10 @@ func (c *complianceComponent) complianceReporterPodTemplate() *corev1.PodTemplat
 				InitContainers:     initContainers,
 				Containers: []corev1.Container{
 					{
-						Name:            "reporter",
-						Image:           c.reporterImage,
-						ImagePullPolicy: ImagePullPolicy(),
-						Env:             envVars,
+						Name:    "reporter",
+						Image:   c.reporterImage,
+						Command: []string{components.CalicoBinaryPath, "component", "compliance-reporter"},
+						Env:     envVars,
 						LivenessProbe: &corev1.Probe{
 							ProbeHandler: corev1.ProbeHandler{
 								HTTPGet: &corev1.HTTPGetAction{
@@ -891,10 +891,10 @@ func (c *complianceComponent) complianceServerDeployment() *appsv1.Deployment {
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceServerName,
-					Image:           c.serverImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:    ComplianceServerName,
+					Image:   c.serverImage,
+					Command: []string{components.CalicoBinaryPath, "component", "compliance-server"},
+					Env:     envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1104,10 +1104,10 @@ func (c *complianceComponent) complianceSnapshotterDeployment() *appsv1.Deployme
 			InitContainers:     initContainers,
 			Containers: []corev1.Container{
 				{
-					Name:            ComplianceSnapshotterName,
-					Image:           c.snapshotterImage,
-					ImagePullPolicy: ImagePullPolicy(),
-					Env:             envVars,
+					Name:    ComplianceSnapshotterName,
+					Image:   c.snapshotterImage,
+					Command: []string{components.CalicoBinaryPath, "component", "compliance-snapshotter"},
+					Env:     envVars,
 					LivenessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{
 							HTTPGet: &corev1.HTTPGetAction{
@@ -1312,7 +1312,6 @@ func (c *complianceComponent) complianceBenchmarkerDaemonSet() *appsv1.DaemonSet
 				{
 					Name:            ComplianceBenchmarkerName,
 					Image:           c.benchmarkerImage,
-					ImagePullPolicy: ImagePullPolicy(),
 					Env:             envVars,
 					SecurityContext: sc,
 					VolumeMounts:    volMounts,

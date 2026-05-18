@@ -758,6 +758,14 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 		}
 	}
 
+	// device_type tells the Calico CNI plugin which virtual device to create for
+	// the pod interface. Only emit when explicitly set to Netkit: leaving it out
+	// keeps the default (veth) behavior and avoids churning existing CNI configs.
+	if c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType == operatorv1.LinuxPodInterfaceNetkit {
+		calicoPluginConfig["device_type"] = "netkit"
+	}
+
 	return calicoPluginConfig
 }
 
@@ -1204,7 +1212,6 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Command:         []string{components.CalicoBinaryPath, "component", "cni", "install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1223,7 +1230,6 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 		Name:            "flexvol-driver",
 		Image:           c.flexvolImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--target", "/host/driver/uds"},
-		ImagePullPolicy: ImagePullPolicy(),
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,
 	}
@@ -1264,7 +1270,6 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "ebpf-bootstrap",
 		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.bpffsEnvvars(),
 		Command:         command,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1347,7 +1352,6 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),

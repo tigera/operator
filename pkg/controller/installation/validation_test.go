@@ -721,6 +721,10 @@ var _ = Describe("Installation validation tests", func() {
 				cipf := operator.ContainerIPForwardingEnabled
 				inst.Spec.CalicoNetwork.ContainerIPForwarding = &cipf
 			}),
+			Entry("LinuxPodInterfaceType", func(inst *operator.Installation) {
+				nk := operator.LinuxPodInterfaceNetkit
+				inst.Spec.CalicoNetwork.LinuxPodInterfaceType = &nk
+			}),
 		)
 		DescribeTable("should allow IPPool", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CNI.Type = plugin

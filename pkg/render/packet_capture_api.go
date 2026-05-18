@@ -99,7 +99,7 @@ func (pc *packetCaptureApiComponent) ResolveImages(is *operatorv1.ImageSet) erro
 	prefix := pc.cfg.Installation.ImagePrefix
 
 	var err error
-	pc.image, err = components.GetReference(components.ComponentPacketCapture, reg, path, prefix, is)
+	pc.image, err = components.GetReference(components.CombinedCalicoImage(pc.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -304,7 +304,7 @@ func (pc *packetCaptureApiComponent) container() corev1.Container {
 	return corev1.Container{
 		Name:            PacketCaptureContainerName,
 		Image:           pc.image,
-		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "packetcapture"},
 		LivenessProbe:   pc.healthProbe(),
 		ReadinessProbe:  pc.healthProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),

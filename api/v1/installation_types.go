@@ -97,6 +97,14 @@ type InstallationSpec struct {
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
 
+	// ImagePullPolicy is the pull policy applied to containers in pods rendered by the operator
+	// that do not explicitly set their own pull policy. If unset, defaults to IfNotPresent.
+	// This is useful in air-gapped environments where images are pre-loaded onto nodes and
+	// must not be re-pulled from a remote registry.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	ImagePullPolicy *v1.PullPolicy `json:"imagePullPolicy,omitempty"`
+
 	// KubernetesProvider specifies a particular provider of the Kubernetes platform and enables provider-specific configuration.
 	// If the specified value is empty, the Operator will attempt to automatically determine the current provider.
 	// If the specified value is not empty, the Operator will still attempt auto-detection, but
@@ -496,6 +504,18 @@ const (
 	ContainerIPForwardingDisabled ContainerIPForwardingType = "Disabled"
 )
 
+// LinuxPodInterfaceType specifies the type of virtual device the Calico CNI plugin
+// creates for the pod-side interface on Linux nodes.
+//
+// One of: Veth, Netkit
+// +kubebuilder:validation:Enum=Veth;Netkit
+type LinuxPodInterfaceType string
+
+const (
+	LinuxPodInterfaceVeth   LinuxPodInterfaceType = "Veth"
+	LinuxPodInterfaceNetkit LinuxPodInterfaceType = "Netkit"
+)
+
 // HostPortsType specifies host port support.
 //
 // One of: Enabled, Disabled
@@ -681,6 +701,18 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
+
+	// LinuxPodInterfaceType selects the virtual device type the Calico CNI plugin
+	// creates for each pod's interface on Linux nodes. When set to Netkit, the CNI
+	// plugin creates a netkit L2 pair on kernels that support it (Linux 6.7+) and
+	// falls back to a veth pair on older kernels. Netkit is recommended for the BPF
+	// dataplane, where it allows BPF programs to attach via BPF_NETKIT_PRIMARY for
+	// improved throughput and tail-latency under contention; for non-BPF dataplanes
+	// it is functionally equivalent to veth. Only valid when using the Calico CNI
+	// plugin.
+	// Default: Veth
+	// +optional
+	LinuxPodInterfaceType *LinuxPodInterfaceType `json:"linuxPodInterfaceType,omitempty"`
 
 	// Sysctl configures sysctl parameters for tuning plugin
 	// +optional

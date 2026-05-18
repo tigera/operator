@@ -75,6 +75,7 @@ const (
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
+	ManagerPortName              = "https"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -238,12 +239,12 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
+	c.voltronImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
+	c.uiAPIsImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -507,7 +508,6 @@ func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
 		Name:            ManagerName,
 		Image:           c.managerImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
@@ -668,7 +668,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 	return corev1.Container{
 		Name:            VoltronName,
 		Image:           c.voltronImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "voltron"},
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
@@ -702,15 +702,14 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 	return corev1.Container{
 		Name:            DashboardAPIName,
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{"/usr/bin/dashboard-api"},
+		Command:         []string{components.CalicoBinaryPath, "component", "dashboards"},
 		Env:             env,
 		VolumeMounts:    mounts,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+					Command: []string{components.CalicoBinaryPath, "component", "dashboards", "ready"},
 				},
 			},
 			FailureThreshold:    3,
@@ -722,7 +721,7 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+					Command: []string{components.CalicoBinaryPath, "component", "dashboards", "ready"},
 				},
 			},
 			FailureThreshold: 3,
@@ -793,7 +792,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 	return corev1.Container{
 		Name:            UIAPIsName,
 		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Command:         []string{components.CalicoBinaryPath, "component", "ui-apis"},
 		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
@@ -821,6 +820,8 @@ func (c *managerComponent) managerService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
+					// OpenShift's Ingress→Route conversion requires a named target port.
+					Name:       ManagerPortName,
 					Port:       ManagerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(managerTargetPort),

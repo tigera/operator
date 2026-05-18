@@ -157,9 +157,8 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 
 func (c *Component) whiskerContainer() corev1.Container {
 	return corev1.Container{
-		Name:            WhiskerContainerName,
-		Image:           c.whiskerImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
+		Name:  WhiskerContainerName,
+		Image: c.whiskerImage,
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
@@ -195,10 +194,9 @@ func (c *Component) whiskerService() *corev1.Service {
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
 	return corev1.Container{
-		Name:            WhiskerBackendContainerName,
-		Image:           c.whiskerBackendImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
-		Command:         []string{components.CalicoBinaryPath, "component", "whisker-backend"},
+		Name:    WhiskerBackendContainerName,
+		Image:   c.whiskerBackendImage,
+		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},

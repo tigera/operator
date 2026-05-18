@@ -200,7 +200,7 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	mc.prometheusServiceImage, err = components.GetReference(components.ComponentTigeraPrometheusService, reg, path, prefix, is)
+	mc.prometheusServiceImage, err = components.GetReference(components.CombinedCalicoImage(mc.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -520,7 +520,6 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
 			Image:              &mc.alertmanagerImage,
-			ImagePullPolicy:    render.ImagePullPolicy(),
 			ImagePullSecrets:   secret.GetReferenceList(mc.cfg.PullSecrets),
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
 			Replicas:           mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas,
@@ -639,9 +638,9 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				},
 				Containers: []corev1.Container{
 					{
-						Name:            "authn-proxy",
-						Image:           mc.prometheusServiceImage,
-						ImagePullPolicy: render.ImagePullPolicy(),
+						Name:    "authn-proxy",
+						Image:   mc.prometheusServiceImage,
+						Command: []string{components.CalicoBinaryPath, "component", "prometheus-service"},
 						Ports: []corev1.ContainerPort{
 							{
 								ContainerPort: PrometheusProxyPort,
@@ -671,7 +670,6 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 					},
 				},
 				Image:            &mc.prometheusImage,
-				ImagePullPolicy:  render.ImagePullPolicy(),
 				ImagePullSecrets: secret.GetReferenceList(mc.cfg.PullSecrets),
 				InitContainers:   initContainers,
 				// ListenLocal makes the Prometheus server listen on loopback, so that it

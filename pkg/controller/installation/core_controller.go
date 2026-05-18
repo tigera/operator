@@ -1988,6 +1988,16 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		}
 	}
 
+	// When BPF is enabled but the operator is not managing kube-proxy (e.g. on AKS, where
+	// the platform owns the kube-proxy DaemonSet), the platform's kube-proxy keeps the
+	// default healthz port (10256), and Felix's BPF kube-proxy healthz server would fail
+	// to bind. Default the port to 0 (disabled) so calico-node starts cleanly. Users can
+	// still override by setting BPFKubeProxyHealthzPort explicitly on FelixConfiguration.
+	if install.Spec.BPFEnabled() && !install.Spec.KubeProxyManagementEnabled() && fc.Spec.BPFKubeProxyHealthzPort == nil {
+		disableBPFKubeProxyHealthz(fc)
+		updated = true
+	}
+
 	if install.Spec.Variant.IsEnterprise() {
 		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
 		dnsService := ""

@@ -339,7 +339,9 @@ func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResource
 		case *corev1.Namespace:
 			// The chart may render a namespace; we create our own in Objects(), so skip it.
 		default:
-			// Skip unknown types.
+			// Fail loudly so a chart bump that adds a new kind we don't handle
+			// trips CI rather than silently dropping the object at runtime.
+			return nil, fmt.Errorf("unhandled object kind %T in rendered gateway-helm manifest", typedObj)
 		}
 	}
 

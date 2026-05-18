@@ -51,6 +51,9 @@ components:
   tigera-cni-windows:
     image: cni-windows
     version: master
+  tigera-cni-plugins:
+    image: cni-plugins
+    version: master
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:

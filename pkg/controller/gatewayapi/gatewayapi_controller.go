@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -394,6 +395,14 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyProxyRef", err, log)
 				return reconcile.Result{}, err
+			}
+			// Upstream rejects mergeGateways with GatewayNamespaceMode; force to false on our copy.
+			if envoyProxy.Spec.MergeGateways != nil && *envoyProxy.Spec.MergeGateways {
+				log.Info("EnvoyProxy sets mergeGateways: true, which is not compatible with namespaced deployments — forcing to false",
+					"envoyProxyNamespace", envoyProxy.Namespace,
+					"envoyProxyName", envoyProxy.Name,
+					"gatewayClass", gatewayAPI.Spec.GatewayClasses[i].Name)
+				envoyProxy.Spec.MergeGateways = ptr.To(false)
 			}
 			if gatewayAPI.Spec.GatewayClasses[i].GatewayKind != nil &&
 				envoyProxy.Spec.Provider != nil &&

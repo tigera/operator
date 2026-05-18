@@ -787,10 +787,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		expectLegacyCleanup(objsToDelete, true, false)
 
-		// The default GatewayClass is auto-provisioned alongside the user-declared
-		// custom classes so that callers always have a working default.
+		// The user-declared GatewayClasses fully replace the default — the controller
+		// only patches in tigera-gateway-class when Spec.GatewayClasses is nil.
 		_, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, GatewayClassName, "")
-		Expect(err).NotTo(HaveOccurred())
+		Expect(err).To(HaveOccurred())
 
 		// GatewayClass is cluster-scoped, so namespace is empty.
 		gc1, err := rtest.GetResourceOfType[*gapi.GatewayClass](objsToCreate, "custom-class-1", "")

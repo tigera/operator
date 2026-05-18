@@ -499,23 +499,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// Helm-rendered envoy-gateway controller in calico-system.
 	objs = append(objs, pr.controllerObjects()...)
 
-	// Auto-provision the default GatewayClass unless the user already declared it
-	// in Spec.GatewayClasses (in which case the loop below honours their overrides).
-	hasDefault := false
-	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
-		if pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name == GatewayClassName {
-			hasDefault = true
-			break
-		}
-	}
-	if !hasDefault {
-		defaultClassSpec := &operatorv1.GatewayClassSpec{Name: GatewayClassName}
-		defaultProxy := pr.envoyProxyConfig(GatewayClassName, common.CalicoNamespace, nil, defaultClassSpec)
-		objs = append(objs, defaultProxy, pr.gatewayClass(GatewayClassName, ControllerName, defaultProxy))
-		pr.cfg.CurrentGatewayClasses.Delete(GatewayClassName)
-	}
-
-	// User-declared GatewayClasses targeting our controller.
+	// Render each GatewayClass declared on the CR. The controller patches in
+	// the default [{Name: "tigera-gateway-class"}] when Spec.GatewayClasses is
+	// nil, so this loop is the single source of truth for what gets emitted.
 	for i := range pr.cfg.GatewayAPI.Spec.GatewayClasses {
 		className := pr.cfg.GatewayAPI.Spec.GatewayClasses[i].Name
 		proxy := pr.envoyProxyConfig(className, common.CalicoNamespace, pr.cfg.CustomEnvoyProxies[className], &(pr.cfg.GatewayAPI.Spec.GatewayClasses[i]))

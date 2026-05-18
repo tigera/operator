@@ -162,7 +162,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should render Gateway API resources from helm chart", func() {
 		s := testScheme()
-		resources, err := renderChart(s, ReleaseName, common.CalicoNamespace, "", "GatewayNamespace")
+		resources, err := renderChart(s)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(resources.controllerDeployment).NotTo(BeNil())
 		Expect(resources.controllerDeployment.Namespace).To(Equal(common.CalicoNamespace))

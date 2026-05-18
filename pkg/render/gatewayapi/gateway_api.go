@@ -66,9 +66,10 @@ var (
 // Single envoy-gateway install in calico-system with deploy.type=GatewayNamespace,
 // so proxies run in each Gateway's own namespace.
 const (
-	ReleaseName      = "tigera-gateway-api"
-	ControllerName   = "gateway.envoyproxy.io/gatewayclass-controller"
-	GatewayClassName = "tigera-gateway-class"
+	ReleaseName         = "tigera-gateway-api"
+	ControllerName      = "gateway.envoyproxy.io/gatewayclass-controller"
+	GatewayClassName    = "tigera-gateway-class"
+	DeploymentNamespace = common.CalicoNamespace
 
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
 	EnvoyGatewayPolicySelector = "app.kubernetes.io/name == 'gateway-helm' || app == 'certgen'"
@@ -157,12 +158,7 @@ type helmConfig struct {
 }
 
 type helmEnvoyGateway struct {
-	Gateway  *helmGateway  `json:"gateway,omitempty"`
 	Provider *helmProvider `json:"provider,omitempty"`
-}
-
-type helmGateway struct {
-	ControllerName string `json:"controllerName,omitempty"`
 }
 
 type helmProvider struct {
@@ -205,14 +201,13 @@ var (
 
 func chartResourcesFor(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
 	chartOnce.Do(func() {
-		chartResults, chartErr = renderChart(scheme, ReleaseName, common.CalicoNamespace, "", "GatewayNamespace")
+		chartResults, chartErr = renderChart(scheme)
 	})
 	return chartResults, chartErr
 }
 
-// renderChart renders the embedded Envoy Gateway helm chart. controllerName and
-// deployType override the equivalent config.envoyGateway values when non-empty.
-func renderChart(scheme *runtime.Scheme, releaseName, namespace, controllerName, deployType string) (*gatewayAPIResources, error) {
+// renderChart renders the embedded Envoy Gateway helm chart.
+func renderChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
 	chart, err := loader.LoadArchive(bytes.NewReader(gatewayHelmChart))
 	if err != nil {
 		return nil, fmt.Errorf("failed to load gateway-helm chart: %w", err)
@@ -223,23 +218,17 @@ func renderChart(scheme *runtime.Scheme, releaseName, namespace, controllerName,
 	helmClient.DryRun = true
 	helmClient.ClientOnly = true
 	helmClient.IncludeCRDs = true
-	helmClient.Namespace = namespace
-	helmClient.ReleaseName = releaseName
+	helmClient.Namespace = DeploymentNamespace
+	helmClient.ReleaseName = ReleaseName
 
-	opts := &helmOpts{}
-	if controllerName != "" || deployType != "" {
-		eg := &helmEnvoyGateway{}
-		if controllerName != "" {
-			eg.Gateway = &helmGateway{ControllerName: controllerName}
-		}
-		if deployType != "" {
-			eg.Provider = &helmProvider{
+	opts := &helmOpts{
+		Config: &helmConfig{EnvoyGateway: &helmEnvoyGateway{
+			Provider: &helmProvider{
 				Kubernetes: &helmKubernetes{
-					Deploy: &helmDeploy{Type: deployType},
+					Deploy: &helmDeploy{Type: "GatewayNamespace"},
 				},
-			}
-		}
-		opts.Config = &helmConfig{EnvoyGateway: eg}
+			},
+		}},
 	}
 
 	values, err := toMap(opts)

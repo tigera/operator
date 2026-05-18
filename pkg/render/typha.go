@@ -411,8 +411,11 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
-	// Allow tolerations to be overwritten by the end-user.
-	tolerations := rmeta.TolerateAll
+	// Allow tolerations to be overwritten by the end-user. By default Typha uses
+	// the bootstrap toleration set: broad enough to schedule on otherwise tainted
+	// nodes during install (before the CNI / cloud provider are ready), but narrow
+	// enough that cordoned nodes are still avoided.
+	tolerations := rmeta.TolerateBootstrap
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
 		tolerations = c.cfg.Installation.ControlPlaneTolerations
 	}

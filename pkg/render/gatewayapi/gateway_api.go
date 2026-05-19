@@ -23,6 +23,7 @@ import (
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
@@ -843,17 +844,20 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						MountPath: "/var/log/calico",
 					},
 				},
-				Env: []corev1.EnvVar{
+				// apigroup.EnvVars() injects CALICO_API_GROUP so libcalico-go skips
+				// auto-discovery. Required because these sidecars are templated into
+				// an EnvoyProxy CR and bypass the operator's componentHandler path.
+				Env: append([]corev1.EnvVar{
 					GatewayNameEnvVar,
 					GatewayNamespaceEnvVar,
-				},
+				}, apigroup.EnvVars()...),
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
 			// need to make changes to the envoy container to mount the socket
 			l7LogCollector := corev1.Container{
 				Name:  "l7-log-collector",
 				Image: pr.L7LogCollectorImage,
-				Env: []corev1.EnvVar{
+				Env: append([]corev1.EnvVar{
 					{
 						Name:  "LOG_LEVEL",
 						Value: "info",
@@ -869,7 +873,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 					// Owning Gateway info from pod labels (set by EnvoyProxy)
 					OwningGatewayNameEnvVar,
 					OwningGatewayNamespaceEnvVar,
-				},
+				}, apigroup.EnvVars()...),
 				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
 				VolumeMounts: []corev1.VolumeMount{
 					{

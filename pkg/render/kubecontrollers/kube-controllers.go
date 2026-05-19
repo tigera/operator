@@ -472,6 +472,11 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
+		{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"packetcaptures/status"},
+			Verbs:     []string{"update"},
+		},
 	}
 
 	if cfg.ManagementClusterConnection != nil {

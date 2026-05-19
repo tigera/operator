@@ -1590,6 +1590,25 @@ value:
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should copy the trust bundle ConfigMap into each Gateway namespace", func() {
+		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
+		Expect(err).NotTo(HaveOccurred())
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:            testScheme(),
+			Installation:      &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
+			GatewayAPI:        &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
+			TrustedBundle:     bundle,
+			GatewayNamespaces: []string{"default", "app-ns"},
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		for _, ns := range []string{"default", "app-ns"} {
+			_, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, ns)
+			Expect(err).NotTo(HaveOccurred(), "trust bundle ConfigMap should be copied into %s", ns)
+		}
+	})
+
 	It("should not create per-namespace resources when no Gateway namespaces are provided (Enterprise)", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.CalicoEnterprise,

@@ -527,6 +527,14 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			if !isReservedOperatorNamespace(ns) {
 				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
 				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+				// Mirror the operator trust bundle (public CA roots + Calico CA) into
+				// the Gateway namespace so provisioned envoy-proxy pods can mount it.
+				// The controller-side bundle is already shipped to calico-system; the
+				// proxy pods live in this namespace under deploy.type=GatewayNamespace
+				// and cannot cross-namespace-mount.
+				if pr.cfg.TrustedBundle != nil {
+					objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(ns))
+				}
 			}
 		}
 		if len(pr.cfg.GatewayNamespaces) > 0 {
@@ -542,6 +550,11 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 					// resources in reserved namespaces (core-owned).
 					if !isReservedOperatorNamespace(ns) {
 						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+						// Trust bundle ConfigMap goes alongside the pull secret (same
+						// delete-before-RB ordering rule applies).
+						if pr.cfg.TrustedBundle != nil {
+							objsToDelete = append(objsToDelete, pr.cfg.TrustedBundle.ConfigMap(ns))
+						}
 					}
 					objsToDelete = append(objsToDelete,
 						pr.gatewayNamespaceSA(ns),

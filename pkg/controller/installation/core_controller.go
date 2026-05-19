@@ -213,6 +213,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Watch for changes to KubeControllersConfiguration.
+	// Watch GatewayAPI: spec.extensions.waf.state gates the WAF v3 surface on
+	// calico-kube-controllers.  See design tigera/designs#25 (PMREQ-384) §Gating.
+	if err := c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{}); err != nil {
+		log.V(5).Info("Failed to create GatewayAPI watch", "err", err)
+		return fmt.Errorf("core-controller failed to watch operator GatewayAPI resource: %w", err)
+	}
+
 	err = c.WatchObject(&v3.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
@@ -1595,6 +1602,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.CSI(&csiCfg))
 
+	// Read the GatewayAPI CR (if present) to decide whether to render the WAF
+	// v3 (Gateway API add-on) surface — env vars, RBAC, applicationlayer
+	// reconciler — on calico-kube-controllers.  Default-off: if no GatewayAPI
+	// CR exists or spec.extensions.waf.state != Enabled, the WAF surface is
+	// not rendered.  See design tigera/designs#25 (PMREQ-384) §Gating.
+	wafGatewayExtensionEnabled := false
+	gatewayAPI := &operatorv1.GatewayAPI{}
+	if err := r.client.Get(ctx, utils.DefaultInstanceKey, gatewayAPI); err == nil {
+		wafGatewayExtensionEnabled = gatewayAPI.Spec.IsWAFGatewayExtensionEnabled()
+	} else if !apierrors.IsNotFound(err) {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading GatewayAPI", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Build a configuration for rendering calico/kube-controllers.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
@@ -1609,6 +1630,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
+		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

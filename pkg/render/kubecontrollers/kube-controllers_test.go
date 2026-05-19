@@ -250,6 +250,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// EnvoyExtensionPolicies in WAFPolicy namespaces.
 		instance.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "tigera-pull-secret"}}
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -410,6 +412,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -477,6 +481,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -620,6 +626,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

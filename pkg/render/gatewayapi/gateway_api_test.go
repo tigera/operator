@@ -22,6 +22,7 @@ import (
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/components"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -1077,6 +1078,78 @@ value:
 		}))
 
 		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
+	})
+
+	It("should inject CALICO_API_GROUP into waf-http-filter and l7-log-collector when v3 CRDs are in use", func() {
+		// EV-6620: these init containers are templated into an EnvoyProxy CR and
+		// bypass the componentHandler that normally injects CALICO_API_GROUP.
+		// Without the env var libcalico-go's auto-discovery picks the wrong group
+		// in no-api-server clusters where both v1 and v3 CRDs are present.
+		apigroup.Set(apigroup.V3)
+		DeferCleanup(func() { apigroup.Set(apigroup.Unknown) })
+
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.CalicoEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		envoyDeployment := proxy.Spec.Provider.Kubernetes.EnvoyDeployment
+		Expect(envoyDeployment).ToNot(BeNil())
+
+		expectedEnvVar := corev1.EnvVar{Name: "CALICO_API_GROUP", Value: "projectcalico.org/v3"}
+
+		var wafFilter, l7Collector *corev1.Container
+		for i := range envoyDeployment.InitContainers {
+			switch envoyDeployment.InitContainers[i].Name {
+			case "waf-http-filter":
+				wafFilter = &envoyDeployment.InitContainers[i]
+			case "l7-log-collector":
+				l7Collector = &envoyDeployment.InitContainers[i]
+			}
+		}
+		Expect(wafFilter).ToNot(BeNil(), "waf-http-filter init container should exist")
+		Expect(l7Collector).ToNot(BeNil(), "l7-log-collector init container should exist")
+		Expect(wafFilter.Env).To(ContainElement(expectedEnvVar))
+		Expect(l7Collector.Env).To(ContainElement(expectedEnvVar))
+	})
+
+	It("should not inject CALICO_API_GROUP when v3 CRDs are not in use", func() {
+		apigroup.Set(apigroup.Unknown)
+
+		installation := &operatorv1.InstallationSpec{
+			Variant: operatorv1.CalicoEnterprise,
+		}
+		gatewayAPI := &operatorv1.GatewayAPI{
+			Spec: operatorv1.GatewayAPISpec{
+				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+			},
+		}
+		gatewayComp := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Installation: installation,
+			GatewayAPI:   gatewayAPI,
+		})
+
+		objsToCreate, _ := gatewayComp.Objects()
+		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, "tigera-gateway-class", "tigera-gateway")
+		Expect(err).NotTo(HaveOccurred())
+
+		for _, c := range proxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
+			for _, e := range c.Env {
+				Expect(e.Name).ToNot(Equal("CALICO_API_GROUP"))
+			}
+		}
 	})
 
 	It("should deploy waf-http-filter for Enterprise when using a custom proxy", func() {

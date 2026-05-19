@@ -1438,13 +1438,21 @@ value:
 		Expect(clusterRole.Name).To(Equal("waf-http-filter"))
 
 		// Verify the ClusterRole has the correct rules
-		Expect(clusterRole.Rules).To(HaveLen(3))
+		Expect(clusterRole.Rules).To(HaveLen(4))
 
 		// Check license key access for WAF
 		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 			APIGroups: []string{"crd.projectcalico.org", "projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
+		}))
+
+		// Check APIService read access (needed for v3 CRD discovery in no-api-server mode)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups:     []string{"apiregistration.k8s.io"},
+			Resources:     []string{"apiservices"},
+			ResourceNames: []string{"v3.projectcalico.org"},
+			Verbs:         []string{"get"},
 		}))
 
 		// Check token review permissions for WAF

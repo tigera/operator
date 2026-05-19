@@ -84,6 +84,24 @@ var _ = Describe("Typha rendering tests", func() {
 		}
 	})
 
+	It("should default to bootstrap tolerations that respect cordoning", func() {
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploy := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deploy).ToNot(BeNil())
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(Equal(rmeta.TolerateBootstrap))
+
+		// Cordoned nodes get a node.kubernetes.io/unschedulable:NoSchedule taint;
+		// Typha must not tolerate it, otherwise replicas pile up on drained nodes.
+		for _, t := range deploy.Spec.Template.Spec.Tolerations {
+			Expect(t.Key).ToNot(Equal("node.kubernetes.io/unschedulable"))
+			Expect(t.Operator == corev1.TolerationOpExists && t.Key == "").To(BeFalse(),
+				"unbounded toleration would defeat node cordoning")
+		}
+	})
+
 	It("should render toleration on GKE", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
 		component := render.Typha(&cfg)

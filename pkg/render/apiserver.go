@@ -1422,7 +1422,7 @@ func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
 // tolerations creates the tolerations used by the API server deployment.
 func (c *apiServerComponent) tolerations() []corev1.Toleration {
 	if c.hostNetwork() {
-		return rmeta.TolerateAll
+		return rmeta.TolerateBootstrap
 	}
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {

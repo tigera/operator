@@ -621,7 +621,7 @@ func (c *component) Ready() bool {
 // tolerations creates the tolerations used by the webhooks deployment.
 func (c *component) tolerations() []corev1.Toleration {
 	if render.HostNetworkRequired(c.cfg.Installation) {
-		return rmeta.TolerateAll
+		return rmeta.TolerateBootstrap
 	}
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {

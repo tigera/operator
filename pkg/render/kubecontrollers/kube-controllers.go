@@ -108,6 +108,15 @@ type KubeControllersConfiguration struct {
 	// Tenant object provides tenant configuration for both single and multi-tenant modes.
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
+
+	// WAFGatewayExtensionEnabled gates the WAF v3 (Gateway API add-on) surface
+	// on calico-kube-controllers: the applicationlayer controller enablement,
+	// the WAF / Gateway-API / EnvoyExtensionPolicy / event / secret-replication
+	// RBAC, the WASM_IMAGE / WASM_PULL_SECRET / WASM_CA_CERT env vars, and the
+	// coraza-wasm image resolution.  Sourced from
+	// `GatewayAPI.spec.extensions.waf.state == Enabled` (default off).
+	// See design `tigera/designs#25` (PMREQ-384).
+	WAFGatewayExtensionEnabled bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -154,7 +163,10 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
 			},
 		)
-		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage", "applicationlayer")
+		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+		if cfg.WAFGatewayExtensionEnabled {
+			enabledControllers = append(enabledControllers, "applicationlayer")
+		}
 	}
 
 	return &kubeControllersComponent{
@@ -251,7 +263,7 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	if err != nil {
 		return err
 	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
+	if c.cfg.Installation.Variant.IsEnterprise() && c.cfg.WAFGatewayExtensionEnabled {
 		c.wasmImage, err = components.GetReference(components.ComponentCorazaWASM, reg, path, prefix, is)
 		if err != nil {
 			return err
@@ -484,75 +496,82 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
-		// Application-layer (gateway-addons) reconcilers reconcile WAF resources
-		// against Gateway API targetRefs and emit events on the policy objects.
-		{
-			APIGroups: []string{"applicationlayer.projectcalico.org"},
-			Resources: []string{
-				"wafpolicies", "globalwafpolicies",
-				"wafplugins", "globalwafplugins",
-				"wafvalidationpolicies", "globalwafvalidationpolicies",
+	}
+
+	if cfg.WAFGatewayExtensionEnabled {
+		// WAF v3 (Gateway API add-on) RBAC. Gated by
+		// GatewayAPI.spec.extensions.waf.state == Enabled.
+		rules = append(rules,
+			// Application-layer (gateway-addons) reconcilers reconcile WAF resources
+			// against Gateway API targetRefs and emit events on the policy objects.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"applicationlayer.projectcalico.org"},
+				Resources: []string{
+					"wafpolicies", "globalwafpolicies",
+					"wafplugins", "globalwafplugins",
+					"wafvalidationpolicies", "globalwafvalidationpolicies",
+				},
+				Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 			},
-			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		{
-			APIGroups: []string{"applicationlayer.projectcalico.org"},
-			Resources: []string{
-				"wafpolicies/status", "globalwafpolicies/status",
-				"wafplugins/status", "globalwafplugins/status",
-				"wafvalidationpolicies/status", "globalwafvalidationpolicies/status",
+			rbacv1.PolicyRule{
+				APIGroups: []string{"applicationlayer.projectcalico.org"},
+				Resources: []string{
+					"wafpolicies/status", "globalwafpolicies/status",
+					"wafplugins/status", "globalwafplugins/status",
+					"wafvalidationpolicies/status", "globalwafvalidationpolicies/status",
+				},
+				Verbs: []string{"get", "update", "patch"},
 			},
-			Verbs: []string{"get", "update", "patch"},
-		},
-		{
-			APIGroups: []string{"applicationlayer.projectcalico.org"},
-			Resources: []string{
-				"wafpolicies/finalizers", "globalwafpolicies/finalizers",
-				"wafplugins/finalizers", "globalwafplugins/finalizers",
-				"wafvalidationpolicies/finalizers", "globalwafvalidationpolicies/finalizers",
+			rbacv1.PolicyRule{
+				APIGroups: []string{"applicationlayer.projectcalico.org"},
+				Resources: []string{
+					"wafpolicies/finalizers", "globalwafpolicies/finalizers",
+					"wafplugins/finalizers", "globalwafplugins/finalizers",
+					"wafvalidationpolicies/finalizers", "globalwafvalidationpolicies/finalizers",
+				},
+				Verbs: []string{"update"},
 			},
-			Verbs: []string{"update"},
-		},
-		{
-			// Validate Gateway API targetRefs and surface attachment status.
-			APIGroups: []string{"gateway.networking.k8s.io"},
-			Resources: []string{"gateways", "httproutes", "tcproutes", "tlsroutes", "grpcroutes"},
-			Verbs:     []string{"get", "list", "watch", "update", "patch"},
-		},
-		{
-			APIGroups: []string{"gateway.networking.k8s.io"},
-			Resources: []string{"gateways/status", "httproutes/status", "tcproutes/status", "tlsroutes/status", "grpcroutes/status"},
-			Verbs:     []string{"get", "update", "patch"},
-		},
-		// controller-runtime Reconcilers (e.g. the applicationlayer manager) record
-		// events on watched objects via Recorder.Eventf; both core and events.k8s.io
-		// API groups are emitted depending on the kubernetes version.
-		{
-			APIGroups: []string{""},
-			Resources: []string{"events"},
-			Verbs:     []string{"create", "patch"},
-		},
-		{
-			APIGroups: []string{"events.k8s.io"},
-			Resources: []string{"events"},
-			Verbs:     []string{"create", "patch"},
-		},
-		// Application-layer reconciler replicates the WAF wasm pull Secret from
-		// the controller namespace (calico-system) into each WAFPolicy's
-		// namespace so the rendered EnvoyExtensionPolicy can reference it. Also
-		// replicates CA-cert ConfigMaps when WASM_CA_CERT is set.
-		{
-			APIGroups: []string{""},
-			Resources: []string{"secrets", "configmaps"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
-		// Application-layer reconciler emits one EnvoyExtensionPolicy per WAF
-		// targetRef to bind the Coraza wasm filter at the gateway / route.
-		{
-			APIGroups: []string{"gateway.envoyproxy.io"},
-			Resources: []string{"envoyextensionpolicies"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-		},
+			rbacv1.PolicyRule{
+				// Validate Gateway API targetRefs and surface attachment status.
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"gateways", "httproutes", "tcproutes", "tlsroutes", "grpcroutes"},
+				Verbs:     []string{"get", "list", "watch", "update", "patch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"gateways/status", "httproutes/status", "tcproutes/status", "tlsroutes/status", "grpcroutes/status"},
+				Verbs:     []string{"get", "update", "patch"},
+			},
+			// controller-runtime Reconcilers (e.g. the applicationlayer manager) record
+			// events on watched objects via Recorder.Eventf; both core and events.k8s.io
+			// API groups are emitted depending on the kubernetes version.
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"events"},
+				Verbs:     []string{"create", "patch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"events.k8s.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"create", "patch"},
+			},
+			// Application-layer reconciler replicates the WAF wasm pull Secret from
+			// the controller namespace (calico-system) into each WAFPolicy's
+			// namespace so the rendered EnvoyExtensionPolicy can reference it. Also
+			// replicates CA-cert ConfigMaps when WASM_CA_CERT is set.
+			rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"secrets", "configmaps"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+			// Application-layer reconciler emits one EnvoyExtensionPolicy per WAF
+			// targetRef to bind the Coraza wasm filter at the gateway / route.
+			rbacv1.PolicyRule{
+				APIGroups: []string{"gateway.envoyproxy.io"},
+				Resources: []string{"envoyextensionpolicies"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+			},
+		)
 	}
 
 	if cfg.ManagementClusterConnection != nil {
@@ -651,30 +670,37 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 
-		// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
-		// wasm OCI reference from this env var to program WAF policy attachments.
-		// Empty when ResolveImages was not called for the Calico variant; the
-		// reconciler stamps Programmed=False/WASMUnavailable in that case.
-		if c.wasmImage != "" {
-			env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
-		}
+		// Application-layer (gateway-addons / WAF v3) env vars, gated by
+		// GatewayAPI.spec.extensions.waf.state == Enabled. When the gate is
+		// off (default), none of the WASM_* env vars are rendered and the
+		// kube-controllers binary skips the WAF reconcilers entirely (see the
+		// applicationlayer entry in enabledControllers).
+		if c.cfg.WAFGatewayExtensionEnabled {
+			// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
+			// wasm OCI reference from this env var to program WAF policy attachments.
+			// Empty when ResolveImages was not called for the Calico variant; the
+			// reconciler stamps Programmed=False/WASMUnavailable in that case.
+			if c.wasmImage != "" {
+				env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
+			}
 
-		// WASM_PULL_SECRET names the imagePullSecret the reconciler replicates
-		// from the kube-controllers namespace into a WAFPolicy's namespace so
-		// the rendered EnvoyExtensionPolicy can pull the wasm OCI artifact from
-		// a private Tigera registry. Source the name from the first
-		// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
-		// installs reuse whatever pull secret operator already attaches here.
-		if len(c.cfg.Installation.ImagePullSecrets) > 0 {
-			env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.Installation.ImagePullSecrets[0].Name})
-		}
+			// WASM_PULL_SECRET names the imagePullSecret the reconciler replicates
+			// from the kube-controllers namespace into a WAFPolicy's namespace so
+			// the rendered EnvoyExtensionPolicy can pull the wasm OCI artifact from
+			// a private Tigera registry. Source the name from the first
+			// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
+			// installs reuse whatever pull secret operator already attaches here.
+			if len(c.cfg.Installation.ImagePullSecrets) > 0 {
+				env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.Installation.ImagePullSecrets[0].Name})
+			}
 
-		// WASM_CA_CERT names the trusted CA bundle ConfigMap (already mounted
-		// on this Deployment via TrustedBundle) that the reconciler replicates
-		// alongside WASM_PULL_SECRET so the EnvoyExtensionPolicy wasm fetcher
-		// trusts the registry's TLS chain.
-		if c.cfg.TrustedBundle != nil {
-			env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: certificatemanagement.TrustedCertConfigMapName})
+			// WASM_CA_CERT names the trusted CA bundle ConfigMap (already mounted
+			// on this Deployment via TrustedBundle) that the reconciler replicates
+			// alongside WASM_PULL_SECRET so the EnvoyExtensionPolicy wasm fetcher
+			// trusts the registry's TLS chain.
+			if c.cfg.TrustedBundle != nil {
+				env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: certificatemanagement.TrustedCertConfigMapName})
+			}
 		}
 	}
 

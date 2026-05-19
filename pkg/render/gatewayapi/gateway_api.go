@@ -1193,6 +1193,12 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterClusterRole() *rbacv1.
 				Verbs:     []string{"get", "watch"},
 			},
 			{
+				APIGroups:     []string{"apiregistration.k8s.io"},
+				Resources:     []string{"apiservices"},
+				ResourceNames: []string{"v3.projectcalico.org"},
+				Verbs:         []string{"get"},
+			},
+			{
 				APIGroups: []string{"authentication.k8s.io"},
 				Resources: []string{"tokenreviews"},
 				Verbs:     []string{"create"},

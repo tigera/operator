@@ -488,7 +488,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(roleUpdateManagedClusters.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
+				Resources: []string{"managedclusters", "managedclusters/status"},
 				Verbs:     []string{"update"},
 			},
 		}))

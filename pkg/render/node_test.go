@@ -3320,11 +3320,11 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 	var expectedReadinessCmd []string
 	switch {
 	case !bgp:
-		expectedReadinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--felix-ready"}
+		expectedReadinessCmd = []string{"calico", "component", "node", "health", "--felix-ready"}
 	case bgp && isEnterprise:
-		expectedReadinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--bird-ready", "--felix-ready", "--bgp-metrics-ready"}
+		expectedReadinessCmd = []string{"calico", "component", "node", "health", "--bird-ready", "--felix-ready", "--bgp-metrics-ready"}
 	case bgp:
-		expectedReadinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--bird-ready", "--felix-ready"}
+		expectedReadinessCmd = []string{"calico", "component", "node", "health", "--bird-ready", "--felix-ready"}
 	}
 	expectedReadiness.ProbeHandler = corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: expectedReadinessCmd}}
 
@@ -3333,7 +3333,7 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 
 	expectedLifecycle := &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
-			Command: []string{"/usr/bin/calico", "component", "node", "shutdown"},
+			Command: []string{"calico", "component", "node", "shutdown"},
 		}},
 	}
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].Lifecycle).To(Equal(expectedLifecycle))
@@ -3411,7 +3411,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			cniImage = fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)
 		}
 		Expect(cniContainer.Image).To(Equal(cniImage))
-		Expect(cniContainer.Command).To(Equal([]string{"/usr/bin/calico", "component", "cni", "install"}))
+		Expect(cniContainer.Command).To(Equal([]string{"calico", "component", "cni", "install"}))
 		Expect(*cniContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 		Expect(*cniContainer.SecurityContext.Privileged).To(BeTrue())
 		Expect(*cniContainer.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
@@ -3471,7 +3471,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	Expect(ebpfBootstrap.Image).To(Equal(ebpfImage))
 	if instance.CalicoNetwork != nil {
 		bpf := instance.CalicoNetwork.LinuxDataplane != nil && *instance.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
-		expectedEbpfCmd := []string{"/usr/bin/calico", "component", "node", "init"}
+		expectedEbpfCmd := []string{"calico", "component", "node", "init"}
 		if !bpf {
 			expectedEbpfCmd = append(expectedEbpfCmd, "--best-effort")
 		}
@@ -3503,7 +3503,7 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)))
 		}
-		Expect(flexvolContainer.Command).To(Equal([]string{"/usr/bin/calico", "component", "flexvol", "install", "--target", "/host/driver/uds"}))
+		Expect(flexvolContainer.Command).To(Equal([]string{"calico", "component", "flexvol", "install", "--target", "/host/driver/uds"}))
 
 		Expect(*flexvolContainer.SecurityContext.AllowPrivilegeEscalation).To(BeTrue())
 		Expect(*flexvolContainer.SecurityContext.Privileged).To(BeTrue())

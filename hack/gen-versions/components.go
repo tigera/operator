@@ -64,6 +64,7 @@ var (
 		"istio-proxyv2":               "istio-proxyv2",
 		"webhooks":                    "webhooks",
 		"calico":                      "calico",
+		"node-driver-registrar":       "node-driver-registrar",
 	}
 
 	ignoredImages = map[string]struct{}{

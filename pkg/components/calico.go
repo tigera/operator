@@ -132,6 +132,22 @@ var (
 		variant:   calicoVariant,
 	}
 
+	ComponentCalicoCSINodeDriverRegistrar = Component{
+		Version:   "master",
+		Image:     "node-driver-registrar",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoCSINodeDriverRegistrarFIPS = Component{
+		Version:   "master-fips",
+		Image:     "node-driver-registrar",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	CalicoImages = []Component{
 		ComponentCalicoCNIWindows,
 		ComponentCalicoNode,
@@ -147,5 +163,7 @@ var (
 		ComponentCalicoIstioProxyv2,
 		ComponentCalico,
 		ComponentCalicoFIPS,
+		ComponentCalicoCSINodeDriverRegistrar,
+		ComponentCalicoCSINodeDriverRegistrarFIPS,
 	}
 )

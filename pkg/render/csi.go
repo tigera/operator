@@ -182,7 +182,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	registrarContainer := corev1.Container{
 		Name:    CSIRegistrarContainerName,
 		Image:   c.csiRegistrarImage,
-		Command: []string{"/usr/bin/csi-node-driver-registrar"},
+		Command: []string{"csi-node-driver-registrar"},
 		Args: []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
@@ -381,7 +381,10 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-	c.csiRegistrarImage = c.csiImage
+	c.csiRegistrarImage, err = components.GetReference(components.CSINodeDriverRegistrarImage(c.cfg.Installation), reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 

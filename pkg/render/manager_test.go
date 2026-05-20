@@ -203,9 +203,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(dashboard.VolumeMounts[1].MountPath).To(Equal(fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)))
 
 		Expect(dashboard.ReadinessProbe).NotTo(BeNil())
-		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/calico", "component", "dashboards", "ready"}))
+		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"calico", "component", "dashboards", "ready"}))
 		Expect(dashboard.LivenessProbe).NotTo(BeNil())
-		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/calico", "component", "dashboards", "ready"}))
+		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"calico", "component", "dashboards", "ready"}))
 
 		Expect(dashboard.SecurityContext).NotTo(BeNil())
 		Expect(*dashboard.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())

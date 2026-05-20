@@ -115,6 +115,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		var linuxPolicySetupTimeoutSeconds int32 = 1
 		cniBinDir := "/opt/custom/cni/bin"
 		cniConfDir := "/etc/custom/cni/net.d"
+		cniInstallMode := operator.CNIInstallModeAll
 
 		hpEnabled := operator.HostPortsEnabled
 		disabled := operator.BGPDisabled
@@ -134,10 +135,11 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CNI: &operator.CNISpec{
-					Type:    operator.PluginCalico,
-					IPAM:    &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
-					BinDir:  &cniBinDir,
-					ConfDir: &cniConfDir,
+					Type:        operator.PluginCalico,
+					IPAM:        &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+					BinDir:      &cniBinDir,
+					ConfDir:     &cniConfDir,
+					InstallMode: &cniInstallMode,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpIptables, // Actually the default but BPF would make other values invalid.
@@ -210,6 +212,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		logSeverity := operator.LogLevelError
 		cniBinDir := "/opt/custom/cni/bin"
 		cniConfDir := "/etc/custom/cni/net.d"
+		cniInstallMode := operator.CNIInstallModeAll
 
 		disabled := operator.BGPDisabled
 		miMode := operator.MultiInterfaceModeNone
@@ -229,10 +232,11 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 				CNI: &operator.CNISpec{
-					Type:    operator.PluginCalico,
-					IPAM:    &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
-					BinDir:  &cniBinDir,
-					ConfDir: &cniConfDir,
+					Type:        operator.PluginCalico,
+					IPAM:        &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+					BinDir:      &cniBinDir,
+					ConfDir:     &cniConfDir,
+					InstallMode: &cniInstallMode,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.

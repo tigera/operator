@@ -83,7 +83,7 @@ type Configuration struct {
 type Component struct {
 	cfg *Configuration
 
-	goldmaneImage string
+	calicoImage string
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -92,7 +92,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.goldmaneImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -234,7 +234,7 @@ func (c *Component) goldmaneContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            GoldmaneContainerName,
-		Image:           c.goldmaneImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "goldmane"},
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),

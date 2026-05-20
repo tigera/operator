@@ -94,7 +94,7 @@ type Component struct {
 	cfg *Configuration
 
 	whiskerImage        string
-	whiskerBackendImage string
+	calicoImage string
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -108,7 +108,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-	c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -195,7 +195,7 @@ func (c *Component) whiskerService() *corev1.Service {
 func (c *Component) whiskerBackendContainer() corev1.Container {
 	return corev1.Container{
 		Name:    WhiskerBackendContainerName,
-		Image:   c.whiskerBackendImage,
+		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},

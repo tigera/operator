@@ -101,7 +101,7 @@ type Config struct {
 
 	// Calculated internal fields.
 	proxyImage            string
-	collectorImage        string
+	calicoImage        string
 	dikastesImage         string
 	dikastesEnabled       bool
 	perHostEnvoyEnabled   bool
@@ -132,7 +132,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.collectorImage, err = components.GetReference(components.CombinedCalicoImage(c.config.Installation), reg, path, prefix, is)
+	c.config.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.config.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -288,7 +288,7 @@ func (c *component) containers() []corev1.Container {
 		// Log collection specific container
 		collector := corev1.Container{
 			Name:            L7CollectorContainerName,
-			Image:           c.config.collectorImage,
+			Image:           c.config.calicoImage,
 			Command:         []string{components.CalicoBinaryPath, "component", "l7-collector"},
 			Env:             c.collectorEnv(),
 			SecurityContext: securitycontext.NewRootContext(false),

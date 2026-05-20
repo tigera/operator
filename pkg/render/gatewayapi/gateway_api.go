@@ -420,7 +420,7 @@ type gatewayAPIImplementationComponent struct {
 	envoyGatewayImage   string
 	envoyProxyImage     string
 	envoyRatelimitImage string
-	calicoImage  string
+	calicoImage         string
 	L7LogCollectorImage string
 }
 

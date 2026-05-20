@@ -133,7 +133,7 @@ type GuardianConfiguration struct {
 }
 
 type GuardianComponent struct {
-	cfg   *GuardianConfiguration
+	cfg         *GuardianConfiguration
 	calicoImage string
 }
 

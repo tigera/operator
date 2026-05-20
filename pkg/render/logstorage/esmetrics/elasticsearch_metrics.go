@@ -71,7 +71,7 @@ type Config struct {
 }
 
 type elasticsearchMetrics struct {
-	cfg            *Config
+	cfg         *Config
 	calicoImage string
 }
 

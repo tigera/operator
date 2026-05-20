@@ -66,9 +66,9 @@ func EsGateway(c *Config) render.Component {
 }
 
 type esGateway struct {
-	csrImage       string
+	csrImage    string
 	calicoImage string
-	cfg            *Config
+	cfg         *Config
 }
 
 // Config contains all the config information needed to render the EsGateway component.

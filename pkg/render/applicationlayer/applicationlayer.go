@@ -101,7 +101,7 @@ type Config struct {
 
 	// Calculated internal fields.
 	proxyImage            string
-	calicoImage        string
+	calicoImage           string
 	dikastesImage         string
 	dikastesEnabled       bool
 	perHostEnvoyEnabled   bool

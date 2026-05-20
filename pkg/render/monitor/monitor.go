@@ -176,10 +176,10 @@ type Config struct {
 }
 
 type monitorComponent struct {
-	cfg                    *Config
-	alertmanagerImage      string
-	prometheusImage        string
-	calicoImage string
+	cfg               *Config
+	alertmanagerImage string
+	prometheusImage   string
+	calicoImage       string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {

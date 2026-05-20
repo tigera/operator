@@ -120,9 +120,9 @@ type IntrusionDetectionConfiguration struct {
 }
 
 type intrusionDetectionComponent struct {
-	cfg                    *IntrusionDetectionConfiguration
-	controllerImage        string
-	calicoImage string
+	cfg             *IntrusionDetectionConfiguration
+	controllerImage string
+	calicoImage     string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {

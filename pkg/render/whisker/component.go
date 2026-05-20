@@ -93,8 +93,8 @@ type Configuration struct {
 type Component struct {
 	cfg *Configuration
 
-	whiskerImage        string
-	calicoImage string
+	whiskerImage string
+	calicoImage  string
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {

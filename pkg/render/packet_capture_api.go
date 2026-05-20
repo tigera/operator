@@ -73,7 +73,7 @@ type PacketCaptureApiConfiguration struct {
 }
 
 type packetCaptureApiComponent struct {
-	cfg   *PacketCaptureApiConfiguration
+	cfg         *PacketCaptureApiConfiguration
 	calicoImage string
 }
 

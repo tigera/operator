@@ -81,7 +81,7 @@ type PolicyRecommendationConfiguration struct {
 }
 
 type policyRecommendationComponent struct {
-	cfg   *PolicyRecommendationConfiguration
+	cfg         *PolicyRecommendationConfiguration
 	calicoImage string
 }
 

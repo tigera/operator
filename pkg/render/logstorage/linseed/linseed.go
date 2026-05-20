@@ -68,8 +68,8 @@ func Linseed(c *Config) render.Component {
 
 type linseed struct {
 	calicoImage string
-	csrImage     string
-	cfg          *Config
+	csrImage    string
+	cfg         *Config
 
 	// Namespace in which to provision namespaced resources.
 	namespace string

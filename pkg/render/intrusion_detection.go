@@ -120,9 +120,9 @@ type IntrusionDetectionConfiguration struct {
 }
 
 type intrusionDetectionComponent struct {
-	cfg                    *IntrusionDetectionConfiguration
-	controllerImage        string
-	webhooksProcessorImage string
+	cfg             *IntrusionDetectionConfiguration
+	controllerImage string
+	calicoImage     string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -137,7 +137,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.webhooksProcessorImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -686,7 +686,7 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 
 	return corev1.Container{
 		Name:            "webhooks-processor",
-		Image:           c.webhooksProcessorImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "webhooks-processor"},
 		Env:             envVars,
 		SecurityContext: securitycontext.NewNonRootContext(),

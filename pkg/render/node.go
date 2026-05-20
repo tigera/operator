@@ -167,9 +167,8 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage     string
-	flexvolImage string
-	nodeImage    string
+	calicoImage string
+	nodeImage   string
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -184,9 +183,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	combinedRef := appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
-	c.cniImage = combinedRef
-	c.flexvolImage = combinedRef
+	c.calicoImage = appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
 	switch {
 	case c.cfg.Installation.Variant.IsEnterprise():
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
@@ -1211,7 +1208,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "install-cni",
-		Image:           c.cniImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "cni", "install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1228,7 +1225,7 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "flexvol-driver",
-		Image:           c.flexvolImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--target", "/host/driver/uds"},
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,

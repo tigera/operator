@@ -224,8 +224,7 @@ type managerComponent struct {
 	tlsSecrets     []*corev1.Secret
 	tlsAnnotations map[string]string
 	managerImage   string
-	voltronImage   string
-	uiAPIsImage    string
+	calicoImage    string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -233,18 +232,14 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
 	errMsgs := []string{}
+
+	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.voltronImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.uiAPIsImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -667,7 +662,7 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           c.voltronImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "voltron"},
 		Env:             env,
 		VolumeMounts:    mounts,
@@ -705,7 +700,7 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            DashboardAPIName,
-		Image:           c.uiAPIsImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "dashboards"},
 		Env:             env,
 		VolumeMounts:    mounts,
@@ -795,7 +790,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            UIAPIsName,
-		Image:           c.uiAPIsImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "ui-apis"},
 		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),

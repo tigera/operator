@@ -335,6 +335,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Detect which served version of MutatingAdmissionPolicy is available on the cluster (if any).
+	// We discover once at startup so reconcile loops don't repeatedly hit the discovery API.
+	mapAPIVersion := admission.DiscoverAPIVersion(mgr.GetRESTMapper())
+	if mapAPIVersion != "" {
+		setupLog.WithValues("version", mapAPIVersion).Info("Detected MutatingAdmissionPolicy API version")
+	} else {
+		setupLog.Info("MutatingAdmissionPolicy API is not served by this cluster")
+	}
+
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
@@ -345,7 +354,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			os.Exit(1)
 		}
 
-		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
+		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, mapAPIVersion, setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure MutatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
@@ -509,6 +518,8 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
+
+		MutatingAdmissionPolicyAPIVersion: mapAPIVersion,
 	}
 
 	// Before we start any controllers, make sure our options are valid.

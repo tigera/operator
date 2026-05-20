@@ -35,10 +35,8 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
@@ -2572,25 +2570,8 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		installation     *operator.Installation
 	)
 
-	// mapMapper builds a RESTMapper advertising the requested served versions of
-	// admissionregistration.k8s.io MutatingAdmissionPolicy / MutatingAdmissionPolicyBinding.
-	mapMapper := func(versions ...string) meta.RESTMapper {
-		gv := []schema.GroupVersion{}
-		mapper := meta.NewDefaultRESTMapper(gv)
-		for _, v := range versions {
-			gvk := schema.GroupVersionKind{Group: admission.APIGroup, Version: v, Kind: "MutatingAdmissionPolicy"}
-			gvkB := schema.GroupVersionKind{Group: admission.APIGroup, Version: v, Kind: "MutatingAdmissionPolicyBinding"}
-			mapper.Add(gvk, meta.RESTScopeRoot)
-			mapper.Add(gvkB, meta.RESTScopeRoot)
-		}
-		return mapper
-	}
-
-	clientFor := func(mapper meta.RESTMapper, initial ...client.Object) client.Client {
-		return ctrlrfake.DefaultFakeClientBuilder(scheme).
-			WithRESTMapper(mapper).
-			WithObjects(initial...).
-			Build()
+	clientFor := func(initial ...client.Object) client.Client {
+		return ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(initial...).Build()
 	}
 
 	BeforeEach(func() {
@@ -2621,11 +2602,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should create v1 MAPs when v1 is served", func() {
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1)),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     true,
+			client:        clientFor(),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        true,
+			mapAPIVersion: admission.VersionV1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2651,11 +2633,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should create v1beta1 MAPs when only v1beta1 is served", func() {
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1Beta1)),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     true,
+			client:        clientFor(),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        true,
+			mapAPIVersion: admission.VersionV1Beta1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2679,11 +2662,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should not create MAPs when no served version exists and should set degraded", func() {
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper()),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     true,
+			client:        clientFor(),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        true,
+			mapAPIVersion: "",
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2696,11 +2680,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should not create MAPs when v3CRDs=false", func() {
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1)),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     false,
+			client:        clientFor(),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        false,
+			mapAPIVersion: admission.VersionV1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2712,11 +2697,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should not create MAPs when manageCRDs=false", func() {
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1)),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: false,
-			v3CRDs:     true,
+			client:        clientFor(),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    false,
+			v3CRDs:        true,
+			mapAPIVersion: admission.VersionV1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2741,11 +2727,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		}
 
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1), staleMAP, staleMAPB),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     true,
+			client:        clientFor(staleMAP, staleMAPB),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        true,
+			mapAPIVersion: admission.VersionV1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2782,11 +2769,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		}
 
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1), initial...),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     true,
+			client:        clientFor(initial...),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        true,
+			mapAPIVersion: admission.VersionV1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2799,11 +2787,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should work with Enterprise variant", func() {
 		r = ReconcileInstallation{
-			client:     clientFor(mapMapper(admission.VersionV1)),
-			scheme:     scheme,
-			status:     mockStatus,
-			manageCRDs: true,
-			v3CRDs:     true,
+			client:        clientFor(),
+			scheme:        scheme,
+			status:        mockStatus,
+			manageCRDs:    true,
+			v3CRDs:        true,
+			mapAPIVersion: admission.VersionV1,
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},

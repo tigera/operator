@@ -130,20 +130,18 @@ func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersi
 }
 
 // Ensure ensures that MutatingAdmissionPolicies necessary for bootstrapping exist in the cluster.
-// Further reconciliation is handled by the core controller. If the API is not available (no served
-// version of MutatingAdmissionPolicy), a warning is logged and the function returns nil. MAPs are
-// only installed when v3 CRDs are enabled.
-func Ensure(c client.Client, variant string, v3 bool, log logr.Logger) error {
+// Further reconciliation is handled by the core controller. If apiVersion is empty (no served
+// version of MutatingAdmissionPolicy on the cluster), a warning is logged and the function returns
+// nil. MAPs are only installed when v3 CRDs are enabled.
+func Ensure(c client.Client, variant string, v3 bool, apiVersion string, log logr.Logger) error {
 	if !v3 {
 		return nil
 	}
 
-	apiVersion := DiscoverAPIVersion(c.RESTMapper())
 	if apiVersion == "" {
 		log.Info("MutatingAdmissionPolicy API not available on cluster, skipping bootstrap")
 		return nil
 	}
-	log.Info("Using discovered MutatingAdmissionPolicy API version", "version", apiVersion)
 
 	objs := GetMutatingAdmissionPolicies(opv1.ProductVariant(variant), v3, apiVersion)
 

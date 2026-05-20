@@ -344,6 +344,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
+		mapAPIVersion:        opts.MutatingAdmissionPolicyAPIVersion,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -402,6 +403,7 @@ type ReconcileInstallation struct {
 	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
+	mapAPIVersion                 string
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -2269,16 +2271,14 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 		return nil
 	}
 
-	// Discover which served version of MutatingAdmissionPolicy is available. v1 was promoted to GA
-	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37, so the cluster
-	// may serve either or both.
-	apiVersion := admission.DiscoverAPIVersion(r.client.RESTMapper())
-	if apiVersion == "" {
+	// MutatingAdmissionPolicy served version was discovered once at startup (v1 was promoted to GA
+	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37).
+	if r.mapAPIVersion == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes cluster does not serve MutatingAdmissionPolicy (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, apiVersion)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, r.mapAPIVersion)
 
 	// Build sets of desired resource names for comparison.
 	desiredMAPs := map[string]bool{}
@@ -2293,7 +2293,7 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 	}
 
 	// Find stale managed resources at the discovered API version.
-	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, apiVersion)
+	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, r.mapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
 		return err

@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/apidiscovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/metrics"
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
@@ -335,6 +336,10 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Snapshot the served versions for the Kubernetes APIs the operator branches on. Discovery
+	// happens once here so reconcile loops can do plain map lookups.
+	apiDiscovery := apidiscovery.New(mgr.GetRESTMapper())
+
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
@@ -345,7 +350,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			os.Exit(1)
 		}
 
-		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
+		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy), setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure MutatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
@@ -509,6 +514,8 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		MultiTenant:         multiTenant,
 		ElasticExternal:     utils.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
+
+		APIDiscovery: apiDiscovery,
 	}
 
 	// Before we start any controllers, make sure our options are valid.

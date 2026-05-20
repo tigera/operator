@@ -694,6 +694,10 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 		{Name: "HEALTH_PORT", Value: DashboardAPIHealthPort},
 	}
 
+	if c.cfg.KeyValidatorConfig != nil {
+		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
+	}
+
 	mounts := append(
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()),
@@ -900,7 +904,7 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{"projectcalico.org"},
-						Resources: []string{"managedclusters"},
+						Resources: []string{"managedclusters", "managedclusters/status"},
 						Verbs:     []string{"update"},
 					},
 				},
@@ -931,7 +935,7 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 			Rules: []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"managedclusters"},
+					Resources: []string{"managedclusters", "managedclusters/status"},
 					Verbs:     []string{"update"},
 				},
 			},

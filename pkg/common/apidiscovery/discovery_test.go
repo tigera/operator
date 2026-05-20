@@ -43,41 +43,49 @@ func (f *fakeMapper) RESTMappings(gk schema.GroupKind, _ ...string) ([]*meta.RES
 }
 
 func TestDiscoveryRecordsPreferredVersion(t *testing.T) {
-	mapper := &fakeMapper{served: map[schema.GroupKind][]string{
-		{Group: "admissionregistration.k8s.io", Kind: "MutatingAdmissionPolicy"}: {"v1", "v1beta1"},
-		{Group: "certificates.k8s.io", Kind: "CertificateSigningRequest"}:        {"v1"},
-	}}
-	tracked := []schema.GroupKind{
-		{Group: "admissionregistration.k8s.io", Kind: "MutatingAdmissionPolicy"},
-		{Group: "certificates.k8s.io", Kind: "CertificateSigningRequest"},
-		{Group: "made.up.example.com", Kind: "Nope"},
+	// Serve every tracked GroupKind at v1 (preferred over v1beta1 where applicable).
+	served := map[schema.GroupKind][]string{}
+	for _, gk := range trackedGroupKinds {
+		served[gk] = []string{"v1", "v1beta1"}
 	}
+	mapper := &fakeMapper{served: served}
 
-	d := New(mapper, tracked)
+	d := New(mapper)
 
-	if got := d.ServedVersion("admissionregistration.k8s.io", "MutatingAdmissionPolicy"); got != "v1" {
-		t.Errorf("MutatingAdmissionPolicy: got %q, want v1", got)
-	}
-	if got := d.ServedVersion("certificates.k8s.io", "CertificateSigningRequest"); got != "v1" {
-		t.Errorf("CertificateSigningRequest: got %q, want v1", got)
-	}
-	if got := d.ServedVersion("made.up.example.com", "Nope"); got != "" {
-		t.Errorf("Nope: got %q, want empty", got)
+	for _, gk := range trackedGroupKinds {
+		if got := d.ServedVersion(gk.Group, gk.Kind); got != "v1" {
+			t.Errorf("%s: got %q, want v1", gk, got)
+		}
 	}
 	if got := d.ServedVersion("never.registered.com", "Other"); got != "" {
 		t.Errorf("untracked GroupKind: got %q, want empty", got)
 	}
 }
 
+func TestDiscoveryUnservedGroupKind(t *testing.T) {
+	// Mapper returns NoKindMatchError for everything.
+	mapper := &fakeMapper{served: map[schema.GroupKind][]string{}}
+	d := New(mapper)
+	for _, gk := range trackedGroupKinds {
+		if got := d.ServedVersion(gk.Group, gk.Kind); got != "" {
+			t.Errorf("%s served unexpectedly: %q", gk, got)
+		}
+	}
+}
+
 func TestDiscoveryNoCallsAfterConstruction(t *testing.T) {
-	mapper := &fakeMapper{served: map[schema.GroupKind][]string{
-		{Group: "g", Kind: "K"}: {"v1"},
-	}}
-	d := New(mapper, []schema.GroupKind{{Group: "g", Kind: "K"}})
+	served := map[schema.GroupKind][]string{}
+	for _, gk := range trackedGroupKinds {
+		served[gk] = []string{"v1"}
+	}
+	mapper := &fakeMapper{served: served}
+	d := New(mapper)
 	calls := mapper.calls
 
 	for i := 0; i < 100; i++ {
-		_ = d.ServedVersion("g", "K")
+		for _, gk := range trackedGroupKinds {
+			_ = d.ServedVersion(gk.Group, gk.Kind)
+		}
 		_ = d.ServedVersion("nope", "Other")
 	}
 	if mapper.calls != calls {

@@ -23,20 +23,25 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// Discovery is a snapshot of which API versions a cluster serves for a pre-registered set of
-// GroupKinds. Lookups are pure map reads; no API calls are made after construction.
+// trackedGroupKinds enumerates the Kubernetes API kinds the operator wants to know served
+// versions for. Add an entry here when a controller needs to branch on whether (or which version
+// of) an API is available.
+var trackedGroupKinds = []schema.GroupKind{
+	{Group: "admissionregistration.k8s.io", Kind: "MutatingAdmissionPolicy"},
+}
+
+// Discovery is a snapshot of which API versions a cluster serves for the set of GroupKinds the
+// operator cares about. Lookups are pure map reads; no API calls are made after construction.
 type Discovery struct {
 	versions map[schema.GroupKind]string
 }
 
 // New consults the supplied RESTMapper for each tracked GroupKind and records the preferred
 // served version. GroupKinds not served by the cluster (or unknown to the RESTMapper) map to the
-// empty string. Callers should pass every GroupKind that any controller will later look up; only
-// pre-registered kinds will return a non-empty version, so this list is the single place to add a
-// new API the operator wants to discover.
-func New(mapper meta.RESTMapper, tracked []schema.GroupKind) *Discovery {
+// empty string. Only GroupKinds listed in trackedGroupKinds will return a non-empty version.
+func New(mapper meta.RESTMapper) *Discovery {
 	d := &Discovery{versions: map[schema.GroupKind]string{}}
-	for _, gk := range tracked {
+	for _, gk := range trackedGroupKinds {
 		// RESTMappings returns mappings sorted by the group's preferred-version order from
 		// discovery — for a GA API like v1+v1beta1, v1 comes first.
 		mappings, err := mapper.RESTMappings(gk)

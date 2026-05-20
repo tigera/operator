@@ -57,7 +57,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -339,14 +338,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	// Snapshot the served versions for the Kubernetes APIs the operator branches on. Discovery
 	// happens once here so reconcile loops can do plain map lookups.
-	apiDiscovery := apidiscovery.New(mgr.GetRESTMapper(), []schema.GroupKind{
-		admission.PolicyGroupKind,
-	})
-	if v := apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy); v != "" {
-		setupLog.WithValues("version", v).Info("Detected MutatingAdmissionPolicy API version")
-	} else {
-		setupLog.Info("MutatingAdmissionPolicy API is not served by this cluster")
-	}
+	apiDiscovery := apidiscovery.New(mgr.GetRESTMapper())
 
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.

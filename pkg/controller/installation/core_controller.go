@@ -31,7 +31,6 @@ import (
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -62,6 +61,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/apidiscovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/ippool"
@@ -345,6 +345,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
+		apiDiscovery:         opts.APIDiscovery,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -403,6 +404,7 @@ type ReconcileInstallation struct {
 	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
+	apiDiscovery                  *apidiscovery.Discovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -2269,47 +2271,44 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 	if !r.manageCRDs || !r.v3CRDs {
 		return nil
 	}
-	if !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes version does not support MutatingAdmissionPolicy v1beta1 (requires v1.32+); policy defaulting will not be available", nil, log)
+
+	// MutatingAdmissionPolicy served version was discovered once at startup (v1 was promoted to GA
+	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37).
+	mapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
+	if mapAPIVersion == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes cluster does not serve MutatingAdmissionPolicy (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
 
-	// Build a set of desired resource names for comparison.
+	// Build sets of desired resource names for comparison.
 	desiredMAPs := map[string]bool{}
 	desiredMAPBs := map[string]bool{}
 	for _, obj := range desired {
-		switch obj.(type) {
-		case *admissionv1beta1.MutatingAdmissionPolicy:
+		switch {
+		case admission.IsPolicyKind(obj):
 			desiredMAPs[obj.GetName()] = true
-		case *admissionv1beta1.MutatingAdmissionPolicyBinding:
+		case admission.IsBindingKind(obj):
 			desiredMAPBs[obj.GetName()] = true
 		}
 	}
 
-	// Find stale MAPs that are labeled as managed but no longer desired.
-	existingMAPs := &admissionv1beta1.MutatingAdmissionPolicyList{}
-	if err := r.client.List(ctx, existingMAPs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicies", err, log)
+	// Find stale managed resources at the discovered API version.
+	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
 		return err
 	}
 	var toDelete []client.Object
-	for i := range existingMAPs.Items {
-		if !desiredMAPs[existingMAPs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPs.Items[i])
+	for _, obj := range existingMAPs {
+		if !desiredMAPs[obj.GetName()] {
+			toDelete = append(toDelete, obj)
 		}
 	}
-
-	// Find stale MAPBs that are labeled as managed but no longer desired.
-	existingMAPBs := &admissionv1beta1.MutatingAdmissionPolicyBindingList{}
-	if err := r.client.List(ctx, existingMAPBs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicyBindings", err, log)
-		return err
-	}
-	for i := range existingMAPBs.Items {
-		if !desiredMAPBs[existingMAPBs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPBs.Items[i])
+	for _, obj := range existingMAPBs {
+		if !desiredMAPBs[obj.GetName()] {
+			toDelete = append(toDelete, obj)
 		}
 	}
 

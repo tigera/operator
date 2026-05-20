@@ -154,9 +154,7 @@ type APIServerConfiguration struct {
 
 type apiServerComponent struct {
 	cfg                             *APIServerConfiguration
-	apiServerImage                  string
-	queryServerImage                string
-	l7AdmissionControllerImage      string
+	calicoImage                     string
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
 }
@@ -170,30 +168,20 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 	enterprise := c.cfg.Installation.Variant.IsEnterprise()
 	if enterprise || c.cfg.RequiresAggregationServer {
-		c.apiServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
 	}
 
-	if enterprise {
-		c.queryServerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if enterprise && c.cfg.IsSidecarInjectionEnabled() {
+		c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
-		if c.cfg.IsSidecarInjectionEnabled() {
-			c.l7AdmissionControllerImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-			c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
-			c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
-			if err != nil {
-				errMsgs = append(errMsgs, err.Error())
-			}
+		c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
 		}
 	}
 
@@ -1177,7 +1165,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:         string(APIServerContainerName),
-		Image:        c.apiServerImage,
+		Image:        c.calicoImage,
 		Command:      []string{components.CalicoBinaryPath, "component", "apiserver"},
 		Args:         c.startUpArgs(),
 		Env:          env,
@@ -1317,7 +1305,7 @@ func (c *apiServerComponent) queryServerContainer() corev1.Container {
 
 	container := corev1.Container{
 		Name:    string(TigeraAPIServerQueryServerContainerName),
-		Image:   c.queryServerImage,
+		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "queryserver"},
 		Env:     env,
 		LivenessProbe: &corev1.Probe{
@@ -2319,7 +2307,7 @@ func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
 
 	l7AdmssCtrl := corev1.Container{
 		Name:    string(L7AdmissionControllerContainerName),
-		Image:   c.l7AdmissionControllerImage,
+		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
 		Env: []corev1.EnvVar{
 			{

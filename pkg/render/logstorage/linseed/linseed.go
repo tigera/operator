@@ -67,9 +67,9 @@ func Linseed(c *Config) render.Component {
 }
 
 type linseed struct {
-	linseedImage string
-	csrImage     string
-	cfg          *Config
+	calicoImage string
+	csrImage    string
+	cfg         *Config
 
 	// Namespace in which to provision namespaced resources.
 	namespace string
@@ -137,7 +137,7 @@ func (l *linseed) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	// Calculate the image(s) to use for Linseed, given user registry configuration.
-	l.linseedImage, err = components.GetReference(components.CombinedCalicoImage(l.cfg.Installation), reg, path, prefix, is)
+	l.calicoImage, err = components.GetReference(components.CombinedCalicoImage(l.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -459,7 +459,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 			Containers: []corev1.Container{
 				{
 					Name:            DeploymentName,
-					Image:           l.linseedImage,
+					Image:           l.calicoImage,
 					Command:         []string{components.CalicoBinaryPath, "component", "linseed"},
 					Env:             envVars,
 					VolumeMounts:    volumeMounts,

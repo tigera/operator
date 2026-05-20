@@ -176,10 +176,10 @@ type Config struct {
 }
 
 type monitorComponent struct {
-	cfg                    *Config
-	alertmanagerImage      string
-	prometheusImage        string
-	prometheusServiceImage string
+	cfg               *Config
+	alertmanagerImage string
+	prometheusImage   string
+	calicoImage       string
 }
 
 func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -200,7 +200,7 @@ func (mc *monitorComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	mc.prometheusServiceImage, err = components.GetReference(components.CombinedCalicoImage(mc.cfg.Installation), reg, path, prefix, is)
+	mc.calicoImage, err = components.GetReference(components.CombinedCalicoImage(mc.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -639,7 +639,7 @@ func (mc *monitorComponent) prometheus() *monitoringv1.Prometheus {
 				Containers: []corev1.Container{
 					{
 						Name:    "authn-proxy",
-						Image:   mc.prometheusServiceImage,
+						Image:   mc.calicoImage,
 						Command: []string{components.CalicoBinaryPath, "component", "prometheus-service"},
 						Ports: []corev1.ContainerPort{
 							{

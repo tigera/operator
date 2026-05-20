@@ -420,7 +420,7 @@ type gatewayAPIImplementationComponent struct {
 	envoyGatewayImage   string
 	envoyProxyImage     string
 	envoyRatelimitImage string
-	wafHTTPFilterImage  string
+	calicoImage  string
 	L7LogCollectorImage string
 }
 
@@ -449,7 +449,7 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 		if err != nil {
 			return err
 		}
-		pr.wafHTTPFilterImage, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
+		pr.calicoImage, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -822,7 +822,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 			// Add or update the Init Container to the deployment
 			wafHTTPFilter := corev1.Container{
 				Name:    wafFilterName,
-				Image:   pr.wafHTTPFilterImage,
+				Image:   pr.calicoImage,
 				Command: []string{components.CalicoBinaryPath, "component", "waf-http-filter"},
 				Args: []string{
 					"--logFileDirectory",

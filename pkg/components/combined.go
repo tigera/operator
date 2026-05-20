@@ -37,3 +37,16 @@ func CombinedCalicoImage(installation *operatorv1.InstallationSpec) Component {
 	}
 	return ComponentCalico
 }
+
+// CSINodeDriverRegistrarImage returns the Component for the csi-node-driver-registrar
+// container. OSS ships this as a standalone image; Enterprise still bundles the
+// registrar binary inside the combined calico image.
+func CSINodeDriverRegistrarImage(installation *operatorv1.InstallationSpec) Component {
+	if installation.Variant.IsEnterprise() {
+		return ComponentTigeraCalico
+	}
+	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
+		return ComponentCalicoCSINodeDriverRegistrarFIPS
+	}
+	return ComponentCalicoCSINodeDriverRegistrar
+}

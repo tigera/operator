@@ -2039,6 +2039,21 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		})
 	}
 
+	// In v3 CRD / webhooks mode there is no aggregated apiserver, and the
+	// calico-uisettings-passthrough ClusterRole that normally grants the broad
+	// uisettings permission isn't deployed. Grant write verbs here so the
+	// calico-webhooks UISettings handler (which narrows access via a SAR on
+	// uisettingsgroups/data) gets invoked instead of being short-circuited by
+	// kube-apiserver RBAC.
+	if !c.cfg.RequiresAggregationServer {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups:     []string{"projectcalico.org"},
+			Resources:     []string{"uisettings"},
+			Verbs:         []string{"create", "update", "delete", "patch"},
+			ResourceNames: []string{"cluster-settings", "user-settings"},
+		})
+	}
+
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

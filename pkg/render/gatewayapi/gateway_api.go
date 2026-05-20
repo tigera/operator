@@ -80,7 +80,9 @@ type gatewayAPIResources struct {
 	certgenRole                   *rbacv1.Role
 	certgenRoleBinding            *rbacv1.RoleBinding
 	certgenJob                    *batchv1.Job
-	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
+	mutatingWebhookConfigurations    []*admissionregv1.MutatingWebhookConfiguration
+	validatingAdmissionPolicies      []*admissionregv1.ValidatingAdmissionPolicy
+	validatingAdmissionPolicyBindings []*admissionregv1.ValidatingAdmissionPolicyBinding
 }
 
 const (
@@ -285,6 +287,18 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
 					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
+				case "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy":
+					obj := &admissionregv1.ValidatingAdmissionPolicy{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.validatingAdmissionPolicies = append(resources.validatingAdmissionPolicies, obj)
+				case "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicyBinding":
+					obj := &admissionregv1.ValidatingAdmissionPolicyBinding{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.validatingAdmissionPolicyBindings = append(resources.validatingAdmissionPolicyBindings, obj)
 				case "/":
 					// No-op.  We see this when there is only a comment between
 					// two "---" delimiters.
@@ -512,6 +526,12 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 	for _, mwc := range resources.mutatingWebhookConfigurations {
 		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, vap := range resources.validatingAdmissionPolicies {
+		objs = append(objs, vap.DeepCopyObject().(client.Object))
+	}
+	for _, vapb := range resources.validatingAdmissionPolicyBindings {
+		objs = append(objs, vapb.DeepCopyObject().(client.Object))
 	}
 	for _, resource := range []client.Object{
 		resources.role,

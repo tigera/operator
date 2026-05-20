@@ -452,7 +452,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						components.TigeraImagePath,
 						components.ComponentTigeraNode.Image,
 						components.ComponentTigeraNode.Version)))
-				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
+				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(6))
 				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 				Expect(fv).ToNot(BeNil())
 				Expect(fv.Image).To(Equal(
@@ -467,6 +467,13 @@ var _ = Describe("Testing core-controller installation", func() {
 						components.TigeraImagePath,
 						components.ComponentTigeraCalico.Image,
 						components.ComponentTigeraCalico.Version)))
+				cniPlugins := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "cni-plugins")
+				Expect(cniPlugins).ToNot(BeNil())
+				Expect(cniPlugins.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s%s:%s",
+						components.TigeraImagePath,
+						components.ComponentTigeraCNIPlugins.Image,
+						components.ComponentTigeraCNIPlugins.Version)))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
@@ -497,6 +504,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Images: []operator.Image{
 							{Image: "tigera/calico", Digest: "sha256:tigeracalicohash"},
 							{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
+							{Image: "tigera/cni-plugins", Digest: "sha256:tigeracnipluginshash"},
 						},
 					},
 				}
@@ -563,7 +571,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						components.TigeraImagePath,
 						components.ComponentTigeraNode.Image,
 						"sha256:tigeranodehash")))
-				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(5))
+				Expect(ds.Spec.Template.Spec.InitContainers).To(HaveLen(6))
 				fv := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "flexvol-driver")
 				Expect(fv).ToNot(BeNil())
 				Expect(fv.Image).To(Equal(
@@ -578,6 +586,13 @@ var _ = Describe("Testing core-controller installation", func() {
 						components.TigeraImagePath,
 						components.ComponentTigeraCalico.Image,
 						"sha256:tigeracalicohash")))
+				cniPlugins := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "cni-plugins")
+				Expect(cniPlugins).ToNot(BeNil())
+				Expect(cniPlugins.Image).To(Equal(
+					fmt.Sprintf("some.registry.org/%s%s@%s",
+						components.TigeraImagePath,
+						components.ComponentTigeraCNIPlugins.Image,
+						"sha256:tigeracnipluginshash")))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(

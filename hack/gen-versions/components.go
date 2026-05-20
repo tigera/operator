@@ -54,6 +54,8 @@ var (
 		"coreos-alertmanager":         "unused-image",
 		"tigera-cni":                  "cni",
 		"tigera-cni-windows":          "cni-windows",
+		"cni-plugins":                 "cni-plugins",
+		"tigera-cni-plugins":          "cni-plugins",
 		"linseed":                     "linseed",
 		"gateway-api-envoy-gateway":   "envoy-gateway",
 		"gateway-api-envoy-proxy":     "envoy-proxy",

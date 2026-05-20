@@ -309,9 +309,10 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
-		expectedImage := fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(expectedImage))
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(expectedImage))
+		expectedCSIImage := fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)
+		expectedRegistrarImage := fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalicoCSINodeDriverRegistrar.Image, components.ComponentCalicoCSINodeDriverRegistrar.Version)
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(expectedCSIImage))
+		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(expectedRegistrarImage))
 	})
 
 	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {

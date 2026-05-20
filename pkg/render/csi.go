@@ -51,7 +51,8 @@ type CSIConfiguration struct {
 type csiComponent struct {
 	cfg *CSIConfiguration
 
-	calicoImage string
+	calicoImage       string
+	csiRegistrarImage string
 }
 
 func CSI(cfg *CSIConfiguration) Component {
@@ -180,8 +181,8 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	// Construct "csi-node-driver-registrar" container
 	registrarContainer := corev1.Container{
 		Name:    CSIRegistrarContainerName,
-		Image:   c.calicoImage,
-		Command: []string{"/usr/bin/csi-node-driver-registrar"},
+		Image:   c.csiRegistrarImage,
+		Command: []string{"csi-node-driver-registrar"},
 		Args: []string{
 			"--v=5",
 			"--csi-address=$(ADDRESS)",
@@ -377,6 +378,10 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
 	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if err != nil {
+		return err
+	}
+	c.csiRegistrarImage, err = components.GetReference(components.CSINodeDriverRegistrarImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}

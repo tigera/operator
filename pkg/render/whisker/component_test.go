@@ -138,7 +138,7 @@ var _ = Describe("ComponentRendering", func() {
 								{
 									Name:    whisker.WhiskerBackendContainerName,
 									Image:   "quay.io/calico/calico:master",
-									Command: []string{"/usr/bin/calico", "component", "whisker-backend"},
+									Command: []string{"calico", "component", "whisker-backend"},
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "3002"},

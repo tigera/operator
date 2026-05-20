@@ -141,7 +141,7 @@ var _ = Describe("ComponentRendering", func() {
 								{
 									Name:    goldmane.GoldmaneContainerName,
 									Image:   "quay.io/calico/calico:master",
-									Command: []string{"/usr/bin/calico", "component", "goldmane"},
+									Command: []string{"calico", "component", "goldmane"},
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "7443"},
@@ -155,13 +155,13 @@ var _ = Describe("ComponentRendering", func() {
 									SecurityContext: securitycontext.NewNonRootContext(),
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=readiness"},
+											Command: []string{"calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=readiness"},
 										}},
 										PeriodSeconds: 10,
 									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=liveness"},
+											Command: []string{"calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=liveness"},
 										}},
 										PeriodSeconds: 10,
 									},

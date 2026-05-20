@@ -70,7 +70,7 @@ type component struct {
 	cfg *Configuration
 
 	// Images.
-	webhooksImage string
+	calicoImage string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -79,7 +79,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.webhooksImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -134,7 +134,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
 						Name:            WebhooksName,
-						Image:           c.webhooksImage,
+						Image:           c.calicoImage,
 						Command:         []string{components.CalicoBinaryPath, "component", "webhooks"},
 						SecurityContext: securtyContext,
 						Args: []string{
@@ -621,7 +621,7 @@ func (c *component) Ready() bool {
 // tolerations creates the tolerations used by the webhooks deployment.
 func (c *component) tolerations() []corev1.Toleration {
 	if render.HostNetworkRequired(c.cfg.Installation) {
-		return rmeta.TolerateAll
+		return rmeta.TolerateBootstrap
 	}
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {

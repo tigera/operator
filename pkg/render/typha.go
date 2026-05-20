@@ -91,7 +91,7 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage string
+	calicoImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -99,7 +99,7 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.typhaImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -411,8 +411,11 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
-	// Allow tolerations to be overwritten by the end-user.
-	tolerations := rmeta.TolerateAll
+	// Allow tolerations to be overwritten by the end-user. By default Typha uses
+	// the bootstrap toleration set: broad enough to schedule on otherwise tainted
+	// nodes during install (before the CNI / cloud provider are ready), but narrow
+	// enough that cordoned nodes are still avoided.
+	tolerations := rmeta.TolerateBootstrap
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
 		tolerations = c.cfg.Installation.ControlPlaneTolerations
 	}
@@ -560,7 +563,7 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes("localhost")
 	return corev1.Container{
 		Name:            TyphaContainerName,
-		Image:           c.typhaImage,
+		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "typha"},
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),

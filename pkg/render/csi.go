@@ -51,7 +51,7 @@ type CSIConfiguration struct {
 type csiComponent struct {
 	cfg *CSIConfiguration
 
-	csiImage          string
+	calicoImage       string
 	csiRegistrarImage string
 }
 
@@ -140,7 +140,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	mountPropagation := corev1.MountPropagationBidirectional
 	csiContainer := corev1.Container{
 		Name:    CSIContainerName,
-		Image:   c.csiImage,
+		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "csi"},
 		Args: []string{
 			"--nodeid=$(KUBE_NODE_NAME)",
@@ -377,7 +377,7 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.csiImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}

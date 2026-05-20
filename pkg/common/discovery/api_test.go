@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package apidiscovery
+package discovery
 
 import (
 	"testing"
@@ -21,15 +21,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// fakeMapper returns the registered versions for the given GroupKind. Other RESTMapper methods
-// are not implemented because Discovery only uses RESTMappings.
-type fakeMapper struct {
+// fakeAPIMapper returns the registered versions for the given GroupKind. Other RESTMapper methods
+// are not implemented because APIDiscovery only uses RESTMappings.
+type fakeAPIMapper struct {
 	meta.RESTMapper
 	served map[schema.GroupKind][]string
 	calls  int
 }
 
-func (f *fakeMapper) RESTMappings(gk schema.GroupKind, _ ...string) ([]*meta.RESTMapping, error) {
+func (f *fakeAPIMapper) RESTMappings(gk schema.GroupKind, _ ...string) ([]*meta.RESTMapping, error) {
 	f.calls++
 	versions, ok := f.served[gk]
 	if !ok {
@@ -42,15 +42,14 @@ func (f *fakeMapper) RESTMappings(gk schema.GroupKind, _ ...string) ([]*meta.RES
 	return out, nil
 }
 
-func TestDiscoveryRecordsPreferredVersion(t *testing.T) {
-	// Serve every tracked GroupKind at v1 (preferred over v1beta1 where applicable).
+func TestAPIDiscoveryRecordsPreferredVersion(t *testing.T) {
 	served := map[schema.GroupKind][]string{}
 	for _, gk := range trackedGroupKinds {
 		served[gk] = []string{"v1", "v1beta1"}
 	}
-	mapper := &fakeMapper{served: served}
+	mapper := &fakeAPIMapper{served: served}
 
-	d := New(mapper)
+	d := DiscoverAPIs(mapper)
 
 	for _, gk := range trackedGroupKinds {
 		if got := d.ServedVersion(gk.Group, gk.Kind); got != "v1" {
@@ -62,10 +61,9 @@ func TestDiscoveryRecordsPreferredVersion(t *testing.T) {
 	}
 }
 
-func TestDiscoveryUnservedGroupKind(t *testing.T) {
-	// Mapper returns NoKindMatchError for everything.
-	mapper := &fakeMapper{served: map[schema.GroupKind][]string{}}
-	d := New(mapper)
+func TestAPIDiscoveryUnservedGroupKind(t *testing.T) {
+	mapper := &fakeAPIMapper{served: map[schema.GroupKind][]string{}}
+	d := DiscoverAPIs(mapper)
 	for _, gk := range trackedGroupKinds {
 		if got := d.ServedVersion(gk.Group, gk.Kind); got != "" {
 			t.Errorf("%s served unexpectedly: %q", gk, got)
@@ -73,13 +71,13 @@ func TestDiscoveryUnservedGroupKind(t *testing.T) {
 	}
 }
 
-func TestDiscoveryNoCallsAfterConstruction(t *testing.T) {
+func TestAPIDiscoveryNoCallsAfterConstruction(t *testing.T) {
 	served := map[schema.GroupKind][]string{}
 	for _, gk := range trackedGroupKinds {
 		served[gk] = []string{"v1"}
 	}
-	mapper := &fakeMapper{served: served}
-	d := New(mapper)
+	mapper := &fakeAPIMapper{served: served}
+	d := DiscoverAPIs(mapper)
 	calls := mapper.calls
 
 	for i := 0; i < 100; i++ {
@@ -93,9 +91,9 @@ func TestDiscoveryNoCallsAfterConstruction(t *testing.T) {
 	}
 }
 
-func TestNilDiscoverySafe(t *testing.T) {
-	var d *Discovery
+func TestNilAPIDiscoverySafe(t *testing.T) {
+	var d *APIDiscovery
 	if got := d.ServedVersion("g", "K"); got != "" {
-		t.Errorf("nil Discovery: got %q, want empty", got)
+		t.Errorf("nil APIDiscovery: got %q, want empty", got)
 	}
 }

@@ -12,11 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package apidiscovery exposes the served versions of API kinds that the operator cares about.
-// A snapshot is taken once at startup so controllers can ask which version of an API is available
-// (and use that to choose between typed Go imports) without issuing further discovery requests at
-// reconcile time.
-package apidiscovery
+package discovery
 
 import (
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -30,17 +26,17 @@ var trackedGroupKinds = []schema.GroupKind{
 	{Group: "admissionregistration.k8s.io", Kind: "MutatingAdmissionPolicy"},
 }
 
-// Discovery is a snapshot of which API versions a cluster serves for the set of GroupKinds the
+// APIDiscovery is a snapshot of which API versions a cluster serves for the set of GroupKinds the
 // operator cares about. Lookups are pure map reads; no API calls are made after construction.
-type Discovery struct {
+type APIDiscovery struct {
 	versions map[schema.GroupKind]string
 }
 
-// New consults the supplied RESTMapper for each tracked GroupKind and records the preferred
-// served version. GroupKinds not served by the cluster (or unknown to the RESTMapper) map to the
-// empty string. Only GroupKinds listed in trackedGroupKinds will return a non-empty version.
-func New(mapper meta.RESTMapper) *Discovery {
-	d := &Discovery{versions: map[schema.GroupKind]string{}}
+// DiscoverAPIs consults the supplied RESTMapper for each tracked GroupKind and records the
+// preferred served version. GroupKinds not served by the cluster (or unknown to the RESTMapper)
+// map to the empty string. Only GroupKinds listed in trackedGroupKinds are queried.
+func DiscoverAPIs(mapper meta.RESTMapper) *APIDiscovery {
+	d := &APIDiscovery{versions: map[schema.GroupKind]string{}}
 	for _, gk := range trackedGroupKinds {
 		// RESTMappings returns mappings sorted by the group's preferred-version order from
 		// discovery — for a GA API like v1+v1beta1, v1 comes first.
@@ -54,19 +50,19 @@ func New(mapper meta.RESTMapper) *Discovery {
 }
 
 // ServedVersion returns the preferred served version for the given GroupKind, or "" if the kind
-// is not served by the cluster (or was not pre-registered in the tracked list passed to New).
-func (d *Discovery) ServedVersion(group, kind string) string {
+// is not served by the cluster (or is not in the tracked set).
+func (d *APIDiscovery) ServedVersion(group, kind string) string {
 	if d == nil {
 		return ""
 	}
 	return d.versions[schema.GroupKind{Group: group, Kind: kind}]
 }
 
-// NewStatic constructs a Discovery from an explicit version map. Intended for tests.
-func NewStatic(versions map[schema.GroupKind]string) *Discovery {
+// NewStaticAPIDiscovery constructs an APIDiscovery from an explicit version map. Intended for tests.
+func NewStaticAPIDiscovery(versions map[schema.GroupKind]string) *APIDiscovery {
 	cp := make(map[schema.GroupKind]string, len(versions))
 	for k, v := range versions {
 		cp[k] = v
 	}
-	return &Discovery{versions: cp}
+	return &APIDiscovery{versions: cp}
 }

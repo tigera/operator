@@ -19,7 +19,7 @@ import (
 
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/common/apidiscovery"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -54,5 +54,5 @@ type ControllerOptions struct {
 	// APIDiscovery is a snapshot of which Kubernetes API versions the cluster serves for the kinds
 	// the operator cares about. Populated once at startup so controllers can branch on API
 	// availability without issuing further discovery requests at reconcile time.
-	APIDiscovery *apidiscovery.Discovery
+	APIDiscovery *discovery.APIDiscovery
 }

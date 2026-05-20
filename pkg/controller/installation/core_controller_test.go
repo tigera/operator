@@ -52,7 +52,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/common/apidiscovery"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -2576,12 +2576,12 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		return ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(initial...).Build()
 	}
 
-	discoveryFor := func(mapVersion string) *apidiscovery.Discovery {
+	discoveryFor := func(mapVersion string) *discovery.APIDiscovery {
 		m := map[schema.GroupKind]string{}
 		if mapVersion != "" {
 			m[admission.PolicyGroupKind] = mapVersion
 		}
-		return apidiscovery.NewStatic(m)
+		return discovery.NewStaticAPIDiscovery(m)
 	}
 
 	BeforeEach(func() {

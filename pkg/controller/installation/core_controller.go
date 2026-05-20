@@ -61,7 +61,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/common/apidiscovery"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/ippool"
@@ -404,7 +404,7 @@ type ReconcileInstallation struct {
 	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
-	apiDiscovery                  *apidiscovery.Discovery
+	apiDiscovery                  *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -1004,7 +1004,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := utils.RequiresTigeraSecure(r.clientset)
+		b, err := discovery.RequiresTigeraSecure(r.clientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)

@@ -47,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -67,6 +68,8 @@ const (
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
 )
+
+var log = logf.Log.WithName("utils")
 
 var (
 	DefaultInstanceKey           = client.ObjectKey{Name: "default"}

@@ -488,6 +488,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ValueFrom: nil,
 		}
 		Expect(d.Spec.Template.Spec.Containers[3].Env).To(ContainElement(oidcEnvVar))
+
+		// dashboard-api must get its own bare-prefixed OIDC_AUTH_* env vars so it can
+		// validate the bearer token voltron forwards on /dashboards/*.
+		dashboard := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
+		Expect(dashboard).NotTo(BeNil())
+		Expect(dashboard.Env).To(ContainElement(corev1.EnvVar{Name: "OIDC_AUTH_ENABLED", Value: "true"}))
+		Expect(dashboard.Env).To(ContainElement(corev1.EnvVar{Name: "OIDC_AUTH_ISSUER", Value: "https://127.0.0.1/dex"}))
 	})
 
 	Describe("public ca bundle", func() {

@@ -20,73 +20,11 @@ import (
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/restmapper"
 
 	opv1 "github.com/tigera/operator/api/v1"
 )
 
-// fakeMapper builds a RESTMapper that only knows the given GroupVersionResources.
-func fakeMapper(gvrs ...schema.GroupVersionResource) meta.RESTMapper {
-	apiGroupRes := []*restmapper.APIGroupResources{
-		{
-			Group: metav1.APIGroup{
-				Name: APIGroup,
-			},
-			VersionedResources: map[string][]metav1.APIResource{},
-		},
-	}
-	for _, gvr := range gvrs {
-		kind := "MutatingAdmissionPolicy"
-		if gvr.Resource == "mutatingadmissionpolicybindings" {
-			kind = "MutatingAdmissionPolicyBinding"
-		}
-		apiGroupRes[0].VersionedResources[gvr.Version] = append(
-			apiGroupRes[0].VersionedResources[gvr.Version],
-			metav1.APIResource{Name: gvr.Resource, Namespaced: false, Kind: kind},
-		)
-		// Group versions need to be advertised too.
-		seen := false
-		for _, v := range apiGroupRes[0].Group.Versions {
-			if v.Version == gvr.Version {
-				seen = true
-				break
-			}
-		}
-		if !seen {
-			apiGroupRes[0].Group.Versions = append(apiGroupRes[0].Group.Versions, metav1.GroupVersionForDiscovery{
-				GroupVersion: gvr.GroupVersion().String(),
-				Version:      gvr.Version,
-			})
-		}
-	}
-	return restmapper.NewDiscoveryRESTMapper(apiGroupRes)
-}
-
 var _ = Describe("MutatingAdmissionPolicies", func() {
-	Describe("DiscoverAPIVersion", func() {
-		It("prefers v1 when both are served", func() {
-			mapper := fakeMapper(
-				schema.GroupVersionResource{Group: APIGroup, Version: "v1", Resource: "mutatingadmissionpolicies"},
-				schema.GroupVersionResource{Group: APIGroup, Version: "v1beta1", Resource: "mutatingadmissionpolicies"},
-			)
-			Expect(DiscoverAPIVersion(mapper)).To(Equal(VersionV1))
-		})
-
-		It("falls back to v1beta1", func() {
-			mapper := fakeMapper(
-				schema.GroupVersionResource{Group: APIGroup, Version: "v1beta1", Resource: "mutatingadmissionpolicies"},
-			)
-			Expect(DiscoverAPIVersion(mapper)).To(Equal(VersionV1Beta1))
-		})
-
-		It("returns empty when nothing is served", func() {
-			Expect(DiscoverAPIVersion(fakeMapper())).To(BeEmpty())
-		})
-	})
-
 	Describe("GetMutatingAdmissionPolicies", func() {
 		It("returns Calico v1beta1 MAPs when v3=true", func() {
 			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1Beta1)

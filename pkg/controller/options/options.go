@@ -19,6 +19,7 @@ import (
 
 	v1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/apidiscovery"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -50,9 +51,8 @@ type ControllerOptions struct {
 	// Whether or not to use crd.projectcalico.org/v1 or projectcalico.org/v3 for Calico CRDs.
 	UseV3CRDs bool
 
-	// MutatingAdmissionPolicyAPIVersion is the served API version of
-	// admissionregistration.k8s.io MutatingAdmissionPolicy (e.g. "v1", "v1beta1") detected once at
-	// startup via the RESTMapper, or empty if neither is served. Discovered up front to avoid
-	// repeated discovery on every reconcile.
-	MutatingAdmissionPolicyAPIVersion string
+	// APIDiscovery is a snapshot of which Kubernetes API versions the cluster serves for the kinds
+	// the operator cares about. Populated once at startup so controllers can branch on API
+	// availability without issuing further discovery requests at reconcile time.
+	APIDiscovery *apidiscovery.Discovery
 }

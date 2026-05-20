@@ -26,7 +26,6 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -48,7 +47,16 @@ const (
 	VersionV1 = "v1"
 	// VersionV1Beta1 is the beta API version (k8s 1.32-1.36).
 	VersionV1Beta1 = "v1beta1"
+
+	// KindPolicy is the MutatingAdmissionPolicy kind.
+	KindPolicy = "MutatingAdmissionPolicy"
+	// KindBinding is the MutatingAdmissionPolicyBinding kind.
+	KindBinding = "MutatingAdmissionPolicyBinding"
 )
+
+// PolicyGroupKind is the GroupKind for MutatingAdmissionPolicy. Exposed so the API discovery
+// registry in cmd/main.go can pre-resolve its served version at startup.
+var PolicyGroupKind = schema.GroupKind{Group: APIGroup, Kind: KindPolicy}
 
 var (
 	//go:embed calico
@@ -56,20 +64,6 @@ var (
 	//go:embed enterprise
 	enterpriseAdmissionFiles embed.FS
 )
-
-// DiscoverAPIVersion returns which served version of MutatingAdmissionPolicy is available on the
-// cluster: "v1" (preferred), "v1beta1", or "" if neither is served. The K8s version varies which
-// version is registered: v1beta1 was introduced in 1.32 and v1 graduated in 1.36, with v1beta1
-// scheduled for removal in 1.37.
-func DiscoverAPIVersion(mapper meta.RESTMapper) string {
-	gk := schema.GroupKind{Group: APIGroup, Kind: "MutatingAdmissionPolicy"}
-	for _, v := range []string{VersionV1, VersionV1Beta1} {
-		if _, err := mapper.RESTMapping(gk, v); err == nil {
-			return v
-		}
-	}
-	return ""
-}
 
 // GetMutatingAdmissionPolicies returns MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding
 // objects for the given variant, typed at the requested API version. These are only applicable

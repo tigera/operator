@@ -193,6 +193,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 			// that legitimately differs from the node's IP.
 			continue
 		}
+		if len(pod.Status.PodIPs) == 0 && pod.Status.PodIP == "" {
+			// Pod hasn't been status-populated yet (e.g. Pending, kubelet
+			// has not admitted it). The kubelet will set the correct IPs on
+			// admission; deleting now would just race that.
+			continue
+		}
 		if podIPMatchesNode(pod, nodeIPs) {
 			continue
 		}
@@ -254,11 +260,6 @@ func podIPMatchesNode(pod *corev1.Pod, nodeIPs map[string]bool) bool {
 		if nodeIPs[pip.IP] {
 			return true
 		}
-	}
-	// Fall back to the singular PodIP field for older pods that haven't
-	// been re-statused with podIPs.
-	if pod.Status.PodIP != "" && nodeIPs[pod.Status.PodIP] {
-		return true
 	}
 	return false
 }

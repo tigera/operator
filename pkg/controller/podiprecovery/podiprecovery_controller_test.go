@@ -188,6 +188,24 @@ var _ = Describe("PodIPRecovery controller", func() {
 			reconcileNode("node1")
 			Expect(podExists("apiserver")).To(BeFalse())
 		})
+
+		It("leaves a pending pod (no podIPs reported yet) alone", func() {
+			// A pod that was just scheduled but hasn't been admitted by the
+			// kubelet yet has empty status.podIPs. Deleting it would race the
+			// kubelet, which is about to populate the IPs correctly from the
+			// node's current address.
+			Expect(c.Create(ctx, newNode("node1", "10.0.0.1"))).To(Succeed())
+			pod := &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Name: "pending", Namespace: ns,
+					Labels: map[string]string{"k8s-app": "calico-typha"}},
+				Spec: corev1.PodSpec{NodeName: "node1", HostNetwork: true},
+				// Intentionally no Status.PodIPs / Status.PodIP — pending pod.
+			}
+			Expect(c.Create(ctx, pod)).To(Succeed())
+
+			reconcileNode("node1")
+			Expect(podExists("pending")).To(BeTrue())
+		})
 	})
 
 	Context("internalIPChangedPredicate", func() {
@@ -228,6 +246,20 @@ var _ = Describe("PodIPRecovery controller", func() {
 			old := newNode("n1", "10.0.0.1")
 			new := newNode("n1", "10.0.0.1", "fd00::1")
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: new})).To(BeTrue())
+		})
+
+		It("does not enqueue on Update when only ExternalIP changes", func() {
+			// Cloud environments commonly reassign external IPs while the
+			// node's internal IP stays put. Don't react to those.
+			old := newNode("n1", "10.0.0.1")
+			old.Status.Addresses = append(old.Status.Addresses, corev1.NodeAddress{
+				Type: corev1.NodeExternalIP, Address: "203.0.113.1",
+			})
+			new := newNode("n1", "10.0.0.1")
+			new.Status.Addresses = append(new.Status.Addresses, corev1.NodeAddress{
+				Type: corev1.NodeExternalIP, Address: "203.0.113.99",
+			})
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: new})).To(BeFalse())
 		})
 	})
 })

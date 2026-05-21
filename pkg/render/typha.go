@@ -666,6 +666,19 @@ func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTCN", c.cfg.TLS.NodeNonClusterHostCommonName)
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTURISAN", c.cfg.TLS.NodeNonClusterHostURISAN)
 
+	// NCH Typha runs pod-networked, so the host-network apiserver endpoint
+	// (e.g. MKE's proxy.local) may not be reachable. Strip the inherited env
+	// vars so we fall back to the default kubernetes Service that kubelet
+	// injects into every pod.
+	out := envVars[:0]
+	for _, e := range envVars {
+		if e.Name == "KUBERNETES_SERVICE_HOST" || e.Name == "KUBERNETES_SERVICE_PORT" {
+			continue
+		}
+		out = append(out, e)
+	}
+	envVars = out
+
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
 	return envVars

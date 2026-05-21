@@ -63,25 +63,27 @@ type yamlKind struct {
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                     *corev1.Namespace
-	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount      *corev1.ServiceAccount
-	envoyGatewayConfigMap         *corev1.ConfigMap
-	envoyGatewayConfig            *envoyapi.EnvoyGateway
-	clusterRoles                  []*rbacv1.ClusterRole
-	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
-	role                          *rbacv1.Role
-	roleBinding                   *rbacv1.RoleBinding
-	leaderElectionRole            *rbacv1.Role
-	leaderElectionRoleBinding     *rbacv1.RoleBinding
-	controllerService             *corev1.Service
-	controllerDeployment          *appsv1.Deployment
-	certgenServiceAccount         *corev1.ServiceAccount
-	certgenRole                   *rbacv1.Role
-	certgenRoleBinding            *rbacv1.RoleBinding
-	certgenJob                    *batchv1.Job
-	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
+	namespace                         *corev1.Namespace
+	k8sCRDs                           []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                         []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount          *corev1.ServiceAccount
+	envoyGatewayConfigMap             *corev1.ConfigMap
+	envoyGatewayConfig                *envoyapi.EnvoyGateway
+	clusterRoles                      []*rbacv1.ClusterRole
+	clusterRoleBindings               []*rbacv1.ClusterRoleBinding
+	role                              *rbacv1.Role
+	roleBinding                       *rbacv1.RoleBinding
+	leaderElectionRole                *rbacv1.Role
+	leaderElectionRoleBinding         *rbacv1.RoleBinding
+	controllerService                 *corev1.Service
+	controllerDeployment              *appsv1.Deployment
+	certgenServiceAccount             *corev1.ServiceAccount
+	certgenRole                       *rbacv1.Role
+	certgenRoleBinding                *rbacv1.RoleBinding
+	certgenJob                        *batchv1.Job
+	mutatingWebhookConfigurations     []*admissionregv1.MutatingWebhookConfiguration
+	validatingAdmissionPolicies       []*admissionregv1.ValidatingAdmissionPolicy
+	validatingAdmissionPolicyBindings []*admissionregv1.ValidatingAdmissionPolicyBinding
 }
 
 const (
@@ -286,6 +288,18 @@ func GatewayAPIResourcesGetter() func() *gatewayAPIResources {
 						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
 					}
 					resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, obj)
+				case "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicy":
+					obj := &admissionregv1.ValidatingAdmissionPolicy{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.validatingAdmissionPolicies = append(resources.validatingAdmissionPolicies, obj)
+				case "admissionregistration.k8s.io/v1/ValidatingAdmissionPolicyBinding":
+					obj := &admissionregv1.ValidatingAdmissionPolicyBinding{}
+					if err := yaml.Unmarshal([]byte(yml), obj); err != nil {
+						panic(fmt.Sprintf("unable to unmarshal %v: %v", kindStr, err))
+					}
+					resources.validatingAdmissionPolicyBindings = append(resources.validatingAdmissionPolicyBindings, obj)
 				case "/":
 					// No-op.  We see this when there is only a comment between
 					// two "---" delimiters.
@@ -518,6 +532,12 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	}
 	for _, mwc := range resources.mutatingWebhookConfigurations {
 		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, vap := range resources.validatingAdmissionPolicies {
+		objs = append(objs, vap.DeepCopyObject().(client.Object))
+	}
+	for _, vapb := range resources.validatingAdmissionPolicyBindings {
+		objs = append(objs, vapb.DeepCopyObject().(client.Object))
 	}
 	for _, resource := range []client.Object{
 		resources.role,

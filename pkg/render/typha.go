@@ -69,7 +69,12 @@ var (
 // TyphaConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/typha on a cluster.
 type TyphaConfiguration struct {
-	K8sServiceEp      k8sapi.ServiceEndpoint
+	K8sServiceEp k8sapi.ServiceEndpoint
+
+	// K8sServiceEpPodNetwork is used for pod-networked Typha (i.e. the non-cluster-host
+	// deployment), where K8sServiceEp may be unreachable from pods.
+	K8sServiceEpPodNetwork k8sapi.ServiceEndpoint
+
 	Installation      *operatorv1.InstallationSpec
 	TLS               *TyphaNodeTLS
 	MigrateNamespaces bool
@@ -665,6 +670,13 @@ func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
 	envVars := c.typhaEnvVars(c.cfg.TLS.TyphaSecretNonClusterHost)
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTCN", c.cfg.TLS.NodeNonClusterHostCommonName)
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTURISAN", c.cfg.TLS.NodeNonClusterHostURISAN)
+
+	// NCH Typha runs pod-networked, so the host-network apiserver endpoint
+	// (e.g. MKE's proxy.local) may not be reachable.
+	if podEp := c.cfg.K8sServiceEpPodNetwork; podEp.Host != "" && podEp.Port != "" {
+		envVars = replaceOrAppendEnvVar(envVars, "KUBERNETES_SERVICE_HOST", podEp.Host)
+		envVars = replaceOrAppendEnvVar(envVars, "KUBERNETES_SERVICE_PORT", podEp.Port)
+	}
 
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})

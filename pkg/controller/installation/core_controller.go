@@ -1357,13 +1357,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:      k8sapi.Endpoint,
-		Installation:      &instance.Spec,
-		TLS:               typhaNodeTLS,
-		MigrateNamespaces: needNsMigration,
-		ClusterDomain:     r.clusterDomain,
-		NonClusterHost:    nonclusterhost,
-		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
+		K8sServiceEp:           k8sapi.Endpoint,
+		K8sServiceEpPodNetwork: k8sapi.PodNetworkEndpoint,
+		Installation:           &instance.Spec,
+		TLS:                    typhaNodeTLS,
+		MigrateNamespaces:      needNsMigration,
+		ClusterDomain:          r.clusterDomain,
+		NonClusterHost:         nonclusterhost,
+		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 

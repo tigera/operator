@@ -7384,19 +7384,6 @@ spec:
                   items:
                     type: string
                   type: array
-                stalePodIPRecovery:
-                  description: |-
-                    StalePodIPRecovery enables automatic detection and deletion of host-networked Calico pods
-                    (calico-typha, calico-node, calico-node-windows) whose status.podIPs no longer matches their
-                    node's current InternalIP. When stale pod IPs are detected (e.g., after a node reboot pulls
-                    a new DHCP lease), the operator deletes affected pods so the Deployment / DaemonSet
-                    controllers recreate them with the correct IP. This works around an upstream Kubernetes
-                    limitation where status.podIPs is immutable for hostNetwork pods.
-                    Default: Enabled
-                  enum:
-                    - Enabled
-                    - Disabled
-                  type: string
                 tlsCipherSuites:
                   description:
                     TLSCipherSuites defines the cipher suite list that the
@@ -16750,19 +16737,6 @@ spec:
                       items:
                         type: string
                       type: array
-                    stalePodIPRecovery:
-                      description: |-
-                        StalePodIPRecovery enables automatic detection and deletion of host-networked Calico pods
-                        (calico-typha, calico-node, calico-node-windows) whose status.podIPs no longer matches their
-                        node's current InternalIP. When stale pod IPs are detected (e.g., after a node reboot pulls
-                        a new DHCP lease), the operator deletes affected pods so the Deployment / DaemonSet
-                        controllers recreate them with the correct IP. This works around an upstream Kubernetes
-                        limitation where status.podIPs is immutable for hostNetwork pods.
-                        Default: Enabled
-                      enum:
-                        - Enabled
-                        - Disabled
-                      type: string
                     tlsCipherSuites:
                       description:
                         TLSCipherSuites defines the cipher suite list that

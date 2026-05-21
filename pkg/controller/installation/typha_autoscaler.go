@@ -23,7 +23,6 @@ import (
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -58,10 +57,6 @@ type typhaAutoscaler struct {
 	typhaIndexer   cache.Store
 	nonClusterHost bool
 
-	// stalePodIPRecoveryEnabled returns whether the operator should detect and delete
-	// host-networked pods with stale status.podIPs each tick. Default-on if nil.
-	stalePodIPRecoveryEnabled func() bool
-
 	// Number of currently running replicas.
 	activeReplicas int32
 }
@@ -79,15 +74,6 @@ func typhaAutoscalerOptionPeriod(syncPeriod time.Duration) typhaAutoscalerOption
 func typhaAutoscalerOptionNonclusterHost(nonClusterHost bool) typhaAutoscalerOption {
 	return func(t *typhaAutoscaler) {
 		t.nonClusterHost = nonClusterHost
-	}
-}
-
-// typhaAutoscalerOptionStalePodIPRecoveryEnabled provides a getter that the autoscaler will
-// call each tick to determine whether stale-IP pod recovery is enabled. If unset, recovery
-// is always enabled.
-func typhaAutoscalerOptionStalePodIPRecoveryEnabled(enabled func() bool) typhaAutoscalerOption {
-	return func(t *typhaAutoscaler) {
-		t.stalePodIPRecoveryEnabled = enabled
 	}
 }
 
@@ -169,40 +155,6 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 					t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, log)
 				} else {
 					degraded = false
-				}
-
-				// Check for host-networked pods with stale IPs (e.g., after a node
-				// IP change) and delete them so they get recreated with the correct
-				// IP. Typha is checked first; if any Typha pod was deleted this
-				// cycle, calico-node deletions are skipped to give the new Typha a
-				// clean window to come up before churning calico-node pods that
-				// depend on it.
-				//
-				// Skip the entire check if stale-IP recovery has been disabled
-				// via Installation.Spec.StalePodIPRecovery.
-				if t.stalePodIPRecoveryEnabled == nil || t.stalePodIPRecoveryEnabled() {
-					typhaBatch := t.resolveTyphaMaxUnavailable()
-					deletedTypha := t.deleteStaleHostNetworkPods(
-						"calico-typha",
-						fmt.Sprintf("%s=%s", render.AppLabelName, render.TyphaK8sAppName),
-						typhaBatch,
-					) > 0
-					if !deletedTypha {
-						// Linux and Windows DaemonSets are paced independently of each
-						// other.
-						linuxBatch := t.resolveDaemonSetMaxUnavailable(render.CalicoNodeObjectName)
-						t.deleteStaleHostNetworkPods(
-							"calico-node",
-							fmt.Sprintf("%s=%s", render.AppLabelName, render.CalicoNodeObjectName),
-							linuxBatch,
-						)
-						windowsBatch := t.resolveDaemonSetMaxUnavailable(render.WindowsNodeObjectName)
-						t.deleteStaleHostNetworkPods(
-							"calico-node-windows",
-							fmt.Sprintf("%s=%s", render.AppLabelName, render.WindowsNodeObjectName),
-							windowsBatch,
-						)
-					}
 				}
 			case errCh := <-t.triggerRunChan:
 				if err := t.autoscaleReplicas(); err != nil {
@@ -326,155 +278,6 @@ func (t *typhaAutoscaler) getNodeCounts() (int, int) {
 		}
 	}
 	return schedulable, linuxNodes
-}
-
-// deleteStaleHostNetworkPods lists pods matching labelSelector in the
-// calico-system namespace and compares each pod's status.podIPs against the
-// current InternalIP of the node the pod is running on. If the IPs don't match
-// (stale pod IP after a node IP change), up to maxBatch pods are deleted so the
-// owning controller (Deployment / DaemonSet) recreates them with the correct IP.
-//
-// This is necessary because Kubernetes does not update status.podIPs for
-// existing hostNetwork pods when the node's IP changes — it is explicitly
-// immutable in the kubelet:
-// https://github.com/kubernetes/kubernetes/issues/93897.
-//
-// Returns the number of pods deleted in this call.
-//
-// workloadName is used only for logging.
-func (t *typhaAutoscaler) deleteStaleHostNetworkPods(workloadName, labelSelector string, maxBatch int) int {
-	if t.nonClusterHost {
-		return 0
-	}
-	if maxBatch < 1 {
-		maxBatch = 1
-	}
-
-	pods, err := t.client.CoreV1().Pods(common.CalicoNamespace).List(context.Background(), metav1.ListOptions{
-		LabelSelector: labelSelector,
-	})
-	if err != nil {
-		typhaLog.V(5).Info("Failed to list pods for stale IP check", "workload", workloadName, "error", err)
-		return 0
-	}
-
-	// Build a map of node name → InternalIP from the informer cache.
-	nodeInternalIPs := map[string]string{}
-	for _, obj := range t.indexInformer.GetIndexer().List() {
-		n := obj.(*v1.Node)
-		for _, addr := range n.Status.Addresses {
-			if addr.Type == v1.NodeInternalIP {
-				nodeInternalIPs[n.Name] = addr.Address
-				break
-			}
-		}
-	}
-
-	deleted := 0
-	for i := range pods.Items {
-		if deleted >= maxBatch {
-			break
-		}
-		pod := &pods.Items[i]
-		if pod.Spec.NodeName == "" {
-			continue
-		}
-		nodeIP, ok := nodeInternalIPs[pod.Spec.NodeName]
-		if !ok {
-			continue
-		}
-
-		// Check if any of the pod's IPs match the node's current InternalIP.
-		match := false
-		for _, podIP := range pod.Status.PodIPs {
-			if podIP.IP == nodeIP {
-				match = true
-				break
-			}
-		}
-		if match {
-			continue
-		}
-
-		// Pod IP is stale — delete the pod so the owning controller recreates
-		// it with the correct IP.
-		podIPs := make([]string, len(pod.Status.PodIPs))
-		for j, pip := range pod.Status.PodIPs {
-			podIPs[j] = pip.IP
-		}
-		typhaLog.Info("Pod has stale IP after node IP change; deleting pod so it gets recreated with the correct IP",
-			"workload", workloadName, "pod", pod.Name, "node", pod.Spec.NodeName,
-			"podIPs", podIPs, "nodeInternalIP", nodeIP)
-		if err := t.client.CoreV1().Pods(common.CalicoNamespace).Delete(context.Background(), pod.Name, metav1.DeleteOptions{}); err != nil {
-			typhaLog.Error(err, "Failed to delete pod with stale IP", "workload", workloadName, "pod", pod.Name)
-			continue
-		}
-		deleted++
-	}
-	return deleted
-}
-
-// resolveTyphaMaxUnavailable reads the maxUnavailable value from the Typha
-// PodDisruptionBudget and resolves it to an absolute pod count using the
-// current Typha replica count. Returns 1 if the PDB doesn't exist, doesn't
-// have maxUnavailable set, or if the resolved value is < 1 (so progress
-// is always guaranteed).
-func (t *typhaAutoscaler) resolveTyphaMaxUnavailable() int {
-	const fallback = 1
-	pdb, err := t.client.PolicyV1().PodDisruptionBudgets(common.CalicoNamespace).Get(
-		context.Background(), common.TyphaDeploymentName, metav1.GetOptions{},
-	)
-	if err != nil || pdb.Spec.MaxUnavailable == nil {
-		return fallback
-	}
-	replicas := int(t.activeReplicas)
-	if replicas <= 0 {
-		// activeReplicas is populated by the informer; fall back to fetching
-		// the deployment if it hasn't been observed yet.
-		typha, err := t.client.AppsV1().Deployments(common.CalicoNamespace).Get(
-			context.Background(), common.TyphaDeploymentName, metav1.GetOptions{},
-		)
-		if err == nil && typha.Spec.Replicas != nil {
-			replicas = int(*typha.Spec.Replicas)
-		}
-	}
-	if replicas < 1 {
-		return fallback
-	}
-	val, err := intstr.GetScaledValueFromIntOrPercent(pdb.Spec.MaxUnavailable, replicas, true)
-	if err != nil || val < 1 {
-		return fallback
-	}
-	return val
-}
-
-// resolveDaemonSetMaxUnavailable reads the maxUnavailable value from the named
-// DaemonSet's update strategy and resolves it to an absolute pod count using
-// the desired DaemonSet pod count. Returns 1 if the DaemonSet doesn't exist,
-// doesn't have a RollingUpdate strategy, or if the resolved value is < 1.
-func (t *typhaAutoscaler) resolveDaemonSetMaxUnavailable(name string) int {
-	const fallback = 1
-	ds, err := t.client.AppsV1().DaemonSets(common.CalicoNamespace).Get(
-		context.Background(), name, metav1.GetOptions{},
-	)
-	if err != nil {
-		return fallback
-	}
-	if ds.Spec.UpdateStrategy.RollingUpdate == nil ||
-		ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable == nil {
-		return fallback
-	}
-	desired := int(ds.Status.DesiredNumberScheduled)
-	if desired < 1 {
-		return fallback
-	}
-	val, err := intstr.GetScaledValueFromIntOrPercent(
-		ds.Spec.UpdateStrategy.RollingUpdate.MaxUnavailable, desired, true,
-	)
-	if err != nil || val < 1 {
-		return fallback
-	}
-	return val
 }
 
 // getHostEndpointCounts returns the number of host endpoints in the cluster that are not created by the kube-controllers.

@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -658,23 +659,6 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 	return typhaEnv
 }
 
-func removeEnvVars(envVars []corev1.EnvVar, keys ...string) []corev1.EnvVar {
-	out := envVars[:0]
-	for _, e := range envVars {
-		drop := false
-		for _, k := range keys {
-			if e.Name == k {
-				drop = true
-				break
-			}
-		}
-		if !drop {
-			out = append(out, e)
-		}
-	}
-	return out
-}
-
 func replaceOrAppendEnvVar(envVars []corev1.EnvVar, key, value string) []corev1.EnvVar {
 	found := false
 	for i := range envVars {
@@ -702,7 +686,9 @@ func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
 	// vars so we fall back to the default kubernetes Service that kubelet
 	// injects into every pod, then re-add a pod-network endpoint if one was
 	// configured explicitly.
-	envVars = removeEnvVars(envVars, "KUBERNETES_SERVICE_HOST", "KUBERNETES_SERVICE_PORT")
+	envVars = slices.DeleteFunc(envVars, func(e corev1.EnvVar) bool {
+		return e.Name == "KUBERNETES_SERVICE_HOST" || e.Name == "KUBERNETES_SERVICE_PORT"
+	})
 	envVars = append(envVars, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
 	// Tell the health aggregator to listen on all interfaces.

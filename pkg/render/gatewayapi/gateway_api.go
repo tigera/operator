@@ -63,26 +63,26 @@ type yamlKind struct {
 // This struct defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	namespace                     *corev1.Namespace
-	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount      *corev1.ServiceAccount
-	envoyGatewayConfigMap         *corev1.ConfigMap
-	envoyGatewayConfig            *envoyapi.EnvoyGateway
-	clusterRoles                  []*rbacv1.ClusterRole
-	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
-	role                          *rbacv1.Role
-	roleBinding                   *rbacv1.RoleBinding
-	leaderElectionRole            *rbacv1.Role
-	leaderElectionRoleBinding     *rbacv1.RoleBinding
-	controllerService             *corev1.Service
-	controllerDeployment          *appsv1.Deployment
-	certgenServiceAccount         *corev1.ServiceAccount
-	certgenRole                   *rbacv1.Role
-	certgenRoleBinding            *rbacv1.RoleBinding
-	certgenJob                    *batchv1.Job
-	mutatingWebhookConfigurations    []*admissionregv1.MutatingWebhookConfiguration
-	validatingAdmissionPolicies      []*admissionregv1.ValidatingAdmissionPolicy
+	namespace                         *corev1.Namespace
+	k8sCRDs                           []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                         []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount          *corev1.ServiceAccount
+	envoyGatewayConfigMap             *corev1.ConfigMap
+	envoyGatewayConfig                *envoyapi.EnvoyGateway
+	clusterRoles                      []*rbacv1.ClusterRole
+	clusterRoleBindings               []*rbacv1.ClusterRoleBinding
+	role                              *rbacv1.Role
+	roleBinding                       *rbacv1.RoleBinding
+	leaderElectionRole                *rbacv1.Role
+	leaderElectionRoleBinding         *rbacv1.RoleBinding
+	controllerService                 *corev1.Service
+	controllerDeployment              *appsv1.Deployment
+	certgenServiceAccount             *corev1.ServiceAccount
+	certgenRole                       *rbacv1.Role
+	certgenRoleBinding                *rbacv1.RoleBinding
+	certgenJob                        *batchv1.Job
+	mutatingWebhookConfigurations     []*admissionregv1.MutatingWebhookConfiguration
+	validatingAdmissionPolicies       []*admissionregv1.ValidatingAdmissionPolicy
 	validatingAdmissionPolicyBindings []*admissionregv1.ValidatingAdmissionPolicyBinding
 }
 

@@ -199,6 +199,27 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
+	It("should strip the host-network apiserver endpoint from the non-cluster-host Typha", func() {
+		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		// NCH Typha is pod-networked; let kubelet's default service injection take over.
+		d := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		for _, e := range d.Spec.Template.Spec.Containers[0].Env {
+			Expect(e.Name).ToNot(Equal("KUBERNETES_SERVICE_HOST"))
+			Expect(e.Name).ToNot(Equal("KUBERNETES_SERVICE_PORT"))
+		}
+
+		// The host-networked Typha still gets the configured endpoint.
+		dMain := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dMain.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "proxy.local"},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "6444"},
+		))
+	})
+
 	It("should use custom client common name when specified for non-cluster host Typha deployment", func() {
 		cfg.TLS.NodeNonClusterHostCommonName = "custom-nch-cn"
 		component := render.Typha(&cfg)

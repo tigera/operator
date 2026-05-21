@@ -217,6 +217,27 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
+	It("should override KUBERNETES_SERVICE_HOST/PORT on the non-cluster-host Typha when a pod-network endpoint is configured", func() {
+		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
+		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{Host: "10.96.0.1", Port: "443"}
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		d := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "10.96.0.1"},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "443"},
+		))
+
+		// The host-networked Typha should still use the host-network endpoint.
+		dMain := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dMain.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "proxy.local"},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "6444"},
+		))
+	})
+
 	It("should use custom client common name when specified for non-cluster host Typha deployment", func() {
 		cfg.TLS.NodeNonClusterHostCommonName = "custom-nch-cn"
 		component := render.Typha(&cfg)

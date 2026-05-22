@@ -514,7 +514,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		MultiTenant:         multiTenant,
 		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
-
 		APIDiscovery: apiDiscovery,
 	}
 

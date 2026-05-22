@@ -199,7 +199,28 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
-	It("should override KUBERNETES_SERVICE_HOST/PORT on the non-cluster-host Typha when a pod-network endpoint is configured", func() {
+	It("should strip the host-network apiserver endpoint from the non-cluster-host Typha and fall back to the default Service", func() {
+		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		// NCH Typha is pod-networked; let kubelet's default service injection take over.
+		d := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		for _, e := range d.Spec.Template.Spec.Containers[0].Env {
+			Expect(e.Name).ToNot(Equal("KUBERNETES_SERVICE_HOST"))
+			Expect(e.Name).ToNot(Equal("KUBERNETES_SERVICE_PORT"))
+		}
+
+		// The host-networked Typha still gets the configured endpoint.
+		dMain := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dMain.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "proxy.local"},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "6444"},
+		))
+	})
+
+	It("should respect an explicit pod-network apiserver endpoint on the non-cluster-host Typha when configured", func() {
 		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
 		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{Host: "10.96.0.1", Port: "443"}
 
@@ -210,13 +231,6 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "10.96.0.1"},
 			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "443"},
-		))
-
-		// The host-networked Typha should still use the host-network endpoint.
-		dMain := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(dMain.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
-			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "proxy.local"},
-			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "6444"},
 		))
 	})
 

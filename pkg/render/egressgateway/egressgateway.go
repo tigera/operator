@@ -194,7 +194,53 @@ func (c *component) egwBuildAnnotations() map[string]string {
 	if len(c.config.EgressGW.Spec.ExternalNetworks) > 0 {
 		annotations["egress.projectcalico.org/externalNetworkNames"] = c.getExternalNetworks()
 	}
+	if c.config.EgressGW.Spec.Network != "" {
+		// Calico CNI attaches the primary interface to the named Network.
+		// Currently a single name; expected to extend to a JSON list later.
+		annotations["cni.projectcalico.org/networks"] = c.config.EgressGW.Spec.Network
+	}
+	if len(c.config.EgressGW.Spec.AdditionalInterfaces) > 0 {
+		annotations["k8s.v1.cni.cncf.io/networks"] = c.getMultusNetworks()
+	}
 	return annotations
+}
+
+// multusNetworkRef is one entry in the k8s.v1.cni.cncf.io/networks annotation.
+// See https://github.com/k8snetworkplumbingwg/multus-cni for the schema.
+type multusNetworkRef struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace,omitempty"`
+	Interface string `json:"interface,omitempty"`
+}
+
+// getMultusNetworks renders the k8s.v1.cni.cncf.io/networks annotation value,
+// one entry per AdditionalInterface. The pod-side interface name is taken from
+// AdditionalInterface.Name so it is deterministic rather than Multus's
+// auto-generated net1/net2.
+func (c *component) getMultusNetworks() string {
+	refs := make([]multusNetworkRef, 0, len(c.config.EgressGW.Spec.AdditionalInterfaces))
+	for _, iface := range c.config.EgressGW.Spec.AdditionalInterfaces {
+		if iface.Attachment.Multus == nil {
+			continue
+		}
+		ns := iface.Attachment.Multus.Namespace
+		if ns == "" {
+			ns = c.config.EgressGW.Namespace
+		}
+		refs = append(refs, multusNetworkRef{
+			Name:      iface.Attachment.Multus.Name,
+			Namespace: ns,
+			Interface: iface.Name,
+		})
+	}
+	b, err := json.Marshal(refs)
+	if err != nil {
+		// json.Marshal on a slice of trivial structs never errors in practice;
+		// log and fall back to an empty array so we never break rendering.
+		log.Error(err, "failed to marshal Multus networks annotation; emitting empty array")
+		return "[]"
+	}
+	return string(b)
 }
 
 func (c *component) egwInitContainer() *corev1.Container {

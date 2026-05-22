@@ -62,6 +62,7 @@ type EGWDeploymentInitContainer struct {
 }
 
 // EgressGatewaySpec defines the desired state of EgressGateway
+// +kubebuilder:validation:XValidation:rule="!(has(self.network) && has(self.externalNetworks) && size(self.externalNetworks) > 0)",message="network and externalNetworks are mutually exclusive; use network"
 type EgressGatewaySpec struct {
 	// Replicas defines how many instances of the Egress Gateway pod will run.
 	// +kubebuilder:validation:Minimum=0
@@ -79,8 +80,33 @@ type EgressGatewaySpec struct {
 	// ExternalNetworks defines the external network names this Egress Gateway is
 	// associated with.
 	// ExternalNetworks must match existing external networks.
+	// Deprecated: superseded by Network and will be removed in a future release.
+	// Mutually exclusive with Network.
 	// +optional
 	ExternalNetworks []string `json:"externalNetworks,omitempty"`
+
+	// Network names a cluster-scoped Calico Network (projectcalico.org/v3) that
+	// the primary pod interface attaches to. When set, EgressGateway pods are
+	// annotated with cni.projectcalico.org/networks so the Calico CNI plumbs
+	// eth0 into that Network.
+	// Mutually exclusive with ExternalNetworks.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$`
+	Network string `json:"network,omitempty"`
+
+	// AdditionalInterfaces declares secondary NICs to attach to each Egress
+	// Gateway pod, in addition to the primary eth0 interface. Each entry names
+	// an interface (which becomes the device name inside the pod) and
+	// describes how it is plumbed in via a Multus NetworkAttachmentDefinition.
+	// Requires Installation.spec.calicoNetwork.multiInterfaceMode=Multus and
+	// the Multus CNI to be installed in the cluster.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	// +kubebuilder:validation:MaxItems=9
+	AdditionalInterfaces []AdditionalInterface `json:"additionalInterfaces,omitempty"`
 
 	// LogSeverity defines the logging level of the Egress Gateway.
 	// +optional
@@ -102,6 +128,59 @@ type EgressGatewaySpec struct {
 	// AWS defines the additional configuration options for Egress Gateways on AWS.
 	// +optional
 	AWS *AWSEgressGateway `json:"aws,omitempty"`
+}
+
+// AdditionalInterface describes a secondary network interface attached to
+// each Egress Gateway pod, in addition to the primary eth0 interface.
+type AdditionalInterface struct {
+	// Name is the interface name inside the pod (e.g. "eth1", "data0").
+	// Must be a valid Linux interface name, must not be "eth0", and must be
+	// unique within additionalInterfaces.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=15
+	// +kubebuilder:validation:Pattern=`^[a-z][a-z0-9-]*$`
+	// +kubebuilder:validation:XValidation:rule="self != 'eth0'",message="name must not be 'eth0'; eth0 is the primary interface"
+	Name string `json:"name"`
+
+	// Attachment selects how this interface is plumbed into the pod.
+	// Exactly one attachment mechanism must be set.
+	// +kubebuilder:validation:Required
+	Attachment InterfaceAttachment `json:"attachment"`
+
+	// IPPools optionally restricts the Calico IP pools the CNI may allocate
+	// from for this interface. If unset, IP allocation follows the
+	// configuration baked into the attachment (e.g. the NetworkAttachmentDefinition's
+	// CNI config).
+	// +optional
+	// +kubebuilder:validation:MaxItems=10
+	IPPools []EgressGatewayIPPool `json:"ipPools,omitempty"`
+}
+
+// InterfaceAttachment selects the mechanism that plumbs a secondary
+// interface into an Egress Gateway pod. Exactly one arm must be set.
+// +kubebuilder:validation:MinProperties=1
+// +kubebuilder:validation:MaxProperties=1
+type InterfaceAttachment struct {
+	// Multus attaches the interface via a Multus NetworkAttachmentDefinition.
+	// +optional
+	Multus *MultusAttachment `json:"multus,omitempty"`
+}
+
+// MultusAttachment references a Multus NetworkAttachmentDefinition.
+type MultusAttachment struct {
+	// Name of the NetworkAttachmentDefinition.
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// Namespace of the NetworkAttachmentDefinition. Defaults to the namespace
+	// of the EgressGateway.
+	// +optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	Namespace string `json:"namespace,omitempty"`
 }
 
 // EgressGatewayDeploymentPodSpec is the Egress Gateway Deployment's PodSpec.
@@ -297,6 +376,7 @@ type EgressGatewayStatus struct {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Network",type=string,JSONPath=`.spec.network`
 
 // EgressGateway is the Schema for the egressgateways API
 type EgressGateway struct {

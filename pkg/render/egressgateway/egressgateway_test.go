@@ -345,4 +345,65 @@ var _ = Describe("Egress Gateway rendering tests", func() {
 			Effect:   corev1.TaintEffectNoSchedule,
 		}))
 	})
+
+	It("should set cni.projectcalico.org/networks when spec.network is set", func() {
+		egw.Spec.ExternalNetworks = nil // mutually exclusive with Network
+		egw.Spec.Network = "finance-vrf"
+
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+		})
+		resources, _ := component.Objects()
+		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue("cni.projectcalico.org/networks", "finance-vrf"))
+	})
+
+	It("should render k8s.v1.cni.cncf.io/networks for additionalInterfaces", func() {
+		egw.Spec.AdditionalInterfaces = []operatorv1.AdditionalInterface{
+			{
+				Name: "data0",
+				Attachment: operatorv1.InterfaceAttachment{
+					Multus: &operatorv1.MultusAttachment{Name: "finance-nad"},
+				},
+			},
+			{
+				Name: "mgmt0",
+				Attachment: operatorv1.InterfaceAttachment{
+					Multus: &operatorv1.MultusAttachment{Name: "mgmt-nad", Namespace: "kube-system"},
+				},
+			},
+		}
+
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+		})
+		resources, _ := component.Objects()
+		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		expected := `[{"name":"finance-nad","namespace":"test-ns","interface":"data0"},` +
+			`{"name":"mgmt-nad","namespace":"kube-system","interface":"mgmt0"}]`
+		Expect(dep.Spec.Template.Annotations).To(HaveKeyWithValue("k8s.v1.cni.cncf.io/networks", expected))
+	})
+
+	It("should not emit the multus annotation when additionalInterfaces is empty", func() {
+		component := egressgateway.EgressGateway(&egressgateway.Config{
+			Installation: installation,
+			OSType:       rmeta.OSTypeLinux,
+			EgressGW:     egw,
+			VXLANVNI:     4097,
+			VXLANPort:    4790,
+		})
+		resources, _ := component.Objects()
+		dep := rtest.GetResource(resources, "egress-test", "test-ns", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Annotations).NotTo(HaveKey("k8s.v1.cni.cncf.io/networks"))
+		Expect(dep.Spec.Template.Annotations).NotTo(HaveKey("cni.projectcalico.org/networks"))
+	})
 })

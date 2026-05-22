@@ -34,6 +34,7 @@ type EgressGatewayReconciler struct {
 
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=egressgateways,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=operator.tigera.io,resources=egressgateways/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=k8s.cni.cncf.io,resources=network-attachment-definitions,verbs=get;list;watch
 
 func (r *EgressGatewayReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return egressgateway.Add(mgr, opts)

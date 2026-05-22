@@ -1590,6 +1590,37 @@ value:
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should not legacy-delete operator resources that the per-NS loop is re-creating in tigera-gateway", func() {
+		// User Gateway in tigera-gateway: per-NS create must win over legacy delete.
+		pullSecret := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
+			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
+		}
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:            testScheme(),
+			Installation:      &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
+			GatewayAPI:        &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
+			PullSecrets:       []*corev1.Secret{pullSecret},
+			GatewayNamespaces: []string{"tigera-gateway"},
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		_, objsToDelete := gatewayComp.Objects()
+		for _, o := range objsToDelete {
+			if o.GetNamespace() != "tigera-gateway" {
+				continue
+			}
+			switch obj := o.(type) {
+			case *corev1.ServiceAccount:
+				Expect(obj.Name).NotTo(Equal("waf-http-filter"), "must not queue waf-http-filter SA for delete in tigera-gateway")
+			case *corev1.Secret:
+				Expect(obj.Name).NotTo(Equal("tigera-pull-secret"), "must not queue tigera-pull-secret for delete in tigera-gateway")
+			case *rbacv1.RoleBinding:
+				Expect(obj.Name).NotTo(Equal("tigera-operator-secrets"), "must not queue tigera-operator-secrets RB for delete in tigera-gateway")
+			}
+		}
+	})
+
 	It("should copy the trust bundle ConfigMap into each Gateway namespace", func() {
 		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
 		Expect(err).NotTo(HaveOccurred())

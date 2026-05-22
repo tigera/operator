@@ -73,7 +73,7 @@ const (
 	DeploymentNamespace = common.CalicoNamespace
 
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
-	EnvoyGatewayPolicySelector = "app.kubernetes.io/name == 'gateway-helm' || app == 'certgen'"
+	EnvoyGatewayPolicySelector = "k8s-app == '" + GatewayControllerLabel + "' || k8s-app == '" + GatewayCertgenLabel + "'"
 )
 
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
@@ -102,6 +102,7 @@ type gatewayAPIResources struct {
 const (
 	GatewayAPIName                      = "gateway-api"
 	GatewayControllerLabel              = GatewayAPIName + "-controller"
+	GatewayCertgenLabel                 = GatewayAPIName + "-certgen"
 	EnvoyGatewayConfigName              = "envoy-gateway-config"
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
@@ -527,11 +528,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			if !isReservedOperatorNamespace(ns) {
 				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
 				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-				// Mirror the operator trust bundle (public CA roots + Calico CA) into
-				// the Gateway namespace so provisioned envoy-proxy pods can mount it.
-				// The controller-side bundle is already shipped to calico-system; the
-				// proxy pods live in this namespace under deploy.type=GatewayNamespace
-				// and cannot cross-namespace-mount.
+				// envoy-proxy pods mount the bundle from their own namespace.
 				if pr.cfg.TrustedBundle != nil {
 					objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(ns))
 				}
@@ -550,8 +547,6 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 					// resources in reserved namespaces (core-owned).
 					if !isReservedOperatorNamespace(ns) {
 						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-						// Trust bundle ConfigMap goes alongside the pull secret (same
-						// delete-before-RB ordering rule applies).
 						if pr.cfg.TrustedBundle != nil {
 							objsToDelete = append(objsToDelete, pr.cfg.TrustedBundle.ConfigMap(ns))
 						}
@@ -571,7 +566,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		}
 	}
 
-	objsToDelete = append(objsToDelete, pr.legacyTeardownObjects()...)
+	objsToDelete = append(objsToDelete, pr.legacyTeardownObjects(objs)...)
 
 	for _, gcName := range pr.cfg.CurrentGatewayClasses.UnsortedList() {
 		log.V(1).Info("Will delete GatewayClass and EnvoyProxy", "name", gcName)
@@ -593,10 +588,21 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 
 // legacyTeardownObjects returns the operator-owned objects from the legacy
 // tigera-gateway install. The Namespace itself is not queued — users may
-// have placed their own resources in it.
-func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects() []client.Object {
+// have placed their own resources in it. Objects already being created in
+// tigera-gateway by the current render are excluded so we don't queue a
+// delete for something we're also creating.
+func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []client.Object) []client.Object {
 	const legacyNS = "tigera-gateway"
 	const helmPrefix = "tigera-gateway-api-gateway-helm"
+
+	key := func(o client.Object) string { return fmt.Sprintf("%T/%s", o, o.GetName()) }
+	skip := set.New[string]()
+	for _, o := range creating {
+		if o.GetNamespace() == legacyNS {
+			skip.Insert(key(o))
+		}
+	}
+
 	var objs []client.Object
 
 	// Pull secrets first, while tigera-operator-secrets still grants the perm.
@@ -694,7 +700,17 @@ func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects() []client.Ob
 		},
 	)
 
-	return objs
+	if skip.Len() == 0 {
+		return objs
+	}
+	filtered := make([]client.Object, 0, len(objs))
+	for _, o := range objs {
+		if skip.Has(key(o)) {
+			continue
+		}
+		filtered = append(filtered, o)
+	}
+	return filtered
 }
 
 // controllerObjects returns the helm-rendered resources for the envoy-gateway
@@ -824,6 +840,10 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	certgenJob.Spec.Template.Spec.ImagePullSecrets = append(
 		certgenJob.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
+	if certgenJob.Spec.Template.Labels == nil {
+		certgenJob.Spec.Template.Labels = map[string]string{}
+	}
+	certgenJob.Spec.Template.Labels["k8s-app"] = GatewayCertgenLabel
 	rcomp.ApplyJobOverrides(certgenJob, pr.cfg.GatewayAPI.Spec.GatewayCertgenJob)
 	objs = append(objs, certgenJob)
 
@@ -1418,7 +1438,8 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.TCPProtocol,
-					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					// Dual-stack and IPv6-only need ::/0 in addition to 0.0.0.0/0.
+					Source: v3.EntityRule{Nets: []string{"0.0.0.0/0", "::/0"}},
 					Destination: v3.EntityRule{
 						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
 					},

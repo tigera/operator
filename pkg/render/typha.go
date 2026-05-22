@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -689,11 +690,14 @@ func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTURISAN", c.cfg.TLS.NodeNonClusterHostURISAN)
 
 	// NCH Typha runs pod-networked, so the host-network apiserver endpoint
-	// (e.g. MKE's proxy.local) may not be reachable.
-	if podEp := c.cfg.K8sServiceEpPodNetwork; podEp.Host != "" && podEp.Port != "" {
-		envVars = replaceOrAppendEnvVar(envVars, "KUBERNETES_SERVICE_HOST", podEp.Host)
-		envVars = replaceOrAppendEnvVar(envVars, "KUBERNETES_SERVICE_PORT", podEp.Port)
-	}
+	// (e.g. MKE's proxy.local) may not be reachable. Strip the inherited env
+	// vars so we fall back to the default kubernetes Service that kubelet
+	// injects into every pod, then re-add a pod-network endpoint if one was
+	// configured explicitly.
+	envVars = slices.DeleteFunc(envVars, func(e corev1.EnvVar) bool {
+		return e.Name == "KUBERNETES_SERVICE_HOST" || e.Name == "KUBERNETES_SERVICE_PORT"
+	})
+	envVars = append(envVars, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})

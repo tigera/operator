@@ -63,6 +63,25 @@ func RequiresTigeraSecure(clientset *kubernetes.Clientset) (bool, error) {
 	return false, nil
 }
 
+// MultusEnabled reports whether the Multus NetworkAttachmentDefinition CRD
+// (k8s.cni.cncf.io/v1) is installed in the cluster. Returns false (no error)
+// when the API group is not present.
+func MultusEnabled(clientset kubernetes.Interface) (bool, error) {
+	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("k8s.cni.cncf.io/v1")
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, r := range resources.APIResources {
+		if r.Kind == "NetworkAttachmentDefinition" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func MultiTenant(ctx context.Context, c kubernetes.Interface) (bool, error) {
 	resources, err := c.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
 	if err != nil {

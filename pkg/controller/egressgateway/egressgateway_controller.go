@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	netattachv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 
@@ -64,7 +65,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	licenseAPIReady := &utils.ReadyFlag{}
 
-	reconciler := newReconciler(mgr, opts, licenseAPIReady)
+	multusEnabled, err := utils.MultusEnabled(opts.K8sClientset)
+	if err != nil {
+		log.Error(err, "Failed to detect Multus NetworkAttachmentDefinition CRD; assuming Multus is not installed")
+		multusEnabled = false
+	}
+
+	reconciler := newReconciler(mgr, opts, licenseAPIReady, multusEnabled)
 
 	c, err := ctrlruntime.NewController("egressgateway-controller", mgr, controller.Options{Reconciler: reconcile.Reconciler(reconciler)})
 	if err != nil {
@@ -73,11 +80,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 
-	return add(mgr, c)
+	return add(mgr, c, multusEnabled)
 }
 
 // newReconciler returns a new *reconcile.Reconciler.
-func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseAPIReady *utils.ReadyFlag, multusEnabled bool) reconcile.Reconciler {
 	r := &ReconcileEgressGateway{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
@@ -85,6 +92,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseA
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
 		licenseAPIReady: licenseAPIReady,
+		multusEnabled:   multusEnabled,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r
@@ -94,7 +102,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseA
 // Watching namespaced resources must be avoided as the controller
 // can't differentiate if the request namespaced resource is an
 // Egress Gateway resource or not.
-func add(_ manager.Manager, c ctrlruntime.Controller) error {
+func add(_ manager.Manager, c ctrlruntime.Controller, multusEnabled bool) error {
 	var err error
 
 	// Watch for changes to primary resource Egress Gateway.
@@ -117,6 +125,17 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("egressGateway-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
+	// Watch NetworkAttachmentDefinitions when Multus is installed so that NAD
+	// create/delete events re-trigger reconciliation. Without this, a NAD
+	// referenced from additionalInterfaces[] would not pick up changes after
+	// the EgressGateway is first reconciled.
+	if multusEnabled {
+		err = c.WatchObject(&netattachv1.NetworkAttachmentDefinition{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("egressgateway-controller failed to watch NetworkAttachmentDefinition resource: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -133,6 +152,9 @@ type ReconcileEgressGateway struct {
 	status          status.StatusManager
 	clusterDomain   string
 	licenseAPIReady *utils.ReadyFlag
+	// multusEnabled reports whether the Multus NetworkAttachmentDefinition
+	// CRD is installed in the cluster. Detected at controller startup.
+	multusEnabled bool
 }
 
 // Reconcile reads that state of the cluster for an EgressGateway object and makes changes
@@ -348,13 +370,16 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 	// update the EGW resource with default values.
 	fillDefaults(egw, installationSpec)
 	// Validate the EGW resource.
-	err := validateEgressGateway(ctx, r.client, egw)
+	warnings, err := validateEgressGateway(ctx, r.client, egw, installationSpec, r.multusEnabled)
 	if err != nil {
 		reqLogger.Error(err, fmt.Sprintf("Error validating Egress Gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace))
 		r.status.SetDegraded(operatorv1.ResourceValidationError,
 			fmt.Sprintf("Error validating egress gateway Name = %s, Namespace = %s", egw.Name, egw.Namespace), err, reqLogger)
 		setDegraded(r.client, ctx, egw, reconcileErr, fmt.Sprintf("Error validating egress gateway err = %s", err.Error()))
 		return err
+	}
+	for _, w := range warnings {
+		reqLogger.Info("EgressGateway validation warning", "warning", w)
 	}
 
 	if err = r.client.Patch(ctx, egw, preDefaultPatchFrom); err != nil {
@@ -428,8 +453,14 @@ func getRequestedEgressGateway(egws []operatorv1.EgressGateway, request reconcil
 	return nil, -1
 }
 
-// validateEgressGateway checks if the ippools specified are already present.
-func validateEgressGateway(ctx context.Context, cli client.Client, egw *operatorv1.EgressGateway) error {
+// validateEgressGateway checks if the ippools specified are already present and
+// validates multi-NIC preconditions. Returns a slice of non-fatal warnings (e.g.
+// references to NetworkAttachmentDefinitions that don't yet exist) alongside
+// any error that should prevent the EGW being rendered.
+func validateEgressGateway(ctx context.Context, cli client.Client, egw *operatorv1.EgressGateway,
+	installationSpec *operatorv1.InstallationSpec, multusEnabled bool,
+) ([]string, error) {
+	var warnings []string
 	nativeIP := operatorv1.NativeIPDisabled
 	if egw.Spec.AWS != nil && egw.Spec.AWS.NativeIP != nil {
 		nativeIP = *egw.Spec.AWS.NativeIP
@@ -440,27 +471,27 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	// If CIDR is specified, check if CIDR matches with any IPPool.
 	// If Aws.NativeIP is enabled, check if the IPPool is backed by aws-subnet ID.
 	if len(egw.Spec.IPPools) == 0 {
-		return fmt.Errorf("at least one IPPool must be specified")
+		return nil, fmt.Errorf("at least one IPPool must be specified")
 	}
 
 	for _, ippool := range egw.Spec.IPPools {
 		err := validateIPPool(ctx, cli, ippool, nativeIP)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	for _, externalNetwork := range egw.Spec.ExternalNetworks {
 		err := validateExternalNetwork(ctx, cli, externalNetwork)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	// Check if ElasticIPs are specified only if NativeIP is enabled.
 	if egw.Spec.AWS != nil {
 		if len(egw.Spec.AWS.ElasticIPs) > 0 && (*egw.Spec.AWS.NativeIP == operatorv1.NativeIPDisabled) {
-			return fmt.Errorf("NativeIP must be enabled when elastic IPs are used")
+			return nil, fmt.Errorf("NativeIP must be enabled when elastic IPs are used")
 		}
 	}
 
@@ -468,23 +499,55 @@ func validateEgressGateway(ctx context.Context, cli client.Client, egw *operator
 	if egw.Spec.EgressGatewayFailureDetection != nil {
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe == nil &&
 			egw.Spec.EgressGatewayFailureDetection.HTTPProbe == nil {
-			return fmt.Errorf("either ICMP or HTTP probe must be configured")
+			return nil, fmt.Errorf("either ICMP or HTTP probe must be configured")
 		}
 		// Check if ICMP and HTTP probe timeout is greater than interval.
 		if egw.Spec.EgressGatewayFailureDetection.ICMPProbe != nil {
 			if *egw.Spec.EgressGatewayFailureDetection.ICMPProbe.TimeoutSeconds <
 				*egw.Spec.EgressGatewayFailureDetection.ICMPProbe.IntervalSeconds {
-				return fmt.Errorf("ICMP probe timeout must be greater than interval")
+				return nil, fmt.Errorf("ICMP probe timeout must be greater than interval")
 			}
 		}
 		if egw.Spec.EgressGatewayFailureDetection.HTTPProbe != nil {
 			if *egw.Spec.EgressGatewayFailureDetection.HTTPProbe.TimeoutSeconds <
 				*egw.Spec.EgressGatewayFailureDetection.HTTPProbe.IntervalSeconds {
-				return fmt.Errorf("HTTP probe timeout must be greater than interval")
+				return nil, fmt.Errorf("HTTP probe timeout must be greater than interval")
 			}
 		}
 	}
-	return nil
+
+	if len(egw.Spec.AdditionalInterfaces) > 0 {
+		if installationSpec == nil || installationSpec.CalicoNetwork == nil ||
+			installationSpec.CalicoNetwork.MultiInterfaceMode == nil ||
+			*installationSpec.CalicoNetwork.MultiInterfaceMode != operatorv1.MultiInterfaceModeMultus {
+			return nil, fmt.Errorf("additionalInterfaces requires Installation.spec.calicoNetwork.multiInterfaceMode=Multus")
+		}
+		if !multusEnabled {
+			return nil, fmt.Errorf("additionalInterfaces requires Multus (NetworkAttachmentDefinition CRD) to be installed in the cluster")
+		}
+		for _, iface := range egw.Spec.AdditionalInterfaces {
+			if iface.Attachment.Multus == nil {
+				// Should be unreachable given CRD-level MinProperties=1, but
+				// guard so that future arms cannot regress silently.
+				return nil, fmt.Errorf("additionalInterfaces[%q]: attachment is not set", iface.Name)
+			}
+			ns := iface.Attachment.Multus.Namespace
+			if ns == "" {
+				ns = egw.Namespace
+			}
+			nad := &netattachv1.NetworkAttachmentDefinition{}
+			err := cli.Get(ctx, types.NamespacedName{Name: iface.Attachment.Multus.Name, Namespace: ns}, nad)
+			if err != nil {
+				if errors.IsNotFound(err) {
+					warnings = append(warnings, fmt.Sprintf("additionalInterfaces[%q]: NetworkAttachmentDefinition %s/%s not found", iface.Name, ns, iface.Attachment.Multus.Name))
+					continue
+				}
+				return warnings, fmt.Errorf("additionalInterfaces[%q]: error querying NetworkAttachmentDefinition %s/%s: %w", iface.Name, ns, iface.Attachment.Multus.Name, err)
+			}
+		}
+	}
+
+	return warnings, nil
 }
 
 // getEgressGateways returns the egress gateways in all namespaces or in the request's namespace.

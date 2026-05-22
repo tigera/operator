@@ -13,7 +13,11 @@ spec:
     singular: egressgateway
   scope: Namespaced
   versions:
-    - name: v1
+    - additionalPrinterColumns:
+        - jsonPath: .spec.network
+          name: Network
+          type: string
+      name: v1
       schema:
         openAPIV3Schema:
           description: EgressGateway is the Schema for the egressgateways API
@@ -38,6 +42,89 @@ spec:
             spec:
               description: EgressGatewaySpec defines the desired state of EgressGateway
               properties:
+                additionalInterfaces:
+                  description: |-
+                    AdditionalInterfaces declares secondary NICs to attach to each Egress
+                    Gateway pod, in addition to the primary eth0 interface. Each entry names
+                    an interface (which becomes the device name inside the pod) and
+                    describes how it is plumbed in via a Multus NetworkAttachmentDefinition.
+                    Requires Installation.spec.calicoNetwork.multiInterfaceMode=Multus and
+                    the Multus CNI to be installed in the cluster.
+                  items:
+                    description: |-
+                      AdditionalInterface describes a secondary network interface attached to
+                      each Egress Gateway pod, in addition to the primary eth0 interface.
+                    properties:
+                      attachment:
+                        description: |-
+                          Attachment selects how this interface is plumbed into the pod.
+                          Exactly one attachment mechanism must be set.
+                        maxProperties: 1
+                        minProperties: 1
+                        properties:
+                          multus:
+                            description:
+                              Multus attaches the interface via a Multus
+                              NetworkAttachmentDefinition.
+                            properties:
+                              name:
+                                description: Name of the NetworkAttachmentDefinition.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                              namespace:
+                                description: |-
+                                  Namespace of the NetworkAttachmentDefinition. Defaults to the namespace
+                                  of the EgressGateway.
+                                maxLength: 63
+                                minLength: 1
+                                type: string
+                            required:
+                              - name
+                            type: object
+                        type: object
+                      ipPools:
+                        description: |-
+                          IPPools optionally restricts the Calico IP pools the CNI may allocate
+                          from for this interface. If unset, IP allocation follows the
+                          configuration baked into the attachment (e.g. the NetworkAttachmentDefinition's
+                          CNI config).
+                        items:
+                          properties:
+                            cidr:
+                              description:
+                                CIDR is the IPPool CIDR that the Egress Gateways
+                                can use.
+                              type: string
+                            name:
+                              description:
+                                Name is the name of the IPPool that the Egress
+                                Gateways can use.
+                              type: string
+                          type: object
+                        maxItems: 10
+                        type: array
+                      name:
+                        description: |-
+                          Name is the interface name inside the pod (e.g. "eth1", "data0").
+                          Must be a valid Linux interface name, must not be "eth0", and must be
+                          unique within additionalInterfaces.
+                        maxLength: 15
+                        minLength: 1
+                        pattern: ^[a-z][a-z0-9-]*$
+                        type: string
+                        x-kubernetes-validations:
+                          - message: name must not be 'eth0'; eth0 is the primary interface
+                            rule: self != 'eth0'
+                    required:
+                      - attachment
+                      - name
+                    type: object
+                  maxItems: 9
+                  type: array
+                  x-kubernetes-list-map-keys:
+                    - name
+                  x-kubernetes-list-type: map
                 aws:
                   description:
                     AWS defines the additional configuration options for
@@ -152,6 +239,8 @@ spec:
                     ExternalNetworks defines the external network names this Egress Gateway is
                     associated with.
                     ExternalNetworks must match existing external networks.
+                    Deprecated: superseded by Network and will be removed in a future release.
+                    Mutually exclusive with Network.
                   items:
                     type: string
                   type: array
@@ -184,6 +273,17 @@ spec:
                     - Info
                     - Debug
                     - Trace
+                  type: string
+                network:
+                  description: |-
+                    Network names a cluster-scoped Calico Network (projectcalico.org/v3) that
+                    the primary pod interface attaches to. When set, EgressGateway pods are
+                    annotated with cni.projectcalico.org/networks so the Calico CNI plumbs
+                    eth0 into that Network.
+                    Mutually exclusive with ExternalNetworks.
+                  maxLength: 253
+                  minLength: 1
+                  pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
                   type: string
                 replicas:
                   default: 1
@@ -1656,6 +1756,11 @@ spec:
               required:
                 - ipPools
               type: object
+              x-kubernetes-validations:
+                - message: network and externalNetworks are mutually exclusive; use network
+                  rule:
+                    "!(has(self.network) && has(self.externalNetworks) && size(self.externalNetworks)
+                    > 0)"
             status:
               description: EgressGatewayStatus defines the observed state of EgressGateway
               properties:

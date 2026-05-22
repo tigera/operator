@@ -722,6 +722,98 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.AssertExpectations(GinkgoT())
 		})
 
+		It("Should reject additionalInterfaces when MultiInterfaceMode is not Multus", func() {
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "additionalInterfaces requires Installation.spec.calicoNetwork.multiInterfaceMode=Multus", mock.Anything, mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: ptr.To(int32(1)),
+					IPPools:  []operatorv1.EgressGatewayIPPool{{Name: "ippool-1"}},
+					AdditionalInterfaces: []operatorv1.AdditionalInterface{{
+						Name: "data0",
+						Attachment: operatorv1.InterfaceAttachment{
+							Multus: &operatorv1.MultusAttachment{Name: "finance-nad"},
+						},
+					}},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: map[string]string{"egress-code": "red"}}},
+				},
+				Status: operatorv1.EgressGatewayStatus{State: operatorv1.TigeraStatusReady},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
+
+		It("Should reject additionalInterfaces when Multus CRD is not installed", func() {
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "additionalInterfaces requires Multus (NetworkAttachmentDefinition CRD) to be installed in the cluster", mock.Anything, mock.Anything).Return()
+			multus := operatorv1.MultiInterfaceModeMultus
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multus}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas: ptr.To(int32(1)),
+					IPPools:  []operatorv1.EgressGatewayIPPool{{Name: "ippool-1"}},
+					AdditionalInterfaces: []operatorv1.AdditionalInterface{{
+						Name: "data0",
+						Attachment: operatorv1.InterfaceAttachment{
+							Multus: &operatorv1.MultusAttachment{Name: "finance-nad"},
+						},
+					}},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: map[string]string{"egress-code": "red"}}},
+				},
+				Status: operatorv1.EgressGatewayStatus{State: operatorv1.TigeraStatusReady},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+
+			// r.multusEnabled is false by default in this test.
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).Should(HaveOccurred())
+			mockStatus.AssertExpectations(GinkgoT())
+		})
+
+		It("Should reconcile (with a warning) when a referenced NAD is missing", func() {
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("ReadyToMonitor")
+			multus := operatorv1.MultiInterfaceModeMultus
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multus}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			r.multusEnabled = true
+
+			egw := &operatorv1.EgressGateway{
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
+				Spec: operatorv1.EgressGatewaySpec{
+					Replicas:    ptr.To(int32(1)),
+					LogSeverity: ptr.To(operatorv1.LogSeverityInfo),
+					IPPools:     []operatorv1.EgressGatewayIPPool{{Name: "ippool-1"}},
+					AdditionalInterfaces: []operatorv1.AdditionalInterface{{
+						Name: "data0",
+						Attachment: operatorv1.InterfaceAttachment{
+							Multus: &operatorv1.MultusAttachment{Name: "absent-nad"},
+						},
+					}},
+					Template: &operatorv1.EgressGatewayDeploymentPodTemplateSpec{Metadata: &operatorv1.EgressGatewayMetadata{Labels: map[string]string{"egress-code": "red"}}},
+				},
+				Status: operatorv1.EgressGatewayStatus{State: operatorv1.TigeraStatusReady},
+			}
+			Expect(c.Create(ctx, egw)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			dep := appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"}}
+			Expect(test.GetResource(c, &dep)).To(BeNil())
+			Expect(dep.Spec.Template.Annotations).To(HaveKey("k8s.v1.cni.cncf.io/networks"))
+		})
+
 		It("Should throw an error when externalNetworks are not present", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Error validating egress gateway Name = calico-red, Namespace = calico-egress", "externalnetworks.crd.projectcalico.org \"three\" not found", mock.Anything, mock.Anything).Return()
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -812,7 +904,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 		It("should not watch namespaced resources", func() {
 			m := &mockController{}
 			var mgr manager.Manager
-			err := add(mgr, m)
+			err := add(mgr, m, true)
 			Expect(err).ShouldNot(HaveOccurred())
 			for _, obj := range m.watchedObjects {
 				Expect(len(obj.GetNamespace())).To(Equal(0))

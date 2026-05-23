@@ -212,7 +212,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{"securityeventwebhooks"},
+				Resources: []string{"securityeventwebhooks", "securityeventwebhooks/status"},
 				Verbs:     []string{"get", "list", "watch", "update"},
 			},
 			rbacv1.PolicyRule{

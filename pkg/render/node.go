@@ -587,6 +587,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"packetcaptures",
+					"packetcaptures/status",
 				},
 				Verbs: []string{"update"},
 			},

@@ -32,14 +32,14 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should not detect a provider if with no info", func() {
-		c := fake.NewSimpleClientset()
+		c := fake.NewClientset()
 		p, e := AutoDiscoverProvider(context.Background(), c)
 		Expect(e).To(BeNil())
 		Expect(p).To(Equal(operatorv1.ProviderNone))
 	})
 
 	It("should detect DockerEE if a Master Node has labels prefixed with com.docker.ucp", func() {
-		c := fake.NewSimpleClientset(&corev1.Node{
+		c := fake.NewClientset(&corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "master1",
 				Labels: map[string]string{
@@ -54,7 +54,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect openshift based on API resource clusterversion.config.openshift.io existence", func() {
-		c := fake.NewSimpleClientset()
+		c := fake.NewClientset()
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "config.openshift.io/v1",
 			APIResources: []metav1.APIResource{{SingularName: "clusterversion", Name: "clusterversions", Kind: "ClusterVersion"}},
@@ -65,7 +65,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect non-openshift based on API resource clusterversion.config.openshift.io absense, however some other config.openshift.io resources are present", func() {
-		c := fake.NewSimpleClientset()
+		c := fake.NewClientset()
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "config.openshift.io/v1",
 			APIResources: []metav1.APIResource{{SingularName: "dummy", Name: "dummies", Kind: "Dummy"}},
@@ -76,7 +76,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect GKE based on API resource networking.gke.io existence", func() {
-		c := fake.NewSimpleClientset()
+		c := fake.NewClientset()
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "networking.gke.io/v1",
 		}}
@@ -86,7 +86,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect TKG based on API resource core.tanzu.vmware.com existence", func() {
-		c := fake.NewSimpleClientset()
+		c := fake.NewClientset()
 		c.Resources = []*metav1.APIResourceList{{
 			GroupVersion: "core.tanzu.vmware.com/v1alpha2",
 		}}
@@ -96,7 +96,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect EKS based on eks-certificates-controller ConfigMap", func() {
-		c := fake.NewSimpleClientset(&corev1.ConfigMap{
+		c := fake.NewClientset(&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "eks-certificates-controller",
 				Namespace: "kube-system",
@@ -107,7 +107,7 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})
 	It("should detect EKS based on aws-auth ConfigMap", func() {
-		c := fake.NewSimpleClientset(&corev1.ConfigMap{
+		c := fake.NewClientset(&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "aws-auth",
 				Namespace: "kube-system",
@@ -118,7 +118,7 @@ var _ = Describe("provider discovery", func() {
 		Expect(p).To(Equal(operatorv1.ProviderEKS))
 	})
 	It("should detect EKS based on kube-dns service label", func() {
-		c := fake.NewSimpleClientset(&corev1.Service{
+		c := fake.NewClientset(&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "kube-dns",
 				Namespace: "kube-system",
@@ -133,7 +133,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect RKE2 based on presence of kube-system/rke2 ConfigMap", func() {
-		c := fake.NewSimpleClientset(&corev1.ConfigMap{
+		c := fake.NewClientset(&corev1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rke2",
 				Namespace: "kube-system",
@@ -145,7 +145,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect RKE2 based on presence of kube-system/rke2-coredns-rke2-coredns Service", func() {
-		c := fake.NewSimpleClientset(&corev1.Service{
+		c := fake.NewClientset(&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "rke2-coredns-rke2-coredns",
 				Namespace: "kube-system",
@@ -157,7 +157,7 @@ var _ = Describe("provider discovery", func() {
 	})
 
 	It("should detect KinD if a Node has ProviderID prefixed with kind://", func() {
-		c := fake.NewSimpleClientset(&corev1.Node{
+		c := fake.NewClientset(&corev1.Node{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "kind-worker",
 			},

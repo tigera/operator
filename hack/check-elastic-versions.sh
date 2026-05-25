@@ -103,3 +103,4 @@ if [[ "$errors" -ne 0 ]]; then
 fi
 
 echo "Operator ES/Kibana versions are consistent and match calico-private."
+

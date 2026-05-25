@@ -243,6 +243,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the Manager CR so changes to spec.rbacManagement re-run the
+		// installation reconcile (the rbacsync controller in
+		// calico-kube-controllers is gated on it).
+		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
+		}
+
 		// watch for change to primary resource LogCollector
 		err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -1027,6 +1035,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	var managerCR *operatorv1.Manager
 	var logCollector *operatorv1.LogCollector
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
@@ -1046,6 +1055,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Manager CR is optional and zero-tenant only. We read it here so that
+		// the kubecontrollers renderer can gate the rbacsync controller on
+		// Manager.spec.rbacManagement.enabled.
+		managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1610,6 +1628,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
+		Manager:                     managerCR,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

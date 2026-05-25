@@ -100,7 +100,7 @@ type gatewayAPIResources struct {
 }
 
 const (
-	GatewayAPIName                      = "gateway-api"
+	GatewayAPIName                      = "calico-gateway-api"
 	GatewayControllerLabel              = GatewayAPIName + "-controller"
 	GatewayCertgenLabel                 = GatewayAPIName + "-certgen"
 	EnvoyGatewayConfigName              = "envoy-gateway-config"

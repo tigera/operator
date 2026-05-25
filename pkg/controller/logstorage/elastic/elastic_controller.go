@@ -42,6 +42,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	operatorcomponents "github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
@@ -549,6 +550,11 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	if elasticsearch == nil || elasticsearch.Status.Phase != esv1.ElasticsearchReadyPhase {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Elasticsearch cluster to be operational", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	if running := elasticsearch.Status.Version; running != "" && running != operatorcomponents.ComponentEckElasticsearch.Version {
+		reqLogger.Info("Elasticsearch version mismatch: running image may be out of sync with operator",
+			"running", running, "expected", operatorcomponents.ComponentEckElasticsearch.Version)
 	}
 
 	if kibanaEnabled && kibanaCR == nil {

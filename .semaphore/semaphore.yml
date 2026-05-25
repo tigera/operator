@@ -113,6 +113,16 @@ blocks:
             - make vet
             - make static-checks
 
+  - name: 'Check ES/Kibana version sync'
+    dependencies: []
+    task:
+      jobs:
+        - name: Check ES/Kibana versions match calico-private
+          execution_time_limit:
+            minutes: 5
+          commands:
+            - make check-elastic-versions
+
   - name: 'UT'
     dependencies: [ "Build amd64" ]
     task:

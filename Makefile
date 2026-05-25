@@ -487,6 +487,9 @@ validate-gen-versions:
 	make gen-versions
 	make dirty-check
 
+check-elastic-versions:
+	./hack/check-elastic-versions.sh
+
 ## Deploys images to registry
 cd: image-all
 ifndef CONFIRM

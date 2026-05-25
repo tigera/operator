@@ -26,6 +26,31 @@ type ManagerSpec struct {
 	// ManagerDeployment configures the Manager Deployment.
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
+
+	// RBACManagement configures the RBAC management UI feature. Only honored
+	// in zero-tenant (non-multi-tenant) management clusters. Disabling this
+	// after enabling does not garbage-collect previously rendered RBAC
+	// objects; they remain on the cluster until removed manually.
+	// +optional
+	RBACManagement *RBACManagement `json:"rbacManagement,omitempty"`
+}
+
+// RBACManagement controls the RBAC management UI feature surface.
+type RBACManagement struct {
+	// Enabled is the master switch for the RBAC management UI. Defaults to
+	// false.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// RBACManagementEnabled returns true when the Manager CR opts the cluster
+// into the RBAC management UI. Safe to call on a nil receiver; returns false
+// for either a nil Manager or an unset / explicitly false flag.
+func (m *Manager) RBACManagementEnabled() bool {
+	if m == nil || m.Spec.RBACManagement == nil || m.Spec.RBACManagement.Enabled == nil {
+		return false
+	}
+	return *m.Spec.RBACManagement.Enabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

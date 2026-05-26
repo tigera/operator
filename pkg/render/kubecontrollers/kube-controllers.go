@@ -108,6 +108,11 @@ type KubeControllersConfiguration struct {
 	// Tenant object provides tenant configuration for both single and multi-tenant modes.
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
+
+	// Manager is the Manager CR if present. Read for Manager.spec.rbacManagement,
+	// which gates the rbacsync controller in calico-kube-controllers. Safe to be
+	// nil (treated as RBAC management disabled).
+	Manager *operatorv1.Manager
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -155,6 +160,18 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 			},
 		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+
+		// RBAC management UI: when enabled on the Manager CR, the rbacsync
+		// controller runs inside calico-kube-controllers to reconcile the
+		// catalog of managed ClusterRoles (per-tier + 32 fine-grained + 6
+		// per-cluster LMA roles + aggregates) and to cascade-clean managed
+		// bindings when an IdP group is removed from the customer-owned
+		// tigera-idp-groups ConfigMap. The controller is dormant when the
+		// flag is false — nothing is garbage-collected on disable.
+		if cfg.Manager.RBACManagementEnabled() {
+			enabledControllers = append(enabledControllers, "rbacsync")
+			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)
+		}
 	}
 
 	return &kubeControllersComponent{
@@ -487,6 +504,57 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	}
 
 	return rules
+}
+
+// rbacSyncControllerRules returns the extra rules the calico-kube-controllers
+// ServiceAccount needs when the rbacsync controller is enabled
+// (Manager.spec.rbacManagement.enabled). The shared escalation-prevention
+// coverage (the resources whose permissions managed roles grant, plus the
+// tigera-idp-groups read) lives in render.RBACManagementEscalationRules; the
+// additions here are rbacsync-specific:
+//
+//   - escalate/bind verbs on the RBAC objects it writes
+//   - read on tigera-known-oidc-users (rbacsync watches the Dex login
+//     cache to drive binding reconciliation as new users sign in)
+//   - list on pods (consumed by webhook-mod) and get/create/patch on secrets
+//   - list verb on compliances (rbacsync iterates them at startup)
+func rbacSyncControllerRules() []rbacv1.PolicyRule {
+	rules := render.RBACManagementEscalationRules()
+	return append(rules,
+		// escalate/bind on the RBAC objects so the K8s RBAC engine accepts
+		// rbacsync's role/binding creations as not-an-escalation.
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "clusterrolebindings"},
+			Verbs:     []string{"escalate", "bind"},
+		},
+		// Read on the Dex login cache ConfigMap — rbacsync watches it to
+		// react as users authenticate to the RBAC management UI.
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"tigera-known-oidc-users"},
+			Verbs:         []string{"get", "list", "watch"},
+		},
+		// Compliance reports — rbacsync iterates them at startup; list is
+		// rbacsync-specific (the manager path only needs get).
+		rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Escalation coverage for the webhook-mod resource role.
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "create", "patch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+	)
 }
 
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {

@@ -1244,6 +1244,15 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
+	egressRules = append(egressRules, v3.Rule{
+		Action:   v3.Allow,
+		Protocol: &networkpolicy.TCPProtocol,
+		Destination: v3.EntityRule{
+			Selector: networkpolicy.KubernetesAppSelector("whisker"),
+			Ports:    networkpolicy.Ports(8081),
+		},
+	})
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,

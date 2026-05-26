@@ -182,6 +182,19 @@
             8444
           ]
         }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "k8s-app == 'whisker'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
       }
     ],
     "egress": [

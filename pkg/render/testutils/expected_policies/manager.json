@@ -149,6 +149,17 @@
       },
       {
         "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "selector": "k8s-app == 'whisker'",
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'",
+          "ports": [
+            8081
+          ]
+        }
+      },
+      {
+        "action": "Allow",
         "protocol": "UDP",
         "destination": {
           "namespaceSelector": "projectcalico.org/name == 'kube-system'",

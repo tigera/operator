@@ -79,6 +79,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	for _, secretName := range []string{
 		certificatemanagement.CASecretName,
 		goldmane.GoldmaneKeyPairSecret,
+		render.TigeraLinseedSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -178,12 +179,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if goldmaneCR == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
-		return reconcile.Result{}, nil
+	isEnterprise := installationSpec.Variant != operatorv1.Calico
+
+	if !isEnterprise {
+		if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if goldmaneCR == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.cli)
@@ -206,15 +211,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	var trustedBundleSecrets []string
+	if isEnterprise {
+		trustedBundleSecrets = append(trustedBundleSecrets, render.TigeraLinseedSecret)
+	} else {
+		trustedBundleSecrets = append(trustedBundleSecrets, goldmane.GoldmaneKeyPairSecret)
+	}
+
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(
 		whisker.WhiskerDeploymentName,
 		r.cli,
 		common.OperatorNamespace(),
 		false,
-		goldmane.GoldmaneKeyPairSecret,
+		trustedBundleSecrets...,
 	)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	preDefaultPatchFrom := client.MergeFrom(whiskerCR.DeepCopy())

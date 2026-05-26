@@ -463,6 +463,25 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 	return applicationLayer, nil
 }
 
+// GetZeroTenantManagerOrNil returns the zero-tenant Manager CR (named
+// tigera-secure) if present, or nil with no error if absent. The Manager CR
+// is optional, so downstream renderers must not block when it isn't
+// installed. This helper deliberately ignores tenant namespaces: callers
+// that need a tenant-scoped Manager (the manager controller itself) must use
+// GetManager from pkg/controller/manager. Non-manager controllers reading
+// zero-tenant-only flags (e.g. spec.rbacManagement) belong here.
+func GetZeroTenantManagerOrNil(ctx context.Context, c client.Client) (*operatorv1.Manager, error) {
+	m := &operatorv1.Manager{}
+	err := c.Get(ctx, DefaultEnterpriseInstanceKey, m)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return m, nil
+}
+
 // Return the ManagementCluster CR if present. No error is returned if it was not found.
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}

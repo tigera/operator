@@ -35,13 +35,17 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	rauth "github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -73,6 +77,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.Goldmane{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch for goldmane resource: %w", controllerName, err)
 	}
+	// Enterprise inputs: the Authentication CR wires Dex, and a
+	// ManagementClusterConnection marks a managed cluster, where nothing is deployed.
+	if err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("%s failed to watch for Authentication resource: %w", controllerName, err)
+	}
+	if err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("%s failed to watch for ManagementClusterConnection resource: %w", controllerName, err)
+	}
 
 	if err = utils.AddInstallationWatch(c); err != nil {
 		return fmt.Errorf("%s failed to watch Installation resource: %w", controllerName, err)
@@ -82,6 +94,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		certificatemanagement.CASecretName,
 		whisker.WhiskerKeyPairSecret,
 		goldmane.GoldmaneKeyPairSecret,
+		render.TigeraLinseedSecret,
+		render.DexTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -214,12 +228,31 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if goldmaneCR == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
-		return reconcile.Result{}, nil
+	isEnterprise := installationSpec.Variant.IsEnterprise()
+
+	if !isEnterprise {
+		if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if goldmaneCR == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
+	} else {
+		// The flow logs UI is a manager module, and the manager runs on management
+		// and standalone clusters only. A managed cluster's flows are served by the
+		// management cluster's whisker-backend, so there is nothing to deploy here.
+		mcc, err := utils.GetManagementClusterConnection(ctx, r.cli)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if mcc != nil {
+			reqLogger.V(1).Info("Managed cluster: whisker-backend is not deployed; flow logs are served by the management cluster")
+			r.status.ReadyToMonitor()
+			r.status.ClearDegraded()
+			return reconcile.Result{}, nil
+		}
 	}
 
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.cli)
@@ -234,12 +267,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	whiskerCertificateNames := dns.GetServiceDNSNames(whisker.WhiskerName, whisker.WhiskerNamespace, r.clusterDomain)
-	whiskerCertificateNames = append(whiskerCertificateNames, "localhost")
-	whiskerKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerKeyPairSecret, whisker.WhiskerNamespace, whiskerCertificateNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
+	// The Whisker UI and its nginx TLS pair are OSS-only; in enterprise the UI
+	// is a manager UI module and only the backend is deployed.
+	var whiskerKeyPair certificatemanagement.KeyPairInterface
+	if !isEnterprise {
+		whiskerCertificateNames := dns.GetServiceDNSNames(whisker.WhiskerName, whisker.WhiskerNamespace, r.clusterDomain)
+		whiskerCertificateNames = append(whiskerCertificateNames, "localhost")
+		whiskerKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerKeyPairSecret, whisker.WhiskerNamespace, whiskerCertificateNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	whiskerBackendCertificateNames := dns.GetServiceDNSNames("whisker-backend", whisker.WhiskerNamespace, r.clusterDomain)
@@ -250,15 +288,54 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	var trustedBundleSecrets []string
+	var keyValidatorConfig rauth.KeyValidatorConfig
+	if isEnterprise {
+		// Linseed is the flow source. Without its certificate the backend cannot
+		// reach it, so wait rather than run a backend that fails every request.
+		linseedCert, err := certificateManager.GetCertificate(r.cli, render.TigeraLinseedSecret, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", render.TigeraLinseedSecret), err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if linseedCert == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Linseed certificate is not available yet, waiting until it becomes available", nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		trustedBundleSecrets = append(trustedBundleSecrets, render.TigeraLinseedSecret)
+
+		// Dex-issued user tokens are accepted once the Authentication CR is ready.
+		authenticationCR, err := eutils.GetAuthentication(ctx, r.cli)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready, status: %s", authenticationCR.Status.State), nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		if eutils.DexEnabled(authenticationCR) {
+			trustedBundleSecrets = append(trustedBundleSecrets, render.DexTLSSecretName)
+		}
+		keyValidatorConfig, err = eutils.GetKeyValidatorConfig(ctx, r.cli, authenticationCR, r.clusterDomain, false)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		trustedBundleSecrets = append(trustedBundleSecrets, goldmane.GoldmaneKeyPairSecret)
+	}
+
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(
 		whisker.WhiskerDeploymentName,
 		r.cli,
 		common.OperatorNamespace(),
 		false,
-		goldmane.GoldmaneKeyPairSecret,
+		trustedBundleSecrets...,
 	)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	preDefaultPatchFrom := client.MergeFrom(whiskerCR.DeepCopy())
@@ -301,6 +378,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               renderCR,
 		ClusterDomain:         r.clusterDomain,
+		KeyValidatorConfig:    keyValidatorConfig,
 	}
 
 	clusterInfo := &v3.ClusterInformation{}
@@ -354,8 +432,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
-		rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true),
 		rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
+	}
+	if whiskerKeyPair != nil {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true))
 	}
 	if gatewayTLSKeyPair != nil {
 		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(gatewayTLSKeyPair, true, false))

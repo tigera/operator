@@ -512,6 +512,13 @@ func (c *dexComponent) calicoSystemNetworkPolicy(installationVariant operatorv1.
 					Source:      networkpolicy.DefaultHelper().APIServerSourceEntityRule(installationVariant),
 					Destination: dexIngressPortDestination,
 				},
+				// whisker-backend verifies Dex-issued user tokens against Dex's signing keys.
+				{
+					Action:      v3.Allow,
+					Protocol:    &networkpolicy.TCPProtocol,
+					Source:      networkpolicy.DefaultHelper().WhiskerSourceEntityRule(),
+					Destination: dexIngressPortDestination,
+				},
 			},
 			Egress: egressRules,
 		},

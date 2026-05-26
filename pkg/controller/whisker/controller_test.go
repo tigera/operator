@@ -16,6 +16,7 @@ package whisker
 
 import (
 	"context"
+	"strings"
 
 	networkingv1 "k8s.io/api/networking/v1"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -44,6 +45,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/whisker"
 	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -51,6 +53,16 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 )
+
+// createLinseedCertificate stands in for the log storage controller, which
+// issues Linseed's serving certificate on management and standalone clusters.
+func createLinseedCertificate(ctx context.Context, cli client.Client) {
+	cm, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+	Expect(err).NotTo(HaveOccurred())
+	kp, err := cm.GetOrCreateKeyPair(cli, render.TigeraLinseedSecret, common.OperatorNamespace(), []string{render.TigeraLinseedSecret})
+	Expect(err).NotTo(HaveOccurred())
+	Expect(cli.Create(ctx, kp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+}
 
 var _ = Describe("whisker controller tests", func() {
 	var (
@@ -332,6 +344,7 @@ var _ = Describe("whisker controller tests", func() {
 			reconciler.ext = trimIngressGateway{reconciler.ext}
 			createGatewayAPI()
 			setIngressGateway(nil)
+			createLinseedCertificate(ctx, cli)
 
 			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
 				Name:      gatewayName,
@@ -409,6 +422,67 @@ var _ = Describe("whisker controller tests", func() {
 				"the operator-created gateway namespace must be deleted, not leaked")
 		})
 	})
+	Context("enterprise reconciliation", func() {
+		var reconciler Reconciler
+		reconcileOnce := func() (reconcile.Result, error) {
+			return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: "calico-system"}})
+		}
+		getDeployment := func() error {
+			return cli.Get(ctx, types.NamespacedName{Name: whisker.WhiskerDeploymentName, Namespace: whisker.WhiskerNamespace}, &appsv1.Deployment{})
+		}
+
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
+			installation.Status.Computed.Variant = operatorv1.CalicoEnterprise
+			Expect(cli.Status().Update(ctx, installation)).NotTo(HaveOccurred())
+			reconciler = Reconciler{
+				cli:      cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+				ext:      extensions.Extensions{}.Whisker(),
+			}
+		})
+
+		It("waits for the Linseed certificate before deploying whisker-backend", func() {
+			// Without Linseed the backend would start and fail every request; the
+			// operator must report that instead of reporting Available.
+			_, err := reconcileOnce()
+			Expect(err).NotTo(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady,
+				mock.MatchedBy(func(msg string) bool { return strings.Contains(msg, "Linseed") }), mock.Anything, mock.Anything)
+			Expect(getDeployment()).To(HaveOccurred(), "no backend until Linseed is reachable")
+		})
+
+		It("deploys whisker-backend wired for Voltron once the Linseed certificate exists", func() {
+			createLinseedCertificate(ctx, cli)
+			_, err := reconcileOnce()
+			Expect(err).NotTo(HaveOccurred())
+			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
+
+			d := &appsv1.Deployment{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.WhiskerDeploymentName, Namespace: whisker.WhiskerNamespace}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1), "enterprise deploys the backend only")
+			Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElement(
+				corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(nil)}))
+		})
+
+		It("deploys nothing on a managed cluster and does not degrade", func() {
+			// The manager UI, and so the flow logs module, runs on the management
+			// cluster; its whisker-backend serves this cluster's flows.
+			Expect(cli.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			})).NotTo(HaveOccurred())
+
+			_, err := reconcileOnce()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getDeployment()).To(HaveOccurred())
+			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "ReadyToMonitor")
+		})
+	})
+
 })
 
 // trimIngressGateway stands in for a variant that does not serve whisker's own

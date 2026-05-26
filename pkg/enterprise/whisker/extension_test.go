@@ -43,15 +43,14 @@ var _ = Describe("whisker enterprise render extension", func() {
 		})
 	}
 
-	It("queues everything whisker rendered for deletion", func() {
+	It("leaves the enterprise whisker render unmodified", func() {
 		base := component(operatorv1.CalicoEnterprise)
 		baseCreate, baseDelete := base.Objects()
 		Expect(baseCreate).NotTo(BeEmpty())
 
 		create, del := ext.Whisker().Modify(base, renderInputs(operatorv1.CalicoEnterprise)).Objects()
-		Expect(create).To(BeEmpty())
-		Expect(del).To(HaveLen(len(baseCreate) + len(baseDelete)))
-		Expect(del).To(ContainElements(baseCreate))
+		Expect(create).To(HaveLen(len(baseCreate)))
+		Expect(del).To(HaveLen(len(baseDelete)))
 	})
 
 	It("leaves whisker alone when the installation is Calico", func() {

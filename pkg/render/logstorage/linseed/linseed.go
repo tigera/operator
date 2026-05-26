@@ -672,6 +672,12 @@ func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 			Source:      networkpolicyHelper.APIServerSourceEntityRule(l.cfg.Installation.Variant),
 			Destination: linseedIngressDestinationEntityRule,
 		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      networkpolicyHelper.WhiskerSourceEntityRule(),
+			Destination: linseedIngressDestinationEntityRule,
+		},
 	}
 
 	if l.cfg.HasDPIResource {

@@ -1244,6 +1244,12 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicyHelper.WhiskerEntityRule(),
+	})
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 	egressRules = append(egressRules, v3.Rule{
 		Action:      v3.Allow,

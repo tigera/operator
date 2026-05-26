@@ -305,6 +305,97 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
+	Context("RBAC management UI gate", func() {
+		BeforeEach(func() {
+			instance.Variant = operatorv1.CalicoEnterprise
+		})
+
+		// rbacSyncControllerRules emits exactly this escalate/bind rule —
+		// uniquely added by the rbacsync gate, so it's a reliable presence
+		// check that won't drift if other unrelated rules grow new verbs.
+		escalateBindRule := rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "clusterrolebindings"},
+			Verbs:     []string{"escalate", "bind"},
+		}
+
+		It("does not enable rbacsync when Manager is nil", func() {
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			}))
+
+			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).NotTo(ContainElement(escalateBindRule), "rbacsync rules should be absent when Manager is nil")
+		})
+
+		It("does not enable rbacsync when Manager.rbacManagement.enabled is unset", func() {
+			cfg.Manager = &operatorv1.Manager{}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			}))
+		})
+
+		It("does not enable rbacsync when Manager.rbacManagement.enabled=false", func() {
+			disabled := false
+			cfg.Manager = &operatorv1.Manager{
+				Spec: operatorv1.ManagerSpec{
+					RBACManagement: &operatorv1.RBACManagement{Enabled: &disabled},
+				},
+			}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			}))
+
+			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).NotTo(ContainElement(escalateBindRule))
+		})
+
+		It("enables rbacsync and adds the controller's RBAC when Manager.rbacManagement.enabled=true", func() {
+			enabled := true
+			cfg.Manager = &operatorv1.Manager{
+				Spec: operatorv1.ManagerSpec{
+					RBACManagement: &operatorv1.RBACManagement{Enabled: &enabled},
+				},
+			}
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,rbacsync",
+			}))
+
+			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ContainElement(escalateBindRule), "expected escalate/bind rule in calico-kube-controllers role")
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{"tigera-idp-groups"},
+				Verbs:         []string{"get", "list", "watch"},
+			}), "expected read-only access to the customer-owned tigera-idp-groups ConfigMap")
+		})
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using CalicoEnterprise when logstorage and secrets exist", func() {
 		expectedResources := []struct {
 			name    string

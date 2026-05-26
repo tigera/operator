@@ -22,12 +22,16 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/whisker"
@@ -35,10 +39,11 @@ import (
 )
 
 var (
-	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
-	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
-	numExpectedObjects       = 5
-	numDeprecatedObjects     = 1
+	defaultTLSKeyPair            = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
+	defaultTrustedCertBundle     = certificatemanagement.CreateTrustedBundle(nil)
+	numExpectedObjects           = 5
+	numEnterpriseExpectedObjects = 7 // base objects + ClusterRole + ClusterRoleBinding
+	numDeprecatedObjects         = 1
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -60,7 +65,7 @@ var _ = Describe("ComponentRendering", func() {
 			},
 			numExpectedObjects, numDeprecatedObjects,
 		),
-		Entry("Should return objects to delete when variant is not Calico",
+		Entry("Should return objects to create when variant is CalicoEnterprise",
 			&whisker.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
@@ -70,7 +75,7 @@ var _ = Describe("ComponentRendering", func() {
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
-			0, numExpectedObjects+numDeprecatedObjects,
+			numEnterpriseExpectedObjects, numDeprecatedObjects,
 		),
 	)
 
@@ -169,7 +174,211 @@ var _ = Describe("ComponentRendering", func() {
 				},
 			},
 		),
+		Entry("Should return enterprise deployment with Linseed env vars when variant is CalicoEnterprise",
+			&whisker.Configuration{
+				Installation: &operatorv1.InstallationSpec{
+					KubernetesProvider: operatorv1.ProviderGKE,
+					Variant:            operatorv1.CalicoEnterprise,
+				},
+				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerBackendKeyPair: defaultTLSKeyPair,
+				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+				ClusterID:             "test-cluster-id",
+				CalicoVersion:         "test-calico-version",
+				ClusterType:           "test-cluster-type",
+				ClusterDomain:         "cluster.domain",
+			},
+			&appsv1.Deployment{
+				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      whisker.WhiskerDeploymentName,
+					Namespace: whisker.WhiskerNamespace,
+				},
+				Spec: appsv1.DeploymentSpec{
+					Replicas: ptr.To(int32(1)),
+					Strategy: appsv1.DeploymentStrategy{
+						Type: appsv1.RecreateDeploymentStrategyType,
+					},
+					Template: corev1.PodTemplateSpec{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: whisker.WhiskerDeploymentName,
+						},
+						Spec: corev1.PodSpec{
+							ServiceAccountName: whisker.WhiskerServiceAccountName,
+							Tolerations:        append(rmeta.TolerateCriticalAddonsAndControlPlane, rmeta.TolerateGKEARM64NoSchedule),
+							Containers: []corev1.Container{
+								{
+									Name:  whisker.WhiskerContainerName,
+									Image: "quay.io/calico/whisker:master",
+									Env: []corev1.EnvVar{
+										{Name: "LOG_LEVEL", Value: "INFO"},
+										{Name: "CALICO_VERSION", Value: "test-calico-version"},
+										{Name: "CLUSTER_ID", Value: "test-cluster-id"},
+										{Name: "CLUSTER_TYPE", Value: "test-cluster-type"},
+										{Name: "NOTIFICATIONS", Value: "Enabled"},
+									},
+									SecurityContext: securitycontext.NewNonRootContext(),
+									VolumeMounts: []corev1.VolumeMount{
+										{
+											Name:      "nginx-config",
+											MountPath: "/etc/nginx/conf.d",
+											ReadOnly:  true,
+										},
+									},
+								},
+								{
+									Name:    whisker.WhiskerBackendContainerName,
+									Image:   "gcr.io/unique-caldron-775/cnx/tigera/calico:master",
+									Command: []string{"/usr/bin/calico", "component", "whisker-backend"},
+									Env: []corev1.EnvVar{
+										{Name: "LOG_LEVEL", Value: "INFO"},
+										{Name: "PORT", Value: "3002"},
+										{Name: "TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
+										{Name: "TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
+										{Name: "WHISKER_BACKEND_UPSTREAM", Value: "linseed"},
+										{Name: "LINSEED_URL", Value: "https://tigera-linseed.tigera-elasticsearch.svc"},
+										{Name: "LINSEED_CA_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
+										{Name: "LINSEED_TOKEN_PATH", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
+										{Name: "LINSEED_CLUSTER_ID", Value: render.DefaultElasticsearchClusterName},
+										{Name: "LINSEED_CLIENT_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
+										{Name: "LINSEED_CLIENT_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
+									},
+									SecurityContext: securitycontext.NewNonRootContext(),
+									VolumeMounts: append(
+										defaultTrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux),
+										defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)),
+								},
+							},
+							Volumes: []corev1.Volume{
+								defaultTrustedCertBundle.Volume(),
+								defaultTLSKeyPair.Volume(),
+								{
+									Name: "nginx-config",
+									VolumeSource: corev1.VolumeSource{
+										ConfigMap: &corev1.ConfigMapVolumeSource{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "whisker-nginx-config"},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		),
 	)
+
+	It("should render network policy with Goldmane egress for Calico variant", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, whisker.WhiskerPolicyName, whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(np.Spec.Egress).To(HaveLen(2))
+		Expect(np.Spec.Egress[0].Destination.Selector).To(Equal(networkpolicy.KubernetesAppSelector(whisker.GoldmaneDeploymentName)))
+		Expect(np.Spec.Egress[0].Destination.Ports).To(Equal(networkpolicy.Ports(whisker.GoldmaneServicePort)))
+	})
+
+	It("should render Linseed RBAC for enterprise variant", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.CalicoEnterprise,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		cr, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, whisker.WhiskerBackendClusterRoleName, "")
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(cr.Rules).To(HaveLen(3))
+		Expect(cr.Rules[0].APIGroups).To(Equal([]string{whisker.WhiskerBackendLinseedAPIGroup}))
+		Expect(cr.Rules[0].Resources).To(Equal([]string{"flows"}))
+		Expect(cr.Rules[0].Verbs).To(Equal([]string{"get"}))
+		Expect(cr.Rules[1].APIGroups).To(Equal([]string{"authentication.k8s.io"}))
+		Expect(cr.Rules[1].Resources).To(Equal([]string{"tokenreviews"}))
+		Expect(cr.Rules[1].Verbs).To(Equal([]string{"create"}))
+		Expect(cr.Rules[2].APIGroups).To(Equal([]string{"authorization.k8s.io"}))
+		Expect(cr.Rules[2].Resources).To(Equal([]string{"subjectaccessreviews"}))
+		Expect(cr.Rules[2].Verbs).To(Equal([]string{"create"}))
+
+		crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, whisker.WhiskerBackendClusterRoleName, "")
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(crb.RoleRef.Name).To(Equal(whisker.WhiskerBackendClusterRoleName))
+		Expect(crb.Subjects).To(HaveLen(1))
+		Expect(crb.Subjects[0].Name).To(Equal(whisker.WhiskerServiceAccountName))
+		Expect(crb.Subjects[0].Namespace).To(Equal(whisker.WhiskerNamespace))
+	})
+
+	It("should render Linseed RBAC for CalicoEnterprise variant (alternate)", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.CalicoEnterprise,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, whisker.WhiskerBackendClusterRoleName, "")
+		Expect(err).ShouldNot(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, whisker.WhiskerBackendClusterRoleName, "")
+		Expect(err).ShouldNot(HaveOccurred())
+	})
+
+	It("should not render Linseed RBAC for Calico variant", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		_, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objsToCreate, whisker.WhiskerBackendClusterRoleName, "")
+		Expect(err).Should(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, whisker.WhiskerBackendClusterRoleName, "")
+		Expect(err).Should(HaveOccurred())
+	})
+
+	It("should render network policy with Linseed egress for enterprise variant", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.CalicoEnterprise,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, whisker.WhiskerPolicyName, whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(np.Spec.Egress).To(HaveLen(3))
+		Expect(np.Spec.Egress[0].Destination).To(Equal(networkpolicy.DefaultHelper().LinseedEntityRule()))
+		Expect(np.Spec.Egress[1].Destination).To(Equal(networkpolicy.KubeAPIServerEntityRule))
+	})
 
 	It("should generate an IPv4-only NGINX configuration", func() {
 		cfg := &whisker.Configuration{

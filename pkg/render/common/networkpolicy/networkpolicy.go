@@ -290,6 +290,14 @@ func (h *NetworkPolicyHelper) ManagerSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("calico-system"), "calico-manager")
 }
 
+func (h *NetworkPolicyHelper) WhiskerEntityRule() v3.EntityRule {
+	return CreateEntityRule(h.namespace("calico-system"), "whisker", 8081)
+}
+
+func (h *NetworkPolicyHelper) WhiskerSourceEntityRule() v3.EntityRule {
+	return CreateSourceEntityRule(h.namespace("calico-system"), "whisker")
+}
+
 func (h *NetworkPolicyHelper) APIServerSourceEntityRule(v operatorv1.ProductVariant) v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("calico-system"), "calico-apiserver")
 }

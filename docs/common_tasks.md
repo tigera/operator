@@ -185,7 +185,10 @@ A version bump therefore lands in two PRs — calico first, operator second.
 
 1. Bump `ENVOY_GATEWAY_VERSION` in `third_party/envoy-gateway/Makefile`. (Renovate
    normally does this automatically — see `renovate.json` — and runs the next
-   step for you.)
+   step for you.) Note that Renovate only handles envoy-gateway *patch* bumps
+   and only regenerates the helm output (step 2); it does not touch the matching
+   envoy-proxy/envoy-ratelimit versions or refresh the patch stacks, so
+   minor/major bumps still need steps 3–4 by hand.
 
 1. Run `make -C third_party/envoy-gateway gen-gateway-api-resources` to
    regenerate `third_party/envoy-gateway/gateway_api_resources.yaml`. Review the
@@ -205,13 +208,17 @@ A version bump therefore lands in two PRs — calico first, operator second.
 
 **In `tigera/operator` (after the calico PR merges):**
 
-1. In `go.mod`, update `github.com/envoyproxy/gateway` to match. Run
-   `make mod-tidy`. If this indicates other changes (e.g. a `GO_BUILD_VER` bump),
-   address them.
+1. Run `make gen-versions`. The `update-envoy-gateway-resources` target it
+   invokes does both halves in one shot: it refreshes
+   `pkg/render/gatewayapi/gateway_api_resources.yaml` from the calico clone and,
+   when calico's `ENVOY_GATEWAY_VERSION` pin differs from go.mod, runs
+   `go mod edit -require=github.com/envoyproxy/gateway@<new> && go mod tidy` to
+   keep the Go decoder version in lockstep with the rendered YAML.
 
-1. Run `make gen-versions`. This refreshes
-   `pkg/render/gatewayapi/gateway_api_resources.yaml` from the calico clone (via
-   `update-envoy-gateway-resources`).
+   You only need to edit `go.mod` by hand first if you want the resulting
+   `go mod tidy` fallout (e.g. a `GO_BUILD_VER` bump) to land as its own commit
+   ahead of the YAML refresh — otherwise `make gen-versions` covers it. Either
+   way, if `go mod tidy` surfaces other changes, address them.
 
 1. If the YAML diff introduced new CRDs or resource kinds, update
    `pkg/render/gatewayapi/gateway_api.go` to parse them.

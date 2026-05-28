@@ -27,10 +27,7 @@ type ManagerSpec struct {
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
 
-	// RBAC configures the RBAC management UI feature. Only honored in
-	// zero-tenant (non-multi-tenant) management clusters. Disabling this
-	// after enabling does not garbage-collect previously rendered RBAC
-	// objects; they remain on the cluster until removed manually.
+	// RBAC configures the RBAC management UI feature.
 	// +optional
 	RBAC *RBAC `json:"rbac,omitempty"`
 }

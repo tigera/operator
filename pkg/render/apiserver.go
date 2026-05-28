@@ -2038,11 +2038,6 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	// calico-webhooks UISettings handler (which narrows access via a SAR on
 	// uisettingsgroups/data) gets invoked instead of being short-circuited by
 	// kube-apiserver RBAC.
-	//
-	// No resourceNames: UISettings names have the form "<group>.<kind>.<name>"
-	// (e.g. "cluster-settings.layer.foo"), and RBAC resourceNames is exact match,
-	// so scoping by group prefix here wouldn't work. The webhook does the
-	// group-level narrowing.
 	if !c.cfg.RequiresAggregationServer {
 		rules = append(rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org"},

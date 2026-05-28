@@ -243,6 +243,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the Manager CR so changes to spec.rbac re-run the installation
+		// reconcile (the rbacsync controller in calico-kube-controllers is
+		// gated on it).
+		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
+		}
+
 		// watch for change to primary resource LogCollector
 		err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -1027,6 +1035,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	var managerCR *operatorv1.Manager
 	var logCollector *operatorv1.LogCollector
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
@@ -1047,6 +1056,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		// Read the zero-tenant Manager CR so the kubecontrollers renderer can
+		// gate the rbacsync controller on Manager.spec.rbac.ui. The
+		// Variant check is required in addition to the enterpriseCRDsExist
+		// outer block: enterprise CRDs can be installed while the cluster
+		// still runs in Calico-only mode.
+		if instance.Spec.Variant.IsEnterprise() {
+			managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 
 		if managementClusterConnection != nil && managementCluster != nil {
@@ -1610,6 +1632,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
+		RBACManagementEnabled:       managerCR.RBACManagementEnabled(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

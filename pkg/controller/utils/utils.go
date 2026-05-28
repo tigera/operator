@@ -463,6 +463,40 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 	return applicationLayer, nil
 }
 
+// GetManager returns the Manager CR. In multi-tenant mode the namespace is
+// used to locate the tenant-scoped instance; in zero-tenant mode the CR is
+// cluster-scoped and the namespace is ignored. Returns the underlying client
+// error (including IsNotFound) so callers can distinguish "missing" from
+// "transient read error" — see GetZeroTenantManagerOrNil for the variant
+// that treats absence as nil.
+func GetManager(ctx context.Context, cli client.Client, multiTenant bool, ns string) (*operatorv1.Manager, error) {
+	key := DefaultEnterpriseInstanceKey
+	if multiTenant {
+		key.Namespace = ns
+	}
+	instance := &operatorv1.Manager{}
+	if err := cli.Get(ctx, key, instance); err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
+// GetZeroTenantManagerOrNil returns the zero-tenant Manager CR (named
+// tigera-secure) if present, or nil with no error if absent. The Manager CR
+// is optional for non-manager controllers, so downstream renderers must not
+// block when it isn't installed. Callers needing a tenant-scoped Manager
+// must use GetManager directly with multiTenant=true.
+func GetZeroTenantManagerOrNil(ctx context.Context, c client.Client) (*operatorv1.Manager, error) {
+	m, err := GetManager(ctx, c, false, "")
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return m, nil
+}
+
 // Return the ManagementCluster CR if present. No error is returned if it was not found.
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}

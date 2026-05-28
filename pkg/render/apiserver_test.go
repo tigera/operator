@@ -1871,7 +1871,7 @@ var (
 	}
 
 	// rbacManagementNetworkAdminRule is the extra tigera-network-admin rule
-	// rendered only when Manager.spec.rbac.mode is Enabled.
+	// rendered only when Manager.spec.rbac.ui is Enabled.
 	rbacManagementNetworkAdminRule = rbacv1.PolicyRule{
 		APIGroups: []string{"rbac.authorization.k8s.io"},
 		Resources: []string{"clusterroles", "roles", "clusterrolebindings", "rolebindings"},

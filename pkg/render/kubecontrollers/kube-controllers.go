@@ -111,7 +111,7 @@ type KubeControllersConfiguration struct {
 
 	// RBACManagementEnabled gates the rbacsync controller in
 	// calico-kube-controllers and the escalation-capable rules it needs.
-	// Mirrors Manager.spec.rbac.mode == Enabled; resolved at zero-tenant
+	// Mirrors Manager.spec.rbac.ui == Enabled; resolved at zero-tenant
 	// scope by the installation controller.
 	RBACManagementEnabled bool
 }
@@ -509,7 +509,7 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 
 // rbacSyncControllerRules returns the extra rules the calico-kube-controllers
 // ServiceAccount needs when the rbacsync controller is enabled
-// (Manager.spec.rbac.mode == Enabled). The shared escalation-prevention
+// (Manager.spec.rbac.ui == Enabled). The shared escalation-prevention
 // coverage (the resources whose permissions managed roles grant, plus the
 // tigera-idp-groups read) lives in render.RBACManagementEscalationRules; the
 // additions here are rbacsync-specific:

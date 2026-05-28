@@ -302,9 +302,9 @@ spec:
                   description: |-
                     RBAC configures the RBAC management UI feature.
                   properties:
-                    mode:
+                    ui:
                       description: |-
-                        Mode controls whether the RBAC management UI is enabled. Defaults to
+                        UI controls whether the RBAC management UI is enabled. Defaults to
                         Disabled.
                       enum:
                         - Enabled

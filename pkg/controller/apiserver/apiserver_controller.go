@@ -379,7 +379,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		// Read the zero-tenant Manager CR so tigera-network-admin can be
-		// granted the RBAC management UI verbs when Manager.spec.rbac.mode is
+		// granted the RBAC management UI verbs when Manager.spec.rbac.ui is
 		// Enabled.
 		managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
 		if err != nil {

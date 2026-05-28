@@ -27,39 +27,36 @@ type ManagerSpec struct {
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
 
-	// RBAC configures the RBAC management UI feature. Only honored in
-	// zero-tenant (non-multi-tenant) management clusters. Disabling this
-	// after enabling does not garbage-collect previously rendered RBAC
-	// objects; they remain on the cluster until removed manually.
+	// RBAC configures the RBAC management UI feature.
 	// +optional
 	RBAC *RBAC `json:"rbac,omitempty"`
 }
 
 // RBAC controls the RBAC management UI feature surface.
 type RBAC struct {
-	// Mode controls whether the RBAC management UI is enabled. Defaults to
+	// UI controls whether the RBAC management UI is enabled. Defaults to
 	// Disabled.
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
-	Mode RBACMode `json:"mode,omitempty"`
+	UI RBACUI `json:"ui,omitempty"`
 }
 
-// RBACMode toggles the RBAC management UI feature.
-type RBACMode string
+// RBACUI toggles the RBAC management UI feature.
+type RBACUI string
 
 const (
-	RBACModeEnabled  RBACMode = "Enabled"
-	RBACModeDisabled RBACMode = "Disabled"
+	RBACUIEnabled  RBACUI = "Enabled"
+	RBACUIDisabled RBACUI = "Disabled"
 )
 
 // RBACManagementEnabled returns true when the Manager CR opts the cluster
 // into the RBAC management UI. Safe to call on a nil receiver; returns false
-// for either a nil Manager or any mode other than Enabled.
+// for either a nil Manager or any UI value other than Enabled.
 func (m *Manager) RBACManagementEnabled() bool {
 	if m == nil || m.Spec.RBAC == nil {
 		return false
 	}
-	return m.Spec.RBAC.Mode == RBACModeEnabled
+	return m.Spec.RBAC.UI == RBACUIEnabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

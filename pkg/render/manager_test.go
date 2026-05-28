@@ -1757,13 +1757,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).NotTo(ContainElement(configmapCreateRule), "rbacManagementUIRules should NOT be present when disabled")
 		})
 
-		It("renders RBAC_UI_ENABLED=true and extra manager role rules when rbac mode is Enabled", func() {
+		It("renders RBAC_UI_ENABLED=true and extra manager role rules when rbac.ui is Enabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeEnabled},
+						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled},
 					},
 				},
 			})
@@ -1774,13 +1774,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).To(ContainElement(configmapCreateRule), "rbacManagementUIRules must be present when enabled")
 		})
 
-		It("renders RBAC_UI_ENABLED=false when rbac mode is Disabled", func() {
+		It("renders RBAC_UI_ENABLED=false when rbac.ui is Disabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeDisabled},
+						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIDisabled},
 					},
 				},
 			})
@@ -1791,7 +1791,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		It("does not add the manager-side RBAC rules in the ManagedClusterIsCalico variant", func() {
 			// Defense-in-depth: the manager renderer must not emit these
 			// rules in a managed-Calico tenant even if a caller somehow
-			// supplied a Manager with rbac.mode=Enabled. Upstream gating
+			// supplied a Manager with rbac.ui=Enabled. Upstream gating
 			// (the installation controller reads the Manager only at
 			// zero-tenant scope) already prevents this in practice.
 			resources, _ := renderObjects(renderConfig{
@@ -1807,7 +1807,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeEnabled},
+						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled},
 					},
 				},
 			})

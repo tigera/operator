@@ -144,7 +144,7 @@ type APIServerConfiguration struct {
 	ClusterDomain                string
 
 	// RBACManagementEnabled gates the RBAC management UI permissions added to
-	// the tigera-network-admin ClusterRole. Mirrors Manager.spec.rbac.mode ==
+	// the tigera-network-admin ClusterRole. Mirrors Manager.spec.rbac.ui ==
 	// Enabled; read at zero-tenant scope by the apiserver controller.
 	RBACManagementEnabled bool
 

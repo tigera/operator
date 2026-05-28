@@ -1059,7 +1059,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 
 		// Read the zero-tenant Manager CR so the kubecontrollers renderer can
-		// gate the rbacsync controller on Manager.spec.rbac.mode. The
+		// gate the rbacsync controller on Manager.spec.rbac.ui. The
 		// Variant check is required in addition to the enterpriseCRDsExist
 		// outer block: enterprise CRDs can be installed while the cluster
 		// still runs in Calico-only mode.

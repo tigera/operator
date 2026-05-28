@@ -319,7 +319,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Verbs:     []string{"escalate", "bind"},
 		}
 
-		It("does not enable rbacsync when Manager is nil", func() {
+		It("does not enable rbacsync when RBACManagementEnabled is false", func() {
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
@@ -331,48 +331,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			}))
 
 			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).NotTo(ContainElement(escalateBindRule), "rbacsync rules should be absent when Manager is nil")
+			Expect(role.Rules).NotTo(ContainElement(escalateBindRule), "rbacsync rules should be absent when RBACManagementEnabled is false")
 		})
 
-		It("does not enable rbacsync when Manager.rbac is unset", func() {
-			cfg.Manager = &operatorv1.Manager{}
-			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			envs := dp.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{
-				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
-			}))
-		})
-
-		It("does not enable rbacsync when Manager.rbac.mode is Disabled", func() {
-			cfg.Manager = &operatorv1.Manager{
-				Spec: operatorv1.ManagerSpec{
-					RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeDisabled},
-				},
-			}
-			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			envs := dp.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{
-				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
-			}))
-
-			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).NotTo(ContainElement(escalateBindRule))
-		})
-
-		It("enables rbacsync and adds the controller's RBAC when Manager.rbac.mode is Enabled", func() {
-			cfg.Manager = &operatorv1.Manager{
-				Spec: operatorv1.ManagerSpec{
-					RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeEnabled},
-				},
-			}
+		It("enables rbacsync and adds the controller's RBAC when RBACManagementEnabled is true", func() {
+			cfg.RBACManagementEnabled = true
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()

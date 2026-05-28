@@ -1789,9 +1789,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		})
 
 		It("does not add the manager-side RBAC rules in the ManagedClusterIsCalico variant", func() {
-			// The installation controller only reads the Manager CR at
-			// zero-tenant scope, so a multi-tenant managed-Calico cluster
-			// should never see these rules even if the flag were somehow set.
+			// Defense-in-depth: the manager renderer must not emit these
+			// rules in a managed-Calico tenant even if a caller somehow
+			// supplied a Manager with rbac.mode=Enabled. Upstream gating
+			// (the installation controller reads the Manager only at
+			// zero-tenant scope) already prevents this in practice.
 			resources, _ := renderObjects(renderConfig{
 				installation:      installation,
 				ns:                "tenant-a",

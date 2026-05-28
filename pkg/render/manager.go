@@ -277,7 +277,7 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.cfg.Manager.RBACManagementEnabled()),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
@@ -746,6 +746,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
+		{Name: "RBAC_UI_ENABLED", Value: strconv.FormatBool(c.cfg.Manager.RBACManagementEnabled())},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
@@ -955,7 +956,11 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
+// When rbacManagementEnabled is true, the role is extended with the permissions
+// the RBAC management UI needs (full CRUD on managed RBAC objects,
+// escalation-prevention coverage for tier/resource roles, and read access to
+// the customer-owned tigera-idp-groups ConfigMap).
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementEnabled bool) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -1140,6 +1145,14 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 		},
 	}
 
+	// RBAC management UI is a zero-tenant-only feature (Manager CR is only
+	// read at zero-tenant scope by the installation controller). The
+	// managed-Calico role variant should never see this; assert via the
+	// tenant discriminator.
+	if rbacManagementEnabled && !tenant.ManagedClusterIsCalico() {
+		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
+	}
+
 	if tenant.MultiTenant() {
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
@@ -1172,6 +1185,68 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
+}
+
+// rbacManagementUIRules returns the extra rules calico-manager-role needs
+// when Manager.spec.rbac.ui == Enabled. The base set
+// (RBACManagementEscalationRules) is shared with calico-kube-controllers;
+// the additions here are specific to the RBAC management UI: the Dex OIDC
+// login cache, the cluster-wide ConfigMap create rule it implies, escalation
+// coverage for webhook-mod resource roles, and read on compliances for the
+// tigera-network-admin binding path.
+func rbacManagementUIRules() []rbacv1.PolicyRule {
+	rules := RBACManagementEscalationRules()
+	return append(rules,
+		// Escalation coverage for the compliances binding path.
+		rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get"},
+		},
+		// Read + write on the Dex login cache ConfigMap. The RBAC management
+		// UI reads the current cache and updates it as users authenticate;
+		// update/patch matches the existing per-namespace pattern in
+		// logstorage.go. No delete: we never tear the ConfigMap down.
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"tigera-known-oidc-users"},
+			Verbs:         []string{"get", "list", "watch", "update", "patch"},
+		},
+		// Cluster-wide create on ConfigMaps — K8s RBAC does not allow pairing
+		// the create verb with resourceNames, so this needs a separate rule.
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		// Escalation coverage for webhook-mod resource roles (create/patch on
+		// Secrets to wire up webhook auth).
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"create", "patch"},
+		},
+		// IdP-groups LDAP integration: the RBAC management UI owns the
+		// tigera-idp-ldap-config Secret (LDAP connection params) and
+		// re-writes the tigera-idp-groups ConfigMap as the directory
+		// changes. The cluster-wide create rules above already cover both
+		// resources; this rule adds the remaining verbs we need
+		// (get/list/watch to observe, update/delete to edit and remove).
+		// Scoped to the specific names to keep blast radius small.
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{"tigera-idp-ldap-config"},
+			Verbs:         []string{"get", "list", "watch", "update", "delete"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"tigera-idp-groups"},
+			Verbs:         []string{"get", "list", "watch", "update", "delete"},
+		},
+	)
 }
 
 func (c *managerComponent) getTLSObjects() []client.Object {
@@ -1240,6 +1315,21 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 					Namespace: LogCollectorNamespace,
 					Name:      FluentdInputService,
 				},
+			},
+		})
+	}
+
+	// RBAC management UI: the feature walks an external LDAP directory to
+	// discover groups. The directory lives outside the cluster (or in an
+	// arbitrary namespace), so we allow egress to the standard LDAP ports
+	// 389 (ldap/StartTLS) and 636 (ldaps). Only opened when the feature is
+	// enabled so non-RBAC-UI clusters keep the tighter default egress.
+	if c.cfg.Manager.RBACManagementEnabled() {
+		egressRules = append(egressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(389, 636),
 			},
 		})
 	}

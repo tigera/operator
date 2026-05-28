@@ -51,4 +51,5 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 // ResetForTest clears all registries. Test-only.
 func ResetForTest() {
 	patches = map[string][]PatchFunc{}
+	imageOverrides = map[string]ImageOverride{}
 }

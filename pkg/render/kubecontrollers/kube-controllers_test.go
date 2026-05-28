@@ -334,7 +334,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(role.Rules).NotTo(ContainElement(escalateBindRule), "rbacsync rules should be absent when Manager is nil")
 		})
 
-		It("does not enable rbacsync when Manager.rbacManagement.enabled is unset", func() {
+		It("does not enable rbacsync when Manager.rbac is unset", func() {
 			cfg.Manager = &operatorv1.Manager{}
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -347,11 +347,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			}))
 		})
 
-		It("does not enable rbacsync when Manager.rbacManagement.enabled=false", func() {
-			disabled := false
+		It("does not enable rbacsync when Manager.rbac.mode is Disabled", func() {
 			cfg.Manager = &operatorv1.Manager{
 				Spec: operatorv1.ManagerSpec{
-					RBACManagement: &operatorv1.RBACManagement{Enabled: &disabled},
+					RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeDisabled},
 				},
 			}
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -368,11 +367,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(role.Rules).NotTo(ContainElement(escalateBindRule))
 		})
 
-		It("enables rbacsync and adds the controller's RBAC when Manager.rbacManagement.enabled=true", func() {
-			enabled := true
+		It("enables rbacsync and adds the controller's RBAC when Manager.rbac.mode is Enabled", func() {
 			cfg.Manager = &operatorv1.Manager{
 				Spec: operatorv1.ManagerSpec{
-					RBACManagement: &operatorv1.RBACManagement{Enabled: &enabled},
+					RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeEnabled},
 				},
 			}
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)

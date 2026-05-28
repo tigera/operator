@@ -109,7 +109,7 @@ type KubeControllersConfiguration struct {
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
 
-	// Manager is the Manager CR if present. Read for Manager.spec.rbacManagement,
+	// Manager is the Manager CR if present. Read for Manager.spec.rbac.mode,
 	// which gates the rbacsync controller in calico-kube-controllers. Safe to be
 	// nil (treated as RBAC management disabled).
 	Manager *operatorv1.Manager
@@ -508,7 +508,7 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 
 // rbacSyncControllerRules returns the extra rules the calico-kube-controllers
 // ServiceAccount needs when the rbacsync controller is enabled
-// (Manager.spec.rbacManagement.enabled). The shared escalation-prevention
+// (Manager.spec.rbac.mode == Enabled). The shared escalation-prevention
 // coverage (the resources whose permissions managed roles grant, plus the
 // tigera-idp-groups read) lives in render.RBACManagementEscalationRules; the
 // additions here are rbacsync-specific:

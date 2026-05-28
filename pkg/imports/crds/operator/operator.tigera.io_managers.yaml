@@ -299,15 +299,11 @@ spec:
                       type: object
                   type: object
                 rbac:
-                  description: |-
-                    RBAC configures the RBAC management UI feature. Only honored in
-                    zero-tenant (non-multi-tenant) management clusters. Disabling this
-                    after enabling does not garbage-collect previously rendered RBAC
-                    objects; they remain on the cluster until removed manually.
+                  description: RBAC configures the RBAC management UI feature.
                   properties:
-                    mode:
+                    ui:
                       description: |-
-                        Mode controls whether the RBAC management UI is enabled. Defaults to
+                        UI controls whether the RBAC management UI is enabled. Defaults to
                         Disabled.
                       enum:
                         - Enabled

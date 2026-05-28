@@ -122,6 +122,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the Manager CR so toggling spec.rbac re-runs the apiserver
+		// reconcile (the tigera-network-admin RBAC is gated on it).
+		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch Manager: %v", err)
+		}
+
 		for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
 			for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
 				if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -342,6 +349,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var keyValidatorConfig authentication.KeyValidatorConfig
+	var managerCR *operatorv1.Manager
 	includeV3NetworkPolicy := false
 
 	if installationSpec.Variant.IsEnterprise() {
@@ -367,6 +375,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// Read the zero-tenant Manager CR so tigera-network-admin can be
+		// granted the RBAC management UI verbs when Manager.spec.rbac.mode is
+		// Enabled.
+		managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -497,6 +514,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		KubernetesVersion:            r.opts.KubernetesVersion,
 		ClusterDomain:                r.opts.ClusterDomain,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
+		RBACManagementEnabled:        managerCR.RBACManagementEnabled(),
 		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}
 

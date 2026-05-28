@@ -2060,10 +2060,9 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	// kube-apiserver RBAC.
 	if !c.cfg.RequiresAggregationServer {
 		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettings"},
-			Verbs:         []string{"create", "update", "delete", "patch"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
 		})
 	}
 

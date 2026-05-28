@@ -418,10 +418,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		// by kube-apiserver RBAC.
 		networkAdmin := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettings"},
-			Verbs:         []string{"create", "update", "delete", "patch"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
 		}))
 	})
 

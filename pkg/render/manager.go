@@ -1188,7 +1188,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 }
 
 // rbacManagementUIRules returns the extra rules calico-manager-role needs
-// when Manager.spec.rbacManagement.enabled is true. The base set
+// when Manager.spec.rbac.mode == Enabled. The base set
 // (RBACManagementEscalationRules) is shared with calico-kube-controllers;
 // the additions here are specific to the RBAC management UI: the Dex OIDC
 // login cache, the cluster-wide ConfigMap create rule it implies, escalation

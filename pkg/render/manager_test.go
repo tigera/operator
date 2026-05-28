@@ -1745,7 +1745,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Verbs:     []string{"create"},
 		}
 
-		It("renders RBAC_UI_ENABLED=false and the base manager role when rbacManagement is unset", func() {
+		It("renders RBAC_UI_ENABLED=false and the base manager role when rbac is unset", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
@@ -1757,14 +1757,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).NotTo(ContainElement(configmapCreateRule), "rbacManagementUIRules should NOT be present when disabled")
 		})
 
-		It("renders RBAC_UI_ENABLED=true and extra manager role rules when rbacManagement is enabled", func() {
-			enabled := true
+		It("renders RBAC_UI_ENABLED=true and extra manager role rules when rbac mode is Enabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBACManagement: &operatorv1.RBACManagement{Enabled: &enabled},
+						RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeEnabled},
 					},
 				},
 			})
@@ -1775,14 +1774,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).To(ContainElement(configmapCreateRule), "rbacManagementUIRules must be present when enabled")
 		})
 
-		It("renders RBAC_UI_ENABLED=false when rbacManagement.enabled is explicitly false", func() {
-			disabled := false
+		It("renders RBAC_UI_ENABLED=false when rbac mode is Disabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBACManagement: &operatorv1.RBACManagement{Enabled: &disabled},
+						RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeDisabled},
 					},
 				},
 			})
@@ -1794,7 +1792,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			// The installation controller only reads the Manager CR at
 			// zero-tenant scope, so a multi-tenant managed-Calico cluster
 			// should never see these rules even if the flag were somehow set.
-			enabled := true
 			resources, _ := renderObjects(renderConfig{
 				installation:      installation,
 				ns:                "tenant-a",
@@ -1808,7 +1805,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBACManagement: &operatorv1.RBACManagement{Enabled: &enabled},
+						RBAC: &operatorv1.RBAC{Mode: operatorv1.RBACModeEnabled},
 					},
 				},
 			})

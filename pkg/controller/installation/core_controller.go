@@ -243,9 +243,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
-		// Watch the Manager CR so changes to spec.rbacManagement re-run the
-		// installation reconcile (the rbacsync controller in
-		// calico-kube-controllers is gated on it).
+		// Watch the Manager CR so changes to spec.rbac re-run the installation
+		// reconcile (the rbacsync controller in calico-kube-controllers is
+		// gated on it).
 		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
@@ -1060,7 +1060,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 		// Manager CR is optional and zero-tenant only. We read it here so that
 		// the kubecontrollers renderer can gate the rbacsync controller on
-		// Manager.spec.rbacManagement.enabled.
+		// Manager.spec.rbac.mode.
 		managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)

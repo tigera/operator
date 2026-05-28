@@ -144,8 +144,8 @@ type APIServerConfiguration struct {
 	ClusterDomain                string
 
 	// RBACManagementEnabled gates the RBAC management UI permissions added to
-	// the tigera-network-admin ClusterRole. Mirrors Manager.spec.rbacManagement
-	// .enabled; read at zero-tenant scope by the apiserver controller.
+	// the tigera-network-admin ClusterRole. Mirrors Manager.spec.rbac.mode ==
+	// Enabled; read at zero-tenant scope by the apiserver controller.
 	RBACManagementEnabled bool
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs

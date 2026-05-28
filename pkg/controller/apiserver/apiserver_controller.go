@@ -122,8 +122,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
 		}
 
-		// Watch the Manager CR so toggling spec.rbacManagement re-runs the
-		// apiserver reconcile (the tigera-network-admin RBAC is gated on it).
+		// Watch the Manager CR so toggling spec.rbac re-runs the apiserver
+		// reconcile (the tigera-network-admin RBAC is gated on it).
 		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch Manager: %v", err)
@@ -380,7 +380,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 
 		// Manager CR is optional and zero-tenant only. We read it here so the
 		// tigera-network-admin ClusterRole can be granted the RBAC management UI
-		// permissions only when Manager.spec.rbacManagement.enabled is set.
+		// permissions only when Manager.spec.rbac.mode is Enabled.
 		managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)

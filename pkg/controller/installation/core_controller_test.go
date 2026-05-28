@@ -2458,7 +2458,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				tierWatchReady:       ready,
 				migrationWatchReady:  &utils.ReadyFlag{},
-				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 					return componentHandler
 				},
 			}
@@ -2605,7 +2605,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            true,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2638,7 +2638,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            true,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 31},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2657,7 +2657,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            false,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2675,7 +2675,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        false,
 			v3CRDs:            true,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2693,7 +2693,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            true,
 			kubernetesVersion: nil,
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2728,7 +2728,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            true,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2787,7 +2787,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            true,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2810,7 +2810,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:        true,
 			v3CRDs:            true,
 			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}

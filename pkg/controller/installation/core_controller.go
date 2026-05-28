@@ -405,7 +405,7 @@ type ReconcileInstallation struct {
 	kubernetesVersion             *common.VersionInfo
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
-	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
 }
 
 // GetActivePools returns the full set of enabled IP pools in the cluster.

@@ -147,7 +147,7 @@ type ReconcileGatewayAPI struct {
 	status              status.StatusManager
 	clusterDomain       string
 	multiTenant         bool
-	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
 	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
 }

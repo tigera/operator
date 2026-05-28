@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/operator"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -73,16 +74,28 @@ type ComponentHandler interface {
 	SetCreateOnly()
 }
 
+// ComponentHandlerOption configures a componentHandler.
+type ComponentHandlerOption func(*componentHandler)
+
+// WithContext supplies the operator.Context passed to registered render patches.
+func WithContext(ctx operator.Context) ComponentHandlerOption {
+	return func(c *componentHandler) { c.modCtx = ctx }
+}
+
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
-	return &componentHandler{
+func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...ComponentHandlerOption) ComponentHandler {
+	h := &componentHandler{
 		client:       cli,
 		scheme:       scheme,
 		cr:           cr,
 		log:          log,
 		apiGroupEnvs: apigroup.EnvVars(),
 	}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 type componentHandler struct {
@@ -92,6 +105,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
+	modCtx       operator.Context
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -459,6 +473,9 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+	if named, ok := component.(render.Named); ok {
+		objsToCreate = operator.ApplyPatches(named.Name(), c.modCtx, objsToCreate)
+	}
 	osType := component.SupportedOSType()
 
 	if len(c.apiGroupEnvs) > 0 {

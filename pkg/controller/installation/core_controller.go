@@ -1058,13 +1058,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		// Manager CR is optional and zero-tenant only. We read it here so that
-		// the kubecontrollers renderer can gate the rbacsync controller on
-		// Manager.spec.rbac.mode.
-		managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
-			return reconcile.Result{}, err
+		// Read the zero-tenant Manager CR so the kubecontrollers renderer can
+		// gate the rbacsync controller on Manager.spec.rbac.mode. The
+		// Variant check is required in addition to the enterpriseCRDsExist
+		// outer block: enterprise CRDs can be installed while the cluster
+		// still runs in Calico-only mode.
+		if instance.Spec.Variant.IsEnterprise() {
+			managerCR, err = utils.GetZeroTenantManagerOrNil(ctx, r.client)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 
 		if managementClusterConnection != nil && managementCluster != nil {

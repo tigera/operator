@@ -109,10 +109,11 @@ type KubeControllersConfiguration struct {
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
 
-	// Manager is the Manager CR if present. Read for Manager.spec.rbac.mode,
-	// which gates the rbacsync controller in calico-kube-controllers. Safe to be
-	// nil (treated as RBAC management disabled).
-	Manager *operatorv1.Manager
+	// RBACManagementEnabled gates the rbacsync controller in
+	// calico-kube-controllers and the escalation-capable rules it needs.
+	// Mirrors Manager.spec.rbac.mode == Enabled; resolved at zero-tenant
+	// scope by the installation controller.
+	RBACManagementEnabled bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -168,7 +169,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		// bindings when an IdP group is removed from the customer-owned
 		// tigera-idp-groups ConfigMap. The controller is dormant when the
 		// flag is false — nothing is garbage-collected on disable.
-		if cfg.Manager.RBACManagementEnabled() {
+		if cfg.RBACManagementEnabled {
 			enabledControllers = append(enabledControllers, "rbacsync")
 			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)
 		}

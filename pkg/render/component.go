@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,3 +39,18 @@ type Component interface {
 	// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
 	SupportedOSType() rmeta.OSType
 }
+
+// Named is implemented by components that expose enterprise extension points.
+// The componentHandler uses Name() to look up registered patches. Components
+// without enterprise extensions need not implement it.
+type Named interface {
+	Name() string
+}
+
+// Component names used as keys into the operator patch registry. Keep these in
+// sync with the Name() methods that return them.
+const (
+	ComponentNameTypha     = "typha"
+	ComponentNameNode      = "node"
+	ComponentNameAPIServer = "apiserver"
+)

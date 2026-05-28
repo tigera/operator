@@ -81,6 +81,8 @@ spec:
                         - nodeSelector
                       x-kubernetes-list-type: map
                     routing:
+                      default:
+                        inClusterMode: Local
                       properties:
                         inClusterMode:
                           default: Local

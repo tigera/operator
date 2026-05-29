@@ -143,9 +143,8 @@ type APIServerConfiguration struct {
 	KubernetesVersion            *common.VersionInfo
 	ClusterDomain                string
 
-	// RBACManagementEnabled gates the RBAC management UI permissions added to
-	// the tigera-network-admin ClusterRole. Mirrors Manager.spec.rbac.ui ==
-	// Enabled; read at zero-tenant scope by the apiserver controller.
+	// RBACManagementEnabled mirrors Manager.spec.rbac.ui == Enabled and
+	// gates the RBAC management UI permissions on tigera-network-admin.
 	RBACManagementEnabled bool
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs

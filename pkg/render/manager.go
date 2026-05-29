@@ -1148,10 +1148,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 		},
 	}
 
-	// RBAC management UI is a zero-tenant-only feature (Manager CR is only
-	// read at zero-tenant scope by the installation controller). The
-	// managed-Calico role variant should never see this; assert via the
-	// tenant discriminator.
 	if rbacManagementEnabled && !tenant.ManagedClusterIsCalico() {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}

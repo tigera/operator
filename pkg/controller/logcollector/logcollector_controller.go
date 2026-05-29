@@ -155,6 +155,11 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
+	if err = c.WatchObject(&operatorv1.OpenTelemetryCollector{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch OpenTelemetryCollector resource: %w", err)
+	}
+
 	return nil
 }
 
@@ -589,6 +594,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	otelCollector, err := utils.GetIfExists[operatorv1.OpenTelemetryCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying OpenTelemetryCollector CR", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -612,6 +623,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		OTelCollectorEnabled:   otelCollector != nil,
 	}
 	// Render the fluent-bit component for Linux
 	comp := rlogcollector.FluentBit(fluentBitCfg)
@@ -697,9 +709,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			// Linux-only (gated on OSType), so NonClusterHost only affects the
 			// policy; Tenant/ExternalElastic additionally select the Linseed
 			// endpoint and x-tenant-id header in the Windows rendered config.
-			NonClusterHost:  nonclusterhost,
-			Tenant:          tenant,
-			ExternalElastic: r.opts.ElasticExternal,
+			NonClusterHost:       nonclusterhost,
+			Tenant:               tenant,
+			ExternalElastic:      r.opts.ElasticExternal,
+			OTelCollectorEnabled: otelCollector != nil,
 		}
 		comp = rlogcollector.FluentBit(fluentBitCfg)
 

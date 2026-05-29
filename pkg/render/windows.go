@@ -163,8 +163,8 @@ func (c *windowsComponent) nodeMetricsService() *corev1.Service {
 				},
 				{
 					Name:       "calico-bgp-metrics-port",
-					Port:       nodeBGPReporterPort,
-					TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
+					Port:       NodeBGPReporterPort,
+					TargetPort: intstr.FromInt(int(NodeBGPReporterPort)),
 					Protocol:   corev1.ProtocolTCP,
 				},
 			},

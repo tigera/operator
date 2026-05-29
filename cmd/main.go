@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -516,6 +517,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		setupLog.Error(err, "Invalid configuration")
 		os.Exit(1)
 	}
+
+	// Wire in-repo enterprise modifiers and extensions into the operator
+	// registries. After the monorepo split this call moves to calico-private's
+	// main.
+	enterprise.Register()
 
 	err = controller.AddToManager(mgr, options)
 	if err != nil {

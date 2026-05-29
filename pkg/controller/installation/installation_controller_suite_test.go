@@ -25,7 +25,13 @@ import (
 	clientfeaturestesting "k8s.io/client-go/features/testing"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/tigera/operator/pkg/enterprise"
 )
+
+var _ = ginkgo.BeforeSuite(func() {
+	enterprise.Register()
+})
 
 func TestInstallation(t *testing.T) {
 	// Disable WatchListClient for tests. In client-go v0.35+, this feature defaults to true and

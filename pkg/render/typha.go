@@ -113,6 +113,8 @@ func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
+func (c *typhaComponent) Name() string { return ComponentNameTypha }
+
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		c.typhaServiceAccount(),
@@ -350,26 +352,6 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 		},
-	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		extraRules := []rbacv1.PolicyRule{
-			{
-				// Tigera Secure needs to be able to read licenses, and config.
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{
-					"bfdconfigurations",
-					"deeppacketinspections",
-					"egressgatewaypolicies",
-					"externalnetworks",
-					"licensekeys",
-					"networks",
-					"packetcaptures",
-					"remoteclusterconfigurations",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-		}
-		role.Rules = append(role.Rules, extraRules...)
 	}
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
@@ -626,15 +608,6 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
 	case operatorv1.PluginAzureVNET:
 		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
-	}
-
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			typhaEnv = append(typhaEnv, corev1.EnvVar{
-				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value(),
-			})
-		}
 	}
 
 	// If host-local IPAM is in use, we need to configure typha to use the Kubernetes pod CIDR.

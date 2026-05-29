@@ -651,7 +651,6 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-					{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
@@ -725,10 +724,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].Env).To(ConsistOf(expectedNodeEnv))
 				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
-				// Expect 2 Ports when FelixPrometheusMetricsEnabled is false
-				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
-				Expect(len(ms.Spec.Ports)).To(Equal(2))
-
 				dirMustExist := corev1.HostPathDirectory
 				bpfVol := corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}}
 				Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(bpfVol))
@@ -737,41 +732,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(bpfVolMount))
 
 				verifyProbesAndLifecycle(ds, false, true)
-			})
-
-			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true", func() {
-				defaultInstance.Variant = operatorv1.CalicoEnterprise
-				cfg.NodeReporterMetricsPort = 9081
-				cfg.FelixPrometheusMetricsEnabled = true
-
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-				resources, _ := component.Objects()
-
-				expectedServicePorts := []corev1.ServicePort{
-					{
-						Name:       "calico-metrics-port",
-						Port:       int32(cfg.NodeReporterMetricsPort),
-						TargetPort: intstr.FromInt(cfg.NodeReporterMetricsPort),
-						Protocol:   corev1.ProtocolTCP,
-					},
-					{
-						Name:       "calico-bgp-metrics-port",
-						Port:       9900,
-						TargetPort: intstr.FromInt(int(9900)),
-						Protocol:   corev1.ProtocolTCP,
-					},
-					{
-						Name:       "felix-metrics-port",
-						Port:       9098,
-						TargetPort: intstr.FromInt(int(9098)),
-						Protocol:   corev1.ProtocolTCP,
-					},
-				}
-
-				// Expect 3 Ports when FelixPrometheusMetricsEnabled is true
-				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
-				Expect(ms.Spec.Ports).To(Equal(expectedServicePorts))
 			})
 
 			It("should render all resources when using Calico CNI on EKS", func() {
@@ -1639,7 +1599,6 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-					{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
@@ -1744,7 +1703,6 @@ var _ = Describe("Node rendering tests", func() {
 					{name: "calico-cni-plugin", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 					{name: "calico-cni-plugin", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-					{name: "calico-node-metrics", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.NodeDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
 				}
@@ -1827,10 +1785,6 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(len(ds.Spec.Template.Spec.Containers[0].Env)).To(Equal(len(expectedNodeEnv)))
 
 				verifyProbesAndLifecycle(ds, true, true)
-
-				// The metrics service should have the correct configuration.
-				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
-				Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 			})
 
 			It("should render volumes and node volumemounts when bird templates are provided", func() {
@@ -2094,7 +2048,7 @@ var _ = Describe("Node rendering tests", func() {
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
-				Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
 				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 				Expect(dsResource).ToNot(BeNil())
@@ -2115,7 +2069,7 @@ var _ = Describe("Node rendering tests", func() {
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
-				Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
+				Expect(len(resources)).To(Equal(defaultNumExpectedResources))
 
 				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
 				Expect(dsResource).ToNot(BeNil())

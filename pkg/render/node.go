@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/imageoverride"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -72,9 +73,9 @@ const (
 )
 
 var (
-	// The port used by calico/node to report Calico Enterprise BGP metrics.
+	// NodeBGPReporterPort is the port used by calico/node to report Calico Enterprise BGP metrics.
 	// This is currently not intended to be user configurable.
-	nodeBGPReporterPort int32 = 9900
+	NodeBGPReporterPort int32 = 9900
 
 	NodeTLSSecretName               = "node-certs"
 	NodeTLSSecretNameNonClusterHost = NodeTLSSecretName + TyphaNonClusterHostSuffix
@@ -184,14 +185,15 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.calicoImage = appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
-	switch {
-	case c.cfg.Installation.Variant.IsEnterprise():
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-	case operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode):
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
-	default:
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
+	nodeImage := imageoverride.Resolve(ComponentNameNode, components.ComponentCalicoNode, c.cfg.Installation)
+	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+		// FIPS only applies to the Calico variant; the enterprise override (if
+		// registered) has already replaced nodeImage for the enterprise variant.
+		if nodeImage == components.ComponentCalicoNode {
+			nodeImage = components.ComponentCalicoNodeFIPS
+		}
 	}
+	c.nodeImage = appendIfErr(components.GetReference(nodeImage, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
@@ -201,6 +203,10 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
+}
+
+func (c *nodeComponent) Name() string {
+	return ComponentNameNode
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
@@ -227,11 +233,6 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	var objsToDelete []client.Object
-
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
-	}
 
 	cniConfig := c.nodeCNIConfigMap()
 	if cniConfig != nil {
@@ -1769,56 +1770,6 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 		TimeoutSeconds: 5,
 	}
 	return lp, rp
-}
-
-// nodeMetricsService creates a Service which exposes two endpoints on calico/node for
-// reporting Prometheus metrics (for policy enforcement activity and BGP stats).
-// This service is used internally by Calico Enterprise and is separate from general
-// Prometheus metrics which are user-configurable.
-func (c *nodeComponent) nodeMetricsService() *corev1.Service {
-	ports := []corev1.ServicePort{
-		{
-			Name:       "calico-metrics-port",
-			Port:       int32(c.cfg.NodeReporterMetricsPort),
-			TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
-			Protocol:   corev1.ProtocolTCP,
-		},
-		{
-			Name:       "calico-bgp-metrics-port",
-			Port:       nodeBGPReporterPort,
-			TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
-			Protocol:   corev1.ProtocolTCP,
-		},
-	}
-
-	if c.cfg.FelixPrometheusMetricsEnabled {
-		felixMetricsPort := int32(c.cfg.FelixPrometheusMetricsPort)
-
-		ports = append(ports, corev1.ServicePort{
-			Name:       "felix-metrics-port",
-			Port:       felixMetricsPort,
-			TargetPort: intstr.FromInt(int(felixMetricsPort)),
-			Protocol:   corev1.ProtocolTCP,
-		})
-	}
-
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      CalicoNodeMetricsService,
-			Namespace: common.CalicoNamespace,
-			Labels:    map[string]string{"k8s-app": CalicoNodeObjectName},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": CalicoNodeObjectName},
-			// Important: "None" tells Kubernetes that we want a headless service with
-			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
-			// a huge set of iptables rules for this service since there's an instance
-			// on every node.
-			ClusterIP: "None",
-			Ports:     ports,
-		},
-	}
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

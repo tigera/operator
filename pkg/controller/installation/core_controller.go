@@ -77,9 +77,9 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
+	"github.com/tigera/operator/pkg/operator"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -405,7 +405,7 @@ type ReconcileInstallation struct {
 	kubernetesVersion             *common.VersionInfo
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
-	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
 }
 
 // GetActivePools returns the full set of enabled IP pools in the cluster.
@@ -1201,62 +1201,47 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
 	// Operator is responsible for creating a service which maps to that port.
-	// Here, we'll check the default felixconfiguration to see if the user is specifying
-	// a non-default port, and use that value if they are.
 	nodeReporterMetricsPort := defaultNodeReporterPort
-	var nodePrometheusTLS certificatemanagement.KeyPairInterface
-	calicoVersion := components.CalicoRelease
-
 	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
-
+	calicoVersion := components.CalicoRelease
 	if instance.Spec.Variant.IsEnterprise() {
-
-		// Determine the port to use for nodeReporter metrics.
+		calicoVersion = components.EnterpriseRelease
 		if felixConfiguration.Spec.PrometheusReporterPort != nil {
 			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
 		}
-		if nodeReporterMetricsPort == 0 {
-			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
 		if felixConfiguration.Spec.PrometheusMetricsPort != nil {
 			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
 		}
-
-		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if nodePrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
-		}
-		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if prometheusClientCert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
-
-		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
-		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
-		// all components within this namespace share a trusted CA bundle. This is necessary because prior to v3.13 secrets were not signed by
-		// a single CA so we need to include each individually.
-		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if esgwCertificate != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
-		}
-
-		calicoVersion = components.EnterpriseRelease
 	}
+
+	// Run the registered installation extension. For the enterprise variant this
+	// validates config and creates the node-prometheus certificate, adding it (and
+	// the prometheus/esgw certs) to the trusted bundle. Returns the render Context
+	// consumed by registered modifiers.
+	var modCtx operator.Context
+	if ext := operator.GetInstallationExtension(); ext != nil {
+		modCtx, err = ext.Prepare(operator.InstallationPrep{
+			Ctx:                ctx,
+			Client:             r.client,
+			Installation:       &instance.Spec,
+			FelixConfiguration: felixConfiguration,
+			CertificateManager: certificateManager,
+			TrustedBundle:      typhaNodeTLS.TrustedBundle,
+			ClusterDomain:      r.clusterDomain,
+		})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing enterprise installation", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		modCtx = operator.Context{
+			Installation:       &instance.Spec,
+			FelixConfiguration: felixConfiguration,
+			ClusterDomain:      r.clusterDomain,
+			TrustedBundle:      typhaNodeTLS.TrustedBundle,
+		}
+	}
+	nodePrometheusTLS := modCtx.NodePrometheusTLS
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
 	if err != nil {
@@ -1295,7 +1280,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance, utils.WithContext(modCtx))
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{

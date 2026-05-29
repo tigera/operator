@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/operator"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -2457,3 +2458,47 @@ func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 	panic("SubResource not implemented in mockClient")
 }
+
+var _ = Describe("componentHandler patch application", func() {
+	AfterEach(func() {
+		operator.ResetForTest()
+	})
+
+	It("applies registered patches to a named component before create", func() {
+		operator.Patch("fake", func(ctx operator.Context, objs []client.Object) []client.Object {
+			cm := objs[0].(*corev1.ConfigMap)
+			cm.Data = map[string]string{"patched": "yes"}
+			return objs
+		})
+
+		s := runtime.NewScheme()
+		Expect(apis.AddToScheme(s, false)).NotTo(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(s)).NotTo(HaveOccurred())
+
+		c := ctrlrfake.DefaultFakeClientBuilder(s).Build()
+		handler := NewComponentHandler(logf.Log, c, s, nil)
+		comp := &namedFakeComponent{name: "fake", obj: &corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},
+		}}
+
+		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
+
+		got := &corev1.ConfigMap{}
+		Expect(c.Get(context.Background(), client.ObjectKey{Name: "cm", Namespace: "default"}, got)).NotTo(HaveOccurred())
+		Expect(got.Data).To(HaveKeyWithValue("patched", "yes"))
+	})
+})
+
+type namedFakeComponent struct {
+	name string
+	obj  client.Object
+}
+
+func (f *namedFakeComponent) Name() string                             { return f.name }
+func (f *namedFakeComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
+func (f *namedFakeComponent) Objects() ([]client.Object, []client.Object) {
+	return []client.Object{f.obj}, nil
+}
+func (f *namedFakeComponent) Ready() bool                   { return true }
+func (f *namedFakeComponent) SupportedOSType() rmeta.OSType { return rmeta.OSTypeLinux }

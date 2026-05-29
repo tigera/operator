@@ -1107,6 +1107,12 @@ value:
 				MountPath: "/var/run/felix",
 			},
 		}))
+		// WAF audit capture: the l7-log-collector tails the redirected Envoy app log on
+		// the access-logs volume it already mounts.
+		Expect(envoyDeployment.InitContainers[1].Env).To(ContainElement(corev1.EnvVar{
+			Name:  "WAF_AUDIT_LOG_PATH",
+			Value: "/access_logs/envoy.log",
+		}))
 
 		Expect(envoyDeployment.Container).ToNot(BeNil())
 		Expect(envoyDeployment.Container.VolumeMounts).To(HaveLen(1))
@@ -1116,6 +1122,18 @@ value:
 		}))
 
 		Expect(proxy.Spec.Telemetry.AccessLog.Settings).To(Equal(AccessLogSettings))
+
+		// WAF audit capture: the wasm component logs at info so Coraza "AuditLog:" lines
+		// reach Envoy's application log, while everything else stays at warn so the
+		// redirected log file is approximately just the audit lines.
+		Expect(proxy.Spec.Logging.Level).To(HaveKeyWithValue(envoyapi.LogComponentDefault, envoyapi.LogLevelWarn))
+		Expect(proxy.Spec.Logging.Level).To(HaveKeyWithValue(envoyapi.ProxyLogComponent("wasm"), envoyapi.LogLevelInfo))
+
+		// WAF audit capture: Envoy's application log is redirected to a file on the
+		// var-log-calico HostPath volume via --log-path (appended through ExtraArgs,
+		// which Envoy Gateway adds to the proxy args verbatim - each token a separate
+		// element). The l7-log-collector tails this file.
+		Expect(proxy.Spec.ExtraArgs).To(Equal([]string{"--log-path", "/access_logs/envoy.log"}))
 	})
 
 	It("should deploy l7-log-collector (no waf-http-filter sidecar) for Enterprise when using a custom proxy", func() {
@@ -1221,6 +1239,10 @@ value:
 				Name:      "felix-sync",
 				MountPath: "/var/run/felix",
 			},
+		}))
+		Expect(envoyDeployment.InitContainers[2].Env).To(ContainElement(corev1.EnvVar{
+			Name:  "WAF_AUDIT_LOG_PATH",
+			Value: "/access_logs/envoy.log",
 		}))
 
 		Expect(envoyDeployment.Container).ToNot(BeNil())

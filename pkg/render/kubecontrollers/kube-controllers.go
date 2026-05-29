@@ -108,6 +108,9 @@ type KubeControllersConfiguration struct {
 	// Tenant object provides tenant configuration for both single and multi-tenant modes.
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
+
+	// RBACManagementEnabled mirrors Manager.spec.rbac.ui == Enabled.
+	RBACManagementEnabled bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -155,6 +158,13 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 			},
 		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+
+		// Runs the rbacsync controller to reconcile managed ClusterRoles and
+		// bindings against the tigera-idp-groups ConfigMap.
+		if cfg.RBACManagementEnabled {
+			enabledControllers = append(enabledControllers, "rbacsync")
+			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)
+		}
 	}
 
 	return &kubeControllersComponent{
@@ -487,6 +497,40 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	}
 
 	return rules
+}
+
+// rbacSyncControllerRules returns the extra rules the rbacsync controller
+// needs on top of render.RBACManagementEscalationRules.
+func rbacSyncControllerRules() []rbacv1.PolicyRule {
+	rules := render.RBACManagementEscalationRules()
+	return append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "clusterrolebindings"},
+			Verbs:     []string{"escalate", "bind"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"tigera-known-oidc-users"},
+			Verbs:         []string{"get", "list", "watch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get", "list"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "create", "patch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+	)
 }
 
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {

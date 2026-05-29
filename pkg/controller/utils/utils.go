@@ -463,6 +463,22 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 	return applicationLayer, nil
 }
 
+// GetManager returns the Manager CR. When multiTenant is true the
+// tenant-scoped instance is read from ns; otherwise the cluster-scoped
+// instance is read and ns is ignored. Returns the underlying client error
+// (including IsNotFound) — callers decide whether absence is fatal.
+func GetManager(ctx context.Context, cli client.Client, multiTenant bool, ns string) (*operatorv1.Manager, error) {
+	key := DefaultEnterpriseInstanceKey
+	if multiTenant {
+		key.Namespace = ns
+	}
+	instance := &operatorv1.Manager{}
+	if err := cli.Get(ctx, key, instance); err != nil {
+		return nil, err
+	}
+	return instance, nil
+}
+
 // Return the ManagementCluster CR if present. No error is returned if it was not found.
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}

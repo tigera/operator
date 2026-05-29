@@ -1756,6 +1756,12 @@ value:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(policy.Spec.Tier).To(Equal("calico-system"))
 		Expect(policy.Spec.Selector).To(Equal(EnvoyGatewayPolicySelector))
+		// A single Calico rule's Nets must be one address family — the ingress
+		// allow is split per family, not {"0.0.0.0/0","::/0"} in one rule, which
+		// Calico rejects ("rule contains both IPv4 and IPv6 CIDRs").
+		Expect(policy.Spec.Ingress).To(HaveLen(2))
+		Expect(policy.Spec.Ingress[0].Source.Nets).To(Equal([]string{"0.0.0.0/0"}))
+		Expect(policy.Spec.Ingress[1].Source.Nets).To(Equal([]string{"::/0"}))
 		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", common.CalicoNamespace)
 		Expect(err).To(HaveOccurred(), "must not render default-deny in calico-system")
 	})

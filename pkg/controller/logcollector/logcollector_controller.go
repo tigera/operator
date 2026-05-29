@@ -159,6 +159,11 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
+	if err = c.WatchObject(&operatorv1.OpenTelemetryCollector{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch OpenTelemetryCollector resource: %w", err)
+	}
+
 	return nil
 }
 
@@ -593,6 +598,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	otelCollector, err := utils.GetIfExists[operatorv1.OpenTelemetryCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying OpenTelemetryCollector CR", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
@@ -616,6 +627,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		OTelCollectorEnabled:   otelCollector != nil,
 	}
 	// Render the fluent-bit component for Linux
 	comp := rlogcollector.FluentBit(fluentBitCfg)
@@ -691,14 +703,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			FluentBitKeyPair:       fluentBitKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 			LicenseExpired:         licenseExpired,
-			// Must match the Linux configuration: both OS variants render the
-			// shared allow-calico-fluent-bit NetworkPolicy, whose non-cluster-host
-			// ingress rule (port 9880) is gated on NonClusterHost. If only the
-			// Linux config sets it, the two renders disagree and the operator
-			// flaps the policy on every reconcile (dropping voltron's access to
-			// the http input). The non-cluster-host input/service themselves are
-			// still Linux-only (gated on OSType), so this only affects the policy.
-			NonClusterHost: nonclusterhost,
+			NonClusterHost:         nonclusterhost,
+			OTelCollectorEnabled:   otelCollector != nil,
 		}
 		comp = rlogcollector.FluentBit(fluentBitCfg)
 

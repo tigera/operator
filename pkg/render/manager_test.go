@@ -1736,16 +1736,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			return corev1.EnvVar{}
 		}
 
-		// rbacManagementUIRules emits exactly this cluster-wide create rule on
-		// ConfigMaps — uniquely added by the ui-apis gate (no other manager
-		// rule grants core/configmaps), so it's a stable presence check.
-		configmapCreateRule := rbacv1.PolicyRule{
+		// Namespaced Role carries the create rule on ConfigMaps/Secrets — this
+		// is the stable presence check for the RBAC management UI gate.
+		nsCreateRule := rbacv1.PolicyRule{
 			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
+			Resources: []string{"configmaps", "secrets"},
 			Verbs:     []string{"create"},
 		}
 
-		It("renders RBAC_UI_ENABLED=false and the base manager role when rbac is unset", func() {
+		It("renders RBAC_UI_ENABLED=false and no namespaced RBAC UI role when rbac is unset", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
@@ -1753,11 +1752,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
 
-			role := rtest.GetResource(resources, render.ManagerClusterRole, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).NotTo(ContainElement(configmapCreateRule), "rbacManagementUIRules should NOT be present when disabled")
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
 		})
 
-		It("renders RBAC_UI_ENABLED=true and extra manager role rules when rbac.ui is Enabled", func() {
+		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbac.ui is Enabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
@@ -1770,8 +1768,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "true"}))
 
-			role := rtest.GetResource(resources, render.ManagerClusterRole, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).To(ContainElement(configmapCreateRule), "rbacManagementUIRules must be present when enabled")
+			role := rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
+			Expect(role.Rules).To(ContainElement(nsCreateRule))
 		})
 
 		It("renders RBAC_UI_ENABLED=false when rbac.ui is Disabled", func() {
@@ -1811,8 +1809,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					},
 				},
 			})
-			role := rtest.GetResource(resources, render.ManagerManagedCalicoClusterRole, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).NotTo(ContainElement(configmapCreateRule), "ManagedClusterIsCalico variant must not pick up the rbacManagementUIRules")
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, "tenant-a", rbacv1.GroupName, "v1", "Role")).To(BeNil())
 		})
 	})
 })

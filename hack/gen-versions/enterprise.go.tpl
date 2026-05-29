@@ -180,6 +180,15 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
+{{ with index .Components "coraza-wasm" }}
+	ComponentCorazaWASM = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   enterpriseVariant,
+	}
+{{- end }}
 {{ with index .Components "coreos-prometheus" }}
 	ComponentCoreOSPrometheus = Component{
 		Version: "{{ .Version }}",
@@ -316,6 +325,7 @@ var (
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,
+		ComponentCorazaWASM,
 		ComponentPrometheus,
 		ComponentPrometheusAlertmanager,
 		ComponentTigeraNode,

@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -108,6 +109,22 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+
+	// wafLogComponentWasm is the Envoy "wasm" logger component. Envoy Gateway does not
+	// define a const for it (its enum omits wasm), but EnvoyProxy.Spec.Logging.Level
+	// passes arbitrary component keys through to Envoy's --component-log-level arg, and
+	// Envoy recognises "wasm". Setting it to info surfaces the Coraza WASM filter's
+	// "AuditLog:" lines (emitted via proxywasm.LogInfo) in Envoy's application log.
+	wafLogComponentWasm = envoyapi.ProxyLogComponent("wasm")
+
+	// wafAuditLogPath is the file that Envoy's application log is redirected to via
+	// --log-path, and that the l7-log-collector tails for Coraza "AuditLog:" lines
+	// (WAF_AUDIT_LOG_PATH). It lives on the "access-logs" emptyDir that is already
+	// mounted in both the envoy container (which writes it) and the l7-log-collector
+	// (which reads it) - so no extra volume or mount is needed. Envoy will not create
+	// parent directories for --log-path, so this is a file directly under the existing
+	// /access_logs mount, not a new subdirectory.
+	wafAuditLogPath = "/access_logs/envoy.log"
 )
 
 var (
@@ -952,6 +969,30 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
+			// Tune Envoy log levels for WAF audit capture: the wasm component logs at
+			// info so the Coraza filter's "AuditLog:" lines reach Envoy's application
+			// log, while the default stays at warn to keep the redirected log file
+			// approximately just the audit lines. A user-supplied default level (e.g.
+			// for debugging) is preserved.
+			if envoyProxy.Spec.Logging.Level == nil {
+				envoyProxy.Spec.Logging.Level = map[envoyapi.ProxyLogComponent]envoyapi.LogLevel{}
+			}
+			if _, ok := envoyProxy.Spec.Logging.Level[envoyapi.LogComponentDefault]; !ok {
+				envoyProxy.Spec.Logging.Level[envoyapi.LogComponentDefault] = envoyapi.LogLevelWarn
+			}
+			envoyProxy.Spec.Logging.Level[wafLogComponentWasm] = envoyapi.LogLevelInfo
+
+			// Redirect Envoy's application log (where the wasm filter's "AuditLog:" lines
+			// land) to a file on the "access-logs" emptyDir so the l7-log-collector can
+			// tail it (the collector already mounts that volume). EnvoyProxy has no native
+			// log-path field, and a Patch on the envoy container's args would replace Envoy
+			// Gateway's generated args, so use ExtraArgs, which EG appends to the proxy
+			// command line. func-e parses each element as a single token, so the flag and
+			// value are separate elements. A user-supplied --log-path is left untouched.
+			if !slices.Contains(envoyProxy.Spec.ExtraArgs, "--log-path") {
+				envoyProxy.Spec.ExtraArgs = append(envoyProxy.Spec.ExtraArgs, "--log-path", wafAuditLogPath)
+			}
+
 			// Add or update the Init Container to the deployment
 			wafHTTPFilter := corev1.Container{
 				Name:    wafFilterName,
@@ -998,6 +1039,12 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					{
 						Name:  "ENVOY_ACCESS_LOG_PATH",
 						Value: "/access_logs/access.log",
+					},
+					// WAF audit capture: file the collector tails for the wasm filter's
+					// Coraza "AuditLog:" lines (Envoy's app log, redirected via --log-path).
+					{
+						Name:  "WAF_AUDIT_LOG_PATH",
+						Value: wafAuditLogPath,
 					},
 					// Owning Gateway info from pod labels (set by EnvoyProxy)
 					OwningGatewayNameEnvVar,
@@ -1434,12 +1481,22 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 			Selector: EnvoyGatewayPolicySelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			// 9443: webhook. 18000-18002: xDS. 19001: metrics.
+			// A single Calico rule's Nets must be one address family, so the
+			// IPv4 and IPv6 allow-from-anywhere CIDRs are split into separate
+			// rules (dual-stack and IPv6-only clusters both need ::/0).
 			Ingress: []v3.Rule{
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.TCPProtocol,
-					// Dual-stack and IPv6-only need ::/0 in addition to 0.0.0.0/0.
-					Source: v3.EntityRule{Nets: []string{"0.0.0.0/0", "::/0"}},
+					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"::/0"}},
 					Destination: v3.EntityRule{
 						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
 					},

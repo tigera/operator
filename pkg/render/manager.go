@@ -1327,11 +1327,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	// RBAC management UI: the feature walks an external LDAP directory to
-	// discover groups. The directory lives outside the cluster (or in an
-	// arbitrary namespace), so we allow egress to the standard LDAP ports
-	// 389 (ldap/StartTLS) and 636 (ldaps). Only opened when the feature is
-	// enabled so non-RBAC-UI clusters keep the tighter default egress.
+	// LDAP egress for the RBAC management UI's directory walk (389/636).
 	if c.cfg.Manager.RBACManagementEnabled() {
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,

@@ -162,13 +162,8 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
 
-		// RBAC management UI: when enabled on the Manager CR, the rbacsync
-		// controller runs inside calico-kube-controllers to reconcile the
-		// catalog of managed ClusterRoles (per-tier + 32 fine-grained + 6
-		// per-cluster LMA roles + aggregates) and to cascade-clean managed
-		// bindings when an IdP group is removed from the customer-owned
-		// tigera-idp-groups ConfigMap. The controller is dormant when the
-		// flag is false — nothing is garbage-collected on disable.
+		// Runs the rbacsync controller to reconcile managed ClusterRoles and
+		// bindings against the tigera-idp-groups ConfigMap.
 		if cfg.RBACManagementEnabled {
 			enabledControllers = append(enabledControllers, "rbacsync")
 			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)

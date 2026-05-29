@@ -63,6 +63,7 @@ import (
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/operator"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
@@ -1294,8 +1295,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		nodeAppArmorProfile = val
 	}
 
+	// Build the render Context carrying reconcile-derived state for any
+	// registered modifiers (e.g. enterprise typha branches).
+	modCtx := operator.Context{
+		Installation:       &instance.Spec,
+		FelixConfiguration: felixConfiguration,
+		ClusterDomain:      r.clusterDomain,
+		TrustedBundle:      typhaNodeTLS.TrustedBundle,
+	}
+
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance, utils.WithContext(modCtx))
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{

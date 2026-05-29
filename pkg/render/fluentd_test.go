@@ -139,6 +139,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "FLUENT_UID", Value: "0"},
 			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
+			corev1.EnvVar{Name: "WAF_LOG_FILE", Value: "/var/log/calico/waf/waf.log"},
 			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			corev1.EnvVar{
 				Name: "NODENAME",
@@ -326,6 +327,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "FLUENT_UID", Value: "0"},
 			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
+			corev1.EnvVar{Name: "WAF_LOG_FILE", Value: "/var/log/calico/waf/waf.log"},
 			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			corev1.EnvVar{
 				Name: "NODENAME",
@@ -435,6 +437,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			corev1.EnvVar{Name: "FLUENT_UID", Value: "0"},
 			corev1.EnvVar{Name: "FLOW_LOG_FILE", Value: "/var/log/calico/flowlogs/flows.log"},
 			corev1.EnvVar{Name: "DNS_LOG_FILE", Value: "/var/log/calico/dnslogs/dns.log"},
+			corev1.EnvVar{Name: "WAF_LOG_FILE", Value: "/var/log/calico/waf/waf.log"},
 			corev1.EnvVar{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			corev1.EnvVar{
 				Name: "NODENAME",
@@ -554,6 +557,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLUENT_UID", Value: "0"},
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
+			{Name: "WAF_LOG_FILE", Value: "c:/var/log/calico/waf/waf.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			{
 				Name: "NODENAME",
@@ -574,6 +578,7 @@ var _ = Describe("Tigera Secure Fluentd rendering tests", func() {
 			{Name: "FLUENT_UID", Value: "0"},
 			{Name: "FLOW_LOG_FILE", Value: "c:/var/log/calico/flowlogs/flows.log"},
 			{Name: "DNS_LOG_FILE", Value: "c:/var/log/calico/dnslogs/dns.log"},
+			{Name: "WAF_LOG_FILE", Value: "c:/var/log/calico/waf/waf.log"},
 			{Name: "FLUENTD_ES_SECURE", Value: "true"},
 			{
 				Name: "NODENAME",

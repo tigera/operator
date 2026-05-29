@@ -28,6 +28,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -2592,6 +2593,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(admissionregistrationv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1alpha1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		mockStatus = &status.MockStatus{}
@@ -2663,6 +2665,35 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			case *admissionv1beta1.MutatingAdmissionPolicy:
 				mapCount++
 			case *admissionv1beta1.MutatingAdmissionPolicyBinding:
+				mapbCount++
+			}
+		}
+		Expect(mapCount).To(Equal(2))
+		Expect(mapbCount).To(Equal(2))
+	})
+
+	It("should create v1alpha1 MAPs when only v1alpha1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
+
+		var mapCount, mapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionregistrationv1alpha1.MutatingAdmissionPolicy:
+				mapCount++
+			case *admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding:
 				mapbCount++
 			}
 		}

@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-logr/logr"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,8 +46,10 @@ const (
 	APIGroup = "admissionregistration.k8s.io"
 	// VersionV1 is the GA API version (k8s 1.36+).
 	VersionV1 = "v1"
-	// VersionV1Beta1 is the beta API version (k8s 1.32-1.36).
+	// VersionV1Beta1 is the beta API version (served k8s 1.34-1.39).
 	VersionV1Beta1 = "v1beta1"
+	// VersionV1Alpha1 is the alpha API version (served k8s 1.32-1.37, behind the MutatingAdmissionPolicy feature gate).
+	VersionV1Alpha1 = "v1alpha1"
 
 	// KindPolicy is the MutatingAdmissionPolicy kind.
 	KindPolicy = "MutatingAdmissionPolicy"
@@ -167,8 +170,8 @@ func Ensure(c client.Client, variant string, v3 bool, apiVersion string, log log
 
 // parseAdmissionPolicyYAML parses a YAML document into either a MutatingAdmissionPolicy
 // or MutatingAdmissionPolicyBinding at the requested API version. The MAP types are identical
-// in shape between v1beta1 and v1, so we deserialize the same YAML into the requested target type
-// and overwrite TypeMeta to reflect the chosen GroupVersion.
+// in shape across v1alpha1, v1beta1, and v1, so we deserialize the same YAML into the requested
+// target type and overwrite TypeMeta to reflect the chosen GroupVersion.
 func parseAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.Object, error) {
 	var meta struct {
 		Kind string `json:"kind"`
@@ -208,6 +211,23 @@ func parseAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.O
 			return obj, nil
 		case "MutatingAdmissionPolicyBinding":
 			obj := &admissionv1beta1.MutatingAdmissionPolicyBinding{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse MutatingAdmissionPolicyBinding from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		}
+	case VersionV1Alpha1:
+		switch meta.Kind {
+		case "MutatingAdmissionPolicy":
+			obj := &admissionregistrationv1alpha1.MutatingAdmissionPolicy{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse MutatingAdmissionPolicy from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		case "MutatingAdmissionPolicyBinding":
+			obj := &admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding{}
 			if err := yaml.Unmarshal(doc, obj); err != nil {
 				return nil, fmt.Errorf("unable to parse MutatingAdmissionPolicyBinding from %s: %v", filename, err)
 			}
@@ -259,6 +279,22 @@ func ListManaged(ctx context.Context, c client.Client, apiVersion string) (polic
 		for i := range bindList.Items {
 			bindings = append(bindings, &bindList.Items[i])
 		}
+	case VersionV1Alpha1:
+		mapList := &admissionregistrationv1alpha1.MutatingAdmissionPolicyList{}
+		if err := c.List(ctx, mapList, client.MatchingLabels{ManagedMAPLabel: ManagedMAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing MutatingAdmissionPolicies: %w", err)
+		}
+		for i := range mapList.Items {
+			policies = append(policies, &mapList.Items[i])
+		}
+
+		bindList := &admissionregistrationv1alpha1.MutatingAdmissionPolicyBindingList{}
+		if err := c.List(ctx, bindList, client.MatchingLabels{ManagedMAPLabel: ManagedMAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing MutatingAdmissionPolicyBindings: %w", err)
+		}
+		for i := range bindList.Items {
+			bindings = append(bindings, &bindList.Items[i])
+		}
 	default:
 		return nil, nil, fmt.Errorf("unsupported MutatingAdmissionPolicy API version %q", apiVersion)
 	}
@@ -268,7 +304,7 @@ func ListManaged(ctx context.Context, c client.Client, apiVersion string) (polic
 // IsPolicyKind returns whether obj is a MutatingAdmissionPolicy (any served version).
 func IsPolicyKind(obj client.Object) bool {
 	switch obj.(type) {
-	case *admissionregistrationv1.MutatingAdmissionPolicy, *admissionv1beta1.MutatingAdmissionPolicy:
+	case *admissionregistrationv1.MutatingAdmissionPolicy, *admissionv1beta1.MutatingAdmissionPolicy, *admissionregistrationv1alpha1.MutatingAdmissionPolicy:
 		return true
 	}
 	return false
@@ -277,7 +313,7 @@ func IsPolicyKind(obj client.Object) bool {
 // IsBindingKind returns whether obj is a MutatingAdmissionPolicyBinding (any served version).
 func IsBindingKind(obj client.Object) bool {
 	switch obj.(type) {
-	case *admissionregistrationv1.MutatingAdmissionPolicyBinding, *admissionv1beta1.MutatingAdmissionPolicyBinding:
+	case *admissionregistrationv1.MutatingAdmissionPolicyBinding, *admissionv1beta1.MutatingAdmissionPolicyBinding, *admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding:
 		return true
 	}
 	return false

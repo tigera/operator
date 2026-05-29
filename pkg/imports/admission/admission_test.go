@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 
 	opv1 "github.com/tigera/operator/api/v1"
@@ -57,6 +58,26 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 				case *admissionregistrationv1.MutatingAdmissionPolicyBinding:
 					mapbCount++
 					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1))
+				}
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
+			}
+			Expect(mapCount).To(Equal(2))
+			Expect(mapbCount).To(Equal(2))
+		})
+
+		It("returns Calico v1alpha1 MAPs when discovered version is v1alpha1", func() {
+			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1Alpha1)
+			Expect(objs).To(HaveLen(4))
+
+			var mapCount, mapbCount int
+			for _, obj := range objs {
+				switch o := obj.(type) {
+				case *admissionregistrationv1alpha1.MutatingAdmissionPolicy:
+					mapCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1Alpha1))
+				case *admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding:
+					mapbCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1Alpha1))
 				}
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
 			}

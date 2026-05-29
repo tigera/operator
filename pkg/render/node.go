@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/controller/migration"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
@@ -184,14 +185,15 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.calicoImage = appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
-	switch {
-	case c.cfg.Installation.Variant.IsEnterprise():
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-	case operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode):
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
-	default:
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
+	nodeImage := imageoverride.Resolve(ComponentNameNode, components.ComponentCalicoNode, c.cfg.Installation)
+	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
+		// FIPS only applies to the Calico variant; the enterprise override (if
+		// registered) has already replaced nodeImage for the enterprise variant.
+		if nodeImage == components.ComponentCalicoNode {
+			nodeImage = components.ComponentCalicoNodeFIPS
+		}
 	}
+	c.nodeImage = appendIfErr(components.GetReference(nodeImage, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
@@ -201,6 +203,10 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
+}
+
+func (c *nodeComponent) Name() string {
+	return ComponentNameNode
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {

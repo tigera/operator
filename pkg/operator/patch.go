@@ -14,7 +14,11 @@
 
 package operator
 
-import "sigs.k8s.io/controller-runtime/pkg/client"
+import (
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/tigera/operator/pkg/imageoverride"
+)
 
 // PatchFunc post-processes the objects a render component produced. It may
 // mutate matched objects and/or append additional objects, and must return the
@@ -51,5 +55,5 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 // ResetForTest clears all registries. Test-only.
 func ResetForTest() {
 	patches = map[string][]PatchFunc{}
-	imageOverrides = map[string]ImageOverride{}
+	imageoverride.ResetForTest()
 }

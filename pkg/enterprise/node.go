@@ -14,10 +14,18 @@
 
 package enterprise
 
-// Register wires all in-repo enterprise modifiers and controller extensions
-// into the operator registries. Called once at process startup. After the
-// monorepo split this is what calico-private's main will do instead.
-func Register() {
-	registerTypha()
-	registerNode()
+import (
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/render"
+)
+
+func registerNode() {
+	operator.OverrideImage(render.ComponentNameNode, func(in *operatorv1.InstallationSpec) (components.Component, bool) {
+		if !in.Variant.IsEnterprise() {
+			return components.Component{}, false
+		}
+		return components.ComponentTigeraNode, true
+	})
 }

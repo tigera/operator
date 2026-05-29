@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package render_test
 
-// Register wires all in-repo enterprise modifiers and controller extensions
-// into the operator registries. Called once at process startup. After the
-// monorepo split this is what calico-private's main will do instead.
-func Register() {
-	registerTypha()
-	registerNode()
-}
+import (
+	. "github.com/onsi/ginkgo/v2"
+
+	"github.com/tigera/operator/pkg/enterprise"
+)
+
+// The render suite asserts enterprise-variant output for components whose
+// variant-specific behavior now lives in registered modifiers/overrides
+// (e.g. the node image). Register them once so the suite exercises the same
+// integrated behavior the operator binary produces.
+var _ = BeforeSuite(func() {
+	enterprise.Register()
+})

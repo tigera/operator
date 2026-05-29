@@ -17,28 +17,22 @@ package operator
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/imageoverride"
 )
 
 // ImageOverride returns the component image to use for an installation, and
 // false to decline (leaving the default in place). Implementations self-gate
 // on in.Variant.
-type ImageOverride func(in *operatorv1.InstallationSpec) (components.Component, bool)
-
-var imageOverrides = map[string]ImageOverride{}
+type ImageOverride = imageoverride.Override
 
 // OverrideImage registers an image override under key. The key is the render
 // component's image identifier (e.g. "node").
 func OverrideImage(key string, fn ImageOverride) {
-	imageOverrides[key] = fn
+	imageoverride.Register(key, fn)
 }
 
 // ResolveImage returns the override registered for key if it applies to in,
 // otherwise def. Render components call this inside ResolveImages.
 func ResolveImage(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
-	if fn, ok := imageOverrides[key]; ok {
-		if c, override := fn(in); override {
-			return c
-		}
-	}
-	return def
+	return imageoverride.Resolve(key, def, in)
 }

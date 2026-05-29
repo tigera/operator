@@ -106,6 +106,14 @@ var alertmanagerSelector = fmt.Sprintf(
 	CalicoNodeAlertmanager,
 )
 
+// AlertmanagerSourceEntityRule selects the Alertmanager pods as a network policy
+// source. It is used by other components (e.g. Linseed) that need to allow
+// ingress from Alertmanager.
+var AlertmanagerSourceEntityRule = v3.EntityRule{
+	Selector:          alertmanagerSelector,
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", common.TigeraPrometheusNamespace),
+}
+
 // Register secret/certs that need Server and Client Key usage
 func init() {
 	certkeyusage.SetCertKeyUsage(PrometheusClientTLSSecretName, []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth, x509.ExtKeyUsageServerAuth})

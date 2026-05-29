@@ -40,14 +40,14 @@ var _ = Describe("installation enterprise extension", func() {
 
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
-		p := newPrep(operatorv1.TigeraSecureEnterprise)
+		p := newPrep(operatorv1.CalicoEnterprise)
 		p.FelixConfiguration = &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port}}
 		_, err := operator.GetInstallationExtension().Prepare(p)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		p := newPrep(operatorv1.TigeraSecureEnterprise)
+		p := newPrep(operatorv1.CalicoEnterprise)
 		p.FelixConfiguration = &v3.FelixConfiguration{}
 		ctx, err := operator.GetInstallationExtension().Prepare(p)
 		Expect(err).NotTo(HaveOccurred())

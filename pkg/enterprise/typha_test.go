@@ -52,7 +52,7 @@ var _ = Describe("typha enterprise modifier", func() {
 
 	It("adds enterprise RBAC and MULTI_INTERFACE_MODE for the enterprise variant", func() {
 		ctx := operator.Context{Installation: &operatorv1.InstallationSpec{
-			Variant:       operatorv1.TigeraSecureEnterprise,
+			Variant:       operatorv1.CalicoEnterprise,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
 		out := operator.ApplyPatches(render.ComponentNameTypha, ctx, newObjs())

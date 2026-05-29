@@ -37,7 +37,7 @@ var _ = Describe("node enterprise image override", func() {
 	})
 
 	It("selects the enterprise node image for the enterprise variant", func() {
-		ent := &operatorv1.InstallationSpec{Variant: operatorv1.TigeraSecureEnterprise}
+		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 		Expect(operator.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 
@@ -55,7 +55,7 @@ var _ = Describe("node metrics service modifier", func() {
 	})
 
 	It("appends the node metrics service for the enterprise variant", func() {
-		ctx := operator.Context{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.TigeraSecureEnterprise}}
+		ctx := operator.Context{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 		out := operator.ApplyPatches(render.ComponentNameNode, ctx, []client.Object{})
 		svc, ok := operator.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeTrue())
@@ -70,7 +70,7 @@ var _ = Describe("node metrics service modifier", func() {
 		metrics := 7091
 		enabled := true
 		ctx := operator.Context{
-			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.TigeraSecureEnterprise},
+			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
 			FelixConfiguration: &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{
 				PrometheusReporterPort:   &reporter,
 				PrometheusMetricsPort:    &metrics,
@@ -93,4 +93,3 @@ var _ = Describe("node metrics service modifier", func() {
 		Expect(ok).To(BeFalse())
 	})
 })
-

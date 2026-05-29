@@ -29,8 +29,8 @@ import (
 )
 
 const (
-	defaultNodeReporterPort    = 9081
-	defaultFelixMetricsPort    = 9091
+	defaultNodeReporterPort = 9081
+	defaultFelixMetricsPort = 9091
 )
 
 func registerNode() {

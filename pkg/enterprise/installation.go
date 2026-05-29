@@ -20,10 +20,10 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/operator"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 type installationExtension struct{}

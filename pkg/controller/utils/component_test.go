@@ -2495,8 +2495,10 @@ type namedFakeComponent struct {
 	obj  client.Object
 }
 
-func (f *namedFakeComponent) Name() string                                { return f.name }
-func (f *namedFakeComponent) ResolveImages(*operatorv1.ImageSet) error    { return nil }
-func (f *namedFakeComponent) Objects() ([]client.Object, []client.Object) { return []client.Object{f.obj}, nil }
-func (f *namedFakeComponent) Ready() bool                                 { return true }
-func (f *namedFakeComponent) SupportedOSType() rmeta.OSType               { return rmeta.OSTypeLinux }
+func (f *namedFakeComponent) Name() string                             { return f.name }
+func (f *namedFakeComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
+func (f *namedFakeComponent) Objects() ([]client.Object, []client.Object) {
+	return []client.Object{f.obj}, nil
+}
+func (f *namedFakeComponent) Ready() bool                   { return true }
+func (f *namedFakeComponent) SupportedOSType() rmeta.OSType { return rmeta.OSTypeLinux }

@@ -36,7 +36,7 @@ var _ = Describe("image overrides", func() {
 			return components.ComponentTigeraNode, true
 		})
 
-		ent := &operatorv1.InstallationSpec{Variant: operatorv1.TigeraSecureEnterprise}
+		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 		Expect(operator.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 

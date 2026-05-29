@@ -1772,7 +1772,6 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	return lp, rp
 }
 
-
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node
 // startup processing. It returns an empty string if IP auto detection should not be enabled.
 func getAutodetectionMethod(ad *operatorv1.NodeAddressAutodetection) string {

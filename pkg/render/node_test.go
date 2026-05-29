@@ -734,7 +734,6 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, false, true)
 			})
 
-
 			It("should render all resources when using Calico CNI on EKS", func() {
 				expectedResources := []struct {
 					name    string

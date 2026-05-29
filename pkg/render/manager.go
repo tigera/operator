@@ -281,6 +281,9 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
+	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() {
+		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
+	}
 	if c.cfg.Tenant.MultiTenant() {
 		objsToCreate = append(objsToCreate, c.multiTenantManagedClustersAccess()...)
 	}
@@ -1187,66 +1190,71 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	return cr
 }
 
-// rbacManagementUIRules returns the extra rules calico-manager-role needs
-// when Manager.spec.rbac.ui == Enabled. The base set
-// (RBACManagementEscalationRules) is shared with calico-kube-controllers;
-// the additions here are specific to the RBAC management UI: the Dex OIDC
-// login cache, the cluster-wide ConfigMap create rule it implies, escalation
-// coverage for webhook-mod resource roles, and read on compliances for the
-// tigera-network-admin binding path.
+// rbacManagementUIRules returns the cluster-scoped rules calico-manager-role
+// needs when Manager.spec.rbac.ui == Enabled. Resource-name-scoped rules on
+// the named Secrets/ConfigMaps live on a namespaced Role
+// (rbacManagementUINamespacedRole) so we don't grant cluster-wide create.
 func rbacManagementUIRules() []rbacv1.PolicyRule {
 	rules := RBACManagementEscalationRules()
 	return append(rules,
-		// Escalation coverage for the compliances binding path.
 		rbacv1.PolicyRule{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"compliances"},
 			Verbs:     []string{"get"},
 		},
-		// Read + write on the Dex login cache ConfigMap. The RBAC management
-		// UI reads the current cache and updates it as users authenticate;
-		// update/patch matches the existing per-namespace pattern in
-		// logstorage.go. No delete: we never tear the ConfigMap down.
-		rbacv1.PolicyRule{
-			APIGroups:     []string{""},
-			Resources:     []string{"configmaps"},
-			ResourceNames: []string{"tigera-known-oidc-users"},
-			Verbs:         []string{"get", "list", "watch", "update", "patch"},
-		},
-		// Cluster-wide create on ConfigMaps — K8s RBAC does not allow pairing
-		// the create verb with resourceNames, so this needs a separate rule.
-		rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"create"},
-		},
-		// Escalation coverage for webhook-mod resource roles (create/patch on
-		// Secrets to wire up webhook auth).
-		rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"create", "patch"},
-		},
-		// IdP-groups LDAP integration: the RBAC management UI owns the
-		// tigera-idp-ldap-config Secret (LDAP connection params) and
-		// re-writes the tigera-idp-groups ConfigMap as the directory
-		// changes. The cluster-wide create rules above already cover both
-		// resources; this rule adds the remaining verbs we need
-		// (get/list/watch to observe, update/delete to edit and remove).
-		// Scoped to the specific names to keep blast radius small.
-		rbacv1.PolicyRule{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			ResourceNames: []string{"tigera-idp-ldap-config"},
-			Verbs:         []string{"get", "list", "watch", "update", "delete"},
-		},
-		rbacv1.PolicyRule{
-			APIGroups:     []string{""},
-			Resources:     []string{"configmaps"},
-			ResourceNames: []string{"tigera-idp-groups"},
-			Verbs:         []string{"get", "list", "watch", "update", "delete"},
-		},
 	)
+}
+
+// rbacManagementUINamespacedRole returns the Role + RoleBinding that scopes
+// the RBAC management UI's Secret/ConfigMap access to calico-system, where
+// tigera-idp-groups and tigera-idp-ldap-config live.
+func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
+	return []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{""},
+					Resources: []string{"configmaps", "secrets"},
+					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups: []string{""},
+					Resources: []string{"secrets"},
+					Verbs:     []string{"patch"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"secrets"},
+					ResourceNames: []string{"tigera-idp-ldap-config"},
+					Verbs:         []string{"get", "list", "watch", "update", "delete"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{"tigera-idp-groups"},
+					Verbs:         []string{"get", "list", "watch", "update", "delete"},
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     ManagerClusterRole,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ManagerServiceAccount,
+					Namespace: c.cfg.Namespace,
+				},
+			},
+		},
+	}
 }
 
 func (c *managerComponent) getTLSObjects() []client.Object {

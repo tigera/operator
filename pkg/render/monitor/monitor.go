@@ -545,6 +545,12 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
+			// Mount the client certificate and CA bundle so the Linseed webhook
+			// receiver can establish an mTLS connection. The prometheus-operator
+			// surfaces these at /etc/alertmanager/secrets/<name>/ and
+			// /etc/alertmanager/configmaps/<name>/ respectively.
+			Secrets:    []string{PrometheusClientTLSSecretName},
+			ConfigMaps: []string{certificatemanagement.TrustedCertConfigMapName},
 		},
 	}
 	return am

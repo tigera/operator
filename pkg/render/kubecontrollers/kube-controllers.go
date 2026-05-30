@@ -1035,6 +1035,20 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 		})
 	}
 
+	// Allow the kube-apiserver to reach the in-process WAF admission webhook on
+	// :9443 (EV-6386). render-v3 wires the webhook Service/config/cert + the
+	// server, but without this ingress rule the calico-system default-deny drops
+	// the apiserver→:9443 call and every WAFPolicy/WAFPlugin admission times out.
+	if cfg.WAFGatewayExtensionEnabled {
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(9443),
+			},
+		})
+	}
+
 	if r, err := cfg.K8sServiceEp.DestinationEntityRule(); r != nil && err == nil {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

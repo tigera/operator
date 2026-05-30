@@ -5,8 +5,22 @@ route:
   group_wait: 30s
   group_interval: 1m
   repeat_interval: 5m
-  receiver: 'webhook'
+  receiver: 'linseed'
 receivers:
-- name: 'webhook'
+- name: 'linseed'
   webhook_configs:
-  - url: 'http://calico-alertmanager-webhook:30501/'
+  # Push alerts to Linseed, which records them as events shown on the web
+  # console Alerts page. Linseed requires mTLS plus a bearer token: the client
+  # certificate and CA bundle are mounted via the Alertmanager spec, and the
+  # token is Alertmanager's (Prometheus) service account token.
+  - url: 'https://tigera-linseed.tigera-elasticsearch.svc/api/v1/events/alertmanager'
+    send_resolved: true
+    http_config:
+      authorization:
+        type: Bearer
+        credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tls_config:
+        ca_file: /etc/alertmanager/configmaps/tigera-ca-bundle/ca.crt
+        cert_file: /etc/alertmanager/secrets/calico-node-prometheus-client-tls/tls.crt
+        key_file: /etc/alertmanager/secrets/calico-node-prometheus-client-tls/tls.key
+        server_name: tigera-linseed.tigera-elasticsearch.svc

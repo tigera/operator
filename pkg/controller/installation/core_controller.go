@@ -1643,6 +1643,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.CSI(&csiCfg))
 
 	// Build a configuration for rendering calico/kube-controllers.
+	// Provision a dedicated WAF wasm pull secret (a renamed copy of the install
+	// pull secret) so the WAF reconciler replicates it into tenant namespaces
+	// without clashing with the operator-managed tigera-pull-secret the
+	// GatewayAPI render also copies there (EV-6386).
+	var wasmPullSecret *corev1.Secret
+	if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
+		wasmPullSecret = pullSecrets[0].DeepCopy()
+		wasmPullSecret.Name = kubecontrollers.WASMPullSecretName
+		wasmPullSecret.Namespace = common.CalicoNamespace
+		wasmPullSecret.ResourceVersion = ""
+		wasmPullSecret.UID = ""
+	}
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
 		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
@@ -1658,6 +1670,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		BindingNamespaces:           []string{common.CalicoNamespace},
 		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
 		WAFWebhookServerTLS:         wafWebhookTLS,
+		WASMPullSecret:              wasmPullSecret,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

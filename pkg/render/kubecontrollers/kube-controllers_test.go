@@ -242,18 +242,20 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: kubecontrollers.WASMPullSecretName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
 		instance.Variant = operatorv1.CalicoEnterprise
-		// Pull secret on the Installation propagates through the Deployment's
-		// imagePullSecrets and is also surfaced via WASM_PULL_SECRET so the
-		// applicationlayer reconciler can reference it from rendered
-		// EnvoyExtensionPolicies in WAFPolicy namespaces.
 		instance.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "tigera-pull-secret"}}
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		// core_controller provisions a dedicated WAF wasm pull secret (a renamed
+		// copy of the install pull secret) so the reconciler can replicate it into
+		// WAFPolicy namespaces without clashing with the operator-managed
+		// tigera-pull-secret; surface it here so it renders and WASM_PULL_SECRET is set.
+		cfg.WASMPullSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.WASMPullSecretName, Namespace: common.CalicoNamespace}}
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -282,7 +284,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Name: "WASM_IMAGE", Value: "test-reg/tigera/coraza-wasm:" + components.ComponentCorazaWASM.Version,
 		}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "WASM_PULL_SECRET", Value: "tigera-pull-secret",
+			Name: "WASM_PULL_SECRET", Value: kubecontrollers.WASMPullSecretName,
 		}))
 		// TrustedBundle is set on the configuration above, so WASM_CA_CERT
 		// names the standard tigera trusted-bundle ConfigMap.

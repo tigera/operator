@@ -56,6 +56,13 @@ const (
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "kube-controller-access"
 
+	// WASMPullSecretName is the dedicated image-pull Secret (a renamed copy of
+	// the install pull secret) that the WAF reconciler replicates into tenant
+	// namespaces for the Coraza wasm OCI pull. A dedicated name avoids clashing
+	// with the operator-managed tigera-pull-secret the GatewayAPI render also
+	// copies into those namespaces (EV-6386).
+	WASMPullSecretName = "tigera-waf-pull-secret"
+
 	// wafWebhookContainerPort is the in-process WAF admission-webhook server
 	// port on calico-kube-controllers. Must match the TargetPort of the
 	// tigera-waf-webhook Service (see pkg/render/applicationlayer) and the port
@@ -102,6 +109,7 @@ type KubeControllersConfiguration struct {
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
 	KubeControllersGatewaySecret *corev1.Secret
+	WASMPullSecret               *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
 	MetricsServerTLS certificatemanagement.KeyPairInterface
@@ -324,6 +332,10 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
+	}
+	if c.cfg.WASMPullSecret != nil {
+		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
+			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.WASMPullSecret)...)...)
 	}
 
 	if c.cfg.MetricsPort != 0 {
@@ -720,8 +732,8 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			// a private Tigera registry. Source the name from the first
 			// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
 			// installs reuse whatever pull secret operator already attaches here.
-			if len(c.cfg.Installation.ImagePullSecrets) > 0 {
-				env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.Installation.ImagePullSecrets[0].Name})
+			if c.cfg.WASMPullSecret != nil {
+				env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.WASMPullSecret.Name})
 			}
 
 			// WASM_CA_CERT names the trusted CA bundle ConfigMap (already mounted

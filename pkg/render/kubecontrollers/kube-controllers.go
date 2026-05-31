@@ -63,6 +63,13 @@ const (
 	// copies into those namespaces (EV-6386).
 	WASMPullSecretName = "tigera-waf-pull-secret"
 
+	// WASMCACertName is the dedicated CA-bundle ConfigMap (in the controller
+	// namespace) the WAF reconciler replicates into tenant namespaces for the
+	// Coraza wasm OCI registry TLS check — a dedicated name avoids clashing with
+	// the operator-managed tigera-ca-bundle ConfigMap (EV-6386). TODO: render the
+	// source copy here too (needs the full TrustedBundle, not the RO interface).
+	WASMCACertName = "tigera-waf-ca-bundle"
+
 	// wafWebhookContainerPort is the in-process WAF admission-webhook server
 	// port on calico-kube-controllers. Must match the TargetPort of the
 	// tigera-waf-webhook Service (see pkg/render/applicationlayer) and the port
@@ -741,7 +748,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			// alongside WASM_PULL_SECRET so the EnvoyExtensionPolicy wasm fetcher
 			// trusts the registry's TLS chain.
 			if c.cfg.TrustedBundle != nil {
-				env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: certificatemanagement.TrustedCertConfigMapName})
+				env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: WASMCACertName})
 			}
 		}
 	}

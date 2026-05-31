@@ -286,10 +286,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name: "WASM_PULL_SECRET", Value: kubecontrollers.WASMPullSecretName,
 		}))
-		// TrustedBundle is set on the configuration above, so WASM_CA_CERT
-		// names the standard tigera trusted-bundle ConfigMap.
+		// WASM_CA_CERT names the dedicated WAF trusted-bundle ConfigMap that the
+		// reconciler replicates into WAFPolicy namespaces (kept separate from the
+		// operator-managed tigera-ca-bundle the GatewayAPI render also copies there).
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "WASM_CA_CERT", Value: certificatemanagement.TrustedCertConfigMapName,
+			Name: "WASM_CA_CERT", Value: kubecontrollers.WASMCACertName,
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))

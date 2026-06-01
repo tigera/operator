@@ -142,6 +142,14 @@ type IstioSpec struct {
 	// ZTunnelDaemonset defines the resource requirements for the ZTunnelDaemonset component.
 	// +optional
 	ZTunnelDaemonset *ZTunnelDaemonset `json:"ztunnel,omitempty"`
+	// WaypointLogging controls whether L7 logging is enabled on every Gateway
+	// using the istio-waypoint GatewayClass. When Enabled (the default), the
+	// operator injects an l7-collector sidecar into each waypoint pod via
+	// class-level defaults. When Disabled, no sidecar is injected and the
+	// associated EnvoyFilters are not created. Allowed values are Enabled or
+	// Disabled.
+	// +optional
+	WaypointLogging *LogCollectionStatusType `json:"waypointLogging,omitempty"`
 	// DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
 	// NetworkPolicies.
 	// +optional

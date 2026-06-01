@@ -208,6 +208,16 @@ bump therefore lands in two PRs — calico first, operator second.
 
 **In `tigera/operator` (after the calico PR merges):**
 
+> **Normally you don't run these by hand.** The hourly `sync-versions` workflow
+> (`.github/workflows/sync-versions.yml`) runs `make gen-versions`, so within ~an hour of the calico PR
+> merging an **"Auto: sync versions"** PR appears with the `go.mod` envoy-gateway
+> pin already applied (step 1); CI on that PR rebuilds the embedded chart from the
+> pin (the `.tgz` is gitignored and a build prerequisite, so step 2 is
+> local-only). Run the steps below by hand only for an out-of-cycle bump. 
+> The parts the sync **can't** do are
+> the `gateway_api.go` changes for new CRD kinds (step 3) and any test fixes
+> (step 4) — those show up as red CI on the auto-sync PR.
+
 1. Run `make gen-versions`. The `update-envoy-gateway-version` target it invokes
    reads calico's `ENVOY_GATEWAY_VERSION` pin and, when it differs from `go.mod`,
    runs `go mod edit -require=github.com/envoyproxy/gateway@<new> && go mod tidy`

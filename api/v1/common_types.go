@@ -67,8 +67,19 @@ type NamespacedName struct {
 	Name      string `json:"name"`
 }
 
-// NetworkPolicyManagement specifies whether or not the operator should manage
-// NetworkPolicies within the cluster.
+// NetworkPolicySpec configures how the operator manages the NetworkPolicies it installs.
+type NetworkPolicySpec struct {
+	// ManagePolicies controls whether the operator creates and reconciles the NetworkPolicies and
+	// GlobalNetworkPolicies it uses to protect the Calico components it installs. When set to
+	// Disabled, the operator stops creating or updating these policies and deletes any it has
+	// already created, leaving policy management to the user. Defaults to Enabled.
+	// +kubebuilder:default=Enabled
+	// +optional
+	ManagePolicies *NetworkPolicyManagement `json:"managePolicies,omitempty"`
+}
+
+// NetworkPolicyManagement specifies whether the operator manages the NetworkPolicies it installs to
+// protect the Calico components it manages.
 // +kubebuilder:validation:Enum=Enabled;Disabled
 type NetworkPolicyManagement string
 

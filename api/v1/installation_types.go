@@ -237,11 +237,10 @@ type InstallationSpec struct {
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
 
-	// NetworkPolicyManagement enables or disables the automatic creation of NetworkPolicies
-	// by the operator.
-	// +kubebuilder:default=Enabled
+	// NetworkPolicy configures how the operator manages the NetworkPolicies and GlobalNetworkPolicies
+	// it installs to protect the Calico components it manages.
 	// +optional
-	NetworkPolicyManagement *NetworkPolicyManagement `json:"networkPolicyManagement,omitempty"`
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // BPFNetworkBootstrapType defines how the initial networking configuration is executed.

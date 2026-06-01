@@ -224,9 +224,9 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.Proxy = override.Proxy
 	}
 
-	switch compareFields(inst.NetworkPolicyManagement, override.NetworkPolicyManagement) {
+	switch compareFields(inst.NetworkPolicy, override.NetworkPolicy) {
 	case BOnlySet, Different:
-		inst.NetworkPolicyManagement = override.NetworkPolicyManagement
+		inst.NetworkPolicy = override.NetworkPolicy
 	}
 
 	return inst

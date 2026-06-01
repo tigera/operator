@@ -448,8 +448,8 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 
 	objsToCreate, objsToDelete := component.Objects()
 
-	// If NetworkPolicyManagement is disabled, then we should not create any NetworkPolicies,
-	// and we should actively delete any that already exist.
+	// If the user has disabled policy management, we should not create any NetworkPolicies, and we
+	// should actively delete any that we have already created.
 	hasNetworkPolicies := false
 	for _, obj := range objsToCreate {
 		if isNetworkPolicy(obj) {
@@ -463,7 +463,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 		if err != nil && !errors.IsNotFound(err) {
 			return err
 		}
-		if installation != nil && installation.NetworkPolicyManagement != nil && *installation.NetworkPolicyManagement == operatorv1.NetworkPolicyManagementDisabled {
+		if installation != nil && policyManagementDisabled(installation) {
 			newToCreate := []client.Object{}
 			for _, obj := range objsToCreate {
 				if isNetworkPolicy(obj) {
@@ -1223,4 +1223,12 @@ func isNetworkPolicy(obj client.Object) bool {
 		return true
 	}
 	return false
+}
+
+// policyManagementDisabled returns true if the user has explicitly disabled operator management of
+// the NetworkPolicies it installs.
+func policyManagementDisabled(installation *operatorv1.InstallationSpec) bool {
+	return installation.NetworkPolicy != nil &&
+		installation.NetworkPolicy.ManagePolicies != nil &&
+		*installation.NetworkPolicy.ManagePolicies == operatorv1.NetworkPolicyManagementDisabled
 }

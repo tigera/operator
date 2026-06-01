@@ -89,13 +89,13 @@ var _ = Describe("Component handler tests", func() {
 		handler = NewComponentHandler(logf.Log, c, scheme, instance)
 	})
 
-	It("respects NetworkPolicyManagement setting in Installation", func() {
-		// Create an Installation resource with NetworkPolicyManagement: Disabled
+	It("respects NetworkPolicy.ManagePolicies setting in Installation", func() {
+		// Create an Installation resource with networkPolicy.managePolicies: Disabled.
 		disabled := operatorv1.NetworkPolicyManagementDisabled
 		install := &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operatorv1.InstallationSpec{
-				NetworkPolicyManagement: &disabled,
+				NetworkPolicy: &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled},
 			},
 		}
 		Expect(c.Create(ctx, install)).To(BeNil())
@@ -125,7 +125,7 @@ var _ = Describe("Component handler tests", func() {
 
 		// Now enable management and reconcile again.
 		enabled := operatorv1.NetworkPolicyManagementEnabled
-		install.Spec.NetworkPolicyManagement = &enabled
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &enabled}
 		Expect(c.Update(ctx, install)).To(BeNil())
 
 		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
@@ -136,7 +136,7 @@ var _ = Describe("Component handler tests", func() {
 		Expect(err).To(BeNil())
 
 		// Now disable management again and verify that the policy is deleted.
-		install.Spec.NetworkPolicyManagement = &disabled
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled}
 		Expect(c.Update(ctx, install)).To(BeNil())
 
 		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)

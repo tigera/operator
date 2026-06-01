@@ -38,6 +38,10 @@ var (
 	disabled = opv1.NetworkPolicyManagementDisabled
 )
 
+func npSpec(m *opv1.NetworkPolicyManagement) *opv1.NetworkPolicySpec {
+	return &opv1.NetworkPolicySpec{ManagePolicies: m}
+}
+
 var _ = Describe("Installation merge tests", func() {
 	DescribeTable("merge Variant", func(main, second, expectVariant *opv1.ProductVariant) {
 		m := opv1.InstallationSpec{}
@@ -1580,16 +1584,16 @@ var _ = Describe("Installation merge tests", func() {
 				&defaulted),
 		)
 
-		DescribeTable("merge NetworkPolicyManagement", func(main, second, expect *opv1.NetworkPolicyManagement) {
-			m := opv1.InstallationSpec{NetworkPolicyManagement: main}
-			s := opv1.InstallationSpec{NetworkPolicyManagement: second}
+		DescribeTable("merge NetworkPolicy", func(main, second, expect *opv1.NetworkPolicySpec) {
+			m := opv1.InstallationSpec{NetworkPolicy: main}
+			s := opv1.InstallationSpec{NetworkPolicy: second}
 			inst := OverrideInstallationSpec(m, s)
-			Expect(inst.NetworkPolicyManagement).To(Equal(expect))
+			Expect(inst.NetworkPolicy).To(Equal(expect))
 		},
 			Entry("Both unset", nil, nil, nil),
-			Entry("Main set, second unset", &enabled, nil, &enabled),
-			Entry("Main unset, second set", nil, &enabled, &enabled),
-			Entry("Both set, different", &enabled, &disabled, &disabled),
+			Entry("Main set, second unset", npSpec(&enabled), nil, npSpec(&enabled)),
+			Entry("Main unset, second set", nil, npSpec(&enabled), npSpec(&enabled)),
+			Entry("Both set, different", npSpec(&enabled), npSpec(&disabled), npSpec(&disabled)),
 		)
 	})
 })

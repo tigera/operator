@@ -253,6 +253,13 @@ $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
 		--destination pkg/render/gatewayapi/
 	@mv pkg/render/gatewayapi/gateway-helm-$(ENVOY_GATEWAY_VERSION).tgz $@
 
+# Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
+# that's what we used before and we don't want to break things if that's necessary.
+HELM3_VERSION = v3.20.2
+HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
+HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
+HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
+
 $(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
 	@ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)

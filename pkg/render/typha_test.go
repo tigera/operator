@@ -23,6 +23,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -845,6 +846,73 @@ var _ = Describe("Typha rendering tests", func() {
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
+	})
+
+	Describe("PodDisruptionBudget", func() {
+		getPDB := func() *policyv1.PodDisruptionBudget {
+			component := render.Typha(&cfg)
+			resources, _ := component.Objects()
+			res := rtest.GetResource(resources, "calico-typha", "calico-system", "policy", "v1", "PodDisruptionBudget")
+			Expect(res).ToNot(BeNil())
+			return res.(*policyv1.PodDisruptionBudget)
+		}
+
+		It("renders the default PDB when no override is set", func() {
+			pdb := getPDB()
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+			Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+			Expect(pdb.Spec.Selector).To(Equal(&metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "calico-typha"},
+			}))
+		})
+
+		It("applies UnhealthyPodEvictionPolicy override and preserves default MaxUnavailable", func() {
+			policy := policyv1.AlwaysAllow
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					UnhealthyPodEvictionPolicy: &policy,
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+			Expect(*pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(policyv1.AlwaysAllow))
+		})
+
+		It("applies MinAvailable override and clears MaxUnavailable", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					MinAvailable: ptr.To(intstr.FromInt(2)),
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
+			Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+		})
+
+		It("applies MaxUnavailable percentage override", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					MaxUnavailable: ptr.To(intstr.FromString("50%")),
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromString("50%"))))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+		})
+
+		It("applies metadata labels and annotations", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"custom": "label"},
+					Annotations: map[string]string{"custom": "ann"},
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Labels).To(HaveKeyWithValue("custom", "label"))
+			Expect(pdb.Annotations).To(HaveKeyWithValue("custom", "ann"))
 		})
 	})
 })

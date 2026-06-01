@@ -90,6 +90,63 @@ var _ = Describe("Component handler tests", func() {
 		handler = NewComponentHandler(logf.Log, c, scheme, instance)
 	})
 
+	It("respects NetworkPolicy.ManagePolicies setting in Installation", func() {
+		// Create an Installation resource with networkPolicy.managePolicies: Disabled.
+		disabled := operatorv1.NetworkPolicyManagementDisabled
+		install := &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operatorv1.InstallationSpec{
+				NetworkPolicy: &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled},
+			},
+		}
+		Expect(c.Create(ctx, install)).To(BeNil())
+
+		// Create a component that returns a NetworkPolicy and a Deployment.
+		np := &v3.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+		}
+		dep := &apps.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-dep", Namespace: "default"},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{np, dep},
+		}
+
+		// Reconcile the component.
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Verify that the Deployment was created, but the NetworkPolicy was not.
+		err = c.Get(ctx, client.ObjectKey{Name: "test-dep", Namespace: "default"}, &apps.Deployment{})
+		Expect(err).To(BeNil())
+
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+
+		// Now enable management and reconcile again.
+		enabled := operatorv1.NetworkPolicyManagementEnabled
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &enabled}
+		Expect(c.Update(ctx, install)).To(BeNil())
+
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Verify that the NetworkPolicy was created.
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(err).To(BeNil())
+
+		// Now disable management again and verify that the policy is deleted.
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled}
+		Expect(c.Update(ctx, install)).To(BeNil())
+
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
 	It("adds Owner references when Custom Resource is provided", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
@@ -2223,6 +2280,9 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		}
 
 		It("NetworkPolicy updates are omitted if there is no change", func() {
+			// CreateOrUpdateOrDelete loads the InstallationSpec once to decide whether policy
+			// management is enabled, and createOrUpdateObject loads it again per object.
+			installationGets()
 			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
@@ -2232,7 +2292,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(3))
+			Expect(mc.Index).To(Equal(5))
 		})
 
 		It("NetworkPolicy updates are applied if there is a change", func() {
@@ -2245,12 +2305,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			}
 
 			installationGets()
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
 				InputMutator: setToModifiedNP,
 			})
-
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Update",
 				Return:       nil,
@@ -2259,7 +2319,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(4))
+			Expect(mc.Index).To(Equal(6))
 		})
 	})
 

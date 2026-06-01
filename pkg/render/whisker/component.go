@@ -20,6 +20,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	netv1 "k8s.io/api/networking/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/utils/ptr"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -51,10 +53,13 @@ const (
 	WhiskerContainerName        = "whisker"
 	WhiskerBackendContainerName = "whisker-backend"
 
-	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
-	GoldmaneDeploymentName      = "goldmane"
-	GoldmaneServicePort         = 7443
-	GoldmaneNamespace           = common.CalicoNamespace
+	WhiskerBackendKeyPairSecret   = "whisker-backend-key-pair"
+	WhiskerBackendClusterRoleName = "whisker-backend"
+	WhiskerBackendLinseedAPIGroup = "linseed.tigera.io"
+
+	GoldmaneDeploymentName = "goldmane"
+	GoldmaneServicePort    = 7443
+	GoldmaneNamespace      = common.CalicoNamespace
 
 	configMapName    = "whisker-nginx-config"
 	configVolumeName = "nginx-config"
@@ -124,20 +129,20 @@ func (c *Component) Objects() ([]client.Object, []client.Object) {
 
 	toCreate := []client.Object{
 		c.serviceAccount(),
-		c.nginxConfigMap(),
 		deployment,
-		c.whiskerService(),
 		c.networkPolicy(),
+	}
+
+	if c.isEnterprise() {
+		toCreate = append(toCreate, c.whiskerBackendClusterRole(), c.whiskerBackendClusterRoleBinding())
+	} else {
+		// The nginx config and Service front the Whisker UI, which is not rendered for enterprise.
+		toCreate = append(toCreate, c.nginxConfigMap(), c.whiskerService())
 	}
 
 	toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(WhiskerNamespace, c.cfg.PullSecrets...)...)...)
 
-	// Whisker needs to be removed if the installation is not Calico, since it's not supported (yet!) for any other variant.
 	var toDelete []client.Object
-	if c.cfg.Installation.Variant != operatorv1.Calico {
-		toDelete = toCreate
-		toCreate = nil
-	}
 
 	toDelete = append(toDelete, c.deprecatedObjects()...)
 
@@ -152,6 +157,49 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerServiceAccountName, Namespace: WhiskerNamespace},
+	}
+}
+
+func (c *Component) whiskerBackendClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: WhiskerBackendClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{WhiskerBackendLinseedAPIGroup},
+				Resources: []string{"flows"},
+				Verbs:     []string{"get"},
+			},
+			{
+				APIGroups: []string{"authentication.k8s.io"},
+				Resources: []string{"tokenreviews"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{"authorization.k8s.io"},
+				Resources: []string{"subjectaccessreviews"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+func (c *Component) whiskerBackendClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: WhiskerBackendClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     WhiskerBackendClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      WhiskerServiceAccountName,
+				Namespace: WhiskerNamespace,
+			},
+		},
 	}
 }
 
@@ -192,18 +240,44 @@ func (c *Component) whiskerService() *corev1.Service {
 	}
 }
 
+func (c *Component) isEnterprise() bool {
+	return c.cfg.Installation.Variant.IsEnterprise()
+}
+
 func (c *Component) whiskerBackendContainer() corev1.Container {
+	env := []corev1.EnvVar{
+		{Name: "LOG_LEVEL", Value: "INFO"},
+		{Name: "PORT", Value: "3002"},
+	}
+
+	if c.isEnterprise() {
+		env = append(env,
+			corev1.EnvVar{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "WHISKER_BACKEND_UPSTREAM", Value: "linseed"},
+			corev1.EnvVar{
+				Name:  "LINSEED_URL",
+				Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.ElasticsearchNamespace, false, false),
+			},
+			corev1.EnvVar{Name: "LINSEED_CA_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+			corev1.EnvVar{Name: "LINSEED_TOKEN_PATH", Value: render.GetLinseedTokenPath(false)},
+			corev1.EnvVar{Name: "LINSEED_CLUSTER_ID", Value: render.DefaultElasticsearchClusterName},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "LINSEED_CLIENT_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
+		)
+	} else {
+		env = append(env,
+			corev1.EnvVar{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
+			corev1.EnvVar{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
+		)
+	}
+
 	return corev1.Container{
-		Name:    WhiskerBackendContainerName,
-		Image:   c.calicoImage,
-		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
-		Env: []corev1.EnvVar{
-			{Name: "LOG_LEVEL", Value: "INFO"},
-			{Name: "PORT", Value: "3002"},
-			{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
-			{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
-			{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
-		},
+		Name:            WhiskerBackendContainerName,
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "whisker-backend"},
+		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts: append(
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
@@ -217,24 +291,29 @@ func (c *Component) deployment() *appsv1.Deployment {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
-	ctrs := []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer()}
-
 	volumes := []corev1.Volume{
 		// Add the trusted cert bundle volume to the pod.
 		c.cfg.TrustedCertBundle.Volume(),
 
 		// Add the whisker backend key pair volume to the pod.
 		c.cfg.WhiskerBackendKeyPair.Volume(),
+	}
+
+	// For enterprise only the whisker-backend is rendered; the Whisker UI (SPA) and its
+	// nginx config are managed separately.
+	ctrs := []corev1.Container{c.whiskerBackendContainer()}
+	if !c.isEnterprise() {
+		ctrs = []corev1.Container{c.whiskerContainer(), c.whiskerBackendContainer()}
 
 		// Volume for nginx config from config map.
-		{
+		volumes = append(volumes, corev1.Volume{
 			Name: configVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
 					LocalObjectReference: corev1.LocalObjectReference{Name: configMapName},
 				},
 			},
-		},
+		})
 	}
 
 	return &appsv1.Deployment{
@@ -266,16 +345,32 @@ func (c *Component) deployment() *appsv1.Deployment {
 }
 
 func (c *Component) networkPolicy() *v3.NetworkPolicy {
-	egressRules := []v3.Rule{
-		{
+	var egressRules []v3.Rule
+
+	if c.isEnterprise() {
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.DefaultHelper().LinseedEntityRule(),
+			},
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.KubeAPIServerEntityRule,
+			},
+		)
+	} else {
+		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
 				Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
 				Ports:    networkpolicy.Ports(GoldmaneServicePort),
 			},
-		},
+		})
 	}
+
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
 	return &v3.NetworkPolicy{

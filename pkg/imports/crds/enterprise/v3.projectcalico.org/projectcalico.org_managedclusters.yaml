@@ -14,7 +14,17 @@ spec:
   preserveUnknownFields: false
   scope: Cluster
   versions:
-    - name: v3
+    - additionalPrinterColumns:
+        - description:
+            Whether the managed cluster is currently connected to the management
+            cluster
+          jsonPath: .status.conditions[?(@.type=='ManagedClusterConnected')].status
+          name: Connected
+          type: string
+        - jsonPath: .metadata.creationTimestamp
+          name: Age
+          type: date
+      name: v3
       schema:
         openAPIV3Schema:
           description: |-
@@ -85,7 +95,8 @@ spec:
           required:
             - metadata
             - spec
-            - status
           type: object
       served: true
       storage: true
+      subresources:
+        status: {}

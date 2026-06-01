@@ -411,6 +411,48 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		rtest.ExpectResources(resources, expectedResources)
+
+		// In CRD/webhooks mode the calico-uisettings-passthrough ClusterRole is not deployed, so
+		// tigera-network-admin needs to grant write access to uisettings itself for the
+		// calico-webhooks UISettings handler to do the narrowing instead of being short-circuited
+		// by kube-apiserver RBAC.
+		networkAdmin := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
+		}))
+	})
+
+	It("should grant the calico-apiserver SA write access to globalreports/status", func() {
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		cr := rtest.GetResource(resources, "calico-apiserver", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+
+		// Find the backing-storage rule and assert it covers globalreports/status.
+		// Without this, compliance-controller can't update status.lastScheduledReportJob
+		// and no compliance jobs ever run.
+		var found bool
+		for _, rule := range cr.Rules {
+			hasGlobalReports := false
+			hasGlobalReportsStatus := false
+			for _, r := range rule.Resources {
+				if r == "globalreports" {
+					hasGlobalReports = true
+				}
+				if r == "globalreports/status" {
+					hasGlobalReportsStatus = true
+				}
+			}
+			if hasGlobalReports {
+				found = true
+				Expect(hasGlobalReportsStatus).To(BeTrue(), "calico-apiserver ClusterRole rule covering globalreports must also cover globalreports/status")
+				Expect(rule.Verbs).To(ContainElement("update"))
+			}
+		}
+		Expect(found).To(BeTrue(), "calico-apiserver ClusterRole should have a rule covering globalreports")
 	})
 
 	It("should render L7 Admission Controller with default config when SidecarInjection is Enabled", func() {

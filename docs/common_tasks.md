@@ -176,23 +176,23 @@ spec:
 
 ### Updating the bundled version of Envoy Gateway
 
-The Envoy Gateway version pin, the rendered manifest bundle, and the source-built
-image all live in `projectcalico/calico`. The operator pulls the rendered
-`gateway_api_resources.yaml` out of a calico clone during `make gen-versions`.
-A version bump therefore lands in two PRs — calico first, operator second.
+The Envoy Gateway version pin and the source-built images all live in
+`projectcalico/calico` (`third_party/envoy-{gateway,proxy,ratelimit}`). The
+operator embeds the upstream `gateway-helm` chart — fetched at build time and
+rendered at runtime via the Helm SDK — and pins `go.mod`'s
+`github.com/envoyproxy/gateway` (the chart decoder types) to the same version.
+`make gen-versions` copies that single version pin out of a calico clone into
+`go.mod`; the operator Makefile then derives `ENVOY_GATEWAY_VERSION` from
+`go.mod`, so the embedded chart and the decoder types can never drift. A version
+bump therefore lands in two PRs — calico first, operator second.
 
 **In `projectcalico/calico`:**
 
 1. Bump `ENVOY_GATEWAY_VERSION` in `third_party/envoy-gateway/Makefile`. (Renovate
-   normally does this automatically — see `renovate.json` — and runs the next
-   step for you.) Note that Renovate only handles envoy-gateway *patch* bumps
-   and only regenerates the helm output (step 2); it does not touch the matching
+   normally does this automatically — see `renovate.json`.) Note that Renovate
+   only handles envoy-gateway *patch* bumps; it does not touch the matching
    envoy-proxy/envoy-ratelimit versions or refresh the patch stacks, so
-   minor/major bumps still need steps 3–4 by hand.
-
-1. Run `make -C third_party/envoy-gateway gen-gateway-api-resources` to
-   regenerate `third_party/envoy-gateway/gateway_api_resources.yaml`. Review the
-   diff for any incompatible changes, new CRDs, or new resource kinds.
+   minor/major bumps still need the next steps by hand.
 
 1. Update `third_party/envoy-proxy/Makefile` and
    `third_party/envoy-ratelimit/Makefile` to the matching `proxy` and
@@ -208,19 +208,18 @@ A version bump therefore lands in two PRs — calico first, operator second.
 
 **In `tigera/operator` (after the calico PR merges):**
 
-1. Run `make gen-versions`. The `update-envoy-gateway-resources` target it
-   invokes does both halves in one shot: it refreshes
-   `pkg/render/gatewayapi/gateway_api_resources.yaml` from the calico clone and,
-   when calico's `ENVOY_GATEWAY_VERSION` pin differs from go.mod, runs
-   `go mod edit -require=github.com/envoyproxy/gateway@<new> && go mod tidy` to
-   keep the Go decoder version in lockstep with the rendered YAML.
+1. Run `make gen-versions`. The `update-envoy-gateway-version` target it invokes
+   reads calico's `ENVOY_GATEWAY_VERSION` pin and, when it differs from `go.mod`,
+   runs `go mod edit -require=github.com/envoyproxy/gateway@<new> && go mod tidy`
+   to pin the Go decoder types. If `go mod tidy` surfaces other changes (e.g. a
+   `GO_BUILD_VER` bump), address them.
 
-   You only need to edit `go.mod` by hand first if you want the resulting
-   `go mod tidy` fallout (e.g. a `GO_BUILD_VER` bump) to land as its own commit
-   ahead of the YAML refresh — otherwise `make gen-versions` covers it. Either
-   way, if `go mod tidy` surfaces other changes, address them.
+1. Delete `pkg/render/gatewayapi/gateway-helm.tgz` and run `make build`. This
+   re-downloads the chart at the version now pinned in `go.mod` (the Makefile
+   derives `ENVOY_GATEWAY_VERSION` from it), embeds it in the operator binary,
+   and renders it at runtime using the Helm SDK.
 
-1. If the YAML diff introduced new CRDs or resource kinds, update
+1. If the chart introduced new CRDs or resource kinds, update
    `pkg/render/gatewayapi/gateway_api.go` to parse them.
 
 1. Run `make ut`, address issues.

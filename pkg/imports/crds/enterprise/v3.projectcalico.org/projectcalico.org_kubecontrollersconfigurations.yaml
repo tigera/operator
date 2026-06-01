@@ -195,6 +195,17 @@ spec:
                             with the Calico datastore. [Default: 5m]"
                           type: string
                       type: object
+                    rbacSync:
+                      description: |-
+                        RBACSync enables and configures the RBAC sync controller, which reconciles
+                        Calico RBAC ClusterRoles and bindings. Disabled by default, set to non-nil to enable.
+                      properties:
+                        reconcilerPeriod:
+                          description:
+                            "ReconcilerPeriod is the period to perform reconciliation
+                            with the Calico datastore. [Default: 30s]"
+                          type: string
+                      type: object
                     serviceAccount:
                       description:
                         ServiceAccount enables and configures the service
@@ -435,6 +446,18 @@ spec:
                                 "ReconcilerPeriod is the period to perform
                                 reconciliation with the Calico datastore. [Default:
                                 5m]"
+                              type: string
+                          type: object
+                        rbacSync:
+                          description: |-
+                            RBACSync enables and configures the RBAC sync controller, which reconciles
+                            Calico RBAC ClusterRoles and bindings. Disabled by default, set to non-nil to enable.
+                          properties:
+                            reconcilerPeriod:
+                              description:
+                                "ReconcilerPeriod is the period to perform
+                                reconciliation with the Calico datastore. [Default:
+                                30s]"
                               type: string
                           type: object
                         serviceAccount:

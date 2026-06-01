@@ -236,13 +236,35 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 	@echo "Downloading Istio chart $* version $(ISTIO_VERSION)..."
 	@curl -fsSL -o $@ $(ISTIO_HELM_REPO)/$*-$(ISTIO_VERSION).tgz
 
-# Helm-rendered Envoy Gateway bundle. The file is committed in this repo
-# and refreshed by `make gen-versions` (target: update-envoy-gateway-resources),
-# which copies it from projectcalico/calico.
-ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
+# The Envoy Gateway version is owned by projectcalico/calico
+# (third_party/envoy-gateway/Makefile) and bumped there by Renovate. `make
+# gen-versions` (target: update-envoy-gateway-version) pins it into go.mod's
+# github.com/envoyproxy/gateway; we derive ENVOY_GATEWAY_VERSION from that pin so
+# there is a single source of truth and the embedded chart can never drift from
+# the decoder types. See "Updating the bundled version of Envoy Gateway" in
+# docs/common_tasks.md.
+ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
+ENVOY_GATEWAY_VERSION ?= $(shell awk '/^[[:space:]]*github\.com\/envoyproxy\/gateway[[:space:]]+v/ {print $$2}' go.mod)
+ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
+
+$(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
+	$(HELM_BUILDARCH_BINARY) pull $(ENVOY_GATEWAY_HELM_CHART) \
+		--version $(ENVOY_GATEWAY_VERSION) \
+		--destination pkg/render/gatewayapi/
+	@mv pkg/render/gatewayapi/gateway-helm-$(ENVOY_GATEWAY_VERSION).tgz $@
+
+$(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
+	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
+	@ln -sf helm-$(BUILDARCH)-$(HELM3_VERSION) $(HACK_BIN)/helm-$(BUILDARCH)
+
+$(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
+	$(info ░▒▓ Downloading helm3 $(HELM3_VERSION) for $(BUILDARCH) to $(HELM_BUILDARCH_VERSIONED_BINARY))
+	@rm -f $(HELM_BUILDARCH_VERSIONED_BINARY)
+	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HELM_BUILDARCH_VERSIONED_BINARY)
+	@chmod a+x $(HELM_BUILDARCH_VERSIONED_BINARY)
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -305,7 +327,7 @@ GINKGO_FOCUS?=.*
 ENVTEST_K8S_VERSION?=1.34.x
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
@@ -314,7 +336,7 @@ ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
@@ -587,7 +609,7 @@ EE_VERSIONS?=config/enterprise_versions.yml
 
 gen-versions: gen-versions-calico gen-versions-enterprise
 
-gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds update-envoy-gateway-resources
+gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds update-envoy-gateway-version
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
 
 gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
@@ -649,7 +671,7 @@ define copy_admission_policies
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
-.PHONY: update-calico-crds update-enterprise-crds update-envoy-gateway-resources
+.PHONY: update-calico-crds update-enterprise-crds update-envoy-gateway-version
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
@@ -668,15 +690,14 @@ update-calico-crds: fetch-calico-crds
 	$(call copy_k8s_policy_crds,"calico")
 	$(call copy_admission_policies, $(CALICO_CRDS_DIR),"calico")
 
-# pkg/render/gatewayapi/gateway_api_resources.yaml is the helm-rendered Envoy
-# Gateway bundle, produced and version-pinned by projectcalico/calico's
-# third_party/envoy-gateway/Makefile (gen-gateway-api-resources). It rides along
-# in the calico clone that fetch-calico-crds prepares. We also bump
-# go.mod's github.com/envoyproxy/gateway in lockstep with calico's pin so the
-# Go decoder version always matches the rendered YAML.
-update-envoy-gateway-resources: fetch-calico-crds
-	@cp $(CALICO_CRDS_DIR)/third_party/envoy-gateway/gateway_api_resources.yaml $(ENVOY_GATEWAY_RESOURCES)
-	@echo "Copied envoy-gateway resources"
+# The Envoy Gateway version is owned by projectcalico/calico's
+# third_party/envoy-gateway/Makefile (bumped there by Renovate). We pin
+# go.mod's github.com/envoyproxy/gateway to that version; the operator's own
+# Makefile derives ENVOY_GATEWAY_VERSION from this go.mod pin and pulls/embeds
+# the matching gateway-helm chart at build time, so the chart and the Go decoder
+# types are always at the same version. ENVOY_GATEWAY_VERSION lives in the calico
+# clone that fetch-calico-crds prepares.
+update-envoy-gateway-version: fetch-calico-crds
 	@new=$$(grep -E '^ENVOY_GATEWAY_VERSION=' $(CALICO_CRDS_DIR)/third_party/envoy-gateway/Makefile | cut -d= -f2 | tr -d ' '); \
 	cur=$$(awk '/^[[:space:]]*github\.com\/envoyproxy\/gateway[[:space:]]+v/ {print $$2}' go.mod); \
 	if [ -z "$$new" ]; then echo "Failed to parse ENVOY_GATEWAY_VERSION from calico Makefile" >&2; exit 1; fi; \

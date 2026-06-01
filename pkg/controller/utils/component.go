@@ -200,7 +200,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	return true
 }
 
-func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType, installationSpec *operatorv1.InstallationSpec) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return fmt.Errorf("object is not ObjectMetaAccessor")
@@ -231,13 +231,6 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
 	// system as specified by the osType.
 	ensureOSSchedulingRestrictions(obj, osType)
-
-	// Look up the InstallationSpec once and reuse it for the passes that need it
-	// (image pull policy and TLS ciphers), so we don't pay for the same Get twice.
-	var installationSpec *operatorv1.InstallationSpec
-	if _, spec, err := GetInstallationSpec(ctx, c.client); err == nil {
-		installationSpec = spec
-	}
 
 	// Set image pull policy based on user input, if specified.
 	var configuredPolicy *v1.PullPolicy
@@ -461,32 +454,26 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 
 	objsToCreate, objsToDelete := component.Objects()
 
-	// If the user has disabled policy management, we should not create any NetworkPolicies, and we
-	// should actively delete any that we have already created.
-	hasNetworkPolicies := false
-	for _, obj := range objsToCreate {
-		if isNetworkPolicy(obj) {
-			hasNetworkPolicies = true
-			break
-		}
+	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it
+	// for image pull policy and TLS ciphers, and we use it here to decide whether the user has
+	// disabled policy management.
+	_, installationSpec, err := GetInstallationSpec(ctx, c.client)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
 	}
 
-	if hasNetworkPolicies {
-		_, installation, err := GetInstallationSpec(ctx, c.client)
-		if err != nil && !errors.IsNotFound(err) {
-			return err
-		}
-		if installation != nil && policyManagementDisabled(installation) {
-			newToCreate := []client.Object{}
-			for _, obj := range objsToCreate {
-				if isNetworkPolicy(obj) {
-					objsToDelete = append(objsToDelete, obj)
-				} else {
-					newToCreate = append(newToCreate, obj)
-				}
+	// If the user has disabled policy management, we should not create any NetworkPolicies, and we
+	// should actively delete any that we have already created.
+	if installationSpec != nil && policyManagementDisabled(installationSpec) {
+		newToCreate := []client.Object{}
+		for _, obj := range objsToCreate {
+			if isNetworkPolicy(obj) {
+				objsToDelete = append(objsToDelete, obj)
+			} else {
+				newToCreate = append(newToCreate, obj)
 			}
-			objsToCreate = newToCreate
 		}
+		objsToCreate = newToCreate
 	}
 
 	osType := component.SupportedOSType()
@@ -506,7 +493,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 		// if we need to retry the function
 		alreadyRetriedConflict := false
 	conflictRetry:
-		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
+		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType, installationSpec)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
 				// Remember that we've had an "already exists" error, but otherwise

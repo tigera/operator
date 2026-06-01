@@ -2147,16 +2147,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		}
 
 		It("if Updating a resource conflicts try the update again (retry OK))", func() {
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
+			// Two Get calls are issued up-front to load the InstallationSpec (one for the
+			// Installation, one for the overlay). The conflict retry re-runs the object update
+			// but reuses the already-loaded spec, so it does not refetch it.
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2167,16 +2163,6 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
 			})
 
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2191,20 +2177,16 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
 
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(6))
 		})
 
 		It("if Updating a resource conflicts try the update again (retry fails)", func() {
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
+			// Two Get calls are issued up-front to load the InstallationSpec (one for the
+			// Installation, one for the overlay). The conflict retry re-runs the object update
+			// but reuses the already-loaded spec, so it does not refetch it.
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2221,22 +2203,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message 2")),
 			})
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(6))
 			Expect(err).NotTo(BeNil())
 		})
 	})
@@ -2280,9 +2252,6 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		}
 
 		It("NetworkPolicy updates are omitted if there is no change", func() {
-			// CreateOrUpdateOrDelete loads the InstallationSpec once to decide whether policy
-			// management is enabled, and createOrUpdateObject loads it again per object.
-			installationGets()
 			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
@@ -2292,7 +2261,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(5))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("NetworkPolicy updates are applied if there is a change", func() {
@@ -2304,7 +2273,6 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
-			installationGets()
 			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
@@ -2319,7 +2287,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(6))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 

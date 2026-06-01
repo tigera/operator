@@ -1260,8 +1260,8 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
-	Describe("validate FIPSMode combined with Variant", func() {
-		DescribeTable("test that FIPSMode is not allowed in combination with Enterprise",
+	Describe("validate FIPSMode", func() {
+		DescribeTable("test that FIPSMode=Enabled is rejected since FIPS mode has been removed",
 			func(variant operator.ProductVariant, fipsMode operator.FIPSMode, expectErr bool) {
 				instance.Spec.Variant = variant
 				instance.Spec.FIPSMode = &fipsMode
@@ -1274,7 +1274,7 @@ var _ = Describe("Installation validation tests", func() {
 			},
 
 			Entry("Product: Calico FipsMode: Disabled", operator.Calico, operator.FIPSModeDisabled, false),
-			Entry("Product: Calico FipsMode: Enabled", operator.Calico, operator.FIPSModeEnabled, false),
+			Entry("Product: Calico FipsMode: Enabled", operator.Calico, operator.FIPSModeEnabled, true),
 			Entry("Product: CalicoEnterprise FipsMode: Disabled", operator.CalicoEnterprise, operator.FIPSModeDisabled, false),
 			Entry("Product: CalicoEnterprise FipsMode: Enabled", operator.CalicoEnterprise, operator.FIPSModeEnabled, true),
 		)

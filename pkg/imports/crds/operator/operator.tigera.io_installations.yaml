@@ -7149,9 +7149,8 @@ spec:
                   type: object
                 fipsMode:
                   description: |-
-                    FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-                    Only supported for Variant=Calico.
-                    Default: Disabled
+                    Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+                    installation degraded.
                   enum:
                     - Enabled
                     - Disabled
@@ -16563,9 +16562,8 @@ spec:
                       type: object
                     fipsMode:
                       description: |-
-                        FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-                        Only supported for Variant=Calico.
-                        Default: Disabled
+                        Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+                        installation degraded.
                       enum:
                         - Enabled
                         - Disabled

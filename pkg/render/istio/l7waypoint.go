@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -25,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
@@ -43,6 +45,14 @@ const (
 	// client IP from the Forwarded header on the connect_terminate listener and
 	// propagates it as filter state to main_internal.
 	L7WaypointSrcPortFilterName = "tigera-waypoint-l7-srcport"
+
+	// L7WaypointEnvoyFilterRoleName is the Role/RoleBinding (in the Istio system
+	// namespace) that grants the operator create/update/delete on the waypoint
+	// EnvoyFilters. The operator's cluster-wide ClusterRole holds only
+	// get/list/watch on envoyfilters (the controller-runtime cache lists and
+	// watches them cluster-wide), so the namespace-scoped write verbs live here,
+	// confining the operator's EnvoyFilter mutations to this one namespace.
+	L7WaypointEnvoyFilterRoleName = "tigera-waypoint-l7-envoyfilters"
 
 	// IstioWaypointGatewayClass is the standard Istio-provided GatewayClass for
 	// waypoint proxies. Every Gateway using this class automatically receives
@@ -71,23 +81,80 @@ func EnvoyFilterGVK() schema.GroupVersionKind {
 	return envoyFilterGV.WithKind("EnvoyFilter")
 }
 
-// L7WaypointObjects returns the three resources the operator manages to enable
+// L7WaypointObjects returns the resources the operator manages to enable
 // L7 logging on every Gateway using the istio-waypoint GatewayClass:
 //
 //   - A defaults ConfigMap (gateway.istio.io/defaults-for-class=istio-waypoint)
 //     that Istio applies as a strategic merge patch to every waypoint
 //     Deployment, injecting the l7-collector sidecar and its shared volumes.
+//   - A Role + RoleBinding granting the operator create/update/delete on
+//     EnvoyFilters in this namespace (see renderEnvoyFilterWriterRole).
 //   - An EnvoyFilter enabling gRPC ALS on main_internal.
 //   - An EnvoyFilter capturing the Forwarded header on connect_terminate and
 //     propagating it as filter state to main_internal.
 //
-// All three are created in the Istio system namespace (the root namespace
-// Istiod reads class-level defaults and mesh-wide EnvoyFilters from).
+// All are created in the Istio system namespace (the root namespace Istiod
+// reads class-level defaults and mesh-wide EnvoyFilters from). The Role and
+// RoleBinding are ordered before the EnvoyFilters so the write grant exists
+// first; on a fresh install the controller re-reconciles to absorb any RBAC
+// propagation lag.
 func L7WaypointObjects(namespace, l7CollectorImage string) []client.Object {
 	return []client.Object{
 		renderL7DefaultsConfigMap(namespace, l7CollectorImage),
+		renderEnvoyFilterWriterRole(namespace),
+		renderEnvoyFilterWriterRoleBinding(namespace),
 		renderALSEnvoyFilter(namespace),
 		renderSrcPortEnvoyFilter(namespace),
+	}
+}
+
+// renderEnvoyFilterWriterRole grants the operator create/update/delete on
+// EnvoyFilters in the Istio system namespace. The operator's ClusterRole holds
+// only get/list/watch on envoyfilters — the controller-runtime cache lists and
+// watches them cluster-wide — so the write verbs are scoped here, to the only
+// namespace the operator ever creates waypoint EnvoyFilters in. This is
+// rendered by the operator (rather than the Helm chart) because the Istio
+// system namespace does not exist at chart-install time; creating a Role with
+// verbs the operator's ClusterRole no longer carries relies on the operator's
+// `escalate` RBAC verb, and the RoleBinding on its `bind` verb.
+func renderEnvoyFilterWriterRole(namespace string) *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      L7WaypointEnvoyFilterRoleName,
+			Namespace: namespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{envoyFilterGV.Group},
+				Resources: []string{"envoyfilters"},
+				Verbs:     []string{"create", "update", "delete"},
+			},
+		},
+	}
+}
+
+// renderEnvoyFilterWriterRoleBinding binds the EnvoyFilter writer Role to the
+// operator's ServiceAccount.
+func renderEnvoyFilterWriterRoleBinding(namespace string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      L7WaypointEnvoyFilterRoleName,
+			Namespace: namespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     L7WaypointEnvoyFilterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      common.OperatorServiceAccount(),
+				Namespace: common.OperatorNamespace(),
+			},
+		},
 	}
 }
 

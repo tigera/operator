@@ -19,6 +19,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/tigera/operator/pkg/components"
@@ -39,23 +40,40 @@ var _ = Describe("L7 Waypoint render", func() {
 	})
 
 	Context("L7WaypointObjects", func() {
-		It("returns exactly three resources in the requested namespace", func() {
+		It("returns exactly five resources in the requested namespace", func() {
 			objs := istio.L7WaypointObjects(ns, image)
-			Expect(objs).To(HaveLen(3))
+			Expect(objs).To(HaveLen(5))
 			for _, o := range objs {
 				Expect(o.GetNamespace()).To(Equal(ns), "object %s/%s in wrong namespace", o.GetObjectKind().GroupVersionKind().Kind, o.GetName())
 			}
 		})
 
-		It("returns the three expected resource names", func() {
+		It("returns the expected resource names", func() {
 			objs := istio.L7WaypointObjects(ns, image)
 			names := map[string]bool{}
 			for _, o := range objs {
 				names[o.GetName()] = true
 			}
 			Expect(names).To(HaveKey(istio.L7WaypointDefaultsConfigMapName))
+			Expect(names).To(HaveKey(istio.L7WaypointEnvoyFilterRoleName))
 			Expect(names).To(HaveKey(istio.L7WaypointALSFilterName))
 			Expect(names).To(HaveKey(istio.L7WaypointSrcPortFilterName))
+		})
+
+		It("grants the operator namespace-scoped EnvoyFilter writes", func() {
+			objs := istio.L7WaypointObjects(ns, image)
+			role, ok := objs[1].(*rbacv1.Role)
+			Expect(ok).To(BeTrue(), "second object should be the EnvoyFilter writer Role")
+			Expect(role.Rules).To(HaveLen(1))
+			Expect(role.Rules[0].APIGroups).To(ConsistOf("networking.istio.io"))
+			Expect(role.Rules[0].Resources).To(ConsistOf("envoyfilters"))
+			Expect(role.Rules[0].Verbs).To(ConsistOf("create", "update", "delete"))
+
+			rb, ok := objs[2].(*rbacv1.RoleBinding)
+			Expect(ok).To(BeTrue(), "third object should be the EnvoyFilter writer RoleBinding")
+			Expect(rb.RoleRef.Name).To(Equal(istio.L7WaypointEnvoyFilterRoleName))
+			Expect(rb.Subjects).To(HaveLen(1))
+			Expect(rb.Subjects[0].Kind).To(Equal("ServiceAccount"))
 		})
 	})
 
@@ -149,7 +167,7 @@ var _ = Describe("L7 Waypoint render", func() {
 		BeforeEach(func() {
 			objs := istio.L7WaypointObjects(ns, image)
 			var ok bool
-			ef, ok = objs[1].(*istio.EnvoyFilter)
+			ef, ok = objs[3].(*istio.EnvoyFilter)
 			Expect(ok).To(BeTrue())
 			Expect(ef.Kind).To(Equal("EnvoyFilter"))
 			Expect(ef.Name).To(Equal(istio.L7WaypointALSFilterName))
@@ -186,7 +204,7 @@ var _ = Describe("L7 Waypoint render", func() {
 		BeforeEach(func() {
 			objs := istio.L7WaypointObjects(ns, image)
 			var ok bool
-			ef, ok = objs[2].(*istio.EnvoyFilter)
+			ef, ok = objs[4].(*istio.EnvoyFilter)
 			Expect(ok).To(BeTrue())
 			Expect(ef.Kind).To(Equal("EnvoyFilter"))
 			Expect(ef.Name).To(Equal(istio.L7WaypointSrcPortFilterName))

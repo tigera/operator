@@ -601,6 +601,14 @@ spec:
                           type: object
                       type: object
                   type: object
+                uiAlertsIntegration:
+                  description: |-
+                    UIAlertsIntegration controls whether Prometheus/Alertmanager alerts are forwarded to Linseed and surfaced
+                    on the manager Alerts page. When omitted, the integration is Enabled.
+                  enum:
+                    - Enabled
+                    - Disabled
+                  type: string
               type: object
             status:
               description: MonitorStatus defines the observed state of Tigera monitor.

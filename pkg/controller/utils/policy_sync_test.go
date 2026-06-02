@@ -103,11 +103,15 @@ var _ = Describe("policySyncPathPrefix coordination predicates", func() {
 			Expect(utils.DesiredPolicySyncPathPrefix("", false, true)).To(Equal("/var/run/nodeagent"))
 		})
 
-		It("clears when neither side needs it and there is no override", func() {
+		It("leaves the field empty when nothing is set and neither side needs it", func() {
 			Expect(utils.DesiredPolicySyncPathPrefix("", false, false)).To(Equal(""))
-			// The operator-managed default is treated as operator-owned, not
-			// as a customer override — so it gets cleared in this case.
-			Expect(utils.DesiredPolicySyncPathPrefix("/var/run/nodeagent", false, false)).To(Equal(""))
+		})
+
+		It("preserves the operator default even when neither side needs it", func() {
+			// egressgateway and Gateway API set the same default and never clear
+			// it, so the applicationlayer/istio path must not clear a value it
+			// may not own.
+			Expect(utils.DesiredPolicySyncPathPrefix("/var/run/nodeagent", false, false)).To(Equal("/var/run/nodeagent"))
 		})
 	})
 })

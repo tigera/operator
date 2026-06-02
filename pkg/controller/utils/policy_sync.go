@@ -68,16 +68,20 @@ func IstioRequiresPolicySync(istio *operatorv1.Istio, variant operatorv1.Product
 // policySyncPathPrefix should hold given the currently set value and
 // whether either the applicationlayer or istio controllers need it.
 //
-//   - A non-empty existing value that does not match the operator-managed
-//     default is treated as a customer override and preserved verbatim.
-//   - If either controller needs the field, the operator-managed default
-//     is returned.
-//   - Otherwise the field is cleared.
+//   - Any non-empty existing value is preserved. This covers both a customer
+//     override and the operator-managed default claimed by another controller
+//     that shares this field (egressgateway, Gateway API) and never clears it.
+//     Those controllers only ever set the default or leave it; clearing it here
+//     would break them, so the applicationlayer and istio controllers likewise
+//     never clear a value they may not own.
+//   - When the field is empty and either controller needs it, the
+//     operator-managed default is returned.
+//   - Otherwise the field stays empty.
 //
-// Both the applicationlayer and istio controllers call this from their
-// set and cleanup paths to keep coordination explicit and symmetric.
+// Both the applicationlayer and istio controllers call this from their set and
+// cleanup paths to keep coordination explicit and symmetric.
 func DesiredPolicySyncPathPrefix(existing string, alNeeds, istioNeeds bool) string {
-	if existing != "" && existing != DefaultPolicySyncPrefix {
+	if existing != "" {
 		return existing
 	}
 	if alNeeds || istioNeeds {

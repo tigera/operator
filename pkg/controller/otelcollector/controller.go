@@ -28,10 +28,10 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/common/validation"
 	otelvalidation "github.com/tigera/operator/pkg/common/validation/otelcollector"
+	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -39,8 +39,8 @@ import (
 )
 
 const (
-	controllerName = "otel-collector-controller"
-	ResourceName   = "otel-collector"
+	controllerName = "log-collector-otel-controller"
+	ResourceName   = "log-collector-otel"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -58,7 +58,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	if err = c.WatchObject(&operatorv1.OpenTelemetryCollector{}, &handler.EnqueueRequestForObject{}); err != nil {
+	if err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
 	}
 
@@ -108,18 +108,24 @@ type Reconciler struct {
 
 func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.V(2).Info("Reconciling OpenTelemetryCollector")
+	reqLogger.V(2).Info("Reconciling OTelCollector")
 
-	instance, err := utils.GetIfExists[operatorv1.OpenTelemetryCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.cli)
+	logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.cli)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying OpenTelemetryCollector CR", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying LogCollector CR", err, reqLogger)
 		return reconcile.Result{}, err
-	} else if instance == nil {
+	} else if logCollector == nil {
 		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
+
+	if logCollector.Spec.OTelCollector == nil {
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
+	}
+
 	r.status.OnCRFound()
-	defer r.status.SetMetaData(&instance.ObjectMeta)
+	defer r.status.SetMetaData(&logCollector.ObjectMeta)
 
 	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
@@ -138,13 +144,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	if instance.Spec.OpenTelemetryCollectorDeployment != nil {
+	if logCollector.Spec.OTelCollector.OTelCollectorStatefulSet != nil {
 		if err := validation.ValidateReplicatedPodResourceOverrides(
-			instance.Spec.OpenTelemetryCollectorDeployment,
-			otelvalidation.ValidateOTelCollectorDeploymentContainer,
+			logCollector.Spec.OTelCollector.OTelCollectorStatefulSet,
+			otelvalidation.ValidateOTelCollectorStatefulSetContainer,
 			validation.NoContainersDefined,
 		); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid deployment overrides", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid statefulSet overrides", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -156,15 +162,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	cfg := &otelcollector.Configuration{
-		PullSecrets:            pullSecrets,
-		OpenShift:              r.opts.DetectedProvider.IsOpenShift(),
-		Installation:           installationSpec,
-		OpenTelemetryCollector: instance,
+		PullSecrets:   pullSecrets,
+		OpenShift:     r.opts.DetectedProvider.IsOpenShift(),
+		Installation:  installationSpec,
+		OTelCollector: logCollector.Spec.OTelCollector,
 	}
 
 	component := otelcollector.OTelCollector(cfg)
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, instance)
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, logCollector)
 	if err = imageset.ApplyImageSet(ctx, r.cli, variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

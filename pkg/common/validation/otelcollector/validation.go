@@ -21,7 +21,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 )
 
-func ValidateOTelCollectorDeploymentContainer(container corev1.Container) error {
+func ValidateOTelCollectorStatefulSetContainer(container corev1.Container) error {
 	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
 	return errs.ToAggregate()
 }

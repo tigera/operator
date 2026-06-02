@@ -52,6 +52,7 @@ type IstioComponent struct {
 	IstioInstallCNIImage string
 	IstioZTunnelImage    string
 	IstioProxyv2Image    string
+	L7CollectorImage     string
 
 	resources *IstioResources
 }
@@ -211,6 +212,18 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		if err != nil {
 			return err
 		}
+		if c.waypointLoggingEnabled() {
+			// The waypoint l7-collector runs as the "l7-collector" subcommand of
+			// the combined calico binary, so it reuses the calico/calico image
+			// that calico-node already pulls onto every node. Paired with
+			// imagePullPolicy: IfNotPresent on the sidecar, waypoint pods in user
+			// namespaces resolve the image from the node cache and never need an
+			// image-pull secret copied into their namespace.
+			c.L7CollectorImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+			if err != nil {
+				return err
+			}
+		}
 	} else {
 		c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
 		if err != nil {
@@ -308,7 +321,27 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
 
+	// Waypoint L7 logging is Enterprise-only. The five resources (the
+	// l7-collector defaults ConfigMap, the EnvoyFilter-writer Role and
+	// RoleBinding, and the two EnvoyFilters) live in the Istio system namespace
+	// so Istio's deployment controller applies them as class defaults to every
+	// Gateway using the istio-waypoint GatewayClass.
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		if c.waypointLoggingEnabled() {
+			objs = append(objs, L7WaypointObjects(c.cfg.IstioNamespace, c.L7CollectorImage)...)
+		} else {
+			toDelete = append(toDelete, L7WaypointObjects(c.cfg.IstioNamespace, "")...)
+		}
+	}
+
 	return objs, toDelete
+}
+
+// waypointLoggingEnabled reports whether L7 logging should be rendered for
+// waypoint proxies. Defaults to true when the field is unset. Delegates to the
+// shared api helper so the renderer and the policy-sync predicate stay aligned.
+func (c *IstioComponent) waypointLoggingEnabled() bool {
+	return c.cfg.Istio.WaypointLoggingEnabled()
 }
 
 func (c *IstioComponent) Ready() bool {

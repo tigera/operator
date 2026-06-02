@@ -223,8 +223,11 @@ var _ = Describe("OTelCollector rendering", func() {
 			config := cm.Data["config.yaml"]
 			Expect(config).To(ContainSubstring("prometheus:"))
 			Expect(config).To(ContainSubstring("kubernetes_sd_configs"))
+			Expect(config).To(ContainSubstring("prometheusremotewrite:"))
+			Expect(config).To(ContainSubstring(otelcollector.PrometheusRemoteWriteEndpoint))
 			Expect(config).To(ContainSubstring("metrics:"))
 			Expect(config).To(ContainSubstring("receivers: [prometheus]"))
+			Expect(config).To(ContainSubstring("exporters: [prometheusremotewrite]"))
 		})
 
 		It("should not include receivers or pipelines when logs and metrics are disabled", func() {
@@ -419,6 +422,22 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(np.Spec.Ingress).To(HaveLen(1))
 			Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow))
 			Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+		})
+
+		It("should add kube API server and prometheus egress rules when metrics are enabled", func() {
+			cfg := &otelcollector.Configuration{
+				Installation: defaultInstallation,
+				OTelCollector: &operatorv1.OTelCollectorSpec{
+					Metrics:   &operatorv1.OTelMetrics{Enabled: ptr.To(operatorv1.OTelMetricsEnable)},
+					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				},
+			}
+			objs, _ := otelcollector.OTelCollector(cfg).Objects()
+
+			np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objs, otelcollector.OTelCollectorPolicyName, otelcollector.OTelCollectorNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			// Base egress (OTLP ports) + kube API + prometheus port + DNS rules
+			Expect(len(np.Spec.Egress)).To(BeNumerically(">=", 4))
 		})
 
 		It("should allow ingress on the OTLP HTTP port when LogForwarderProtocol is OTLP", func() {

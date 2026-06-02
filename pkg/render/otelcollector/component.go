@@ -51,6 +51,9 @@ const (
 	OTLPGRPCPort      = 4317
 	OTLPHTTPPort      = 4318
 	HealthCheckPort   = 13133
+	PrometheusPort    = 9090
+
+	PrometheusRemoteWriteEndpoint = "http://prometheus-http-api.tigera-prometheus.svc:9090/api/v1/write"
 )
 
 // LogForwarderProtocol determines which receiver the collector uses for log ingestion.
@@ -212,6 +215,9 @@ func (c *component) collectorConfig() string {
 			}
 		}
 	}
+	if metricsEnabled {
+		b.WriteString(fmt.Sprintf("  prometheusremotewrite:\n    endpoint: %s\n    tls:\n      insecure: true\n", PrometheusRemoteWriteEndpoint))
+	}
 
 	// Extensions
 	b.WriteString(fmt.Sprintf("\nextensions:\n  health_check:\n    endpoint: 0.0.0.0:%d\n", HealthCheckPort))
@@ -228,9 +234,7 @@ func (c *component) collectorConfig() string {
 	}
 
 	if metricsEnabled {
-		b.WriteString("    metrics:\n      receivers: [prometheus]\n      exporters: [")
-		b.WriteString(c.exporterNames())
-		b.WriteString("]\n")
+		b.WriteString("    metrics:\n      receivers: [prometheus]\n      exporters: [prometheusremotewrite]\n")
 	}
 
 	return b.String()
@@ -398,11 +402,20 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 		c.cfg.OTelCollector.Metrics.Enabled != nil &&
 		*c.cfg.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
 	if metricsEnabled {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		})
+		egressRules = append(egressRules,
+			v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.KubeAPIServerEntityRule,
+			},
+			v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(PrometheusPort),
+				},
+			},
+		)
 	}
 
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)

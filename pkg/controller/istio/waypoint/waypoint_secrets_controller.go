@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -177,8 +178,17 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 			}
 		}
 
-		// Build desired secrets for each target namespace.
+		// Build desired resources for each target namespace. The operator's
+		// cluster-wide secrets grant is read-only; writing a secret into a
+		// namespace requires a tigera-operator-secrets RoleBinding there. Render
+		// that RoleBinding (ordered before the secrets so the operator can create
+		// them — the controller re-reconciles to absorb RBAC propagation lag on
+		// first create) followed by the copied pull secrets.
 		for ns := range targetNamespaces {
+			rb := render.CreateOperatorSecretsRoleBinding(ns)
+			rb.Labels = map[string]string{WaypointPullSecretLabel: "true"}
+			toCreate = append(toCreate, rb)
+
 			copied := secret.CopyToNamespace(ns, pullSecrets...)
 			for _, s := range copied {
 				if s.Labels == nil {
@@ -190,14 +200,24 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 		}
 	}
 
-	// Build the desired set keyed on (namespace, name) so that renamed or removed
-	// secrets are correctly detected as stale.
+	// Build the desired sets keyed on (namespace, name), per kind, so that
+	// renamed or removed resources are correctly detected as stale.
 	desiredSecrets := map[types.NamespacedName]bool{}
+	desiredRoleBindings := map[types.NamespacedName]bool{}
 	for _, obj := range toCreate {
-		desiredSecrets[types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = true
+		key := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
+		switch obj.(type) {
+		case *rbacv1.RoleBinding:
+			desiredRoleBindings[key] = true
+		default:
+			desiredSecrets[key] = true
+		}
 	}
 
-	// List all existing secrets managed by this controller and mark stale ones for deletion.
+	// List existing secrets managed by this controller and mark stale ones for
+	// deletion. Secrets are appended to toDelete before RoleBindings so that each
+	// secret is removed while the operator still holds write access in its
+	// namespace (the RoleBinding grants that access).
 	existingSecrets := &corev1.SecretList{}
 	if err := r.List(ctx, existingSecrets, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to list waypoint pull secrets: %w", err)
@@ -207,6 +227,20 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
 		if !desiredSecrets[key] {
 			toDelete = append(toDelete, s)
+		}
+	}
+
+	// List existing RoleBindings managed by this controller and mark stale ones
+	// for deletion (after the secrets, per the ordering note above).
+	existingRoleBindings := &rbacv1.RoleBindingList{}
+	if err := r.List(ctx, existingRoleBindings, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed to list waypoint pull secret rolebindings: %w", err)
+	}
+	for i := range existingRoleBindings.Items {
+		rb := &existingRoleBindings.Items[i]
+		key := types.NamespacedName{Namespace: rb.Namespace, Name: rb.Name}
+		if !desiredRoleBindings[key] {
+			toDelete = append(toDelete, rb)
 		}
 	}
 

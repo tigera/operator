@@ -321,9 +321,11 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
 
-	// Waypoint L7 logging is Enterprise-only. The three resources live in the
-	// Istio system namespace so Istio's deployment controller applies them as
-	// class defaults to every Gateway using the istio-waypoint GatewayClass.
+	// Waypoint L7 logging is Enterprise-only. The five resources (the
+	// l7-collector defaults ConfigMap, the EnvoyFilter-writer Role and
+	// RoleBinding, and the two EnvoyFilters) live in the Istio system namespace
+	// so Istio's deployment controller applies them as class defaults to every
+	// Gateway using the istio-waypoint GatewayClass.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.waypointLoggingEnabled() {
 			objs = append(objs, L7WaypointObjects(c.cfg.IstioNamespace, c.L7CollectorImage)...)

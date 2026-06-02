@@ -545,6 +545,18 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
+			// Annotate the pod with a hash of the Alertmanager configuration so that
+			// changing the config (e.g. toggling the UI alerts integration on/off, which
+			// swaps the webhook receiver) rolls the Alertmanager pod and reloads the new
+			// config rather than leaving it running with the stale in-memory config.
+			PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
+				// Labels must be non-nil: the component handler copies the object's
+				// labels into PodMetadata.Labels (see setStandardSelectorAndLabels).
+				Labels: map[string]string{},
+				Annotations: map[string]string{
+					"hash.operator.tigera.io/alertmanager-config": rmeta.SecretsAnnotationHash(mc.cfg.AlertmanagerConfigSecret),
+				},
+			},
 			// Mount the client certificate and CA bundle so the Linseed webhook
 			// receiver can establish an mTLS connection. The prometheus-operator
 			// surfaces these at /etc/alertmanager/secrets/<name>/ and
@@ -947,11 +959,11 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	rules := []monitoringv1.Rule{
 		{
 			Alert:  "DeniedPacketsRate",
-			Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
+			Expr:   intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0"),
 			Labels: map[string]string{"severity": "info"},
 			Annotations: map[string]string{
-				"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
-				"description": "{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}.",
+				"summary":     "High rate of denied packets",
+				"description": "Policy {{$labels.policy}} is denying packets at a high rate.",
 			},
 		},
 	}

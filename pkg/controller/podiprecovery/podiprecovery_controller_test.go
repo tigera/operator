@@ -29,6 +29,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
@@ -54,21 +57,20 @@ var _ = Describe("PodIPRecovery controller", func() {
 		return n
 	}
 
-	newPod := func(name, nodeName, podIP string, hostNetwork bool, labels map[string]string) *corev1.Pod {
-		return &corev1.Pod{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: ns,
-				Labels:    labels,
-			},
-			Spec: corev1.PodSpec{
-				NodeName:    nodeName,
-				HostNetwork: hostNetwork,
-			},
-			Status: corev1.PodStatus{
-				PodIP:  podIP,
-				PodIPs: []corev1.PodIP{{IP: podIP}},
-			},
+	// newPod creates a pod labeled with the operator's host-networked marker
+	// label. Tests that need to assert behavior on a non-labeled pod can use
+	// the lower-level newPodWithLabels helper.
+	newPod := func(name, nodeName, podIP string, hostNetwork bool) *corev1.Pod {
+		return newPodWithLabels(name, nodeName, podIP, hostNetwork, map[string]string{
+			common.HostNetworkedPodLabel: "true",
+		})
+	}
+
+	// newDefaultInstallation creates the Installation CR that the controller
+	// gates on. Without it, Reconcile is a no-op.
+	newDefaultInstallation := func() *operatorv1.Installation {
+		return &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		}
 	}
 
@@ -76,8 +78,19 @@ var _ = Describe("PodIPRecovery controller", func() {
 		ctx = context.Background()
 		scheme := runtime.NewScheme()
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
-		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-		r = &Reconciler{client: c, scheme: scheme}
+		Expect(apis.AddToScheme(scheme, false)).To(Succeed())
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).
+			// Mirror the cmd/main.go index registration so the fake client
+			// can honor `client.MatchingFields{"spec.nodeName": ...}`.
+			WithIndex(&corev1.Pod{}, podNodeNameIndex, func(obj client.Object) []string {
+				return []string{obj.(*corev1.Pod).Spec.NodeName}
+			}).
+			Build()
+		r = &Reconciler{client: c}
+
+		// By default, create the Installation so Reconcile proceeds.
+		// The Installation-gate test overrides this expectation.
+		Expect(c.Create(ctx, newDefaultInstallation())).To(Succeed())
 	})
 
 	reconcileNode := func(nodeName string) {
@@ -97,8 +110,7 @@ var _ = Describe("PodIPRecovery controller", func() {
 	Context("Reconcile", func() {
 		It("leaves a pod alone when its IP matches the node InternalIP", func() {
 			Expect(c.Create(ctx, newNode("node1", "10.0.0.1"))).To(Succeed())
-			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("typha")).To(BeTrue())
@@ -106,8 +118,7 @@ var _ = Describe("PodIPRecovery controller", func() {
 
 		It("deletes a hostNetwork pod whose IP doesn't match the node InternalIP", func() {
 			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
-			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("typha")).To(BeFalse())
@@ -115,12 +126,9 @@ var _ = Describe("PodIPRecovery controller", func() {
 
 		It("deletes stale pods of multiple workloads on the same node in one reconcile (no pacing)", func() {
 			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
-			Expect(c.Create(ctx, newPod("typha-1", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
-			Expect(c.Create(ctx, newPod("node-1", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-node"}))).To(Succeed())
-			Expect(c.Create(ctx, newPod("nodewin-1", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-node-windows"}))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha-1", "node1", "10.0.0.1", true))).To(Succeed())
+			Expect(c.Create(ctx, newPod("node-1", "node1", "10.0.0.1", true))).To(Succeed())
+			Expect(c.Create(ctx, newPod("nodewin-1", "node1", "10.0.0.1", true))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("typha-1")).To(BeFalse())
@@ -131,10 +139,8 @@ var _ = Describe("PodIPRecovery controller", func() {
 		It("only touches pods on the reconciled node", func() {
 			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
 			Expect(c.Create(ctx, newNode("node2", "10.0.0.3"))).To(Succeed())
-			Expect(c.Create(ctx, newPod("typha-1", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
-			Expect(c.Create(ctx, newPod("typha-2", "node2", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha-1", "node1", "10.0.0.1", true))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha-2", "node2", "10.0.0.1", true))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("typha-1")).To(BeFalse(), "stale pod on node1 should be deleted")
@@ -148,12 +154,25 @@ var _ = Describe("PodIPRecovery controller", func() {
 		})
 
 		It("skips a non-hostNetwork pod even if its labels match", func() {
+			// A pod that carries our label but doesn't actually have
+			// hostNetwork set must not be deleted — its CNI-assigned IP
+			// legitimately differs from the node's IP.
 			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
-			Expect(c.Create(ctx, newPod("cnipod", "node1", "10.244.0.5", false,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
+			Expect(c.Create(ctx, newPod("cnipod", "node1", "10.244.0.5", false))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("cnipod")).To(BeTrue())
+		})
+
+		It("ignores pods that don't carry the host-networked label", func() {
+			// A pod without our label isn't operator-managed (or at least
+			// isn't claiming to be host-networked); leave it alone.
+			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
+			Expect(c.Create(ctx, newPodWithLabels("unmarked", "node1", "10.0.0.1", true,
+				map[string]string{"k8s-app": "some-other-workload"}))).To(Succeed())
+
+			reconcileNode("node1")
+			Expect(podExists("unmarked")).To(BeTrue())
 		})
 
 		It("matches dual-stack pod IPs against any of the node's InternalIPs", func() {
@@ -161,7 +180,7 @@ var _ = Describe("PodIPRecovery controller", func() {
 			Expect(c.Create(ctx, node)).To(Succeed())
 
 			// Pod reports both v4 and v6; one matches, so the pod is healthy.
-			pod := newPod("typha", "node1", "10.0.0.1", true, map[string]string{"k8s-app": "calico-typha"})
+			pod := newPod("typha", "node1", "10.0.0.1", true)
 			pod.Status.PodIPs = []corev1.PodIP{{IP: "10.0.0.1"}, {IP: "fd00::1"}}
 			Expect(c.Create(ctx, pod)).To(Succeed())
 
@@ -172,21 +191,10 @@ var _ = Describe("PodIPRecovery controller", func() {
 		It("skips reconcile when the node has no InternalIPs reported", func() {
 			// Avoid deleting based on a transient empty status.
 			Expect(c.Create(ctx, newNode("node1" /* no IPs */))).To(Succeed())
-			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true,
-				map[string]string{"k8s-app": "calico-typha"}))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("typha")).To(BeTrue())
-		})
-
-		It("deletes stale apiserver pods (different label scheme)", func() {
-			// apiserver uses {apiserver: true} rather than k8s-app=...
-			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
-			Expect(c.Create(ctx, newPod("apiserver", "node1", "10.0.0.1", true,
-				map[string]string{"apiserver": "true"}))).To(Succeed())
-
-			reconcileNode("node1")
-			Expect(podExists("apiserver")).To(BeFalse())
 		})
 
 		It("leaves a pending pod (no podIPs reported yet) alone", func() {
@@ -197,7 +205,7 @@ var _ = Describe("PodIPRecovery controller", func() {
 			Expect(c.Create(ctx, newNode("node1", "10.0.0.1"))).To(Succeed())
 			pod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{Name: "pending", Namespace: ns,
-					Labels: map[string]string{"k8s-app": "calico-typha"}},
+					Labels: map[string]string{common.HostNetworkedPodLabel: "true"}},
 				Spec: corev1.PodSpec{NodeName: "node1", HostNetwork: true},
 				// Intentionally no Status.PodIPs / Status.PodIP — pending pod.
 			}
@@ -205,6 +213,20 @@ var _ = Describe("PodIPRecovery controller", func() {
 
 			reconcileNode("node1")
 			Expect(podExists("pending")).To(BeTrue())
+		})
+
+		It("returns nil and skips work when no Installation exists (gate)", func() {
+			// Override the BeforeEach default: delete the Installation we
+			// created so the gate-check NotFound path fires.
+			Expect(c.Delete(ctx, newDefaultInstallation())).To(Succeed())
+
+			Expect(c.Create(ctx, newNode("node1", "10.0.0.2"))).To(Succeed())
+			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true))).To(Succeed())
+
+			// Reconcile should return cleanly without touching the pod.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "node1"}})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(podExists("typha")).To(BeTrue())
 		})
 	})
 
@@ -263,3 +285,24 @@ var _ = Describe("PodIPRecovery controller", func() {
 		})
 	})
 })
+
+// newPodWithLabels is the lower-level helper used by the `newPod` shortcut.
+// Tests that want to set non-default labels (e.g. to verify that pods missing
+// the host-networked marker are ignored) call this directly.
+func newPodWithLabels(name, nodeName, podIP string, hostNetwork bool, labels map[string]string) *corev1.Pod {
+	return &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: ns,
+			Labels:    labels,
+		},
+		Spec: corev1.PodSpec{
+			NodeName:    nodeName,
+			HostNetwork: hostNetwork,
+		},
+		Status: corev1.PodStatus{
+			PodIP:  podIP,
+			PodIPs: []corev1.PodIP{{IP: podIP}},
+		},
+	}
+}

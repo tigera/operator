@@ -336,10 +336,10 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 }
 
 // waypointLoggingEnabled reports whether L7 logging should be rendered for
-// waypoint proxies. Defaults to true when the field is unset.
+// waypoint proxies. Defaults to true when the field is unset. Delegates to the
+// shared api helper so the renderer and the policy-sync predicate stay aligned.
 func (c *IstioComponent) waypointLoggingEnabled() bool {
-	wl := c.cfg.Istio.Spec.WaypointLogging
-	return wl == nil || *wl != operatorv1.L7LogCollectionDisabled
+	return c.cfg.Istio.WaypointLoggingEnabled()
 }
 
 func (c *IstioComponent) Ready() bool {

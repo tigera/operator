@@ -78,7 +78,7 @@ var _ = Describe("OTelCollector controller tests", func() {
 		})).ToNot(HaveOccurred())
 
 		mockStatus = &status.MockStatus{}
-		mockStatus.On("AddDeployments", mock.Anything).Return()
+		mockStatus.On("AddStatefulSets", mock.Anything).Return()
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("OnCRNotFound").Return()
@@ -109,13 +109,30 @@ var _ = Describe("OTelCollector controller tests", func() {
 		})
 	})
 
+	Context("LogCollector without OTelCollector", func() {
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec:       operatorv1.LogCollectorSpec{},
+			})).ToNot(HaveOccurred())
+		})
+
+		It("should call OnCRNotFound when OTelCollector is nil", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "OnCRNotFound")
+		})
+	})
+
 	Context("happy path", func() {
 		BeforeEach(func() {
-			Expect(cli.Create(ctx, &operatorv1.OpenTelemetryCollector{
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.OpenTelemetryCollectorSpec{
-					Logs:      &operatorv1.OTelLogs{Types: []operatorv1.OTelLogType{operatorv1.OTelLogFlows}},
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				Spec: operatorv1.LogCollectorSpec{
+					OTelCollector: &operatorv1.OTelCollectorSpec{
+						Logs:      &operatorv1.OTelLogs{Types: []operatorv1.OTelLogType{operatorv1.OTelFlowLog}},
+						Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					},
 				},
 			})).ToNot(HaveOccurred())
 		})
@@ -128,19 +145,21 @@ var _ = Describe("OTelCollector controller tests", func() {
 			mockStatus.AssertCalled(GinkgoT(), "ReadyToMonitor")
 			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
 
-			d := appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector", Namespace: "calico-system"}}
-			Expect(test.GetResource(cli, &d)).To(BeNil())
-			Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
+			ss := appsv1.StatefulSet{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector", Namespace: "calico-system"}}
+			Expect(test.GetResource(cli, &ss)).To(BeNil())
+			Expect(ss.Spec.Template.Spec.Containers).To(HaveLen(1))
 		})
 	})
 
 	Context("license missing", func() {
 		BeforeEach(func() {
 			Expect(cli.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &operatorv1.OpenTelemetryCollector{
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.OpenTelemetryCollectorSpec{
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				Spec: operatorv1.LogCollectorSpec{
+					OTelCollector: &operatorv1.OTelCollectorSpec{
+						Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					},
 				},
 			})).ToNot(HaveOccurred())
 		})
@@ -162,10 +181,12 @@ var _ = Describe("OTelCollector controller tests", func() {
 				},
 			})).ToNot(HaveOccurred())
 
-			Expect(cli.Create(ctx, &operatorv1.OpenTelemetryCollector{
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.OpenTelemetryCollectorSpec{
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				Spec: operatorv1.LogCollectorSpec{
+					OTelCollector: &operatorv1.OTelCollectorSpec{
+						Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					},
 				},
 			})).ToNot(HaveOccurred())
 		})
@@ -180,10 +201,12 @@ var _ = Describe("OTelCollector controller tests", func() {
 	Context("installation missing", func() {
 		BeforeEach(func() {
 			Expect(cli.Delete(ctx, &operatorv1.Installation{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).ToNot(HaveOccurred())
-			Expect(cli.Create(ctx, &operatorv1.OpenTelemetryCollector{
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec: operatorv1.OpenTelemetryCollectorSpec{
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				Spec: operatorv1.LogCollectorSpec{
+					OTelCollector: &operatorv1.OTelCollectorSpec{
+						Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					},
 				},
 			})).ToNot(HaveOccurred())
 		})

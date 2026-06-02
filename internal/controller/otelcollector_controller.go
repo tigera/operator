@@ -33,8 +33,8 @@ type OpenTelemetryCollectorReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=opentelemetrycollectors,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=operator.tigera.io,resources=opentelemetrycollectors/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=operator.tigera.io,resources=logcollectors/status,verbs=get;update;patch
 
 func (r *OpenTelemetryCollectorReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
 	return otelcollector.Add(mgr, opts)

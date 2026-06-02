@@ -574,7 +574,7 @@ var _ = Describe("Istio controller tests", func() {
 				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 			})
 
-			It("clears policySyncPathPrefix on Istio deletion when ApplicationLayer features are all disabled", func() {
+			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer features are all disabled", func() {
 				disabled := operatorv1.L7LogCollectionDisabled
 				al := &operatorv1.ApplicationLayer{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -599,10 +599,13 @@ var _ = Describe("Istio controller tests", func() {
 
 				cleaned := &v3.FelixConfiguration{}
 				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
-				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal(""))
+				// Never clear a value we may not own: egressgateway and Gateway
+				// API share this default and never clear it, so Istio deletion
+				// preserves it rather than wiping it out from under them.
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 			})
 
-			It("clears policySyncPathPrefix on Istio deletion when ApplicationLayer is absent", func() {
+			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer is absent", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
@@ -618,7 +621,10 @@ var _ = Describe("Istio controller tests", func() {
 
 				cleaned := &v3.FelixConfiguration{}
 				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
-				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal(""))
+				// Never clear a value we may not own: egressgateway and Gateway
+				// API share this default and never clear it, so Istio deletion
+				// preserves it rather than wiping it out from under them.
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 			})
 		})
 

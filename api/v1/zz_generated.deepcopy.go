@@ -6566,6 +6566,11 @@ func (in *IstioSpec) DeepCopyInto(out *IstioSpec) {
 		*out = new(ZTunnelDaemonset)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.WaypointLogging != nil {
+		in, out := &in.WaypointLogging, &out.WaypointLogging
+		*out = new(LogCollectionStatusType)
+		**out = **in
+	}
 	if in.DSCPMark != nil {
 		in, out := &in.DSCPMark, &out.DSCPMark
 		*out = new(numorstring.DSCP)

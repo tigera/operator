@@ -207,6 +207,9 @@ func (d *dpiComponent) dpiDaemonset() *appsv1.DaemonSet {
 	podTemplate := &corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: d.dpiAnnotations(),
+			Labels: map[string]string{
+				common.HostNetworkedPodLabel: "true",
+			},
 		},
 		Spec: corev1.PodSpec{
 			Tolerations:                   meta.TolerateAll,

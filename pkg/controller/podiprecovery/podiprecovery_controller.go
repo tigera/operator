@@ -24,6 +24,12 @@
 // EndpointSlice controller advertises the stale IPs, and Felix can't reach
 // Typha. Only deleting and recreating the pod causes the kubelet to populate
 // status.podIPs from the current node IP.
+//
+// Operator-managed pods are identified by the
+// common.HostNetworkedPodLabel label, which each render package applies to
+// its hostNetwork pod templates. The controller additionally verifies
+// spec.hostNetwork == true on each candidate as a safety net before
+// deleting.
 package podiprecovery
 
 import (
@@ -32,8 +38,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -44,35 +49,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/applicationlayer"
-	"github.com/tigera/operator/pkg/render/intrusiondetection/dpi"
-	"github.com/tigera/operator/pkg/render/webhooks"
 )
 
 var log = logf.Log.WithName("controller_podiprecovery")
 
-// targetLabelSelectors is the set of label selectors identifying
-// operator-managed pods that are (or may be) host-networked. The controller
-// applies a per-pod hostNetwork check before deleting, so non-hostNetwork
-// pods that happen to match are left alone.
-var targetLabelSelectors = []labels.Selector{
-	labels.SelectorFromSet(labels.Set{render.AppLabelName: render.TyphaK8sAppName}),
-	labels.SelectorFromSet(labels.Set{render.AppLabelName: render.CalicoNodeObjectName}),
-	labels.SelectorFromSet(labels.Set{render.AppLabelName: render.WindowsNodeObjectName}),
-	labels.SelectorFromSet(labels.Set{render.AppLabelName: dpi.DeepPacketInspectionName}),
-	labels.SelectorFromSet(labels.Set{render.AppLabelName: applicationlayer.ApplicationLayerDaemonsetName}),
-	labels.SelectorFromSet(labels.Set{"apiserver": "true"}),
-	labels.SelectorFromSet(labels.Set{render.AppLabelName: webhooks.WebhooksName}),
-}
+// podNodeNameIndex is the field-index registered in cmd/main.go that lets
+// us list pods by their `spec.nodeName` with a server-side field selector.
+const podNodeNameIndex = "spec.nodeName"
 
 // Add wires the controller into the manager.
-func Add(mgr manager.Manager, opts options.ControllerOptions) error {
+func Add(mgr manager.Manager, _ options.ControllerOptions) error {
 	r := &Reconciler{
 		client: mgr.GetClient(),
-		scheme: mgr.GetScheme(),
 	}
 
 	c, err := ctrlruntime.NewController("podiprecovery-controller", mgr, controller.Options{Reconciler: r})
@@ -108,7 +100,7 @@ func internalIPChangedPredicate() predicate.Predicate {
 			if !oldOK || !newOK {
 				return false
 			}
-			return !sameInternalIPs(oldNode.Status.Addresses, newNode.Status.Addresses)
+			return !internalIPSet(oldNode.Status.Addresses).Equal(internalIPSet(newNode.Status.Addresses))
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
 			return false
@@ -116,27 +108,13 @@ func internalIPChangedPredicate() predicate.Predicate {
 	}
 }
 
-// sameInternalIPs returns true when both slices contain the same set of
-// NodeInternalIP addresses (order-independent).
-func sameInternalIPs(a, b []corev1.NodeAddress) bool {
-	aIPs := internalIPSet(a)
-	bIPs := internalIPSet(b)
-	if len(aIPs) != len(bIPs) {
-		return false
-	}
-	for ip := range aIPs {
-		if !bIPs[ip] {
-			return false
-		}
-	}
-	return true
-}
-
-func internalIPSet(addrs []corev1.NodeAddress) map[string]bool {
-	out := map[string]bool{}
+// internalIPSet returns the set of NodeInternalIP addresses from a Node's
+// status.
+func internalIPSet(addrs []corev1.NodeAddress) sets.Set[string] {
+	out := sets.New[string]()
 	for _, a := range addrs {
 		if a.Type == corev1.NodeInternalIP {
-			out[a.Address] = true
+			out.Insert(a.Address)
 		}
 	}
 	return out
@@ -145,7 +123,6 @@ func internalIPSet(addrs []corev1.NodeAddress) map[string]bool {
 // Reconciler implements reconcile.Reconciler.
 type Reconciler struct {
 	client client.Client
-	scheme *runtime.Scheme
 }
 
 var _ reconcile.Reconciler = &Reconciler{}
@@ -156,6 +133,15 @@ var _ reconcile.Reconciler = &Reconciler{}
 // current InternalIPs.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.WithValues("node", req.Name)
+
+	// Gate on Installation: if Calico hasn't been installed yet, the
+	// operator-managed pods we'd act on don't exist. Bail out silently.
+	if _, _, err := utils.GetInstallationSpec(ctx, r.client); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, fmt.Errorf("failed to read Installation: %w", err)
+	}
 
 	node := &corev1.Node{}
 	if err := r.client.Get(ctx, req.NamespacedName, node); err != nil {
@@ -168,38 +154,41 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	}
 
 	nodeIPs := internalIPSet(node.Status.Addresses)
-	if len(nodeIPs) == 0 {
+	if nodeIPs.Len() == 0 {
 		// Nothing to compare against; bail out to avoid deleting pods
 		// based on a transient empty status.
 		logger.V(1).Info("Node has no InternalIPs reported; skipping pod IP check")
 		return ctrl.Result{}, nil
 	}
 
-	// List operator-managed pods running on this node. We list once per
-	// label selector and filter by spec.nodeName on the client side. The
-	// pod list is small enough that this is cheap.
-	pods, err := r.listOperatorManagedPodsOnNode(ctx, node.Name)
-	if err != nil {
+	// List operator-managed hostNetwork pods on this node. The label is
+	// applied at render time across all hostNetwork workloads; the field
+	// selector narrows by node server-side using the index registered in
+	// cmd/main.go.
+	var pl corev1.PodList
+	if err := r.client.List(ctx, &pl,
+		client.MatchingLabels{common.HostNetworkedPodLabel: "true"},
+		client.MatchingFields{podNodeNameIndex: node.Name},
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list pods on node %q: %w", node.Name, err)
 	}
 
 	var firstErr error
 	deleted := 0
-	for i := range pods {
-		pod := &pods[i]
+	for _, pod := range pl.Items {
 		if !pod.Spec.HostNetwork {
 			// Safety check: only delete hostNetwork pods. A non-hostNetwork
-			// pod that happens to match our labels has a CNI-assigned IP
+			// pod that happens to carry our label has a CNI-assigned IP
 			// that legitimately differs from the node's IP.
 			continue
 		}
-		if len(pod.Status.PodIPs) == 0 && pod.Status.PodIP == "" {
+		if len(pod.Status.PodIPs) == 0 {
 			// Pod hasn't been status-populated yet (e.g. Pending, kubelet
 			// has not admitted it). The kubelet will set the correct IPs on
 			// admission; deleting now would just race that.
 			continue
 		}
-		if podIPMatchesNode(pod, nodeIPs) {
+		if podIPMatchesNode(&pod, nodeIPs) {
 			continue
 		}
 
@@ -207,11 +196,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		for _, pip := range pod.Status.PodIPs {
 			podIPs = append(podIPs, pip.IP)
 		}
-		logger.Info("Deleting pod with stale IP after node IP change so its controller can recreate it with the current IP",
+		logger.Info("Host networked Pod has stale IP, recreate",
 			"pod", pod.Name, "namespace", pod.Namespace,
-			"podIPs", podIPs, "nodeInternalIPs", keys(nodeIPs))
+			"podIPs", podIPs, "nodeInternalIPs", nodeIPs.UnsortedList())
 
-		if delErr := r.client.Delete(ctx, pod); delErr != nil && !apierrors.IsNotFound(delErr) {
+		if delErr := r.client.Delete(ctx, &pod); delErr != nil && !apierrors.IsNotFound(delErr) {
 			logger.Error(delErr, "Failed to delete pod with stale IP", "pod", pod.Name, "namespace", pod.Namespace)
 			if firstErr == nil {
 				firstErr = delErr
@@ -227,47 +216,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return ctrl.Result{}, firstErr
 }
 
-// listOperatorManagedPodsOnNode lists pods on the given node that match any
-// of the operator's host-networked-workload label selectors.
-func (r *Reconciler) listOperatorManagedPodsOnNode(ctx context.Context, nodeName string) ([]corev1.Pod, error) {
-	seen := map[string]struct{}{}
-	var out []corev1.Pod
-	for _, sel := range targetLabelSelectors {
-		var pl corev1.PodList
-		if err := r.client.List(ctx, &pl, &client.ListOptions{LabelSelector: sel}); err != nil {
-			return nil, fmt.Errorf("listing pods with selector %q: %w", sel.String(), err)
-		}
-		for i := range pl.Items {
-			pod := &pl.Items[i]
-			if pod.Spec.NodeName != nodeName {
-				continue
-			}
-			key := pod.Namespace + "/" + pod.Name
-			if _, dup := seen[key]; dup {
-				continue
-			}
-			seen[key] = struct{}{}
-			out = append(out, *pod)
-		}
-	}
-	return out, nil
-}
-
 // podIPMatchesNode returns true if any of the pod's reported IPs is also
 // listed as an InternalIP on the node.
-func podIPMatchesNode(pod *corev1.Pod, nodeIPs map[string]bool) bool {
+func podIPMatchesNode(pod *corev1.Pod, nodeIPs sets.Set[string]) bool {
 	for _, pip := range pod.Status.PodIPs {
-		if nodeIPs[pip.IP] {
+		if nodeIPs.Has(pip.IP) {
 			return true
 		}
 	}
 	return false
-}
-
-func keys(m map[string]bool) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

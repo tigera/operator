@@ -33,7 +33,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -41,7 +40,7 @@ const (
 	OTelCollectorName               = "otel-collector"
 	OTelCollectorNamespace          = common.CalicoNamespace
 	OTelCollectorServiceAccountName = OTelCollectorName
-	OTelCollectorDeploymentName     = OTelCollectorName
+	OTelCollectorStatefulSetName    = OTelCollectorName
 	OTelCollectorServiceName        = OTelCollectorName
 	OTelCollectorConfigMapName      = OTelCollectorName
 	OTelCollectorContainerName      = "otel-collector"
@@ -54,11 +53,22 @@ const (
 	HealthCheckPort   = 13133
 )
 
+// LogForwarderProtocol determines which receiver the collector uses for log ingestion.
+type LogForwarderProtocol int
+
+const (
+	// LogForwarderFluentdHTTP uses the custom fluentdhttp receiver (Fluentd out_http → HTTP JSON).
+	LogForwarderFluentdHTTP LogForwarderProtocol = iota
+	// LogForwarderOTLP uses the OTLP receiver (native OTLP output).
+	LogForwarderOTLP
+)
+
 type Configuration struct {
-	PullSecrets            []*corev1.Secret
-	OpenShift              bool
-	Installation           *operatorv1.InstallationSpec
-	OpenTelemetryCollector *operatorv1.OpenTelemetryCollector
+	PullSecrets          []*corev1.Secret
+	OpenShift            bool
+	Installation         *operatorv1.InstallationSpec
+	OTelCollector        *operatorv1.OTelCollectorSpec
+	LogForwarderProtocol LogForwarderProtocol
 }
 
 type component struct {
@@ -76,7 +86,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentOTelCollector, reg, path, prefix, is)
+	c.image, err = components.GetReference(components.ComponentTigeraCalico, reg, path, prefix, is)
 	return err
 }
 
@@ -85,9 +95,9 @@ func (c *component) SupportedOSType() rmeta.OSType {
 }
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
-	deployment := c.deployment()
-	if c.cfg.OpenTelemetryCollector.Spec.OpenTelemetryCollectorDeployment != nil {
-		rcomp.ApplyDeploymentOverrides(deployment, c.cfg.OpenTelemetryCollector.Spec.OpenTelemetryCollectorDeployment)
+	statefulSet := c.statefulSet()
+	if c.cfg.OTelCollector.OTelCollectorStatefulSet != nil {
+		rcomp.ApplyStatefulSetOverrides(statefulSet, c.cfg.OTelCollector.OTelCollectorStatefulSet)
 	}
 
 	objs := []client.Object{
@@ -96,7 +106,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.clusterRoleBinding(),
 		c.configMap(),
 		c.service(),
-		deployment,
+		statefulSet,
 		c.networkPolicy(),
 	}
 
@@ -169,29 +179,37 @@ func (c *component) collectorConfig() string {
 	// Receivers
 	b.WriteString("receivers:\n")
 
-	hasLogs := c.cfg.OpenTelemetryCollector.Spec.Logs != nil && len(c.cfg.OpenTelemetryCollector.Spec.Logs.Types) > 0
+	hasLogs := c.cfg.OTelCollector.Logs != nil && len(c.cfg.OTelCollector.Logs.Types) > 0
 	if hasLogs {
-		b.WriteString(fmt.Sprintf("  fluentforward:\n    endpoint: 0.0.0.0:%d\n", FluentForwardPort))
+		switch c.cfg.LogForwarderProtocol {
+		case LogForwarderOTLP:
+			b.WriteString(fmt.Sprintf("  otlp:\n    protocols:\n      http:\n        endpoint: 0.0.0.0:%d\n", OTLPHTTPPort))
+		default:
+			b.WriteString(fmt.Sprintf("  fluentdhttp:\n    endpoint: 0.0.0.0:%d\n", FluentForwardPort))
+		}
 	}
 
-	metricsEnabled := c.cfg.OpenTelemetryCollector.Spec.Metrics != nil &&
-		c.cfg.OpenTelemetryCollector.Spec.Metrics.Enabled != nil &&
-		*c.cfg.OpenTelemetryCollector.Spec.Metrics.Enabled == operatorv1.OTelMetricsEnable
+	metricsEnabled := c.cfg.OTelCollector.Metrics != nil &&
+		c.cfg.OTelCollector.Metrics.Enabled != nil &&
+		*c.cfg.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
 	if metricsEnabled {
 		b.WriteString("  prometheus:\n    config:\n      scrape_configs:\n")
-		b.WriteString("        - job_name: 'calico-components'\n")
+		b.WriteString("        - job_name: 'calico-metrics'\n")
 		b.WriteString("          kubernetes_sd_configs:\n")
 		b.WriteString("            - role: endpoints\n")
 	}
 
 	// Exporters
 	b.WriteString("\nexporters:\n")
-	for _, exp := range c.cfg.OpenTelemetryCollector.Spec.Exporters {
+	for _, exp := range c.cfg.OTelCollector.Exporters {
 		switch exp.Protocol {
 		case operatorv1.OTelProtocolHTTP:
 			b.WriteString(fmt.Sprintf("  otlphttp/%s:\n    endpoint: %s\n", exp.Name, exp.Endpoint))
 		default:
 			b.WriteString(fmt.Sprintf("  otlp/%s:\n    endpoint: %s\n", exp.Name, exp.Endpoint))
+			if exp.TLSInsecure != nil && *exp.TLSInsecure {
+				b.WriteString("    tls:\n      insecure: true\n")
+			}
 		}
 	}
 
@@ -202,7 +220,9 @@ func (c *component) collectorConfig() string {
 	b.WriteString("\nservice:\n  extensions: [health_check]\n  pipelines:\n")
 
 	if hasLogs {
-		b.WriteString("    logs:\n      receivers: [fluentforward]\n      exporters: [")
+		b.WriteString("    logs:\n      receivers: [")
+		b.WriteString(c.logReceiverName())
+		b.WriteString("]\n      exporters: [")
 		b.WriteString(c.exporterNames())
 		b.WriteString("]\n")
 	}
@@ -218,7 +238,7 @@ func (c *component) collectorConfig() string {
 
 func (c *component) exporterNames() string {
 	var names []string
-	for _, exp := range c.cfg.OpenTelemetryCollector.Spec.Exporters {
+	for _, exp := range c.cfg.OTelCollector.Exporters {
 		switch exp.Protocol {
 		case operatorv1.OTelProtocolHTTP:
 			names = append(names, fmt.Sprintf("otlphttp/%s", exp.Name))
@@ -229,12 +249,27 @@ func (c *component) exporterNames() string {
 	return strings.Join(names, ", ")
 }
 
+func (c *component) logReceiverName() string {
+	if c.cfg.LogForwarderProtocol == LogForwarderOTLP {
+		return "otlp"
+	}
+	return "fluentdhttp"
+}
+
+func (c *component) logReceiverPort() int32 {
+	if c.cfg.LogForwarderProtocol == LogForwarderOTLP {
+		return OTLPHTTPPort
+	}
+	return FluentForwardPort
+}
+
 func (c *component) service() *corev1.Service {
+	port := c.logReceiverPort()
 	ports := []corev1.ServicePort{
 		{
-			Name:       "fluentforward",
-			Port:       FluentForwardPort,
-			TargetPort: intstr.FromInt32(FluentForwardPort),
+			Name:       c.logReceiverName(),
+			Port:       port,
+			TargetPort: intstr.FromInt32(port),
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}
@@ -244,10 +279,10 @@ func (c *component) service() *corev1.Service {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      OTelCollectorServiceName,
 			Namespace: OTelCollectorNamespace,
-			Labels:    map[string]string{"k8s-app": OTelCollectorDeploymentName},
+			Labels:    map[string]string{"k8s-app": OTelCollectorStatefulSetName},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": OTelCollectorDeploymentName},
+			Selector: map[string]string{"k8s-app": OTelCollectorStatefulSetName},
 			Ports:    ports,
 		},
 	}
@@ -257,9 +292,9 @@ func (c *component) container() corev1.Container {
 	return corev1.Container{
 		Name:    OTelCollectorContainerName,
 		Image:   c.image,
-		Command: []string{"/otelcol", "--config=/etc/otel/config.yaml"},
+		Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 		Ports: []corev1.ContainerPort{
-			{Name: "fluentforward", ContainerPort: FluentForwardPort, Protocol: corev1.ProtocolTCP},
+			{Name: "fluentdhttp", ContainerPort: FluentForwardPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-http", ContainerPort: OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 			{Name: "health", ContainerPort: HealthCheckPort, Protocol: corev1.ProtocolTCP},
@@ -293,30 +328,28 @@ func (c *component) container() corev1.Container {
 	}
 }
 
-func (c *component) deployment() *appsv1.Deployment {
+func (c *component) statefulSet() *appsv1.StatefulSet {
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+	return &appsv1.StatefulSet{
+		TypeMeta: metav1.TypeMeta{Kind: "StatefulSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      OTelCollectorDeploymentName,
+			Name:      OTelCollectorStatefulSetName,
 			Namespace: OTelCollectorNamespace,
 		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: ptr.To(int32(1)),
-			Strategy: appsv1.DeploymentStrategy{
-				Type: appsv1.RecreateDeploymentStrategyType,
-			},
+		Spec: appsv1.StatefulSetSpec{
+			Replicas:    c.cfg.Installation.ControlPlaneReplicas,
+			ServiceName: OTelCollectorServiceName,
 			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{"k8s-app": OTelCollectorDeploymentName},
+				MatchLabels: map[string]string{"k8s-app": OTelCollectorStatefulSetName},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:   OTelCollectorDeploymentName,
-					Labels: map[string]string{"k8s-app": OTelCollectorDeploymentName},
+					Name:   OTelCollectorStatefulSetName,
+					Labels: map[string]string{"k8s-app": OTelCollectorStatefulSetName},
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -346,19 +379,43 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(FluentForwardPort),
+				Ports: networkpolicy.Ports(uint16(c.logReceiverPort())),
 			},
 		},
 	}
+
+	egressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(OTLPGRPCPort, OTLPHTTPPort),
+			},
+		},
+	}
+
+	metricsEnabled := c.cfg.OTelCollector.Metrics != nil &&
+		c.cfg.OTelCollector.Metrics.Enabled != nil &&
+		*c.cfg.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
+	if metricsEnabled {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		})
+	}
+
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: OTelCollectorPolicyName, Namespace: OTelCollectorNamespace},
 		Spec: v3.NetworkPolicySpec{
 			Tier:     networkpolicy.CalicoTierName,
-			Selector: networkpolicy.KubernetesAppSelector(OTelCollectorDeploymentName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Selector: networkpolicy.KubernetesAppSelector(OTelCollectorStatefulSetName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

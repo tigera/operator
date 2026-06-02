@@ -545,6 +545,18 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
+			// Annotate the pod with a hash of the Alertmanager configuration so that
+			// changing the config (e.g. toggling the UI alerts integration on/off, which
+			// swaps the webhook receiver) rolls the Alertmanager pod and reloads the new
+			// config rather than leaving it running with the stale in-memory config.
+			PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
+				// Labels must be non-nil: the component handler copies the object's
+				// labels into PodMetadata.Labels (see setStandardSelectorAndLabels).
+				Labels: map[string]string{},
+				Annotations: map[string]string{
+					"hash.operator.tigera.io/alertmanager-config": rmeta.SecretsAnnotationHash(mc.cfg.AlertmanagerConfigSecret),
+				},
+			},
 			// Mount the client certificate and CA bundle so the Linseed webhook
 			// receiver can establish an mTLS connection. The prometheus-operator
 			// surfaces these at /etc/alertmanager/secrets/<name>/ and

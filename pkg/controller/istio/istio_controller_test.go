@@ -471,6 +471,28 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(err.Error()).To(ContainSubstring("felixconfig IstioAmbientMode modified by user"))
 		})
 
+		It("initializes nil Annotations when writing the DSCP mark (no nil-map panic)", func() {
+			// configureIstioAmbientMode only initializes fc.Annotations when it
+			// writes the mode annotation and can return without doing so, so
+			// configureIstioDSCPMark must guard the nil map itself before
+			// writing the DSCP annotation.
+			dscp := numorstring.DSCPFromInt(23)
+			instance := &operatorv1.Istio{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       operatorv1.IstioSpec{DSCPMark: &dscp},
+			}
+			// FelixConfiguration with nil Annotations (zero value).
+			fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+
+			r := &ReconcileIstio{}
+			changed, err := r.configureIstioDSCPMark(instance, fc, false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(changed).To(BeTrue())
+			Expect(fc.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationDSCP, "23"))
+			Expect(fc.Spec.IstioDSCPMark).NotTo(BeNil())
+			Expect(fc.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
+		})
+
 		It("should detect user modification of IstioDSCPMark in FelixConfiguration", func() {
 			// Create FelixConfiguration with mismatched annotation and spec
 			userModifiedDSCP := numorstring.DSCPFromInt(50)

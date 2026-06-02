@@ -373,6 +373,9 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *
 		return false, nil
 	}
 	fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
+	if fc.Annotations == nil {
+		fc.Annotations = make(map[string]string)
+	}
 	fc.Annotations[istio.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
 	return true, nil
 }

@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("Waypoint pull secrets controller tests", func() {
@@ -163,6 +165,13 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 		return secretList.Items
 	}
 
+	listTrackedRoleBindings := func() []rbacv1.RoleBinding {
+		rbList := &rbacv1.RoleBindingList{}
+		err := cli.List(ctx, rbList, client.MatchingLabels{WaypointPullSecretLabel: "true"})
+		Expect(err).NotTo(HaveOccurred())
+		return rbList.Items
+	}
+
 	Context("when no pull secrets are configured", func() {
 		It("should not create any secrets", func() {
 			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -198,6 +207,21 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			Expect(secrets[0].Namespace).To(Equal("user-ns"))
 			Expect(secrets[0].Name).To(Equal("my-pull-secret"))
 			Expect(secrets[0].Labels[WaypointPullSecretLabel]).To(Equal("true"))
+		})
+
+		It("should create a tigera-operator-secrets RoleBinding so the operator can write secrets in the waypoint namespace", func() {
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			rbs := listTrackedRoleBindings()
+			Expect(rbs).To(HaveLen(1))
+			Expect(rbs[0].Namespace).To(Equal("user-ns"))
+			Expect(rbs[0].Name).To(Equal(render.TigeraOperatorSecrets))
+			Expect(rbs[0].RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rbs[0].RoleRef.Name).To(Equal(render.TigeraOperatorSecrets))
+			Expect(rbs[0].Labels[WaypointPullSecretLabel]).To(Equal("true"))
 		})
 
 		It("should copy pull secrets only once for multiple gateways in same namespace", func() {
@@ -246,8 +270,9 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			_, err = doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Secrets should be cleaned up.
+			// Secrets and the RoleBinding should be cleaned up.
 			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 
 		It("should not take action for non-matching gatewayClassName", func() {
@@ -349,8 +374,9 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			_, err = doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// All secrets should be cleaned up.
+			// All secrets and RoleBindings should be cleaned up.
 			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 	})
 

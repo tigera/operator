@@ -398,7 +398,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx)
+	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx, instance.Spec.UIAlertsEnabled())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
 		return reconcile.Result{}, err
@@ -580,10 +580,13 @@ func PrometheusTLSServerDNSNames(clusterDomain string) []string {
 //go:embed alertmanager-config.yaml
 var alertmanagerConfig string
 
+//go:embed alertmanager-config-disabled.yaml
+var alertmanagerConfigDisabled string
+
 // readAlertmanagerConfigSecret attempts to retrieve Alertmanager configuration secret from either the Tigera Operator
 // namespace or the Tigera Prometheus namespace. If it doesn't exist in either of the namespace, a new default configuration
 // secret will be created.
-func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*corev1.Secret, bool, error) {
+func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context, uiAlertsEnabled bool) (*corev1.Secret, bool, error) {
 	// Previous to this change, a customer was expected to deploy the Alertmanager configuration secret
 	// in the tigera-prometheus namespace directly. Now that this secret is managed by the Operator,
 	// the customer must deploy this secret in the tigera-operator namespace. The Operator then copies
@@ -602,6 +605,13 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	// Monitor controller can verify the owner reference of the configuration secret and decide if we want to
 	// upgrade it automatically.
 
+	// Select the desired default configuration based on whether the UI alerts integration is enabled.
+	// The enabled variant forwards alerts to Linseed; the disabled variant routes to a null receiver.
+	desiredConfig := alertmanagerConfig
+	if !uiAlertsEnabled {
+		desiredConfig = alertmanagerConfigDisabled
+	}
+
 	defaultConfigSecret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -609,15 +619,30 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 			Namespace: common.OperatorNamespace(),
 		},
 		Data: map[string][]byte{
-			"alertmanager.yaml": []byte(alertmanagerConfig),
+			"alertmanager.yaml": []byte(desiredConfig),
 		},
 	}
 
-	// Read Alertmanager configuration secret as-is if it is found in the tigera-operator namespace.
+	// operatorManaged reports whether a secret's data matches one of the Operator's default
+	// configurations (the enabled or disabled variant). Such a secret is owned by the Monitor
+	// controller and may be regenerated to the desired configuration when the integration is
+	// toggled. A secret matching neither was customized by the user and is left untouched.
+	operatorManaged := func(data map[string][]byte) bool {
+		return reflect.DeepEqual(data, map[string][]byte{"alertmanager.yaml": []byte(alertmanagerConfig)}) ||
+			reflect.DeepEqual(data, map[string][]byte{"alertmanager.yaml": []byte(alertmanagerConfigDisabled)})
+	}
+
+	// Read Alertmanager configuration secret if it is found in the tigera-operator namespace.
 	secret, err := utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.OperatorNamespace())
 	if err != nil {
 		return nil, false, err
 	} else if secret != nil {
+		// If the Operator owns the configuration, regenerate it to the desired variant so that
+		// toggling the integration takes effect (the rendered tigera-prometheus copy is then updated
+		// by the component handler). User-modified configurations are returned as-is and unmanaged.
+		if operatorManaged(secret.Data) {
+			secret.Data = defaultConfigSecret.Data
+		}
 		return secret, false, nil
 	}
 
@@ -627,12 +652,14 @@ func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context) (*c
 	if err != nil {
 		return nil, false, err
 	} else if secret != nil {
-		// Monitor controller will own the secret if it is the same.
-		if reflect.DeepEqual(defaultConfigSecret.Data, secret.Data) {
-			return rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0], true, nil
+		// Monitor controller will own the secret if it matches one of the Operator defaults.
+		if operatorManaged(secret.Data) {
+			s := rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0]
+			s.Data = defaultConfigSecret.Data
+			return s, true, nil
 		}
 
-		// If the secret isn't the same, leave it unmanaged.
+		// If the secret isn't a managed default, leave it unmanaged.
 		s := rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0]
 		if err := r.client.Create(ctx, s); err != nil {
 			return nil, false, err

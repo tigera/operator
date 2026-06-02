@@ -1,0 +1,14 @@
+global:
+  resolve_timeout: 5m
+route:
+  group_by: ['job']
+  group_wait: 30s
+  group_interval: 1m
+  repeat_interval: 5m
+  # The UI alerts integration is disabled: route to a receiver with no
+  # notification configs so Alertmanager silently drops alerts instead of
+  # forwarding them to Linseed. Set Monitor.spec.uiAlertsIntegration to
+  # Enabled to forward alerts to the Alerts page.
+  receiver: 'null'
+receivers:
+- name: 'null'

@@ -486,10 +486,10 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.Spec.Groups[0].Name).To(Equal("calico.rules"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(1))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPacketsRate"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("info"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
 
 		// ServiceMonitor
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
@@ -1086,10 +1086,10 @@ var _ = Describe("monitor rendering tests", func() {
 
 		// DeniedPacketsRate - base rule, severity downgraded to info
 		Expect(rules[0].Alert).To(Equal("DeniedPacketsRate"))
-		Expect(rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
+		Expect(rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(rules[0].Labels["severity"]).To(Equal("info"))
-		Expect(rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
-		Expect(rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
+		Expect(rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
+		Expect(rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
 
 		// TLS certificate expiry alerts
 		Expect(rules[1].Alert).To(Equal("TLSCertExpiringWarning"))

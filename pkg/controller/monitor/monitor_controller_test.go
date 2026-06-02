@@ -481,6 +481,40 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(ownerRefs).To(HaveLen(1))
 			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
 		})
+
+		It("should render the disabled Alertmanager config when the UI alerts integration is disabled", func() {
+			disabled := operatorv1.UIAlertsIntegrationDisabled
+			monitorCR.Spec.UIAlertsIntegration = &disabled
+			Expect(cli.Update(ctx, monitorCR)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			s := &corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfigDisabled)))
+		})
+
+		It("should regenerate an Operator-owned config when the integration is toggled off", func() {
+			// New install renders the enabled (default) config.
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			s := &corev1.Secret{}
+			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
+
+			// Toggle the integration off; the Operator-owned config should be regenerated to the disabled variant.
+			// Re-fetch first: the prior Reconcile bumped the Monitor's resourceVersion.
+			Expect(cli.Get(ctx, client.ObjectKeyFromObject(monitorCR), monitorCR)).NotTo(HaveOccurred())
+			disabled := operatorv1.UIAlertsIntegrationDisabled
+			monitorCR.Spec.UIAlertsIntegration = &disabled
+			Expect(cli.Update(ctx, monitorCR)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
+			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfigDisabled)))
+		})
 	})
 
 	Context("Reconcile for Condition status", func() {

@@ -56,10 +56,12 @@ func ApplicationLayerRequiresPolicySync(al *operatorv1.ApplicationLayer) bool {
 // IstioRequiresPolicySync reports whether an Istio CR is active in a way
 // that requires policySyncPathPrefix to be set. The L7 ambient waypoint
 // resources (l7-collector sidecar + EnvoyFilter) are rendered when the
-// installation variant is Enterprise; this predicate mirrors that gate so
-// the FelixConfiguration field tracks the renderer.
+// installation variant is Enterprise and waypoint logging is enabled; this
+// predicate mirrors that gate (via the shared WaypointLoggingEnabled helper)
+// so the FelixConfiguration field tracks the renderer — including when
+// waypoint logging is explicitly Disabled.
 func IstioRequiresPolicySync(istio *operatorv1.Istio, variant operatorv1.ProductVariant) bool {
-	return istio != nil && variant.IsEnterprise()
+	return istio != nil && variant.IsEnterprise() && istio.WaypointLoggingEnabled()
 }
 
 // DesiredPolicySyncPathPrefix returns the value FelixConfiguration's

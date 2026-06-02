@@ -181,6 +181,19 @@ type Istio struct {
 	Status IstioStatus `json:"status,omitempty"`
 }
 
+// WaypointLoggingEnabled reports whether waypoint L7 logging should be rendered
+// for this Istio CR. It defaults to true when the field is unset, and is the
+// single source of truth shared by the renderer (which gates the l7-collector
+// sidecar + EnvoyFilters) and the policy-sync predicate (which gates
+// policySyncPathPrefix), so the two never diverge. A nil receiver reports false.
+func (i *Istio) WaypointLoggingEnabled() bool {
+	if i == nil {
+		return false
+	}
+	wl := i.Spec.WaypointLogging
+	return wl == nil || *wl != L7LogCollectionDisabled
+}
+
 // +kubebuilder:object:root=true
 
 // IstioList contains a list of Istio resources.

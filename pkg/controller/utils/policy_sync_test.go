@@ -73,8 +73,22 @@ var _ = Describe("policySyncPathPrefix coordination predicates", func() {
 			Expect(utils.IstioRequiresPolicySync(&operatorv1.Istio{}, operatorv1.Calico)).To(BeFalse())
 		})
 
-		It("returns true when an Istio CR is present on Enterprise", func() {
+		It("returns true when an Istio CR is present on Enterprise with WaypointLogging unset (default)", func() {
 			Expect(utils.IstioRequiresPolicySync(&operatorv1.Istio{}, operatorv1.CalicoEnterprise)).To(BeTrue())
+		})
+
+		It("returns true when WaypointLogging is explicitly Enabled", func() {
+			enabled := operatorv1.L7LogCollectionEnabled
+			Expect(utils.IstioRequiresPolicySync(&operatorv1.Istio{
+				Spec: operatorv1.IstioSpec{WaypointLogging: &enabled},
+			}, operatorv1.CalicoEnterprise)).To(BeTrue())
+		})
+
+		It("returns false when WaypointLogging is explicitly Disabled", func() {
+			disabled := operatorv1.L7LogCollectionDisabled
+			Expect(utils.IstioRequiresPolicySync(&operatorv1.Istio{
+				Spec: operatorv1.IstioSpec{WaypointLogging: &disabled},
+			}, operatorv1.CalicoEnterprise)).To(BeFalse())
 		})
 	})
 

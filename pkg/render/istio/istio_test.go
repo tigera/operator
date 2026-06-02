@@ -866,9 +866,11 @@ var _ = Describe("Istio Component Rendering", func() {
 		})
 
 		It("should emit waypoint L7 logging resources only for Enterprise variant", func() {
-			// Enterprise: all three L7 waypoint resources must appear in the
-			// Istio root namespace, with the l7-collector image resolved onto
-			// the defaults ConfigMap.
+			// Enterprise: the five L7 waypoint resources (defaults ConfigMap,
+			// the EnvoyFilter-writer Role and RoleBinding, and two EnvoyFilters)
+			// are rendered into the Istio root namespace. This test asserts the
+			// ConfigMap (with the l7-collector image resolved onto it) and the
+			// two EnvoyFilters.
 			cfg.Installation.Variant = operatorv1.CalicoEnterprise
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -894,7 +896,7 @@ var _ = Describe("Istio Component Rendering", func() {
 				objsToCreate, istio.L7WaypointSrcPortFilterName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Calico (OSS) variant: none of the three resources should appear,
+			// Calico (OSS) variant: none of the five resources should appear,
 			// regardless of image resolution outcome.
 			cfg.Installation.Variant = operatorv1.Calico
 			_, component, err = istio.Istio(cfg)

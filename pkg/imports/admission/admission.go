@@ -110,6 +110,12 @@ func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersi
 			if err != nil {
 				panic(fmt.Sprintf("Failed to parse admission policy %s: %v", entry.Name(), err))
 			}
+			if obj == nil {
+				// The admission directory also carries policy kinds we don't manage here
+				// (e.g. the ValidatingAdmissionPolicy that protects built-in tiers), which
+				// parse to a nil object. Skip those.
+				continue
+			}
 
 			// Add managed label for stale resource cleanup.
 			labels := obj.GetLabels()
@@ -171,7 +177,8 @@ func Ensure(c client.Client, variant string, v3 bool, apiVersion string, log log
 // parseAdmissionPolicyYAML parses a YAML document into either a MutatingAdmissionPolicy
 // or MutatingAdmissionPolicyBinding at the requested API version. The MAP types are identical
 // in shape across v1alpha1, v1beta1, and v1, so we deserialize the same YAML into the requested
-// target type and overwrite TypeMeta to reflect the chosen GroupVersion.
+// target type and overwrite TypeMeta to reflect the chosen GroupVersion. Documents of any other
+// kind return a nil object and nil error so the caller can skip them.
 func parseAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.Object, error) {
 	var meta struct {
 		Kind string `json:"kind"`
@@ -237,7 +244,8 @@ func parseAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.O
 	default:
 		return nil, fmt.Errorf("unsupported MutatingAdmissionPolicy API version %q", apiVersion)
 	}
-	return nil, fmt.Errorf("unexpected kind %q in %s", meta.Kind, filename)
+	// Not a MAP kind we manage here.
+	return nil, nil
 }
 
 // ListManaged returns the operator-managed MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding

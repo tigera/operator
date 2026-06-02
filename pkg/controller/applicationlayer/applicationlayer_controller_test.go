@@ -148,14 +148,17 @@ var _ = Describe("Application layer controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("ensuring that PolicySyncPathPrefix is cleared after ALP deletion when nothing else needs it")
+			By("ensuring that felix configuration PolicySyncPathPrefix is left as is, even after ALP deletion")
 			f2 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
 			}
 			Expect(test.GetResource(c, &f2)).To(BeNil())
-			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal(""))
+			// The operator-managed default is shared with egressgateway and
+			// Gateway API, which never clear it; the AL controller must not
+			// clear a value it may not own, so it is preserved here.
+			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 		})
 
 		It("should leave PolicySyncPathPrefix set on AL deletion when Istio CR still needs it", func() {

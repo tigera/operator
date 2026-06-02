@@ -1042,6 +1042,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotations,
+					Labels: map[string]string{
+						common.HostNetworkedPodLabel: "true",
+					},
 				},
 				Spec: corev1.PodSpec{
 					Tolerations:                   rmeta.TolerateAll,

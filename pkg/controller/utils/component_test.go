@@ -91,6 +91,63 @@ var _ = Describe("Component handler tests", func() {
 		handler = NewComponentHandler(logf.Log, c, scheme, instance)
 	})
 
+	It("respects NetworkPolicy.ManagePolicies setting in Installation", func() {
+		// Create an Installation resource with networkPolicy.managePolicies: Disabled.
+		disabled := operatorv1.NetworkPolicyManagementDisabled
+		install := &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operatorv1.InstallationSpec{
+				NetworkPolicy: &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled},
+			},
+		}
+		Expect(c.Create(ctx, install)).To(BeNil())
+
+		// Create a component that returns a NetworkPolicy and a Deployment.
+		np := &v3.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+		}
+		dep := &apps.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-dep", Namespace: "default"},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{np, dep},
+		}
+
+		// Reconcile the component.
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Verify that the Deployment was created, but the NetworkPolicy was not.
+		err = c.Get(ctx, client.ObjectKey{Name: "test-dep", Namespace: "default"}, &apps.Deployment{})
+		Expect(err).To(BeNil())
+
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+
+		// Now enable management and reconcile again.
+		enabled := operatorv1.NetworkPolicyManagementEnabled
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &enabled}
+		Expect(c.Update(ctx, install)).To(BeNil())
+
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Verify that the NetworkPolicy was created.
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(err).To(BeNil())
+
+		// Now disable management again and verify that the policy is deleted.
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled}
+		Expect(c.Update(ctx, install)).To(BeNil())
+
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+	})
+
 	It("adds Owner references when Custom Resource is provided", func() {
 		fc := &fakeComponent{
 			supportedOSType: rmeta.OSTypeLinux,
@@ -2091,16 +2148,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		}
 
 		It("if Updating a resource conflicts try the update again (retry OK))", func() {
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
+			// Two Get calls are issued up-front to load the InstallationSpec (one for the
+			// Installation, one for the overlay). The conflict retry re-runs the object update
+			// but reuses the already-loaded spec, so it does not refetch it.
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2111,16 +2164,6 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
 			})
 
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2135,20 +2178,16 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
 
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(6))
 		})
 
 		It("if Updating a resource conflicts try the update again (retry fails)", func() {
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
+			// Two Get calls are issued up-front to load the InstallationSpec (one for the
+			// Installation, one for the overlay). The conflict retry re-runs the object update
+			// but reuses the already-loaded spec, so it does not refetch it.
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2165,22 +2204,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message 2")),
 			})
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(6))
 			Expect(err).NotTo(BeNil())
 		})
 	})
@@ -2251,7 +2280,6 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Return:       nil,
 				InputMutator: setToModifiedNP,
 			})
-
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Update",
 				Return:       nil,

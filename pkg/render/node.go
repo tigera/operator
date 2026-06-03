@@ -186,13 +186,6 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 	c.calicoImage = appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
 	nodeImage := imageoverride.Resolve(ComponentNameNode, components.ComponentCalicoNode, c.cfg.Installation)
-	if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-		// FIPS only applies to the Calico variant; the enterprise override (if
-		// registered) has already replaced nodeImage for the enterprise variant.
-		if nodeImage == components.ComponentCalicoNode {
-			nodeImage = components.ComponentCalicoNodeFIPS
-		}
-	}
 	c.nodeImage = appendIfErr(components.GetReference(nodeImage, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {

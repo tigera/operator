@@ -248,21 +248,13 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
 ENVOY_GATEWAY_VERSION ?= v1.7.2
-ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
-ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
-ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
+ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
-$(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
-	echo "---" > $@
-	echo "apiVersion: v1" >> $@
-	echo "kind: Namespace" >> $@
-	echo "metadata:" >> $@
-	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
-	$(HELM_BUILDARCH_BINARY) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+$(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
+	$(HELM_BUILDARCH_BINARY) pull $(ENVOY_GATEWAY_HELM_CHART) \
 		--version $(ENVOY_GATEWAY_VERSION) \
-		-n $(ENVOY_GATEWAY_NAMESPACE) \
-		--include-crds \
-	>> $@
+		--destination pkg/render/gatewayapi/
+	@mv pkg/render/gatewayapi/gateway-helm-$(ENVOY_GATEWAY_VERSION).tgz $@
 
 $(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
@@ -276,7 +268,7 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -339,7 +331,7 @@ GINKGO_FOCUS?=.*
 ENVTEST_K8S_VERSION?=1.34.x
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
@@ -348,7 +340,7 @@ ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
@@ -1026,7 +1018,6 @@ gen-enterprise-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-enterprise.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(enterprise_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1045,7 +1036,6 @@ gen-calico-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-calico.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(calico_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1054,7 +1044,7 @@ gen-calico-imageset: $(BUILD_DIR)
 	done
 ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
 	@docker run $(OPERATOR_IMAGE) --print-images=list | \
-	  grep -v -e "Failed to read" -e fips | \
+	  grep -v -e "Failed to read" | \
 	  grep -e 'tigera/key-cert-provisioner' | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \

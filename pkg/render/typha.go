@@ -116,11 +116,15 @@ func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 func (c *typhaComponent) Name() string { return ComponentNameTypha }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
+	pdb := c.typhaPodDisruptionBudget()
+	if overrides := c.cfg.Installation.TyphaPodDisruptionBudget; overrides != nil {
+		rcomp.ApplyPodDisruptionBudgetOverrides(pdb, overrides)
+	}
 	objs := []client.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
-		c.typhaPodDisruptionBudget(),
+		pdb,
 	}
 	objs = append(objs, c.typhaServices()...)
 

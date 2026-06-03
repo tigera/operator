@@ -31,7 +31,6 @@ import (
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -62,6 +61,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/ippool"
@@ -345,6 +345,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
+		apiDiscovery:         opts.APIDiscovery,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -403,6 +404,7 @@ type ReconcileInstallation struct {
 	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
+	apiDiscovery                  *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
@@ -903,6 +905,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
+	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
+	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
+	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
+	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
@@ -931,11 +940,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
+	if err = r.updateValidatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -1002,7 +1011,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := utils.RequiresTigeraSecure(r.clientset)
+		b, err := discovery.RequiresTigeraSecure(r.clientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
@@ -2255,54 +2264,86 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 	if !r.manageCRDs || !r.v3CRDs {
 		return nil
 	}
-	if !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes version does not support MutatingAdmissionPolicy v1beta1 (requires v1.32+); policy defaulting will not be available", nil, log)
+
+	// MutatingAdmissionPolicy served version was discovered once at startup (v1 was promoted to GA
+	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37).
+	mapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
+	if mapAPIVersion == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes cluster does not serve MutatingAdmissionPolicy (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
+	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
+		return err
+	}
 
-	// Build a set of desired resource names for comparison.
-	desiredMAPs := map[string]bool{}
-	desiredMAPBs := map[string]bool{}
+	return r.syncManagedAdmissionPolicies(ctx, install, log, desired, existingMAPs, existingMAPBs, admission.IsPolicyKind, admission.IsBindingKind, "Error syncing MutatingAdmissionPolicy resources")
+}
+
+func (r *ReconcileInstallation) updateValidatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
+	if !r.manageCRDs || !r.v3CRDs {
+		return nil
+	}
+
+	// ValidatingAdmissionPolicy reached GA (v1) well before MutatingAdmissionPolicy, so it has its own
+	// served version and is reconciled independently of whether the cluster serves MAPs. If the cluster
+	// doesn't serve it at all there's nothing to do, so skip rather than degrade.
+	vapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
+	if vapAPIVersion == "" {
+		log.Info("Kubernetes cluster does not serve ValidatingAdmissionPolicy, skipping")
+		return nil
+	}
+
+	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, vapAPIVersion)
+	existingVAPs, existingVAPBs, err := admission.ListManagedValidating(ctx, r.client, vapAPIVersion)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed ValidatingAdmissionPolicy resources", err, log)
+		return err
+	}
+
+	return r.syncManagedAdmissionPolicies(ctx, install, log, desired, existingVAPs, existingVAPBs, admission.IsValidatingPolicyKind, admission.IsValidatingBindingKind, "Error syncing ValidatingAdmissionPolicy resources")
+}
+
+// syncManagedAdmissionPolicies creates or updates the desired admission policies and bindings and
+// deletes any operator-managed ones that are no longer desired, in a single pass. isPolicy/isBinding
+// bucket the desired objects by kind so stale existing resources can be identified by name.
+func (r *ReconcileInstallation) syncManagedAdmissionPolicies(
+	ctx context.Context,
+	install *operatorv1.Installation,
+	log logr.Logger,
+	desired, existingPolicies, existingBindings []client.Object,
+	isPolicy, isBinding func(client.Object) bool,
+	degradeMsg string,
+) error {
+	desiredPolicies := map[string]bool{}
+	desiredBindings := map[string]bool{}
 	for _, obj := range desired {
-		switch obj.(type) {
-		case *admissionv1beta1.MutatingAdmissionPolicy:
-			desiredMAPs[obj.GetName()] = true
-		case *admissionv1beta1.MutatingAdmissionPolicyBinding:
-			desiredMAPBs[obj.GetName()] = true
+		switch {
+		case isPolicy(obj):
+			desiredPolicies[obj.GetName()] = true
+		case isBinding(obj):
+			desiredBindings[obj.GetName()] = true
 		}
 	}
 
-	// Find stale MAPs that are labeled as managed but no longer desired.
-	existingMAPs := &admissionv1beta1.MutatingAdmissionPolicyList{}
-	if err := r.client.List(ctx, existingMAPs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicies", err, log)
-		return err
-	}
 	var toDelete []client.Object
-	for i := range existingMAPs.Items {
-		if !desiredMAPs[existingMAPs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPs.Items[i])
+	for _, obj := range existingPolicies {
+		if !desiredPolicies[obj.GetName()] {
+			toDelete = append(toDelete, obj)
+		}
+	}
+	for _, obj := range existingBindings {
+		if !desiredBindings[obj.GetName()] {
+			toDelete = append(toDelete, obj)
 		}
 	}
 
-	// Find stale MAPBs that are labeled as managed but no longer desired.
-	existingMAPBs := &admissionv1beta1.MutatingAdmissionPolicyBindingList{}
-	if err := r.client.List(ctx, existingMAPBs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicyBindings", err, log)
-		return err
-	}
-	for i := range existingMAPBs.Items {
-		if !desiredMAPBs[existingMAPBs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPBs.Items[i])
-		}
-	}
-
-	// Create or update desired MAPs/MAPBs and delete any stale ones in a single pass.
 	handler := r.newComponentHandler(log, r.client, r.scheme, install)
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired, toDelete), nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error syncing MutatingAdmissionPolicy resources", err, log)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, degradeMsg, err, log)
 		return err
 	}
 

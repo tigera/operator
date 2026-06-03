@@ -314,19 +314,6 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(Equal(expectedImage))
 	})
 
-	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		cfg.Installation.FIPSMode = &fipsEnabled
-		cfg.Installation.Variant = operatorv1.Calico
-
-		comp := render.CSI(&cfg)
-		Expect(comp.ResolveImages(nil)).To(BeNil())
-		createObjs, _ := comp.Objects()
-		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
-		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[1].Image).To(ContainSubstring("-fips"))
-	})
-
 	It("should render the labels when the provider is openshift", func() {
 		cfg.OpenShift = true
 		comp := render.CSI(&cfg)

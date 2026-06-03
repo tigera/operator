@@ -27,6 +27,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -529,6 +530,43 @@ func ApplyJobOverrides(job *batchv1.Job, overrides any) {
 	job.Labels = r.labels
 	job.Annotations = r.annotations
 	job.Spec.Template = *r.podTemplateSpec
+}
+
+// ApplyPodDisruptionBudgetOverrides applies the overrides to the given PodDisruptionBudget.
+// Overrides that are nil leave the corresponding field on the PDB untouched, preserving
+// the operator's default. Setting Spec.MinAvailable clears Spec.MaxUnavailable and vice
+// versa (the PDB API mandates these are mutually exclusive). The PDB's selector is never
+// modified. Labels and annotations from Metadata are merged into the PDB's existing
+// labels and annotations.
+func ApplyPodDisruptionBudgetOverrides(pdb *policyv1.PodDisruptionBudget, overrides *operator.PodDisruptionBudgetOverride) {
+	if pdb == nil || overrides == nil {
+		return
+	}
+	if md := overrides.Metadata; md != nil {
+		if len(md.Labels) > 0 {
+			pdb.Labels = common.MapExistsOrInitialize(pdb.Labels)
+			common.MergeMaps(md.Labels, pdb.Labels)
+		}
+		if len(md.Annotations) > 0 {
+			pdb.Annotations = common.MapExistsOrInitialize(pdb.Annotations)
+			common.MergeMaps(md.Annotations, pdb.Annotations)
+		}
+	}
+	spec := overrides.Spec
+	if spec == nil {
+		return
+	}
+	if spec.MinAvailable != nil {
+		pdb.Spec.MinAvailable = spec.MinAvailable
+		pdb.Spec.MaxUnavailable = nil
+	}
+	if spec.MaxUnavailable != nil {
+		pdb.Spec.MaxUnavailable = spec.MaxUnavailable
+		pdb.Spec.MinAvailable = nil
+	}
+	if spec.UnhealthyPodEvictionPolicy != nil {
+		pdb.Spec.UnhealthyPodEvictionPolicy = spec.UnhealthyPodEvictionPolicy
+	}
 }
 
 // ApplyStatefulSetOverrides applies the overrides to the given DaemonSet.

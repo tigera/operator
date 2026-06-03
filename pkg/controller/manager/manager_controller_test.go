@@ -1098,29 +1098,6 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			Context("FIPS reconciliation", func() {
-				BeforeEach(func() {
-					fipsEnabled := operatorv1.FIPSModeEnabled
-					installation.Spec.FIPSMode = &fipsEnabled
-					Expect(c.Update(
-						ctx,
-						installation,
-					)).NotTo(HaveOccurred())
-				})
-				It("should not require presence of ElasticSearch ConfigMap", func() {
-					Expect(c.Delete(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-					elasticConfigMapKey := client.ObjectKey{
-						Name:      relasticsearch.ClusterConfigConfigMapName,
-						Namespace: common.OperatorNamespace(),
-					}
-					elasticConfigMap := corev1.ConfigMap{}
-					Expect(c.Get(ctx, elasticConfigMapKey, &elasticConfigMap)).To(HaveOccurred())
-
-					_, err := r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
-				})
-			})
-
 			Context("non-cluster host", func() {
 				It("should read NonClusterHost resource", func() {
 					nonclusterhost := &operatorv1.NonClusterHost{

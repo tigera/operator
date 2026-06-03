@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/metrics"
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
@@ -336,6 +337,10 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Snapshot the served versions for the Kubernetes APIs the operator branches on. Discovery
+	// happens once here so reconcile loops can do plain map lookups.
+	apiDiscovery := discovery.DiscoverAPIs(mgr.GetRESTMapper())
+
 	// If configured to manage CRDs, do a preliminary install of them here. The Installation controller
 	// will reconcile them as well, but we need to make sure they are installed before we start the rest of the controllers.
 	if bootstrapCRDs || manageCRDs {
@@ -346,8 +351,13 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			os.Exit(1)
 		}
 
-		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
+		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy), setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure MutatingAdmissionPolicies are created")
+			os.Exit(1)
+		}
+
+		if err := admission.EnsureValidating(mgr.GetClient(), variant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy), setupLog); err != nil {
+			setupLog.Error(err, "Failed to ensure ValidatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
 
@@ -426,7 +436,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	// Attempt to auto discover the provider
-	provider, err := utils.AutoDiscoverProvider(ctx, clientset)
+	provider, err := discovery.AutoDiscoverProvider(ctx, clientset)
 	if err != nil {
 		setupLog.Error(err, "Auto discovery of Provider failed")
 		os.Exit(1)
@@ -434,7 +444,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
 
 	// Determine if we're running in single or multi-tenant mode.
-	multiTenant, err := utils.MultiTenant(ctx, clientset)
+	multiTenant, err := discovery.MultiTenant(ctx, clientset)
 	if err != nil {
 		log.Error(err, "Failed to discovery tenancy mode")
 		os.Exit(1)
@@ -442,7 +452,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
 	// Determine if we need to start the Enterprise specific controllers.
-	enterpriseCRDExists, err := utils.RequiresTigeraSecure(clientset)
+	enterpriseCRDExists, err := discovery.RequiresTigeraSecure(clientset)
 	if err != nil {
 		setupLog.Error(err, "Failed to determine if Enterprise controllers are required")
 		os.Exit(1)
@@ -508,8 +518,9 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ShutdownContext:     ctx,
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
-		ElasticExternal:     utils.UseExternalElastic(bootConfig),
+		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
+		APIDiscovery:        apiDiscovery,
 	}
 
 	// Before we start any controllers, make sure our options are valid.

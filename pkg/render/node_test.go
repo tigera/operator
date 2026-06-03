@@ -3041,31 +3041,6 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
 			})
 
-			It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
-				fipsEnabled := operatorv1.FIPSModeEnabled
-				cfg.Installation.FIPSMode = &fipsEnabled
-				cfg.Installation.Variant = operatorv1.Calico
-				cfg.Installation.NodeMetricsPort = ptr.To(int32(123))
-
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-				Expect(err).NotTo(HaveOccurred())
-
-				cfg.PrometheusServerTLS = certificateManager.KeyPair()
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-
-				resources, _ := component.Objects()
-				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
-				Expect(nodeDSObj).ToNot(BeNil())
-
-				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
-				Expect(ok).To(BeTrue())
-
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
-				verifyInitContainers(nodeDS, cfg.Installation)
-			})
-
 			Context("With calico-node DaemonSet overrides", func() {
 				rr1 := corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -3357,10 +3332,6 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		rtest.ExpectEnv(cniContainer.Env, "CNI_CONF_NAME", "10-calico.conflist")
 		rtest.ExpectEnv(cniContainer.Env, "SLEEP", "false")
 		cniImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)
-		if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
-			// Calico combined image has a -fips variant when FIPS mode is enabled.
-			cniImage = fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFIPS.Image, components.ComponentCalicoFIPS.Version)
-		}
 		if instance.Variant.IsEnterprise() {
 			cniImage = fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)
 		}
@@ -3415,10 +3386,6 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	ebpfBootstrap := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 	Expect(ebpfBootstrap).NotTo(BeNil())
 	ebpfImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
-	if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
-		// Calico Node image should have -fips suffix when FIPS mode is enabled.
-		ebpfImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
-	}
 	if instance.Variant.IsEnterprise() {
 		ebpfImage = components.TigeraRegistry + "tigera/node:" + components.ComponentTigeraNode.Version
 	}
@@ -3452,8 +3419,6 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		Expect(flexvolContainer).NotTo(BeNil())
 		if instance.Variant.IsEnterprise() {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)))
-		} else if operatorv1.IsFIPSModeEnabled(instance.FIPSMode) {
-			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFIPS.Image, components.ComponentCalicoFIPS.Version)))
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)))
 		}

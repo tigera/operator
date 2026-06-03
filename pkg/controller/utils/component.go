@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -74,16 +75,29 @@ type ComponentHandler interface {
 	SetCreateOnly()
 }
 
+// ComponentHandlerOption configures a componentHandler.
+type ComponentHandlerOption func(*componentHandler)
+
+// WithRenderContext supplies the extensions.RenderContext passed to registered
+// render modifiers.
+func WithRenderContext(ctx extensions.RenderContext) ComponentHandlerOption {
+	return func(c *componentHandler) { c.modCtx = ctx }
+}
+
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
-	return &componentHandler{
+func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...ComponentHandlerOption) ComponentHandler {
+	h := &componentHandler{
 		client:       cli,
 		scheme:       scheme,
 		cr:           cr,
 		log:          log,
 		apiGroupEnvs: apigroup.EnvVars(),
 	}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 type componentHandler struct {
@@ -93,6 +107,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
+	modCtx       extensions.RenderContext
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -453,6 +468,9 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+	if named, ok := component.(render.Extensible); ok {
+		objsToCreate = extensions.ApplyModifiers(named.Name(), c.modCtx, objsToCreate)
+	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it
 	// for image pull policy and TLS ciphers, and we use it here to decide whether the user has
@@ -1133,7 +1151,6 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 		owner, ok := cr.(runtime.Object)
 		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
 			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
-
 		}
 	}
 }

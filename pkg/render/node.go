@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
+	"github.com/tigera/operator/pkg/imageoverride"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -72,9 +73,9 @@ const (
 )
 
 var (
-	// The port used by calico/node to report Calico Enterprise BGP metrics.
+	// NodeBGPReporterPort is the port used by calico/node to report Calico Enterprise BGP metrics.
 	// This is currently not intended to be user configurable.
-	nodeBGPReporterPort int32 = 9900
+	NodeBGPReporterPort int32 = 9900
 
 	NodeTLSSecretName               = "node-certs"
 	NodeTLSSecretNameNonClusterHost = NodeTLSSecretName + TyphaNonClusterHostSuffix
@@ -115,11 +116,10 @@ type NodeConfiguration struct {
 	GoldmaneIP string
 
 	// Optional fields.
-	LogCollector            *operatorv1.LogCollector
-	MigrateNamespaces       bool
-	NodeAppArmorProfile     string
-	BirdTemplates           map[string]string
-	NodeReporterMetricsPort int
+	LogCollector        *operatorv1.LogCollector
+	MigrateNamespaces   bool
+	NodeAppArmorProfile string
+	BirdTemplates       map[string]string
 
 	// CanRemoveCNIFinalizer specifies whether CNI plugin is still needed during uninstall since the CNI plugin and
 	// associated RBAC resources are required for pod teardown to succeed. Setting this to true removes
@@ -145,10 +145,6 @@ type NodeConfiguration struct {
 	// The bindMode read from the default BGPConfiguration. Used to trigger rolling updates
 	// should this value change.
 	BindMode string
-
-	FelixPrometheusMetricsEnabled bool
-
-	FelixPrometheusMetricsPort int
 
 	V3CRDs bool
 }
@@ -184,12 +180,8 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	c.calicoImage = appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
-	switch {
-	case c.cfg.Installation.Variant.IsEnterprise():
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-	default:
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
-	}
+	nodeImage := imageoverride.Resolve(ComponentNameNode, components.ComponentCalicoNode, c.cfg.Installation)
+	c.nodeImage = appendIfErr(components.GetReference(nodeImage, reg, path, prefix, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
@@ -199,6 +191,10 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
+}
+
+func (c *nodeComponent) Name() string {
+	return ComponentNameNode
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
@@ -225,11 +221,6 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	var objsToDelete []client.Object
-
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		// Include Service for exposing node metrics.
-		objs = append(objs, c.nodeMetricsService())
-	}
 
 	cniConfig := c.nodeCNIConfigMap()
 	if cniConfig != nil {
@@ -558,34 +549,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		extraRules := []rbacv1.PolicyRule{
-			{
-				// Calico Enterprise needs to be able to read additional resources.
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{
-					"bfdconfigurations",
-					"egressgatewaypolicies",
-					"externalnetworks",
-					"licensekeys",
-					"networks",
-					"packetcaptures",
-					"remoteclusterconfigurations",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-			{
-				// Tigera Secure updates status for packet captures.
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{
-					"packetcaptures",
-					"packetcaptures/status",
-				},
-				Verbs: []string{"update"},
-			},
-		}
-		role.Rules = append(role.Rules, extraRules...)
-	}
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -646,14 +609,6 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 		},
-	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		// The Network resource is only available in Enterprise / Cloud at this time.
-		role.Rules = append(role.Rules, rbacv1.PolicyRule{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"networks"},
-			Verbs:     []string{"get"},
-		})
 	}
 	return role
 }
@@ -1098,13 +1053,16 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		c.cfg.TLS.TrustedBundle.Volume(),
 		c.cfg.TLS.NodeSecret.Volume(),
 		c.varRunCalicoVolume(),
-		corev1.Volume{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
+		{Name: "var-lib-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/calico", Type: &dirOrCreate}}},
+		// The Calico log directory. The CNI plugin logs to the cni/ subdirectory of
+		// this, and Felix writes its flow/DNS logs here on the enterprise variant.
+		{Name: "var-log-calico", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}}},
 		// Volume for the containing directory so that the init container can mount the child bpf directory if needed.
-		corev1.Volume{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
+		{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 		// Volume for the bpffs itself, used by the main node container.
-		corev1.Volume{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
+		{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 		// Volume used by mount-cgroupv2 init container to access root cgroup name space of node.
-		corev1.Volume{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
+		{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
 	}
 
 	if c.vppDataplaneEnabled() {
@@ -1118,17 +1076,6 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: *c.cfg.Installation.CNI.BinDir, Type: &dirOrCreate}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: *c.cfg.Installation.CNI.ConfDir}}})
-		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}})
-	}
-
-	// Override with Tigera-specific config.
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		// Add volume for calico logs.
-		calicoLogVol := corev1.Volume{
-			Name:         "var-log-calico",
-			VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
-		}
-		volumes = append(volumes, calicoLogVol)
 	}
 
 	// Create and append flexvolume
@@ -1330,12 +1277,6 @@ func (c *nodeComponent) cniEnvvars() []corev1.EnvVar {
 
 	envVars = append(envVars, c.cfg.K8sServiceEp.EnvVars()...)
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			envVars = append(envVars, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
-		}
-	}
-
 	return envVars
 }
 
@@ -1379,15 +1320,9 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 	if c.vppDataplaneEnabled() {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/usr/local/bin/felix-plugins", Name: "felix-plugins", ReadOnly: true})
 	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		extraNodeMounts := []corev1.VolumeMount{
-			{MountPath: "/var/log/calico", Name: "var-log-calico"},
-		}
-		nodeVolumeMounts = append(nodeVolumeMounts, extraNodeMounts...)
-	} else if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
-		cniLogMount := corev1.VolumeMount{MountPath: "/var/log/calico/cni", Name: "cni-log-dir", ReadOnly: false}
-		nodeVolumeMounts = append(nodeVolumeMounts, cniLogMount)
-	}
+	// Mount the Calico log directory. The CNI plugin writes to the cni/ subdirectory
+	// and, on the enterprise variant, Felix writes its flow/DNS logs here too.
+	nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"})
 
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
 		nodeVolumeMounts = append(nodeVolumeMounts, corev1.VolumeMount{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"})
@@ -1633,35 +1568,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_IPV6SUPPORT", Value: "false"})
 	}
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		// Add in Calico Enterprise specific configuration.
-		extraNodeEnv := []corev1.EnvVar{
-			{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-			{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", c.cfg.NodeReporterMetricsPort)},
-			{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
-			{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
-			{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
-			{Name: "FELIX_FLOWLOGSFILEINCLUDESERVICE", Value: "true"},
-			{Name: "FELIX_FLOWLOGSENABLENETWORKSETS", Value: "true"},
-			{Name: "FELIX_FLOWLOGSCOLLECTPROCESSINFO", Value: "true"},
-			{Name: "FELIX_DNSLOGSFILEENABLED", Value: "true"},
-			{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
-		}
-
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			extraNodeEnv = append(extraNodeEnv, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
-		}
-
-		if c.cfg.PrometheusServerTLS != nil {
-			extraNodeEnv = append(extraNodeEnv,
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountCertificateFilePath()},
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: c.cfg.PrometheusServerTLS.VolumeMountKeyFilePath()},
-				corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: c.cfg.TLS.TrustedBundle.MountPath()},
-			)
-		}
-		nodeEnv = append(nodeEnv, extraNodeEnv...)
-	}
-
 	if c.cfg.Installation.NodeMetricsPort != nil {
 		// If a node metrics port was given, then enable felix prometheus metrics and set the port.
 		// Note that this takes precedence over any FelixConfiguration resources in the cluster.
@@ -1740,10 +1646,7 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	var readinessCmd []string
 
 	readinessCmd = []string{components.CalicoBinaryPath, "component", "node", "health", "--bird-ready", "--felix-ready"}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		readinessCmd = append(readinessCmd, "--bgp-metrics-ready")
-	}
-	// If not using BGP or using VPP, don't check bird status (or bgp metrics server for enterprise).
+	// If not using BGP or using VPP, don't check bird status.
 	if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
 		readinessCmd = []string{components.CalicoBinaryPath, "component", "node", "health", "--felix-ready"}
 	}
@@ -1767,56 +1670,6 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 		TimeoutSeconds: 5,
 	}
 	return lp, rp
-}
-
-// nodeMetricsService creates a Service which exposes two endpoints on calico/node for
-// reporting Prometheus metrics (for policy enforcement activity and BGP stats).
-// This service is used internally by Calico Enterprise and is separate from general
-// Prometheus metrics which are user-configurable.
-func (c *nodeComponent) nodeMetricsService() *corev1.Service {
-	ports := []corev1.ServicePort{
-		{
-			Name:       "calico-metrics-port",
-			Port:       int32(c.cfg.NodeReporterMetricsPort),
-			TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
-			Protocol:   corev1.ProtocolTCP,
-		},
-		{
-			Name:       "calico-bgp-metrics-port",
-			Port:       nodeBGPReporterPort,
-			TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
-			Protocol:   corev1.ProtocolTCP,
-		},
-	}
-
-	if c.cfg.FelixPrometheusMetricsEnabled {
-		felixMetricsPort := int32(c.cfg.FelixPrometheusMetricsPort)
-
-		ports = append(ports, corev1.ServicePort{
-			Name:       "felix-metrics-port",
-			Port:       felixMetricsPort,
-			TargetPort: intstr.FromInt(int(felixMetricsPort)),
-			Protocol:   corev1.ProtocolTCP,
-		})
-	}
-
-	return &corev1.Service{
-		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      CalicoNodeMetricsService,
-			Namespace: common.CalicoNamespace,
-			Labels:    map[string]string{"k8s-app": CalicoNodeObjectName},
-		},
-		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": CalicoNodeObjectName},
-			// Important: "None" tells Kubernetes that we want a headless service with
-			// no kube-proxy load balancer.  If we omit this then kube-proxy will render
-			// a huge set of iptables rules for this service since there's an instance
-			// on every node.
-			ClusterIP: "None",
-			Ports:     ports,
-		},
-	}
 }
 
 // getAutodetectionMethod returns the IP auto detection method in a form understandable by the calico/node

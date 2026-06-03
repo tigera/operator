@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -39,3 +39,21 @@ type Component interface {
 	// that create pods. Return OSTypeAny means that no node selector should be set for the "kubernetes.io/os" label.
 	SupportedOSType() rmeta.OSType
 }
+
+// Extensible is implemented by components that expose extension points. The
+// componentHandler uses Name() to look up registered modifiers. Components
+// without extensions need not implement it.
+//
+// Note this interface is structural: any component that grows a Name() string
+// method for an unrelated reason becomes modifier-eligible. There are no name
+// collisions today, but keep it in mind when adding a Name() method.
+type Extensible interface {
+	Name() string
+}
+
+// Component names used as keys into the extension modifier registry. Keep these
+// in sync with the Name() methods that return them.
+const (
+	ComponentNameTypha = "typha"
+	ComponentNameNode  = "node"
+)

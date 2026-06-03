@@ -453,10 +453,14 @@ func (c *windowsComponent) cniContainer() corev1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
+	// The combined calico binary ships in the cni-windows image at
+	// /opt/cni/bin/calico.exe (Linux uses /usr/bin/calico in the node image).
+	// Keep the binary path and the Image in sync: the node image's
+	// /CalicoWindows/calico-node.exe would not resolve in the cni image.
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
-		Command:         []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "cni", "install"},
+		Command:         []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/calico.exe", "component", "cni", "install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
 		VolumeMounts:    cniVolumeMounts,

@@ -248,6 +248,11 @@ type InstallationSpec struct {
 	// the cluster (including the API server) are exempt from proxying.
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
+
+	// NetworkPolicy configures how the operator manages the NetworkPolicies and GlobalNetworkPolicies
+	// it installs to protect the Calico components it manages.
+	// +optional
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // BPFNetworkBootstrapType defines how the initial networking configuration is executed.

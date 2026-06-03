@@ -34,6 +34,15 @@ import (
 
 func intPtr(i int32) *int32 { return &i }
 
+var (
+	enabled  = opv1.NetworkPolicyManagementEnabled
+	disabled = opv1.NetworkPolicyManagementDisabled
+)
+
+func npSpec(m *opv1.NetworkPolicyManagement) *opv1.NetworkPolicySpec {
+	return &opv1.NetworkPolicySpec{ManagePolicies: m}
+}
+
 var _ = Describe("Installation merge tests", func() {
 	DescribeTable("merge Variant", func(main, second, expectVariant *opv1.ProductVariant) {
 		m := opv1.InstallationSpec{}
@@ -1592,6 +1601,18 @@ var _ = Describe("Installation merge tests", func() {
 					CNI:           &opv1.CNISpec{},
 				},
 				&defaulted),
+		)
+
+		DescribeTable("merge NetworkPolicy", func(main, second, expect *opv1.NetworkPolicySpec) {
+			m := opv1.InstallationSpec{NetworkPolicy: main}
+			s := opv1.InstallationSpec{NetworkPolicy: second}
+			inst := OverrideInstallationSpec(m, s)
+			Expect(inst.NetworkPolicy).To(Equal(expect))
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main set, second unset", npSpec(&enabled), nil, npSpec(&enabled)),
+			Entry("Main unset, second set", nil, npSpec(&enabled), npSpec(&enabled)),
+			Entry("Both set, different", npSpec(&enabled), npSpec(&disabled), npSpec(&disabled)),
 		)
 	})
 })

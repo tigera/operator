@@ -36,14 +36,6 @@ var (
 		imagePath: "{{ .ImagePath }}",
 		variant:   calicoVariant,
 	}
-
-	ComponentCalicoNodeFIPS = Component{
-		Version:   "{{ .Version }}-fips",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   calicoVariant,
-	}
 {{- end }}
 {{ with index .Components  "node-windows" }}
 	ComponentCalicoNodeWindows = Component{
@@ -134,20 +126,11 @@ var (
 		imagePath: "{{ .ImagePath }}",
 		variant:   calicoVariant,
 	}
-
-	ComponentCalicoFIPS = Component{
-		Version:   "{{ .Version }}-fips",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   calicoVariant,
-	}
 {{- end }}
 
 	CalicoImages = []Component{
 		ComponentCalicoCNIWindows,
 		ComponentCalicoNode,
-		ComponentCalicoNodeFIPS,
 		ComponentCalicoNodeWindows,
 		ComponentCalicoWhisker,
 		ComponentCalicoEnvoyGateway,
@@ -158,6 +141,5 @@ var (
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
 		ComponentCalico,
-		ComponentCalicoFIPS,
 	}
 )

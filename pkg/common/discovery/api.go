@@ -24,6 +24,7 @@ import (
 // of) an API is available.
 var trackedGroupKinds = []schema.GroupKind{
 	{Group: "admissionregistration.k8s.io", Kind: "MutatingAdmissionPolicy"},
+	{Group: "admissionregistration.k8s.io", Kind: "ValidatingAdmissionPolicy"},
 }
 
 // APIDiscovery is a snapshot of which API versions a cluster serves for the set of GroupKinds the

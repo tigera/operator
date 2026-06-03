@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -222,9 +221,8 @@ type InstallationSpec struct {
 	// CalicoNodeWindowsDaemonSet configures the calico-node-windows DaemonSet.
 	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
-	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-	// Only supported for Variant=Calico.
-	// Default: Disabled
+	// Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+	// installation degraded.
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
 	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
@@ -1145,11 +1143,6 @@ type CertificateManagement struct {
 // IsFIPSModeEnabled is a convenience function for turning a FIPSMode reference into a bool.
 func IsFIPSModeEnabled(mode *FIPSMode) bool {
 	return mode != nil && *mode == FIPSModeEnabled
-}
-
-// IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
-func IsFIPSModeEnabledString(mode *FIPSMode) string {
-	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
 }
 
 type WindowsNodeSpec struct {

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -199,7 +200,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	return true
 }
 
-func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType, installationSpec *operatorv1.InstallationSpec) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return fmt.Errorf("object is not ObjectMetaAccessor")
@@ -230,13 +231,6 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Ensure that if the object is something the creates a pod that it is scheduled on nodes running the operating
 	// system as specified by the osType.
 	ensureOSSchedulingRestrictions(obj, osType)
-
-	// Look up the InstallationSpec once and reuse it for the passes that need it
-	// (image pull policy and TLS ciphers), so we don't pay for the same Get twice.
-	var installationSpec *operatorv1.InstallationSpec
-	if _, spec, err := GetInstallationSpec(ctx, c.client); err == nil {
-		installationSpec = spec
-	}
 
 	// Set image pull policy based on user input, if specified.
 	var configuredPolicy *v1.PullPolicy
@@ -459,6 +453,29 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+
+	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it
+	// for image pull policy and TLS ciphers, and we use it here to decide whether the user has
+	// disabled policy management.
+	_, installationSpec, err := GetInstallationSpec(ctx, c.client)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	// If the user has disabled policy management, we should not create any NetworkPolicies, and we
+	// should actively delete any that we have already created.
+	if installationSpec != nil && policyManagementDisabled(installationSpec) {
+		newToCreate := []client.Object{}
+		for _, obj := range objsToCreate {
+			if isNetworkPolicy(obj) {
+				objsToDelete = append(objsToDelete, obj)
+			} else {
+				newToCreate = append(newToCreate, obj)
+			}
+		}
+		objsToCreate = newToCreate
+	}
+
 	osType := component.SupportedOSType()
 
 	if len(c.apiGroupEnvs) > 0 {
@@ -476,7 +493,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 		// if we need to retry the function
 		alreadyRetriedConflict := false
 	conflictRetry:
-		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
+		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType, installationSpec)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
 				// Remember that we've had an "already exists" error, but otherwise
@@ -1205,4 +1222,20 @@ func mergeEnvVars(existing []v1.EnvVar, toMerge []v1.EnvVar) []v1.EnvVar {
 		}
 	}
 	return existing
+}
+
+func isNetworkPolicy(obj client.Object) bool {
+	switch obj.(type) {
+	case *v3.NetworkPolicy, *v3.GlobalNetworkPolicy, *netv1.NetworkPolicy:
+		return true
+	}
+	return false
+}
+
+// policyManagementDisabled returns true if the user has explicitly disabled operator management of
+// the NetworkPolicies it installs.
+func policyManagementDisabled(installation *operatorv1.InstallationSpec) bool {
+	return installation.NetworkPolicy != nil &&
+		installation.NetworkPolicy.ManagePolicies != nil &&
+		*installation.NetworkPolicy.ManagePolicies == operatorv1.NetworkPolicyManagementDisabled
 }

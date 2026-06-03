@@ -122,6 +122,12 @@ func V3Client(config *rest.Config) (client.Client, error) {
 		return nil, fmt.Errorf("failed to add projectcalico.org/v3 to scheme: %w", err)
 	}
 
+	// The component handler reads the Installation regardless of which client writes the rendered
+	// objects, so this client needs to be able to resolve operator.tigera.io types as well.
+	if err := operatorv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add operator.tigera.io to scheme: %w", err)
+	}
+
 	c, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %w", err)

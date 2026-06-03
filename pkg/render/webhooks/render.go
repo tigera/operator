@@ -218,6 +218,12 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// Set DNSPolicy based on the final HostNetwork value (after overrides).
 	if dep.Spec.Template.Spec.HostNetwork {
 		dep.Spec.Template.Spec.DNSPolicy = corev1.DNSClusterFirstWithHostNet
+		// Mark the pod for the podiprecovery controller so it can recover
+		// after a node IP change.
+		if dep.Spec.Template.Labels == nil {
+			dep.Spec.Template.Labels = map[string]string{}
+		}
+		dep.Spec.Template.Labels[common.HostNetworkedPodLabel] = "true"
 	}
 
 	// Read the final container port from the deployment (after overrides) for use in the Service.

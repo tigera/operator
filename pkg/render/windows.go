@@ -456,7 +456,7 @@ func (c *windowsComponent) cniContainer() corev1.Container {
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
-		Command:         []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/install.exe"},
+		Command:         []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "cni", "install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
 		VolumeMounts:    cniVolumeMounts,

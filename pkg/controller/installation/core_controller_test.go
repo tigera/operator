@@ -2784,3 +2784,223 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 	})
 })
+
+var _ = Describe("updateValidatingAdmissionPolicies", func() {
+	var (
+		ctx              context.Context
+		cancel           context.CancelFunc
+		r                ReconcileInstallation
+		scheme           *runtime.Scheme
+		mockStatus       *status.MockStatus
+		componentHandler *fakeComponentHandler
+		log              logr.Logger
+		installation     *operator.Installation
+	)
+
+	clientFor := func(initial ...client.Object) client.Client {
+		return ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(initial...).Build()
+	}
+
+	discoveryFor := func(vapVersion string) *discovery.APIDiscovery {
+		m := map[schema.GroupKind]string{}
+		if vapVersion != "" {
+			m[admission.ValidatingPolicyGroupKind] = vapVersion
+		}
+		return discovery.NewStaticAPIDiscovery(m)
+	}
+
+	BeforeEach(func() {
+		log = logr.Discard()
+		ctx, cancel = context.WithCancel(context.Background())
+
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1alpha1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		componentHandler = newFakeComponentHandler()
+		installation = &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Variant: operator.Calico,
+			},
+		}
+	})
+
+	AfterEach(func() {
+		cancel()
+	})
+
+	It("should create v1 VAPs when v1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+
+		var vapCount, vapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionregistrationv1.ValidatingAdmissionPolicy:
+				vapCount++
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedVAPLabel, admission.ManagedVAPLabelValue))
+			case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+				vapbCount++
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedVAPLabel, admission.ManagedVAPLabelValue))
+			}
+		}
+		Expect(vapCount).To(Equal(1))
+		Expect(vapbCount).To(Equal(1))
+	})
+
+	It("should create v1beta1 VAPs when only v1beta1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+
+		var vapCount, vapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionv1beta1.ValidatingAdmissionPolicy:
+				vapCount++
+			case *admissionv1beta1.ValidatingAdmissionPolicyBinding:
+				vapbCount++
+			}
+		}
+		Expect(vapCount).To(Equal(1))
+		Expect(vapbCount).To(Equal(1))
+	})
+
+	It("should create v1alpha1 VAPs when only v1alpha1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+	})
+
+	It("should skip without degrading when no served version exists", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(""),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(BeEmpty())
+		mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	It("should not create VAPs when v3CRDs=false", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       false,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(BeEmpty())
+	})
+
+	It("should delete stale v1 VAPs with managed label", func() {
+		staleVAP := &admissionregistrationv1.ValidatingAdmissionPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "stale-policy",
+				Labels: map[string]string{admission.ManagedVAPLabel: admission.ManagedVAPLabelValue},
+			},
+		}
+		staleVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "stale-binding",
+				Labels: map[string]string{admission.ManagedVAPLabel: admission.ManagedVAPLabelValue},
+			},
+		}
+
+		r = ReconcileInstallation{
+			client:       clientFor(staleVAP, staleVAPB),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToDelete).To(HaveLen(2))
+		deletedNames := map[string]bool{}
+		for _, obj := range componentHandler.objectsToDelete {
+			deletedNames[obj.GetName()] = true
+		}
+		Expect(deletedNames).To(HaveKey("stale-policy"))
+		Expect(deletedNames).To(HaveKey("stale-binding"))
+	})
+
+	It("should work with Enterprise variant", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		installation.Spec.Variant = operator.TigeraSecureEnterprise
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+	})
+})

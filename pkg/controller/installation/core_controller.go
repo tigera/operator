@@ -903,6 +903,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
+	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
+	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
+	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
+	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
@@ -929,10 +936,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid computed config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-	}
-
-	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
-		return reconcile.Result{}, err
 	}
 
 	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {

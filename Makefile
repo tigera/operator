@@ -1018,7 +1018,6 @@ gen-enterprise-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-enterprise.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(enterprise_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1037,7 +1036,6 @@ gen-calico-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-calico.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(calico_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1046,7 +1044,7 @@ gen-calico-imageset: $(BUILD_DIR)
 	done
 ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
 	@docker run $(OPERATOR_IMAGE) --print-images=list | \
-	  grep -v -e "Failed to read" -e fips | \
+	  grep -v -e "Failed to read" | \
 	  grep -e 'tigera/key-cert-provisioner' | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \

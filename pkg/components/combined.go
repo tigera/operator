@@ -23,14 +23,10 @@ import (
 const CalicoBinaryPath = "/usr/bin/calico"
 
 // CombinedCalicoImage returns the combined calico/calico Component for the given installation.
-// The right Component is selected based on the installation variant (Calico OSS vs. Calico Enterprise)
-// and FIPS mode. FIPS + Enterprise is rejected at admission so it is not represented here.
+// The right Component is selected based on the installation variant (Calico OSS vs. Calico Enterprise).
 func CombinedCalicoImage(installation *operatorv1.InstallationSpec) Component {
 	if installation.Variant.IsEnterprise() {
 		return ComponentTigeraCalico
-	}
-	if operatorv1.IsFIPSModeEnabled(installation.FIPSMode) {
-		return ComponentCalicoFIPS
 	}
 	return ComponentCalico
 }

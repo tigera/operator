@@ -94,8 +94,8 @@ func CreateCSRInitContainer(
 }
 
 // ResolveCSRInitImage resolves the image needed for the CSR init container, taking into account the
-// specified ImageSet. The init container reuses the combined calico/calico image (or its FIPS variant
-// for OSS) and dispatches into the key-cert-provisioner Cobra subcommand.
+// specified ImageSet. The init container reuses the combined calico/calico image and dispatches into
+// the key-cert-provisioner Cobra subcommand.
 func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
 	return components.GetReference(components.CombinedCalicoImage(inst), inst.Registry, inst.ImagePath, inst.ImagePrefix, is)
 }

@@ -120,7 +120,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -177,7 +177,7 @@ var _ = Describe("monitor rendering tests", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -457,7 +457,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusServiceObj.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt(9095)))
 
 		// PodMonitor
-		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.FluentdMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		servicemonitorObj, ok := rtest.GetResource(toCreate, monitor.FluentBitMetrics, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
@@ -465,15 +465,15 @@ var _ = Describe("monitor rendering tests", func() {
 			{
 				Key:      "k8s-app",
 				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"fluentd-node", "fluentd-node-windows"},
+				Values:   []string{"calico-fluent-bit", "calico-fluent-bit-windows"},
 			},
 		}))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
-		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-fluentd"))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("calico-system"))
 		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Endpoints[0].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluentd-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluent-bit-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 
 		// PrometheusRule
@@ -530,7 +530,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
 		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
 
-		servicemonitorObj, ok = rtest.GetResource(toCreate, "fluentd-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		servicemonitorObj, ok = rtest.GetResource(toCreate, "calico-fluent-bit-metrics", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Selector.MatchLabels).To(HaveLen(0))
 		Expect(servicemonitorObj.Spec.Selector.MatchExpressions).To(HaveLen(1))
@@ -538,17 +538,20 @@ var _ = Describe("monitor rendering tests", func() {
 			{
 				Key:      "k8s-app",
 				Operator: metav1.LabelSelectorOpIn,
-				Values:   []string{"fluentd-node", "fluentd-node-windows"},
+				Values:   []string{"calico-fluent-bit", "calico-fluent-bit-windows"},
 			},
 		}))
 		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames).To(HaveLen(1))
-		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("tigera-fluentd"))
+		Expect(servicemonitorObj.Spec.NamespaceSelector.MatchNames[0]).To(Equal("calico-system"))
 		Expect(servicemonitorObj.Spec.Endpoints).To(HaveLen(1))
 		Expect(servicemonitorObj.Spec.Endpoints[0].HonorLabels).To(BeTrue())
 		Expect(servicemonitorObj.Spec.Endpoints[0].Interval).To(BeEquivalentTo("5s"))
-		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluentd-metrics-port"))
+		Expect(servicemonitorObj.Spec.Endpoints[0].Port).To(Equal("fluent-bit-metrics-port"))
 		Expect(servicemonitorObj.Spec.Endpoints[0].ScrapeTimeout).To(BeEquivalentTo("5s"))
-		Expect(*servicemonitorObj.Spec.Endpoints[0].RelabelConfigs[0].Replacement).To(Equal("https"))
+		// fluent-bit's monitoring server is plain HTTP (no TLS support), unlike
+		// fluentd's mTLS prometheus exporter.
+		Expect(servicemonitorObj.Spec.Endpoints[0].RelabelConfigs).To(BeEmpty())
+		Expect(servicemonitorObj.Spec.Endpoints[0].TLSConfig).To(BeNil())
 
 		servicemonitorObj, ok = rtest.GetResource(toCreate, "calico-api", common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
 		Expect(ok).To(BeTrue())
@@ -679,7 +682,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -869,7 +872,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render external prometheus resources with service monitor and custom token", func() {
@@ -895,7 +898,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render external prometheus resources without service monitor", func() {
@@ -911,7 +914,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
@@ -925,7 +928,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(4))
+		Expect(toDelete).To(HaveLen(6))
 		sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
 		Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
 			TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
@@ -1002,7 +1005,7 @@ var _ = Describe("monitor rendering tests", func() {
 		serviceMonitorNames := []string{
 			monitor.CalicoNodeMonitor,
 			monitor.ElasticsearchMetrics,
-			monitor.FluentdMetrics,
+			monitor.FluentBitMetrics,
 			"calico-api",
 			"calico-kube-controllers-metrics",
 		}
@@ -1027,7 +1030,7 @@ var _ = Describe("monitor rendering tests", func() {
 		serviceMonitorNames := []string{
 			monitor.CalicoNodeMonitor,
 			monitor.ElasticsearchMetrics,
-			monitor.FluentdMetrics,
+			monitor.FluentBitMetrics,
 			"calico-api",
 			"calico-kube-controllers-metrics",
 		}
@@ -1064,8 +1067,8 @@ var _ = Describe("monitor rendering tests", func() {
 		serviceMonitor := sm.(*monitoringv1.ServiceMonitor)
 		Expect(serviceMonitor.Spec.Endpoints[0].Port).To(Equal(monitor.OperatorMetricsPortName))
 
-		// Neither should be in toDelete (only PodMonitor, Deployment, typhaServiceMonitor).
-		Expect(toDelete).To(HaveLen(3))
+		// Neither should be in toDelete (only the legacy monitors, Deployment, typhaServiceMonitor).
+		Expect(toDelete).To(HaveLen(5))
 	})
 
 	It("Should include operator alert rules in PrometheusRule when OperatorMetricsEnabled is true", func() {
@@ -1188,7 +1191,7 @@ func expectedBaseResources() []client.Object {
 		&monitoringv1.PrometheusRule{ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "PrometheusRule", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-monitor", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "elasticsearch-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
-		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
+		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceMonitor", APIVersion: "monitoring.coreos.com/v1"}},
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},

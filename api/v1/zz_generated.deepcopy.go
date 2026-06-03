@@ -7278,6 +7278,11 @@ func (in *LogCollectorSpec) DeepCopyInto(out *LogCollectorSpec) {
 		*out = new(FluentdDaemonSet)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.CalicoFluentBitDaemonSet != nil {
+		in, out := &in.CalicoFluentBitDaemonSet, &out.CalicoFluentBitDaemonSet
+		*out = new(FluentdDaemonSet)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.EKSLogForwarderDeployment != nil {
 		in, out := &in.EKSLogForwarderDeployment, &out.EKSLogForwarderDeployment
 		*out = new(EKSLogForwarderDeployment)

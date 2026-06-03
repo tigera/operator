@@ -20,61 +20,64 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-type installationExtension struct{}
+// installationFactory is the Calico Enterprise RenderContextFactory. It builds
+// the base render context and then does the controller-side work the modifiers
+// can't: validating config and creating/fetching the certificates that feed the
+// trusted bundle.
+type installationFactory struct{}
 
 func registerInstallation() {
-	operator.RegisterInstallationExtension(&installationExtension{})
+	extensions.RegisterRenderContextFactory(&installationFactory{})
 }
 
-func (e *installationExtension) Prepare(p operator.InstallationPrep) (operator.Context, error) {
-	ctx := operator.Context{
-		Installation:       p.Installation,
-		FelixConfiguration: p.FelixConfiguration,
-		ClusterDomain:      p.ClusterDomain,
-		TrustedBundle:      p.TrustedBundle,
-	}
-	if !p.Installation.Variant.IsEnterprise() {
-		return ctx, nil
+func (f *installationFactory) New(opts ...extensions.RenderContextOption) (extensions.RenderContext, error) {
+	in := extensions.ApplyInputs(opts...)
+	rc := extensions.BaseRenderContext(in)
+	if in.Installation == nil || !in.Installation.Variant.IsEnterprise() {
+		return rc, nil
 	}
 
-	// Reject the unsupported zero reporter port. (Port value derivation stays in
-	// the OSS controller; only validation moves here.)
-	if p.FelixConfiguration.Spec.PrometheusReporterPort != nil && *p.FelixConfiguration.Spec.PrometheusReporterPort == 0 {
-		return ctx, errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+	// Reject the unsupported zero reporter port. The port value itself is derived
+	// in the node modifier; only this validation lives here.
+	if in.FelixConfiguration.Spec.PrometheusReporterPort != nil && *in.FelixConfiguration.Spec.PrometheusReporterPort == 0 {
+		return rc, errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 	}
 
-	nodePrometheusTLS, err := p.CertificateManager.GetOrCreateKeyPair(
-		p.Client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, p.ClusterDomain))
+	nodePrometheusTLS, err := in.CertificateManager.GetOrCreateKeyPair(
+		in.Client,
+		render.NodePrometheusTLSServerSecret,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, in.ClusterDomain),
+	)
 	if err != nil {
-		return ctx, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
+		return rc, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
 	}
 	if nodePrometheusTLS != nil {
-		p.TrustedBundle.AddCertificates(nodePrometheusTLS)
+		in.TrustedBundle.AddCertificates(nodePrometheusTLS)
 	}
-	ctx.NodePrometheusTLS = nodePrometheusTLS
+	rc.NodePrometheusTLS = nodePrometheusTLS
 
-	prometheusClientCert, err := p.CertificateManager.GetCertificate(p.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	prometheusClientCert, err := in.CertificateManager.GetCertificate(in.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return ctx, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
+		return rc, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
 	}
 	if prometheusClientCert != nil {
-		p.TrustedBundle.AddCertificates(prometheusClientCert)
+		in.TrustedBundle.AddCertificates(prometheusClientCert)
 	}
 
-	esgwCertificate, err := p.CertificateManager.GetCertificate(p.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	esgwCertificate, err := in.CertificateManager.GetCertificate(in.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
-		return ctx, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
+		return rc, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
 	}
 	if esgwCertificate != nil {
-		p.TrustedBundle.AddCertificates(esgwCertificate)
+		in.TrustedBundle.AddCertificates(esgwCertificate)
 	}
 
-	return ctx, nil
+	return rc, nil
 }

@@ -40,17 +40,20 @@ type Component interface {
 	SupportedOSType() rmeta.OSType
 }
 
-// Named is implemented by components that expose enterprise extension points.
-// The componentHandler uses Name() to look up registered patches. Components
-// without enterprise extensions need not implement it.
-type Named interface {
+// Extensible is implemented by components that expose extension points. The
+// componentHandler uses Name() to look up registered modifiers. Components
+// without extensions need not implement it.
+//
+// Note this interface is structural: any component that grows a Name() string
+// method for an unrelated reason becomes modifier-eligible. There are no name
+// collisions today, but keep it in mind when adding a Name() method.
+type Extensible interface {
 	Name() string
 }
 
-// Component names used as keys into the operator patch registry. Keep these in
-// sync with the Name() methods that return them.
+// Component names used as keys into the extension modifier registry. Keep these
+// in sync with the Name() methods that return them.
 const (
-	ComponentNameTypha     = "typha"
-	ComponentNameNode      = "node"
-	ComponentNameAPIServer = "apiserver"
+	ComponentNameTypha = "typha"
+	ComponentNameNode  = "node"
 )

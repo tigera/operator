@@ -46,7 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -2487,13 +2487,13 @@ func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 	panic("SubResource not implemented in mockClient")
 }
 
-var _ = Describe("componentHandler patch application", func() {
+var _ = Describe("componentHandler modifier application", func() {
 	AfterEach(func() {
-		operator.ResetForTest()
+		extensions.ResetForTest()
 	})
 
-	It("applies registered patches to a named component before create", func() {
-		operator.Patch("fake", func(ctx operator.Context, objs []client.Object) []client.Object {
+	It("applies registered modifiers to a named component before create", func() {
+		extensions.Modify("fake", func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
 			cm := objs[0].(*corev1.ConfigMap)
 			cm.Data = map[string]string{"patched": "yes"}
 			return objs

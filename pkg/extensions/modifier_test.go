@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package operator_test
+package extensions_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -21,24 +21,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("patch registry", func() {
+var _ = Describe("modifier registry", func() {
 	AfterEach(func() {
-		operator.ResetForTest()
+		extensions.ResetForTest()
 	})
 
-	It("applies a registered patch to the matching component", func() {
-		operator.Patch("test", func(ctx operator.Context, objs []client.Object) []client.Object {
-			cm, ok := operator.FindObject[*corev1.ConfigMap](objs, "cm")
+	It("applies a registered modifier to the matching component", func() {
+		extensions.Modify("test", func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+			cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
 			Expect(ok).To(BeTrue())
 			cm.Data = map[string]string{"k": "v"}
 			return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out := operator.ApplyPatches("test", operator.Context{}, in)
+		out := extensions.ApplyModifiers("test", extensions.RenderContext{}, in)
 
 		Expect(out).To(HaveLen(2))
 		cm := out[0].(*corev1.ConfigMap)
@@ -46,9 +46,23 @@ var _ = Describe("patch registry", func() {
 		Expect(out[1].GetName()).To(Equal("extra"))
 	})
 
-	It("returns objects unchanged when no patch is registered", func() {
+	It("returns objects unchanged when no modifier is registered", func() {
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out := operator.ApplyPatches("unregistered", operator.Context{}, in)
+		out := extensions.ApplyModifiers("unregistered", extensions.RenderContext{}, in)
 		Expect(out).To(Equal(in))
+	})
+
+	It("replaces rather than stacks when a component is registered twice", func() {
+		add := func(name string) extensions.Modifier {
+			return func(_ extensions.RenderContext, objs []client.Object) []client.Object {
+				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}})
+			}
+		}
+		extensions.Modify("test", add("first"))
+		extensions.Modify("test", add("second"))
+
+		out := extensions.ApplyModifiers("test", extensions.RenderContext{}, nil)
+		Expect(out).To(HaveLen(1))
+		Expect(out[0].GetName()).To(Equal("second"))
 	})
 })

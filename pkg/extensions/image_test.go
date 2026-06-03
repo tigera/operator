@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package operator_test
+package extensions_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -20,16 +20,16 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/extensions"
 )
 
 var _ = Describe("image overrides", func() {
 	AfterEach(func() {
-		operator.ResetForTest()
+		extensions.ResetForTest()
 	})
 
 	It("uses the override when one matches", func() {
-		operator.OverrideImage("node", func(in *operatorv1.InstallationSpec) (components.Component, bool) {
+		extensions.OverrideImage("node", func(in *operatorv1.InstallationSpec) (components.Component, bool) {
 			if !in.Variant.IsEnterprise() {
 				return components.Component{}, false
 			}
@@ -37,11 +37,11 @@ var _ = Describe("image overrides", func() {
 		})
 
 		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
-		Expect(operator.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
+		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 
 	It("falls back to the default when no override matches", func() {
-		oss := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		Expect(operator.ResolveImage("node", components.ComponentCalicoNode, oss)).To(Equal(components.ComponentCalicoNode))
+		calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
+		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
 	})
 })

@@ -529,9 +529,9 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
-	// Wire in-repo enterprise modifiers and extensions into the operator
-	// registries. After the monorepo split this call moves to calico-private's
-	// main.
+	// Wire the in-repo Calico Enterprise extensions (the render context factory,
+	// modifiers, and image overrides) into the operator registries. After the
+	// monorepo split this call moves to calico-private's main.
 	enterprise.Register()
 
 	err = controller.AddToManager(mgr, options)

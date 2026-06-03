@@ -20,10 +20,15 @@ import (
 	"github.com/tigera/operator/pkg/enterprise"
 )
 
-// The render suite asserts enterprise-variant output for components whose
-// variant-specific behavior now lives in registered modifiers/overrides
-// (e.g. the node image). Register them once so the suite exercises the same
-// integrated behavior the operator binary produces.
+// Register the enterprise extensions once for the whole render suite. This wires
+// two things the suite relies on:
+//   - the image override, which the Objects()-level render tests pick up through
+//     ResolveImages (e.g. the enterprise node image), and
+//   - the modifiers, which node_enterprise_test.go applies explicitly to real
+//     render output to check they still match it.
+//
+// The plain Objects()-level tests do not run modifiers - those only run at the
+// componentHandler - so registering here does not change their output.
 var _ = BeforeSuite(func() {
 	enterprise.Register()
 })

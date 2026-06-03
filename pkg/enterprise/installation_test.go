@@ -21,48 +21,45 @@ import (
 	. "github.com/onsi/gomega"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/apimachinery/pkg/runtime"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/enterprise"
-	"github.com/tigera/operator/pkg/operator"
-	"k8s.io/apimachinery/pkg/runtime"
+	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("installation enterprise extension", func() {
+var _ = Describe("installation render context factory", func() {
 	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() {
-		operator.ResetForTest()
-		operator.ResetExtensionsForTest()
-	})
+	AfterEach(func() { extensions.ResetForTest() })
 
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
-		p := newPrep(operatorv1.CalicoEnterprise)
-		p.FelixConfiguration = &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port}}
-		_, err := operator.GetInstallationExtension().Prepare(p)
+		opts := newOpts(operatorv1.CalicoEnterprise)
+		opts = append(opts, extensions.WithFelixConfiguration(&v3.FelixConfiguration{
+			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
+		}))
+		_, err := extensions.GetRenderContextFactory().New(opts...)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		p := newPrep(operatorv1.CalicoEnterprise)
-		p.FelixConfiguration = &v3.FelixConfiguration{}
-		ctx, err := operator.GetInstallationExtension().Prepare(p)
+		rc, err := extensions.GetRenderContextFactory().New(newOpts(operatorv1.CalicoEnterprise)...)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ctx.NodePrometheusTLS).NotTo(BeNil())
+		Expect(rc.NodePrometheusTLS).NotTo(BeNil())
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		p := newPrep(operatorv1.Calico)
-		ctx, err := operator.GetInstallationExtension().Prepare(p)
+		rc, err := extensions.GetRenderContextFactory().New(newOpts(operatorv1.Calico)...)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ctx.NodePrometheusTLS).To(BeNil())
+		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})
 })
 
-func newPrep(variant operatorv1.ProductVariant) operator.InstallationPrep {
+func newOpts(variant operatorv1.ProductVariant) []extensions.RenderContextOption {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -71,15 +68,13 @@ func newPrep(variant operatorv1.ProductVariant) operator.InstallationPrep {
 	Expect(err).NotTo(HaveOccurred())
 	trustedBundle := certManager.CreateTrustedBundle()
 
-	return operator.InstallationPrep{
-		Ctx:    context.Background(),
-		Client: c,
-		Installation: &operatorv1.InstallationSpec{
-			Variant: variant,
-		},
-		FelixConfiguration: &v3.FelixConfiguration{},
-		CertificateManager: certManager,
-		TrustedBundle:      trustedBundle,
-		ClusterDomain:      "cluster.local",
+	return []extensions.RenderContextOption{
+		extensions.WithContext(context.Background()),
+		extensions.WithClient(c),
+		extensions.WithInstallation(&operatorv1.InstallationSpec{Variant: variant}),
+		extensions.WithFelixConfiguration(&v3.FelixConfiguration{}),
+		extensions.WithCertificateManager(certManager),
+		extensions.WithTrustedBundle(trustedBundle),
+		extensions.WithClusterDomain("cluster.local"),
 	}
 }

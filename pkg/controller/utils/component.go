@@ -47,7 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -78,8 +78,9 @@ type ComponentHandler interface {
 // ComponentHandlerOption configures a componentHandler.
 type ComponentHandlerOption func(*componentHandler)
 
-// WithContext supplies the operator.Context passed to registered render patches.
-func WithContext(ctx operator.Context) ComponentHandlerOption {
+// WithRenderContext supplies the extensions.RenderContext passed to registered
+// render modifiers.
+func WithRenderContext(ctx extensions.RenderContext) ComponentHandlerOption {
 	return func(c *componentHandler) { c.modCtx = ctx }
 }
 
@@ -106,7 +107,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
-	modCtx       operator.Context
+	modCtx       extensions.RenderContext
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -467,8 +468,8 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
-	if named, ok := component.(render.Named); ok {
-		objsToCreate = operator.ApplyPatches(named.Name(), c.modCtx, objsToCreate)
+	if named, ok := component.(render.Extensible); ok {
+		objsToCreate = extensions.ApplyModifiers(named.Name(), c.modCtx, objsToCreate)
 	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it
@@ -1150,7 +1151,6 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 		owner, ok := cr.(runtime.Object)
 		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
 			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
-
 		}
 	}
 }

@@ -79,17 +79,16 @@ func allCalicoComponents(
 	secretsAndConfigMaps := render.NewCreationPassthrough(objs...)
 
 	nodeCfg := &render.NodeConfiguration{
-		K8sServiceEp:            k8sServiceEp,
-		Installation:            cr,
-		TLS:                     typhaNodeTLS,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		ClusterDomain:           clusterDomain,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		LogCollector:            logCollector,
-		BirdTemplates:           bt,
-		MigrateNamespaces:       up,
-		FelixHealthPort:         9099,
+		K8sServiceEp:        k8sServiceEp,
+		Installation:        cr,
+		TLS:                 typhaNodeTLS,
+		NodeAppArmorProfile: nodeAppArmorProfile,
+		ClusterDomain:       clusterDomain,
+		BGPLayouts:          bgpLayout,
+		LogCollector:        logCollector,
+		BirdTemplates:       bt,
+		MigrateNamespaces:   up,
+		FelixHealthPort:     9099,
 	}
 	typhaCfg := &render.TyphaConfiguration{
 		K8sServiceEp:      k8sServiceEp,

@@ -20,20 +20,20 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/operator"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
 func registerTypha() {
-	operator.Patch(render.ComponentNameTypha, patchTypha)
+	extensions.Modify(render.ComponentNameTypha, modifyTypha)
 }
 
-func patchTypha(ctx operator.Context, objs []client.Object) []client.Object {
+func modifyTypha(ctx extensions.RenderContext, objs []client.Object) []client.Object {
 	if ctx.Installation == nil || !ctx.Installation.Variant.IsEnterprise() {
 		return objs
 	}
 
-	if role, ok := operator.FindObject[*rbacv1.ClusterRole](objs, "calico-typha"); ok {
+	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha"); ok {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
@@ -50,7 +50,7 @@ func patchTypha(ctx operator.Context, objs []client.Object) []client.Object {
 		})
 	}
 
-	if dep, ok := operator.FindObject[*appsv1.Deployment](objs, "calico-typha"); ok {
+	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, "calico-typha"); ok {
 		net := ctx.Installation.CalicoNetwork
 		if net != nil && net.MultiInterfaceMode != nil {
 			for i := range dep.Spec.Template.Spec.Containers {

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package operator
+package extensions
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -20,22 +20,26 @@ import (
 	"github.com/tigera/operator/pkg/imageoverride"
 )
 
-// PatchFunc post-processes the objects a render component produced. It may
-// mutate matched objects and/or append additional objects, and must return the
+// Modifier post-processes the objects a render component produced. It may mutate
+// matched objects and/or append additional objects, and must return the
 // (possibly extended) slice. Implementations self-gate on ctx.Installation.Variant.
-type PatchFunc func(ctx Context, objs []client.Object) []client.Object
+type Modifier func(ctx RenderContext, objs []client.Object) []client.Object
 
-var patches = map[string][]PatchFunc{}
+var modifiers = map[string]Modifier{}
 
-// Patch registers fn to run against the named component's objects. Multiple
-// patches may be registered for the same component; they run in registration order.
-func Patch(component string, fn PatchFunc) {
-	patches[component] = append(patches[component], fn)
+// Modify registers fn as the modifier for the named component. A component has
+// at most one modifier; the modifier handles all of that component's
+// extension-specific mutations. Registration replaces any prior modifier, so it
+// is idempotent and safe to call more than once - matching the image-override
+// registry rather than stacking duplicate work.
+func Modify(component string, fn Modifier) {
+	modifiers[component] = fn
 }
 
-// ApplyPatches runs every patch registered for the named component over objs.
-func ApplyPatches(component string, ctx Context, objs []client.Object) []client.Object {
-	for _, fn := range patches[component] {
+// ApplyModifiers runs the modifier registered for the named component over objs,
+// returning objs unchanged when none is registered.
+func ApplyModifiers(component string, ctx RenderContext, objs []client.Object) []client.Object {
+	if fn, ok := modifiers[component]; ok {
 		objs = fn(ctx, objs)
 	}
 	return objs
@@ -52,8 +56,10 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 	return zero, false
 }
 
-// ResetForTest clears all registries. Test-only.
+// ResetForTest clears every registry: modifiers, image overrides, and the
+// render context factory. Test-only.
 func ResetForTest() {
-	patches = map[string][]PatchFunc{}
+	modifiers = map[string]Modifier{}
+	renderContextFactory = defaultFactory{}
 	imageoverride.ResetForTest()
 }

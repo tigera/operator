@@ -2721,9 +2721,9 @@ var _ = Describe("Windows rendering tests", func() {
 // The unused argument is kept temporarily so existing call sites compile while the OSS/Enterprise distinction
 // is being phased out.
 func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, _ bool) {
-	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-live"}
-	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "health", "--felix-ready"}
-	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "node", "shutdown"}
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "node", "health", "--felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "node", "health", "--felix-ready"}
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "node", "shutdown"}
 
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

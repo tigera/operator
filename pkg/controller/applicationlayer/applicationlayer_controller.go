@@ -50,9 +50,9 @@ const ResourceName = "applicationlayer"
 
 var log = logf.Log.WithName("controller_applicationlayer")
 
-const (
-	DefaultPolicySyncPrefix string = "/var/run/nodeagent"
-)
+// DefaultPolicySyncPrefix is the operator-managed value for
+// FelixConfiguration.policySyncPathPrefix.
+const DefaultPolicySyncPrefix = utils.DefaultPolicySyncPrefix
 
 // Add creates a new ApplicationLayer Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -475,26 +475,9 @@ func (r *ReconcileApplicationLayer) isSidecarInjectionEnabled(applicationLayerSp
 		*applicationLayerSpec.SidecarInjection == operatorv1.SidecarEnabled
 }
 
-func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec, al *operatorv1.ApplicationLayer) string {
-	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
-	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
-	existing := fcSpec.PolicySyncPathPrefix
-	if existing != "" {
-		return existing
-	}
-
-	// There's no existing value, nor is ApplicationLayer enabled
-	if al == nil {
-		return ""
-	}
-
-	// No existing value. However, at least one of the applicationLayer features are enabled
-	spec := &al.Spec
-	if r.isALPEnabled(spec) || r.isWAFEnabled(spec) || r.isLogsCollectionEnabled(spec) ||
-		r.isSidecarInjectionEnabled(spec) {
-		return DefaultPolicySyncPrefix
-	}
-	return ""
+func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec, al *operatorv1.ApplicationLayer, istioNeeds bool) string {
+	alNeeds := utils.ApplicationLayerRequiresPolicySync(al)
+	return utils.DesiredPolicySyncPathPrefix(fcSpec.PolicySyncPathPrefix, alNeeds, istioNeeds)
 }
 
 func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLayer) (bool, string) {
@@ -516,7 +499,26 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 // patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+	// Fetch the Istio CR and Installation variant so DesiredPolicySyncPathPrefix
+	// can see whether the istio side still needs the field. Both reads tolerate
+	// NotFound — the istio side has no claim if either is absent.
+	istioCR, err := utils.GetIstio(ctx, r.client)
+	if err != nil {
+		return err
+	}
+	// Use Spec.Variant (via the second return of GetInstallationSpec) so the
+	// gate matches the renderer's decision to ship the L7 waypoint sidecar.
+	var variant operatorv1.ProductVariant
+	if _, spec, ierr := utils.GetInstallationSpec(ctx, r.client); ierr != nil {
+		if !apierrors.IsNotFound(ierr) {
+			return ierr
+		}
+	} else if spec != nil {
+		variant = spec.Variant
+	}
+	istioNeeds := utils.IstioRequiresPolicySync(istioCR, variant)
+
+	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		var tproxyMode string
 		if ok, v := r.getTProxyMode(al); ok {
 			tproxyMode = v
@@ -538,7 +540,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 			tproxyMode = "Disabled"
 		}
 
-		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al)
+		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al, istioNeeds)
 		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
 		tproxyModeSetDesired := fc.Spec.TPROXYMode != "" && fc.Spec.TPROXYMode == string(tproxyMode)
 		wafEventLogsFileEnabled := al != nil && ((al.Spec.SidecarInjection != nil && *al.Spec.SidecarInjection == operatorv1.SidecarEnabled) ||

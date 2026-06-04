@@ -42,6 +42,14 @@ const (
 	// the controller in the owner reference will not be set.
 	MultipleOwnersLabel = "operator.tigera.io/multipleOwners"
 
+	// HostNetworkedPodLabel marks pods that run with hostNetwork=true and are
+	// managed by the operator. The podiprecovery controller uses this label
+	// to identify pods that need their IPs re-checked after a node IP change
+	// (Kubernetes does not refresh status.podIPs for existing hostNetwork pods;
+	// see https://github.com/kubernetes/kubernetes/issues/93897). All render
+	// packages that produce hostNetwork pod templates must apply this label.
+	HostNetworkedPodLabel = "operator.tigera.io/host-networked"
+
 	// Sidecar common names
 	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"
 )

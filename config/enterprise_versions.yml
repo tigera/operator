@@ -1,187 +1,187 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/enterprise.go.tpl
-title: release-calient-v3.23
+title: v3.23.0-2.0
 components:
   libcalico-go:
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   manager:
     image: manager
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   voltron:
     image: voltron
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   apiserver:
     image: apiserver
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   queryserver:
     image: queryserver
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   kube-controllers:
     image: kube-controllers
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   typha:
     image: typha
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   node:
     image: node
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   node-windows:
     image: node-windows
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   fluentd:
     image: fluentd
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   fluentd-windows:
     image: fluentd-windows
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   ui-apis:
     image: ui-apis
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   linseed:
     image: linseed
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   es-gateway:
     image: es-gateway
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   dex:
     image: dex
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   # eck-kibana holds the version of Kibana built for tigera/kibana
   eck-kibana:
     version: 8.19.15
   kibana:
     image: kibana
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   # eck-elasticsearch holds the version of Elasticsearch built for tigera/elasticsearch
   eck-elasticsearch:
     version: 8.19.15
   elasticsearch:
     image: elasticsearch
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   elastic-tsee-installer:
     image: intrusion-detection-job-installer
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   es-curator:
     image: es-curator
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   intrusion-detection-controller:
     image: intrusion-detection-controller
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   waf-http-filter:
     image: waf-http-filter
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   webhooks-processor:
     image: webhooks-processor
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   compliance-controller:
     image: compliance-controller
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   compliance-reporter:
     image: compliance-reporter
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   compliance-snapshotter:
     image: compliance-snapshotter
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   compliance-server:
     image: compliance-server
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   compliance-benchmarker:
     image: compliance-benchmarker
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   guardian:
     image: guardian
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   tigera-cni:
     image: cni
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   tigera-cni-windows:
     image: cni-windows
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   elasticsearch-metrics:
     image: elasticsearch-metrics
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   packetcapture:
     image: packetcapture
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   policy-recommendation:
     image: policy-recommendation
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   # coreos-prometheus holds the version of prometheus built for tigera/prometheus,
   # which prometheus operator uses to validate.
   coreos-prometheus:
     version: v3.9.1
   prometheus:
     image: prometheus
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   # coreos-alertmanager holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
     version: v0.30.1
   alertmanager:
     image: alertmanager
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   tigera-prometheus-service:
     image: prometheus-service
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   deep-packet-inspection:
     image: deep-packet-inspection
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   flexvol:
     image: pod2daemon-flexvol
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   csi:
     image: csi
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   csi-node-driver-registrar:
     image: node-driver-registrar
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   elasticsearch-operator:
     image: eck-operator
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   # eck-elasticsearch-operator holds the version of the ECK operator used to manage
   # Elasticsearch
   eck-elasticsearch-operator:
     version: 2.16.0
   l7-collector:
     image: l7-collector
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   gateway-l7-collector:
     image: gateway-l7-collector
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   envoy:
     image: envoy
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   dikastes:
     image: dikastes
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   l7-admission-controller:
     image: l7-admission-controller
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   egress-gateway:
     image: egress-gateway
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   key-cert-provisioner:
     image: key-cert-provisioner
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   gateway-api-envoy-gateway:
     image: envoy-gateway
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   gateway-api-envoy-proxy:
     image: envoy-proxy
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   gateway-api-envoy-ratelimit:
     image: envoy-ratelimit
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   istio-pilot:
     image: istio-pilot
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   istio-install-cni:
     image: istio-install-cni
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   istio-ztunnel:
     image: istio-ztunnel
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   istio-proxyv2:
     image: istio-proxyv2
-    version: release-calient-v3.23
+    version: v3.23.0-2.0
   webhooks:
-    version: release-calient-v3.23
+    version: v3.23.0-2.0

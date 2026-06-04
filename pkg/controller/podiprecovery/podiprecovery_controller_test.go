@@ -188,13 +188,52 @@ var _ = Describe("PodIPRecovery controller", func() {
 			Expect(podExists("typha")).To(BeTrue())
 		})
 
-		It("skips reconcile when the node has no InternalIPs reported", func() {
+		It("skips reconcile when the node has no host IPs reported", func() {
 			// Avoid deleting based on a transient empty status.
 			Expect(c.Create(ctx, newNode("node1" /* no IPs */))).To(Succeed())
 			Expect(c.Create(ctx, newPod("typha", "node1", "10.0.0.1", true))).To(Succeed())
 
 			reconcileNode("node1")
 			Expect(podExists("typha")).To(BeTrue())
+		})
+
+		It("falls back to ExternalIP when the node has no InternalIP (mirrors kubelet)", func() {
+			// Mirror kubelet's GetNodeHostIPs: ExternalIP is used to populate
+			// status.podIPs on a hostNetwork pod only when the node has no
+			// InternalIP. Our comparison must use the same selection logic.
+			node := newNode("node1" /* no InternalIPs */)
+			node.Status.Addresses = append(node.Status.Addresses, corev1.NodeAddress{
+				Type: corev1.NodeExternalIP, Address: "10.0.0.1",
+			})
+			Expect(c.Create(ctx, node)).To(Succeed())
+
+			// Pod whose IP matches the ExternalIP is healthy — leave it alone.
+			Expect(c.Create(ctx, newPod("matches-external", "node1", "10.0.0.1", true))).To(Succeed())
+			// Pod with a different IP is stale — delete it.
+			Expect(c.Create(ctx, newPod("stale", "node1", "10.0.0.2", true))).To(Succeed())
+
+			reconcileNode("node1")
+			Expect(podExists("matches-external")).To(BeTrue(),
+				"ExternalIP-only node: pod matching the ExternalIP should be left alone")
+			Expect(podExists("stale")).To(BeFalse(),
+				"ExternalIP-only node: pod not matching any node IP should be deleted")
+		})
+
+		It("ignores ExternalIP when an InternalIP exists", func() {
+			// If the node has both, InternalIP wins (mirroring kubelet). A pod
+			// whose IP happens to match the ExternalIP but not the InternalIP
+			// is considered stale.
+			node := newNode("node1", "10.0.0.1")
+			node.Status.Addresses = append(node.Status.Addresses, corev1.NodeAddress{
+				Type: corev1.NodeExternalIP, Address: "203.0.113.1",
+			})
+			Expect(c.Create(ctx, node)).To(Succeed())
+
+			Expect(c.Create(ctx, newPod("matches-external", "node1", "203.0.113.1", true))).To(Succeed())
+
+			reconcileNode("node1")
+			Expect(podExists("matches-external")).To(BeFalse(),
+				"InternalIP present: ExternalIP must not satisfy the comparison")
 		})
 
 		It("leaves a pending pod (no podIPs reported yet) alone", func() {
@@ -230,8 +269,8 @@ var _ = Describe("PodIPRecovery controller", func() {
 		})
 	})
 
-	Context("internalIPChangedPredicate", func() {
-		pred := internalIPChangedPredicate()
+	Context("hostIPsChangedPredicate", func() {
+		pred := hostIPsChangedPredicate()
 
 		It("enqueues on Create", func() {
 			Expect(pred.Create(event.CreateEvent{Object: newNode("n1", "10.0.0.1")})).To(BeTrue())
@@ -270,9 +309,11 @@ var _ = Describe("PodIPRecovery controller", func() {
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: new})).To(BeTrue())
 		})
 
-		It("does not enqueue on Update when only ExternalIP changes", func() {
+		It("does not enqueue on Update when only ExternalIP changes (InternalIP wins)", func() {
 			// Cloud environments commonly reassign external IPs while the
-			// node's internal IP stays put. Don't react to those.
+			// node's internal IP stays put. With an InternalIP present, the
+			// ExternalIP is ignored by the kubelet's host-IP selection, so
+			// we shouldn't react either.
 			old := newNode("n1", "10.0.0.1")
 			old.Status.Addresses = append(old.Status.Addresses, corev1.NodeAddress{
 				Type: corev1.NodeExternalIP, Address: "203.0.113.1",
@@ -282,6 +323,16 @@ var _ = Describe("PodIPRecovery controller", func() {
 				Type: corev1.NodeExternalIP, Address: "203.0.113.99",
 			})
 			Expect(pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: new})).To(BeFalse())
+		})
+
+		It("enqueues on Update when ExternalIP changes on a node with no InternalIP", func() {
+			// In the (rare) ExternalIP-only case, ExternalIP is what the
+			// kubelet uses for status.podIPs, so changes to it matter.
+			old := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1"}}
+			old.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeExternalIP, Address: "10.0.0.1"}}
+			new := &corev1.Node{ObjectMeta: metav1.ObjectMeta{Name: "n1"}}
+			new.Status.Addresses = []corev1.NodeAddress{{Type: corev1.NodeExternalIP, Address: "10.0.0.2"}}
+			Expect(pred.Update(event.UpdateEvent{ObjectOld: old, ObjectNew: new})).To(BeTrue())
 		})
 	})
 })

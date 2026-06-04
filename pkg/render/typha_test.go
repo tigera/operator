@@ -677,13 +677,12 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 			}))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-typha". The deployment object
-			// produced by the render carries two labels: the operator's
-			// host-networked marker (applied unconditionally because Typha is
-			// hostNetwork) and the override-supplied template-level label.
-			Expect(d.Spec.Template.Labels).To(HaveLen(2))
-			Expect(d.Spec.Template.Labels[common.HostNetworkedPodLabel]).To(Equal("true"))
+			// At runtime, the operator's setStandardSelectorAndLabels helper
+			// adds standard labels such as "k8s-app=calico-typha" and the
+			// host-networked marker. The deployment object produced by the
+			// render itself only carries the override-supplied template-level
+			// label; the rest are layered on during apply.
+			Expect(d.Spec.Template.Labels).To(HaveLen(1))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
 			// With the default instance we expect 3 template-level annotations

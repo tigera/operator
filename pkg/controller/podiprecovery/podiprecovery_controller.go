@@ -28,10 +28,11 @@
 // status.podIPs from the current node IP.
 //
 // Operator-managed pods are identified by the
-// common.HostNetworkedPodLabel label, which each render package applies to
-// its hostNetwork pod templates. The controller additionally verifies
-// spec.hostNetwork == true on each candidate as a safety net before
-// deleting.
+// common.HostNetworkedPodLabel label, which the operator's shared
+// setStandardSelectorAndLabels helper applies to any pod template with
+// spec.hostNetwork == true as a side effect of the normal apply path.
+// The controller additionally verifies spec.hostNetwork == true on each
+// candidate as a safety net before deleting.
 package podiprecovery
 
 import (

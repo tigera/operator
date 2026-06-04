@@ -46,8 +46,10 @@ const (
 	// managed by the operator. The podiprecovery controller uses this label
 	// to identify pods that need their IPs re-checked after a node IP change
 	// (Kubernetes does not refresh status.podIPs for existing hostNetwork pods;
-	// see https://github.com/kubernetes/kubernetes/issues/93897). All render
-	// packages that produce hostNetwork pod templates must apply this label.
+	// see https://github.com/kubernetes/kubernetes/issues/93897). It is
+	// applied centrally by setStandardSelectorAndLabels in pkg/controller/utils
+	// to any pod template with Spec.HostNetwork == true, so render packages
+	// do not need to apply it themselves.
 	HostNetworkedPodLabel = "operator.tigera.io/host-networked"
 
 	// Sidecar common names

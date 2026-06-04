@@ -222,9 +222,6 @@ func (c *component) daemonset() *appsv1.DaemonSet {
 	podTemplate := corev1.PodTemplateSpec{
 		ObjectMeta: metav1.ObjectMeta{
 			Annotations: annots,
-			Labels: map[string]string{
-				common.HostNetworkedPodLabel: "true",
-			},
 		},
 		Spec: corev1.PodSpec{
 			HostIPC:            true,

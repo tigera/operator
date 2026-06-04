@@ -1960,6 +1960,96 @@ var _ = Describe("Component handler tests", func() {
 			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
+		It("adds the host-networked label to a hostNetwork Deployment pod template", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{HostNetwork: true},
+						},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.GetLabels()).To(HaveKeyWithValue(common.HostNetworkedPodLabel, "true"))
+		})
+		It("does not add the host-networked label to a pod-networked Deployment", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.GetLabels()).NotTo(HaveKey(common.HostNetworkedPodLabel))
+		})
+		It("adds the host-networked label to a hostNetwork DaemonSet pod template", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{HostNetwork: true},
+						},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			ds := &apps.DaemonSet{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-daemonset", Namespace: "test-namespace"}, ds)).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.GetLabels()).To(HaveKeyWithValue(common.HostNetworkedPodLabel, "true"))
+		})
+		It("preserves existing pod template labels alongside the host-networked label", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{"existing": "value"},
+							},
+							Spec: corev1.PodSpec{HostNetwork: true},
+						},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.GetLabels()).To(HaveKeyWithValue("existing", "value"))
+			Expect(d.Spec.Template.GetLabels()).To(HaveKeyWithValue(common.HostNetworkedPodLabel, "true"))
+		})
 		DescribeTable("should sanitize common labels so that they pass regexp validation", func(in string) {
 			Expect(sanitizeLabel(in)).To(MatchRegexp(`(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?`))
 		},

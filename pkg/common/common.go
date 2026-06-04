@@ -48,7 +48,7 @@ const (
 	// (Kubernetes does not refresh status.podIPs for existing hostNetwork pods;
 	// see https://github.com/kubernetes/kubernetes/issues/93897). All render
 	// packages that produce hostNetwork pod templates must apply this label.
-	HostNetworkedPodLabel = "operator.tigera.io/hostNetworked"
+	HostNetworkedPodLabel = "operator.tigera.io/host-networked"
 
 	// Sidecar common names
 	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"

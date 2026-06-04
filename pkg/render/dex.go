@@ -135,6 +135,7 @@ func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 		c.allowTigeraNetworkPolicy(c.cfg.Installation.Variant),
 		networkpolicy.AllowTigeraDefaultDeny(DexNamespace),
 		CreateOperatorSecretsRoleBinding(DexNamespace),
+		CreateOperatorSecretsRoleBinding(ManagerNamespace),
 		c.serviceAccount(),
 		c.deployment(),
 		c.service(),

@@ -23,7 +23,9 @@ import (
 	v1 "github.com/tigera/operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
@@ -1262,6 +1264,119 @@ var _ = Describe("Common components render tests", func() {
 		for _, c := range d.Spec.Template.Spec.Containers {
 			Expect(c.Resources).To(Equal(overrideResources), "container %q should have overridden resources", c.Name)
 		}
+	})
+})
+
+var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
+	var pdb *policyv1.PodDisruptionBudget
+
+	BeforeEach(func() {
+		pdb = &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+			Spec: policyv1.PodDisruptionBudgetSpec{
+				MaxUnavailable: ptr.To(intstr.FromInt(1)),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"k8s-app": "calico-typha"},
+				},
+			},
+		}
+	})
+
+	It("does nothing when overrides is nil", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, nil)
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+	})
+
+	It("does not panic on nil PDB", func() {
+		Expect(func() {
+			ApplyPodDisruptionBudgetOverrides(nil, &v1.PodDisruptionBudgetOverride{
+				Spec: &v1.PodDisruptionBudgetOverrideSpec{
+					MinAvailable: ptr.To(intstr.FromInt(2)),
+				},
+			})
+		}).ToNot(Panic())
+	})
+
+	It("applies only UnhealthyPodEvictionPolicy and preserves default MaxUnavailable", func() {
+		policy := policyv1.AlwaysAllow
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				UnhealthyPodEvictionPolicy: &policy,
+			},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(*pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(policyv1.AlwaysAllow))
+	})
+
+	It("clears MaxUnavailable when MinAvailable is set", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable: ptr.To(intstr.FromInt(2)),
+			},
+		})
+		Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
+		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+	})
+
+	It("clears MinAvailable when MaxUnavailable is set to a percentage", func() {
+		pdb.Spec.MaxUnavailable = nil
+		pdb.Spec.MinAvailable = ptr.To(intstr.FromInt(3))
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MaxUnavailable: ptr.To(intstr.FromString("50%")),
+			},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromString("50%"))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+	})
+
+	It("applies MinAvailable + UnhealthyPodEvictionPolicy together", func() {
+		policy := policyv1.AlwaysAllow
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable:               ptr.To(intstr.FromInt(2)),
+				UnhealthyPodEvictionPolicy: &policy,
+			},
+		})
+		Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
+		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+		Expect(*pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(policyv1.AlwaysAllow))
+	})
+
+	It("never mutates the selector", func() {
+		original := pdb.Spec.Selector.DeepCopy()
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable: ptr.To(intstr.FromInt(2)),
+			},
+		})
+		Expect(pdb.Spec.Selector).To(Equal(original))
+	})
+
+	It("merges metadata labels and annotations onto the PDB", func() {
+		pdb.Labels = map[string]string{"existing": "label"}
+		pdb.Annotations = map[string]string{"existing": "ann"}
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Metadata: &v1.Metadata{
+				Labels:      map[string]string{"new": "label"},
+				Annotations: map[string]string{"new": "ann"},
+			},
+		})
+		Expect(pdb.Labels).To(Equal(map[string]string{"existing": "label", "new": "label"}))
+		Expect(pdb.Annotations).To(Equal(map[string]string{"existing": "ann", "new": "ann"}))
+	})
+
+	It("treats a nil Spec as no spec override", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Metadata: &v1.Metadata{Labels: map[string]string{"a": "b"}},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+		Expect(pdb.Labels).To(HaveKeyWithValue("a", "b"))
 	})
 })
 

@@ -1441,19 +1441,24 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"egressgatewaypolicies",
 				"externalnetworks",
 				"globalalerts",
+				"globalalerts/status",
 				"globalalerttemplates",
 				"globalreports",
+				"globalreports/status",
 				"globalreporttypes",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
 				"licensekeys",
 				"managedclusters",
+				"managedclusters/status",
 				"networks",
 				"packetcaptures",
+				"packetcaptures/status",
 				"policyrecommendationscopes",
 				"policyrecommendationscopes/status",
 				"remoteclusterconfigurations",
 				"securityeventwebhooks",
+				"securityeventwebhooks/status",
 				"uisettings",
 				"uisettingsgroups",
 			},
@@ -1674,6 +1679,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		// Allow the user to view Networks.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 		// Additional "list" requests required to view flows.
 		{
 			APIGroups: []string{""},
@@ -1870,6 +1881,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
 		},
+		// Allow the user to CRUD Networks.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
 		// Additional "list" requests that the Tigera Secure manager needs
 		{
 			APIGroups: []string{""},
@@ -2035,10 +2052,9 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	// kube-apiserver RBAC.
 	if !c.cfg.RequiresAggregationServer {
 		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettings"},
-			Verbs:         []string{"create", "update", "delete", "patch"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
 		})
 	}
 

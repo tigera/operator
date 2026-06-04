@@ -48,6 +48,19 @@ spec:
                     Controllers enables and configures individual Kubernetes
                     controllers
                   properties:
+                    applicationLayer:
+                      description: |-
+                        ApplicationLayer enables and configures the application-layer subsystem
+                        (WAF, GlobalWAF, WAFPlugin, validation). Operator-managed; users should
+                        not edit this field directly. Non-nil enables the subsystem; activation
+                        is gated on a valid Calico Enterprise license.
+                      properties:
+                        reconcilerPeriod:
+                          description:
+                            "ReconcilerPeriod is the period to perform reconciliation.
+                            [Default: 30s]"
+                          type: string
+                      type: object
                     federatedServices:
                       description:
                         FederatedServices enables and configures the federatedservices
@@ -195,6 +208,17 @@ spec:
                             with the Calico datastore. [Default: 5m]"
                           type: string
                       type: object
+                    rbacSync:
+                      description: |-
+                        RBACSync enables and configures the RBAC sync controller, which reconciles
+                        Calico RBAC ClusterRoles and bindings. Disabled by default, set to non-nil to enable.
+                      properties:
+                        reconcilerPeriod:
+                          description:
+                            "ReconcilerPeriod is the period to perform reconciliation
+                            with the Calico datastore. [Default: 30s]"
+                          type: string
+                      type: object
                     serviceAccount:
                       description:
                         ServiceAccount enables and configures the service
@@ -287,6 +311,19 @@ spec:
                         Controllers enables and configures individual Kubernetes
                         controllers
                       properties:
+                        applicationLayer:
+                          description: |-
+                            ApplicationLayer enables and configures the application-layer subsystem
+                            (WAF, GlobalWAF, WAFPlugin, validation). Operator-managed; users should
+                            not edit this field directly. Non-nil enables the subsystem; activation
+                            is gated on a valid Calico Enterprise license.
+                          properties:
+                            reconcilerPeriod:
+                              description:
+                                "ReconcilerPeriod is the period to perform
+                                reconciliation. [Default: 30s]"
+                              type: string
+                          type: object
                         federatedServices:
                           description:
                             FederatedServices enables and configures the
@@ -435,6 +472,18 @@ spec:
                                 "ReconcilerPeriod is the period to perform
                                 reconciliation with the Calico datastore. [Default:
                                 5m]"
+                              type: string
+                          type: object
+                        rbacSync:
+                          description: |-
+                            RBACSync enables and configures the RBAC sync controller, which reconciles
+                            Calico RBAC ClusterRoles and bindings. Disabled by default, set to non-nil to enable.
+                          properties:
+                            reconcilerPeriod:
+                              description:
+                                "ReconcilerPeriod is the period to perform
+                                reconciliation with the Calico datastore. [Default:
+                                30s]"
                               type: string
                           type: object
                         serviceAccount:

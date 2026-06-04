@@ -195,8 +195,6 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	switch {
 	case c.cfg.Installation.Variant.IsEnterprise():
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-	case operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode):
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
 	default:
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
 	}
@@ -589,6 +587,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"packetcaptures",
+					"packetcaptures/status",
 				},
 				Verbs: []string{"update"},
 			},

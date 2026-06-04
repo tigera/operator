@@ -2638,14 +2638,12 @@ var _ = Describe("Windows rendering tests", func() {
 
 			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// daemonset such as "k8s-app=calico-node-windows". The calico-node-windows
-			// daemonset object produced by the render carries two labels: the
-			// operator's host-networked marker (applied unconditionally because the
-			// windows DaemonSet is hostNetwork) and the override-supplied
-			// template-level label.
-			Expect(ds.Spec.Template.Labels).To(HaveLen(2))
-			Expect(ds.Spec.Template.Labels[common.HostNetworkedPodLabel]).To(Equal("true"))
+			// At runtime, the operator's setStandardSelectorAndLabels helper
+			// adds standard labels such as "k8s-app=calico-node-windows" and
+			// the host-networked marker. The daemonset object produced by the
+			// render itself only carries the override-supplied template-level
+			// label; the rest are layered on during apply.
+			Expect(ds.Spec.Template.Labels).To(HaveLen(1))
 			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
 			// With the default instance we expect 3 template-level annotations

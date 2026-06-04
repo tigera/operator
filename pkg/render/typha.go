@@ -446,9 +446,6 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Annotations: annotations,
-					Labels: map[string]string{
-						common.HostNetworkedPodLabel: "true",
-					},
 				},
 				Spec: corev1.PodSpec{
 					Tolerations:                   tolerations,
@@ -487,9 +484,6 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		// Remove the affinity and use pod network
 		deployNonClusterHost.Spec.Template.Spec.Affinity = nil
 		deployNonClusterHost.Spec.Template.Spec.HostNetwork = false
-		// The non-cluster-host Typha is pod-networked, so the
-		// hostNetworked-recovery label doesn't apply.
-		delete(deployNonClusterHost.Spec.Template.Labels, common.HostNetworkedPodLabel)
 		// Tune Typha container and volumes for NonClusterHost deployment.
 		deployNonClusterHost.Spec.Template.Spec.Containers = []corev1.Container{c.typhaContainerNonClusterHost()}
 		deployNonClusterHost.Spec.Template.Spec.Volumes = c.volumeNonClusterHost()

@@ -1027,12 +1027,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		d.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(APIServerName, []string{APIServerNamespace, "tigera-system", "calico-apiserver"})
 	}
 
-	if hostNetwork {
-		// Mark the pod for the podiprecovery controller so it can recover after
-		// a node IP change.
-		d.Spec.Template.Labels[common.HostNetworkedPodLabel] = "true"
-	}
-
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.cfg.TrustedBundle != nil {
 			trustedBundleHashAnnotations := c.cfg.TrustedBundle.HashAnnotations()

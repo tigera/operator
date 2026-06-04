@@ -13,8 +13,10 @@
 // limitations under the License.
 
 // Package podiprecovery contains a small controller that watches Kubernetes
-// Nodes for InternalIP changes and deletes operator-managed host-networked
-// pods whose status.podIPs no longer matches the node's current InternalIP.
+// Nodes for host-IP changes (the address set the kubelet would put in
+// `status.podIPs` for a hostNetwork pod: InternalIP-preferred, ExternalIP
+// fallback) and deletes operator-managed host-networked pods whose
+// status.podIPs no longer matches that set.
 //
 // This works around an upstream Kubernetes behavior
 // (https://github.com/kubernetes/kubernetes/issues/93897) where status.podIPs
@@ -73,20 +75,21 @@ func Add(mgr manager.Manager, _ options.ControllerOptions) error {
 	}
 
 	// Watch Node objects. Only enqueue reconciliations when the set of
-	// InternalIPs has changed — that is the only signal that interests us,
-	// and it avoids spurious reconciles for routine kubelet heartbeats.
-	if err := c.WatchObject(&corev1.Node{}, &handler.EnqueueRequestForObject{}, internalIPChangedPredicate()); err != nil {
+	// host IPs (what the kubelet would put in status.podIPs) has changed —
+	// that is the only signal that interests us, and it avoids spurious
+	// reconciles for routine kubelet heartbeats.
+	if err := c.WatchObject(&corev1.Node{}, &handler.EnqueueRequestForObject{}, hostIPsChangedPredicate()); err != nil {
 		return fmt.Errorf("podiprecovery-controller failed to watch Nodes: %w", err)
 	}
 
 	return nil
 }
 
-// internalIPChangedPredicate filters Node events so reconciles only fire when
-// the node's InternalIPs change (including initial set / removal). New nodes
+// hostIPsChangedPredicate filters Node events so reconciles only fire when
+// the node's host IPs change (including initial set / removal). New nodes
 // are reconciled once to handle the case where pods are scheduled before the
 // Node's status is populated.
-func internalIPChangedPredicate() predicate.Predicate {
+func hostIPsChangedPredicate() predicate.Predicate {
 	return predicate.Funcs{
 		CreateFunc: func(e event.CreateEvent) bool {
 			return true
@@ -100,7 +103,7 @@ func internalIPChangedPredicate() predicate.Predicate {
 			if !oldOK || !newOK {
 				return false
 			}
-			return !internalIPSet(oldNode.Status.Addresses).Equal(internalIPSet(newNode.Status.Addresses))
+			return !nodeHostIPSet(oldNode.Status.Addresses).Equal(nodeHostIPSet(newNode.Status.Addresses))
 		},
 		GenericFunc: func(e event.GenericEvent) bool {
 			return false
@@ -108,16 +111,33 @@ func internalIPChangedPredicate() predicate.Predicate {
 	}
 }
 
-// internalIPSet returns the set of NodeInternalIP addresses from a Node's
-// status.
-func internalIPSet(addrs []corev1.NodeAddress) sets.Set[string] {
-	out := sets.New[string]()
+// nodeHostIPSet returns the set of addresses that the kubelet would use to
+// populate `status.podIPs` for a hostNetwork pod scheduled on this node.
+//
+// This mirrors upstream `k8s.io/kubernetes/pkg/util/node.GetNodeHostIPs`:
+// InternalIPs are preferred; ExternalIPs are returned only when the node
+// has no InternalIP at all. The upstream helper isn't importable from
+// outside k8s.io/kubernetes, so we reimplement the few lines we need
+// rather than vendor the package.
+//
+// In any cluster with normally-provisioned nodes the InternalIP branch
+// always wins — but mirroring the kubelet's selection logic keeps our
+// comparison faithful in the edge case where a node only has an ExternalIP.
+func nodeHostIPSet(addrs []corev1.NodeAddress) sets.Set[string] {
+	internal := sets.New[string]()
+	external := sets.New[string]()
 	for _, a := range addrs {
-		if a.Type == corev1.NodeInternalIP {
-			out.Insert(a.Address)
+		switch a.Type {
+		case corev1.NodeInternalIP:
+			internal.Insert(a.Address)
+		case corev1.NodeExternalIP:
+			external.Insert(a.Address)
 		}
 	}
-	return out
+	if internal.Len() > 0 {
+		return internal
+	}
+	return external
 }
 
 // Reconciler implements reconcile.Reconciler.
@@ -127,10 +147,10 @@ type Reconciler struct {
 
 var _ reconcile.Reconciler = &Reconciler{}
 
-// Reconcile is called for a Node when its InternalIPs change (or on initial
+// Reconcile is called for a Node when its host IPs change (or on initial
 // creation). It lists operator-managed pods on the node and deletes any
 // host-networked pod whose status.podIPs doesn't include any of the node's
-// current InternalIPs.
+// current host IPs (InternalIP-preferred, ExternalIP fallback).
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.WithValues("node", req.Name)
 
@@ -153,11 +173,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, fmt.Errorf("failed to get Node %q: %w", req.Name, err)
 	}
 
-	nodeIPs := internalIPSet(node.Status.Addresses)
+	nodeIPs := nodeHostIPSet(node.Status.Addresses)
 	if nodeIPs.Len() == 0 {
 		// Nothing to compare against; bail out to avoid deleting pods
 		// based on a transient empty status.
-		logger.V(1).Info("Node has no InternalIPs reported; skipping pod IP check")
+		logger.V(1).Info("Node has no host IPs reported; skipping pod IP check")
 		return ctrl.Result{}, nil
 	}
 
@@ -198,7 +218,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		}
 		logger.Info("Host networked Pod has stale IP, recreate",
 			"pod", pod.Name, "namespace", pod.Namespace,
-			"podIPs", podIPs, "nodeInternalIPs", nodeIPs.UnsortedList())
+			"podIPs", podIPs, "nodeHostIPs", nodeIPs.UnsortedList())
 
 		if delErr := r.client.Delete(ctx, &pod); delErr != nil && !apierrors.IsNotFound(delErr) {
 			logger.Error(delErr, "Failed to delete pod with stale IP", "pod", pod.Name, "namespace", pod.Namespace)
@@ -216,8 +236,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	return ctrl.Result{}, firstErr
 }
 
-// podIPMatchesNode returns true if any of the pod's reported IPs is also
-// listed as an InternalIP on the node.
+// podIPMatchesNode returns true if any of the pod's reported IPs is in
+// the node's host-IP set (see nodeHostIPSet for selection semantics).
 func podIPMatchesNode(pod *corev1.Pod, nodeIPs sets.Set[string]) bool {
 	for _, pip := range pod.Status.PodIPs {
 		if nodeIPs.Has(pip.IP) {

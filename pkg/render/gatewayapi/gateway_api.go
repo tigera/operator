@@ -1438,8 +1438,15 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.TCPProtocol,
-					// Dual-stack and IPv6-only need ::/0 in addition to 0.0.0.0/0.
-					Source: v3.EntityRule{Nets: []string{"0.0.0.0/0", "::/0"}},
+					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"::/0"}},
 					Destination: v3.EntityRule{
 						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
 					},

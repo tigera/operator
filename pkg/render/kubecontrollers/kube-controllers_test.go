@@ -16,6 +16,7 @@ package kubecontrollers_test
 
 import (
 	"fmt"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -40,6 +41,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -244,7 +246,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		instance.Variant = operatorv1.CalicoEnterprise
+		// Pull secret on the Installation propagates through the Deployment's
+		// imagePullSecrets and is also surfaced via WASM_PULL_SECRET so the
+		// applicationlayer reconciler can reference it from rendered
+		// EnvoyExtensionPolicies in WAFPolicy namespaces.
+		instance.ImagePullSecrets = []corev1.LocalObjectReference{{Name: "tigera-pull-secret"}}
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -262,16 +271,95 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
+		Expect(dp.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: "tigera-pull-secret"}))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
+		}))
+		// Application-layer reconcilers consume these env vars to program WAF
+		// EnvoyExtensionPolicy attachments.
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "WASM_IMAGE", Value: "test-reg/tigera/coraza-wasm:" + components.ComponentCorazaWASM.Version,
+		}))
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "WASM_PULL_SECRET", Value: "tigera-pull-secret",
+		}))
+		// TrustedBundle is set on the configuration above, so WASM_CA_CERT
+		// names the standard tigera trusted-bundle ConfigMap.
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "WASM_CA_CERT", Value: certificatemanagement.TrustedCertConfigMapName,
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(28), "cluster role should have 28 rules")
+		Expect(clusterRole.Rules).To(HaveLen(38), "cluster role should have 38 rules")
+
+		// Application-layer reconciler RBAC: WAF CRDs (resources, /status, /finalizers).
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies", "globalwafpolicies",
+				"wafplugins", "globalwafplugins",
+				"wafvalidationpolicies", "globalwafvalidationpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		}))
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies/status", "globalwafpolicies/status",
+				"wafplugins/status", "globalwafplugins/status",
+				"wafvalidationpolicies/status", "globalwafvalidationpolicies/status",
+			},
+			Verbs: []string{"get", "update", "patch"},
+		}))
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"wafpolicies/finalizers", "globalwafpolicies/finalizers",
+				"wafplugins/finalizers", "globalwafplugins/finalizers",
+				"wafvalidationpolicies/finalizers", "globalwafvalidationpolicies/finalizers",
+			},
+			Verbs: []string{"update"},
+		}))
+		// Gateway API targetRef validation + status patching.
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes", "tcproutes", "tlsroutes", "grpcroutes"},
+			Verbs:     []string{"get", "list", "watch", "update", "patch"},
+		}))
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways/status", "httproutes/status", "tcproutes/status", "tlsroutes/status", "grpcroutes/status"},
+			Verbs:     []string{"get", "update", "patch"},
+		}))
+		// Recorder.Eventf emits to both core/events and events.k8s.io/events.
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		}))
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"events.k8s.io"},
+			Resources: []string{"events"},
+			Verbs:     []string{"create", "patch"},
+		}))
+		// Cluster-wide secrets+configmaps CRUD: reconciler replicates pull
+		// secrets and CA bundles from the controller namespace into target
+		// WAFPolicy namespaces.
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets", "configmaps"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		}))
+		// EnvoyExtensionPolicy CRUD: reconciler renders one EEP per WAF targetRef.
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"gateway.envoyproxy.io"},
+			Resources: []string{"envoyextensionpolicies"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		}))
 
 		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
@@ -326,6 +414,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -358,7 +448,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(26), "cluster role should have 26 rules")
+		Expect(clusterRole.Rules).To(HaveLen(36), "cluster role should have 36 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -393,6 +483,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -412,7 +504,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "node,loadbalancer,service,federatedservices,usage",
+			Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
@@ -512,6 +604,50 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 	})
 
+	It("should mount the WAF admission webhook serving cert and expose its port when WAF is enabled", func() {
+		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		wafTLS, err := certificateManager.GetOrCreateKeyPair(cli,
+			applicationlayer.WAFWebhookServerTLSSecretName,
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, dns.DefaultClusterDomain))
+		Expect(err).NotTo(HaveOccurred())
+
+		instance.Variant = operatorv1.CalicoEnterprise
+		cfg.WAFGatewayExtensionEnabled = true
+		cfg.WAFWebhookServerTLS = wafTLS
+
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		c := dp.Spec.Template.Spec.Containers[0]
+
+		// Serving cert is mounted and advertised to the in-process webhook server.
+		Expect(dp.Spec.Template.Spec.Volumes).To(ContainElement(wafTLS.Volume()))
+		Expect(c.VolumeMounts).To(ContainElement(wafTLS.VolumeMount(rmeta.OSTypeLinux)))
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "WAF_WEBHOOK_CERT_DIR",
+			Value: filepath.Dir(wafTLS.VolumeMountCertificateFilePath()),
+		}))
+
+		// In-process webhook port exposed for the tigera-waf-webhook Service.
+		Expect(c.Ports).To(ContainElement(corev1.ContainerPort{
+			Name:          "waf-webhook",
+			ContainerPort: int32(9443),
+			Protocol:      corev1.ProtocolTCP,
+		}))
+
+		// namespaces patch/update RBAC for the waf-id-range annotation.
+		clusterRole := rtest.GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"namespaces"},
+			Verbs:     []string{"get", "patch", "update"},
+		}))
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
 		expectedResources := []struct {
 			name    string
@@ -536,6 +672,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
+		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
+		cfg.WAFGatewayExtensionEnabled = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -569,7 +707,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(26), "cluster role should have 26 rules")
+		Expect(clusterRole.Rules).To(HaveLen(36), "cluster role should have 36 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},

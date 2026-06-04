@@ -84,6 +84,9 @@ components:
   dikastes:
     image: dikastes
     version: master
+  coraza-wasm:
+    image: coraza-wasm
+    version: master
   egress-gateway:
     image: egress-gateway
     version: master

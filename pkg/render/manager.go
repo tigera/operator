@@ -996,14 +996,23 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			{
 				// ui-apis needs broad read access to UISettings and UISettingsGroups to serve
 				// requests on behalf of users. It performs SubjectAccessReviews to enforce
-				// per-group RBAC before returning results.
+				// per-group RBAC before returning results. Delete is included because the
+				// ui-apis DELETE handler issues the call with its own service-account token
+				// (writes were moved off user impersonation by the cloud security fix).
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"uisettings",
 					"uisettingsgroups",
 					"uisettingsgroups/data",
 				},
-				Verbs: []string{"get", "list", "watch"},
+				Verbs: []string{"get", "list", "watch", "delete"},
+			},
+			{
+				// ClusterInformation read: surfaces the management-cluster version in the UI.
+				// Served by the ui-apis ClusterInformation handler using its own SA token.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -1027,11 +1036,14 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"list"},
 			},
-			// Allow Enterprise Custom Dashboards to access managed clusters
+			// Allow Enterprise Custom Dashboards to access managed clusters. Create/delete
+			// were added when the ui-apis ManagedCluster handler took over CRUD with its
+			// own SA token (replacing the impersonated /apis/.../managedclusters proxy).
+			// Update is granted separately via managedClustersUpdateRBAC().
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},

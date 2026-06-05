@@ -263,7 +263,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.2
+ENVOY_GATEWAY_VERSION ?= v1.8.0
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
@@ -296,7 +296,7 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHAR
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/main.go'
+	GOTOOLCHAIN=go1.26.3+auto go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/main.go'
 ifeq ($(ARCH), $(filter $(ARCH),amd64))
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/operator-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
 endif

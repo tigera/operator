@@ -20,6 +20,14 @@ package components
 var (
 	CalicoRelease string = "master"
 
+	ComponentCalicoCNIPlugins = Component{
+		Version:   "master",
+		Image:     "cni-plugins",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	ComponentCalicoCNIWindows = Component{
 		Version:   "master",
 		Image:     "cni-windows",
@@ -117,6 +125,7 @@ var (
 	}
 
 	CalicoImages = []Component{
+		ComponentCalicoCNIPlugins,
 		ComponentCalicoCNIWindows,
 		ComponentCalicoNode,
 		ComponentCalicoNodeWindows,

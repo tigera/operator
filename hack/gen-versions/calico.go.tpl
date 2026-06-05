@@ -19,6 +19,15 @@ package components
 
 var (
 	CalicoRelease string = "{{ .Title }}"
+{{ with index .Components "cni-plugins" }}
+	ComponentCalicoCNIPlugins = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
 {{ with index .Components "cni-windows" }}
 	ComponentCalicoCNIWindows = Component{
 		Version:   "{{ .Version }}",
@@ -129,6 +138,7 @@ var (
 {{- end }}
 
 	CalicoImages = []Component{
+		ComponentCalicoCNIPlugins,
 		ComponentCalicoCNIWindows,
 		ComponentCalicoNode,
 		ComponentCalicoNodeWindows,

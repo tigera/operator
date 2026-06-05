@@ -157,6 +157,7 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-e ACK_GINKGO_RC=true \
 		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
+		-e GOTOOLCHAIN=go1.26.3+auto \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -263,7 +264,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.2
+ENVOY_GATEWAY_VERSION ?= v1.8.0
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
@@ -296,7 +297,7 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHAR
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/main.go'
+	GOTOOLCHAIN=go1.26.3+auto go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/main.go'
 ifeq ($(ARCH), $(filter $(ARCH),amd64))
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/operator-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
 endif
@@ -335,7 +336,7 @@ $(BINDIR)/kubectl:
 kubectl: $(BINDIR)/kubectl
 
 $(BINDIR)/kind:
-	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) GOTOOLCHAIN=go1.26.3+auto go install sigs.k8s.io/kind"
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -359,14 +360,14 @@ GINKGO_FOCUS?=.*
 ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
+	GOTOOLCHAIN=go1.26.3+auto ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
 run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
+	GOTOOLCHAIN=go1.26.3+auto ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
 KIND_KUBECONFIG?=./kubeconfig.yaml
@@ -507,18 +508,18 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 .PHONY: static-checks
 ## Perform static checks on the code.
 static-checks:
-	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --timeout 5m
+	$(CONTAINERIZED) -e GOTOOLCHAIN=go1.26.3+auto $(CALICO_BUILD) golangci-lint run --timeout 5m
 
 .PHONY: fix
 ## Fix static checks
 fix:
-	$(CONTAINERIZED) $(CALICO_BUILD) \
+	$(CONTAINERIZED) -e GOTOOLCHAIN=go1.26.3+auto $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	goimports -w $(SRC_FILES)'
 
 .PHONY: format-check
 format-check:
-	@$(CONTAINERIZED) $(CALICO_BUILD) \
+	@$(CONTAINERIZED) -e GOTOOLCHAIN=go1.26.3+auto $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	files=$$(gofmt -l ./pkg ./internal/controller ./api ./test); \
 	[ "$$files" = "" ] && exit 0; \
@@ -649,7 +650,7 @@ hack/bin/release-from: $(shell find ./hack/release-from -type f)
 	mkdir -p hack/bin
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
+	GOTOOLCHAIN=go1.26.3+auto go build -buildvcs=false -o hack/bin/release-from ./hack/release-from'
 
 release-from: hack/bin/release-from var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
 	hack/bin/release-from
@@ -748,7 +749,7 @@ $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -o $(BINDIR)/gen-versions ./hack/gen-versions'
+	GOTOOLCHAIN=go1.26.3+auto go build -buildvcs=false -o $(BINDIR)/gen-versions ./hack/gen-versions'
 
 # $(1) is the product
 define prep_local_crds
@@ -899,16 +900,16 @@ manifests:
 fmt:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go fmt ./...'
+	GOTOOLCHAIN=go1.26.3+auto go fmt ./...'
 
 # Run go vet against code
 vet:
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go vet ./...'
+	GOTOOLCHAIN=go1.26.3+auto go vet ./...'
 
 mod-tidy:
-	$(DOCKER_RUN) sh -c 'go mod tidy'
+	$(DOCKER_RUN) sh -c 'GOTOOLCHAIN=go1.26.3+auto go mod tidy'
 
 # Generate code
 # We use the upstream latest release of controller-gen as this is compatible with golang 1.19+ and we have no need

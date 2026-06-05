@@ -64,7 +64,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 				},
 			},
 			Format: &envoyapi.ProxyAccessLogFormat{
-				Type: envoyapi.ProxyAccessLogFormatTypeJSON,
+				Type: ptr.ToPtr(envoyapi.ProxyAccessLogFormatTypeJSON),
 				JSON: map[string]string{
 					"reporter":                         "gateway",
 					"start_time":                       "%START_TIME%",
@@ -235,7 +235,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		objsToCreate, objsToDelete := gatewayComp.Objects()
 		Expect(objsToDelete).To(HaveLen(0))
 		Expect(objsToCreate).NotTo(BeEmpty())
-		Expect(objsToCreate).To(HaveLen(20 + len(gatewayAPI.Spec.GatewayClasses))) // 20 core objects plus one per GatewayClass
+		Expect(objsToCreate).To(HaveLen(22 + len(gatewayAPI.Spec.GatewayClasses))) // 22 core objects plus one per GatewayClass
 
 		rtest.ExpectResources(objsToCreate, []client.Object{
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway"}},
@@ -243,6 +243,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
 			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
+			&admissionregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
+			&admissionregv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
@@ -344,6 +346,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
 			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
+			&admissionregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
+			&admissionregv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
@@ -437,6 +441,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
 			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
+			&admissionregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
+			&admissionregv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:tigera-gateway"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-rolebinding"}},
@@ -715,7 +721,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDaemonSet: &envoyapi.KubernetesDaemonSetSpec{
 							Pod: &envoyapi.KubernetesPodSpec{
@@ -926,7 +932,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 			},
 			Spec: envoyapi.EnvoyProxySpec{
 				Provider: &envoyapi.EnvoyProxyProvider{
-					Type: envoyapi.ProviderTypeKubernetes,
+					Type: envoyapi.EnvoyProxyProviderTypeKubernetes,
 					Kubernetes: &envoyapi.EnvoyProxyKubernetesProvider{
 						EnvoyDeployment: &envoyapi.KubernetesDeploymentSpec{
 							InitContainers: []corev1.Container{

@@ -6,6 +6,10 @@
 # TODO: Add in the necessary variables, etc, to make this Makefile work.
 # TODO: Add in multi-arch stuff.
 
+# Delete partially-written targets when a recipe fails, so a failed download
+# doesn't leave a stale file behind that poisons subsequent builds.
+.DELETE_ON_ERROR:
+
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
 NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
@@ -263,7 +267,7 @@ $(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 	$(info ░▒▓ Downloading helm3 $(HELM3_VERSION) for $(BUILDARCH) to $(HELM_BUILDARCH_VERSIONED_BINARY))
 	@rm -f $(HELM_BUILDARCH_VERSIONED_BINARY)
-	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HELM_BUILDARCH_VERSIONED_BINARY)
+	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -O $(NATIVE_OS)-$(BUILDARCH)/helm > $(HELM_BUILDARCH_VERSIONED_BINARY)
 	@chmod a+x $(HELM_BUILDARCH_VERSIONED_BINARY)
 
 

@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -243,6 +244,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: kubecontrollers.WASMPullSecretName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: applicationlayer.WAFWebhookServiceName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-waf.applicationlayer.projectcalico.org", ns: "", group: "admissionregistration.k8s.io", version: "v1", kind: "ValidatingWebhookConfiguration"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
@@ -251,6 +254,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.WAFWebhookCABundle = []byte("fake-ca-bundle")
 		// core_controller provisions a dedicated WAF wasm pull secret (a renamed
 		// copy of the install pull secret) so the reconciler can replicate it into
 		// WAFPolicy namespaces without clashing with the operator-managed
@@ -366,6 +370,29 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		ms := rtest.GetResource(resources, kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless")
+
+		// The webhook surface is rendered with the operator CA stamped into the
+		// ValidatingWebhookConfiguration caBundle.
+		vwc := rtest.GetResource(resources, "tigera-waf.applicationlayer.projectcalico.org", "", "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration").(*admissionregistrationv1.ValidatingWebhookConfiguration)
+		Expect(vwc.Webhooks).To(HaveLen(1))
+		Expect(vwc.Webhooks[0].ClientConfig.CABundle).To(Equal([]byte("fake-ca-bundle")))
+	})
+
+	It("should delete the WAF admission webhook surface when the WAF Gateway API add-on is disabled", func() {
+		instance.Variant = operatorv1.CalicoEnterprise
+		cfg.WAFGatewayExtensionEnabled = false
+
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		toCreate, toDelete := component.Objects()
+
+		// Neither webhook object is created...
+		Expect(rtest.GetResource(toCreate, applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, "", "v1", "Service")).To(BeNil())
+		Expect(rtest.GetResource(toCreate, "tigera-waf.applicationlayer.projectcalico.org", "", "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration")).To(BeNil())
+		// ...and both are queued for deletion, so disabling the feature (or
+		// removing the GatewayAPI CR) cleans up an earlier enabled render.
+		Expect(rtest.GetResource(toDelete, applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, "", "v1", "Service")).NotTo(BeNil())
+		Expect(rtest.GetResource(toDelete, "tigera-waf.applicationlayer.projectcalico.org", "", "admissionregistration.k8s.io", "v1", "ValidatingWebhookConfiguration")).NotTo(BeNil())
 	})
 
 	It("should render all calico kube-controllers resources using CalicoEnterprise on Openshift", func() {
@@ -479,6 +506,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.ManagedClustersWatchRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: applicationlayer.WAFWebhookServiceName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
+			{name: "tigera-waf.applicationlayer.projectcalico.org", ns: "", group: "admissionregistration.k8s.io", version: "v1", kind: "ValidatingWebhookConfiguration"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 

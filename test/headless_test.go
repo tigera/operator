@@ -25,6 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -102,7 +103,9 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		Eventually(func() error {
 			var gc gapi.GatewayClass
 			err := c.Get(context.Background(), types.NamespacedName{Name: "tigera-gateway-class"}, &gc)
-			if kerror.IsNotFound(err) {
+			if kerror.IsNotFound(err) || apimeta.IsNoMatchError(err) {
+				// Not present, or the Gateway API CRDs haven't been installed yet
+				// (a fresh cluster has them only after a GatewayAPI CR is reconciled).
 				return nil
 			}
 			if err != nil {

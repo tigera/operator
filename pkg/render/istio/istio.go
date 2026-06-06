@@ -42,6 +42,13 @@ type Configuration struct {
 	Istio          *operatorv1.Istio
 	IstioNamespace string
 	Scheme         *runtime.Scheme
+
+	// IncludeV3NetworkPolicy is true when the projectcalico.org/v3 API is available (the
+	// calico-system Tier exists), in which case the Calico NetworkPolicies protecting the
+	// Istio components are rendered. When the v3 API is not served (e.g. before the Calico
+	// API server is up, or in a headless installation), they are omitted so that the rest
+	// of the Istio components can still be applied.
+	IncludeV3NetworkPolicy bool
 }
 
 var _ render.Component = &IstioComponent{}
@@ -242,17 +249,20 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.resources
 
 	var objs, toDelete []client.Object
-	objs = append(objs,
-		c.istiodCalicoSystemPolicy(),
-		c.istioCNICalicoSystemPolicy(),
-		c.ztunnelCalicoSystemPolicy(),
-	)
-	// allow-tigera Tier was renamed to calico-system
-	toDelete = append(toDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
-	)
+	// v3 NetworkPolicies can only be applied when the projectcalico.org/v3 API is served.
+	if c.cfg.IncludeV3NetworkPolicy {
+		objs = append(objs,
+			c.istiodCalicoSystemPolicy(),
+			c.istioCNICalicoSystemPolicy(),
+			c.ztunnelCalicoSystemPolicy(),
+		)
+		// allow-tigera Tier was renamed to calico-system
+		toDelete = append(toDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
+		)
+	}
 
 	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(res.IstiodDeployment, overrides)

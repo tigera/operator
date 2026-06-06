@@ -302,10 +302,21 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// patch felix config for l7-collector socket path.
-	if err = r.patchFelixConfiguration(ctx); err != nil {
-		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
-		return reconcile.Result{}, err
+	// patch felix config for l7-collector socket path. In headless installations
+	// (spec.calicoNetwork.linuxDataplane: None) there is no Felix to consume it, so skip.
+	if installationSpec.LinuxDataplaneEnabled() {
+		if err = r.patchFelixConfiguration(ctx); err != nil {
+			if meta.IsNoMatchError(err) {
+				// The projectcalico.org/v3 API is not served yet (e.g. the API server or v3 CRDs
+				// are still coming up). Wait for it rather than degrading hard.
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the projectcalico.org/v3 API to be available before patching felix configuration", err, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		reqLogger.V(1).Info("Linux dataplane is disabled; skipping felix configuration for L7 log collection")
 	}
 
 	// Render v3 NetworkPolicies only when the calico-system Tier exists — same pattern

@@ -1279,4 +1279,82 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("Product: CalicoEnterprise FipsMode: Enabled", operator.CalicoEnterprise, operator.FIPSModeEnabled, true),
 		)
 	})
+
+	Describe("validate None CNI plugin (policy-only mode)", Label("headless"), func() {
+		BeforeEach(func() {
+			instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginNone}
+		})
+
+		It("should allow None CNI with the default dataplane", func() {
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+
+		It("should allow None CNI with an explicit Iptables dataplane", func() {
+			instance.Spec.CalicoNetwork.LinuxDataplane = ptr.To(operator.LinuxDataplaneIptables)
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+
+		It("should reject IPAM with None CNI", func() {
+			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: operator.IPAMPluginCalico}
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("spec.cni.ipam must not be set")))
+		})
+
+		It("should reject the Windows dataplane with None CNI", func() {
+			instance.Spec.CalicoNetwork.WindowsDataplane = ptr.To(operator.WindowsDataplaneHNS)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("spec.calicoNetwork.windowsDataplane must be Disabled")))
+		})
+	})
+
+	Describe("validate headless mode (linuxDataplane: None)", Label("headless"), func() {
+		BeforeEach(func() {
+			instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginNone}
+			instance.Spec.CalicoNetwork.LinuxDataplane = ptr.To(operator.LinuxDataplaneNone)
+		})
+
+		It("should allow a valid headless configuration", func() {
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+
+		It("should allow headless with BGP explicitly disabled", func() {
+			instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPDisabled)
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+		})
+
+		It("should reject linuxDataplane None without cni.type None", func() {
+			instance.Spec.CNI = &operator.CNISpec{
+				Type: operator.PluginCalico,
+				IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("requires spec.cni.type None")))
+		})
+
+		It("should reject the Windows dataplane in headless mode", func() {
+			instance.Spec.CalicoNetwork.WindowsDataplane = ptr.To(operator.WindowsDataplaneHNS)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("spec.calicoNetwork.windowsDataplane must be Disabled")))
+		})
+
+		It("should reject IP pools in headless mode", func() {
+			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{{CIDR: "192.168.0.0/16"}}
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("spec.calicoNetwork.ipPools must not be set")))
+		})
+
+		It("should reject BGP Enabled in headless mode", func() {
+			instance.Spec.CalicoNetwork.BGP = ptr.To(operator.BGPEnabled)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("spec.calicoNetwork.bgp cannot be Enabled")))
+		})
+
+		It("should reject node address autodetection in headless mode", func() {
+			instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 = &operator.NodeAddressAutodetection{
+				CanReach: "8.8.8.8",
+			}
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("nodeAddressAutodetectionV4/V6 must not be set")))
+		})
+	})
 })

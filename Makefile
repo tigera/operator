@@ -338,17 +338,45 @@ ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	export KUBEBUILDER_ASSETS=$$(setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir /tmp/envtest-bins -p path) && \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
+## Run only the headless-mode unit tests (specs labelled "headless" across all packages).
+.PHONY: ut-headless
+ut-headless: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
+	-mkdir -p .go-pkg-cache report
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
+	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
+	export KUBEBUILDER_ASSETS=$$(setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir /tmp/envtest-bins -p path) && \
+	ginkgo --label-filter="headless" $(GINKGO_ARGS) "$(UT_DIR)"'
+
+## Run all headless-mode tests: unit tests first, then the FV tests on their own cluster.
+.PHONY: test-headless
+test-headless: ut-headless fv-headless
+
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
 run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
+	ginkgo -focus="$(GINKGO_FOCUS)" --label-filter="!headless" $(GINKGO_ARGS) "$(FV_DIR)"'
+
+## Run the headless-mode functional tests. These need a kind cluster with the default
+## CNI (kindnet) enabled, since headless installations run no Calico dataplane; they are
+## therefore excluded from the regular `fv` run and get their own cluster lifecycle.
+fv-headless: cluster-create-headless run-headless-fvs cluster-destroy
+run-headless-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
+	-mkdir -p .go-pkg-cache report
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
+	ginkgo --label-filter="headless" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
 KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
 KINDEST_NODE_VERSION?=v1.31.12
+KIND_CONFIG?=./deploy/kind-config.yaml
+
+## Create a kind cluster with the default CNI enabled, for headless-mode FV tests.
+cluster-create-headless: KIND_CONFIG=./deploy/kind-config-headless.yaml
+cluster-create-headless: cluster-create
+
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy
@@ -356,7 +384,7 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# Create a kind cluster.
 	$(BINDIR)/kind create cluster \
 	        --name $(KIND_CLUSTER_NAME) \
-	        --config ./deploy/kind-config.yaml \
+	        --config $(KIND_CONFIG) \
 	        --kubeconfig $(KIND_KUBECONFIG) \
 	        --image kindest/node:$(KINDEST_NODE_VERSION)
 

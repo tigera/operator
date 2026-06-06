@@ -175,8 +175,9 @@ var _ = Describe("Istio Component Rendering", func() {
 					DSCPMark: func() *numorstring.DSCP { d := numorstring.DSCPFromInt(11); return &d }(),
 				},
 			},
-			IstioNamespace: istio.IstioNamespace,
-			Scheme:         testScheme,
+			IstioNamespace:         istio.IstioNamespace,
+			Scheme:                 testScheme,
+			IncludeV3NetworkPolicy: true,
 		}
 	})
 
@@ -254,6 +255,22 @@ var _ = Describe("Istio Component Rendering", func() {
 
 			rtest.ExpectResources(objsToCreate, expectedResources)
 			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
+		})
+
+		It("should omit v3 NetworkPolicies when the projectcalico.org/v3 API is not available", Label("headless"), func() {
+			cfg.IncludeV3NetworkPolicy = false
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, objsToDelete := component.Objects()
+
+			// Same as above minus the 3 NetworkPolicies to create and 3 to delete.
+			Expect(objsToCreate).To(HaveLen(29))
+			Expect(objsToDelete).To(BeEmpty())
+			for _, obj := range objsToCreate {
+				_, isV3Policy := obj.(*v3.NetworkPolicy)
+				Expect(isV3Policy).To(BeFalse(), "expected no v3 NetworkPolicy objects, got %s", obj.GetName())
+			}
 		})
 
 		It("should render network policies with correct tier, selector, and ingress/egress rules", func() {

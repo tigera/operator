@@ -130,6 +130,19 @@ var _ = Describe("CSI rendering tests", func() {
 		}
 	})
 
+	It("should render objects for deletion in headless mode (linuxDataplane: None)", Label("headless"), func() {
+		dpNone := operatorv1.LinuxDataplaneNone
+		cfg.Installation.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+		cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+
+		comp := render.CSI(&cfg)
+		Expect(comp.ResolveImages(nil)).To(BeNil())
+		createObjs, delObjs := comp.Objects()
+
+		Expect(createObjs).To(BeEmpty())
+		Expect(delObjs).NotTo(BeEmpty())
+	})
+
 	It("should set priority class to system-node-critical", func() {
 		resources, _ := render.CSI(&cfg).Objects()
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)

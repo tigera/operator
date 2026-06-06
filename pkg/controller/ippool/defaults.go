@@ -83,9 +83,10 @@ func normalizeCIDR(cidr string) string {
 // fillDefaults fills in IP pool defaults on the Installation object. Defaulting of fields other than IP pools occurs
 // in pkg/controller/installation/
 func fillDefaults(ctx context.Context, client client.Client, instance *operator.Installation, currentPools *v3.IPPoolList) error {
-	if instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil {
+	if instance.Spec.CNI == nil || (instance.Spec.CNI.Type != operator.PluginNone && instance.Spec.CNI.IPAM == nil) {
 		// These fields are needed for IP pool defaulting but defaulted themselves by the core Installation controller, which this controller waits for before
-		// running. We should never hit this branch, but handle it just in case.
+		// running. We should never hit this branch, but handle it just in case. The None CNI plugin
+		// is the exception: it has no IPAM at all, and no pools are ever defaulted for it.
 		return fmt.Errorf("cannot perform IP pool defaulting until CNI configuration is available")
 	}
 

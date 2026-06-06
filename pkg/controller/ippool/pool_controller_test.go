@@ -670,6 +670,19 @@ var _ = Describe("fillDefaults()", func() {
 		ctx = context.Background()
 	})
 
+	It("should not default any pools and not error for the None CNI plugin (headless / policy-only)", Label("headless"), func() {
+		// The None CNI plugin intentionally has no IPAM configuration.
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{Type: operator.PluginNone},
+			},
+		}
+		Expect(fillDefaults(ctx, cli, instance, currentPools)).NotTo(HaveOccurred())
+		if instance.Spec.CalicoNetwork != nil {
+			Expect(instance.Spec.CalicoNetwork.IPPools).To(BeEmpty())
+		}
+	})
+
 	It("should reject an IP pool with no Encapsulation", func() {
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{

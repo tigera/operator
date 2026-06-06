@@ -1645,24 +1645,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.CSI(&csiCfg))
 
 	// Build a configuration for rendering calico/kube-controllers.
-	// Provision a dedicated WAF wasm pull secret (a renamed copy of the install
-	// pull secret) so the WAF reconciler replicates it into tenant namespaces
-	// without clashing with the operator-managed tigera-pull-secret the
-	// GatewayAPI render also copies there (EV-6386).
+	// Provision a dedicated WAF wasm pull secret so the WAF reconciler
+	// replicates it into tenant namespaces without clashing with the
+	// operator-managed tigera-pull-secret the GatewayAPI render also copies
+	// there (EV-6386). The EnvoyExtensionPolicy image source takes a single
+	// pullSecretRef, so the registry auths of all Installation pull secrets
+	// are merged into it rather than picking one.
 	var wasmPullSecret *corev1.Secret
 	if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
-		// The kube-controllers WAF reconciler takes a single pull secret
-		// (WASM_PULL_SECRET), so only the first Installation pull secret is
-		// used for the Coraza wasm OCI pull.
-		if len(pullSecrets) > 1 {
-			reqLogger.Info("Multiple imagePullSecrets configured; only the first is used for the WAF wasm OCI pull",
-				"used", pullSecrets[0].Name)
+		var skipped []string
+		wasmPullSecret, skipped = kubecontrollers.MergeWAFPullSecret(pullSecrets)
+		if len(skipped) > 0 {
+			reqLogger.Info("Skipped unparseable imagePullSecrets when building the WAF wasm pull secret", "skipped", skipped)
 		}
-		wasmPullSecret = pullSecrets[0].DeepCopy()
-		wasmPullSecret.Name = kubecontrollers.WASMPullSecretName
-		wasmPullSecret.Namespace = common.CalicoNamespace
-		wasmPullSecret.ResourceVersion = ""
-		wasmPullSecret.UID = ""
 	}
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,

@@ -117,7 +117,7 @@ const (
 	WAFExtensionStateDisabled WAFExtensionState = "Disabled"
 )
 
-// IsWAFGatewayExtensionEnabled returns true iff spec.extensions.waf.state == Enabled.
+// IsWAFGatewayExtensionEnabled returns true if spec.extensions.waf.state == Enabled.
 // Unset Extensions, unset WAF, unset State, and explicit Disabled all return false.
 func (s *GatewayAPISpec) IsWAFGatewayExtensionEnabled() bool {
 	if s == nil || s.Extensions == nil || s.Extensions.WAF == nil || s.Extensions.WAF.State == nil {

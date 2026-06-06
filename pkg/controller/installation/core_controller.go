@@ -64,6 +64,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -1367,11 +1368,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// spec.extensions.waf.state != Enabled, the WAF surface is not rendered.
 	// See design tigera/designs#25 (PMREQ-384) §Gating.
 	wafGatewayExtensionEnabled := false
-	gatewayAPI := &operatorv1.GatewayAPI{}
-	if err := r.client.Get(ctx, utils.DefaultInstanceKey, gatewayAPI); err == nil {
+	if gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client); err == nil {
 		wafGatewayExtensionEnabled = gatewayAPI.Spec.IsWAFGatewayExtensionEnabled()
 	} else if !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading GatewayAPI", err, reqLogger)
+		// Mirrors the GatewayAPI controller's handling: a read error or a
+		// duplicate default/tigera-secure pair degrades rather than guessing.
+		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -1399,9 +1401,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
-	}
-	if wafWebhookTLS != nil {
-		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true))
+		// Nil when the WAF v3 surface is disabled; the certificate-management
+		// render skips nil key pairs.
+		rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true),
 	}
 
 	components = append(components,
@@ -1649,6 +1651,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// GatewayAPI render also copies there (EV-6386).
 	var wasmPullSecret *corev1.Secret
 	if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
+		// The kube-controllers WAF reconciler takes a single pull secret
+		// (WASM_PULL_SECRET), so only the first Installation pull secret is
+		// used for the Coraza wasm OCI pull.
+		if len(pullSecrets) > 1 {
+			reqLogger.Info("Multiple imagePullSecrets configured; only the first is used for the WAF wasm OCI pull",
+				"used", pullSecrets[0].Name)
+		}
 		wasmPullSecret = pullSecrets[0].DeepCopy()
 		wasmPullSecret.Name = kubecontrollers.WASMPullSecretName
 		wasmPullSecret.Namespace = common.CalicoNamespace
@@ -1671,16 +1680,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
 		WAFWebhookServerTLS:         wafWebhookTLS,
 		WASMPullSecret:              wasmPullSecret,
+		// The webhook Service + ValidatingWebhookConfiguration are rendered by
+		// the kube-controllers component (and deleted when the WAF extension is
+		// disabled); the caBundle is the operator CA that issued the serving
+		// cert above.
+		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
-
-	// Render the in-process WAF admission webhook Service + ValidatingWebhookConfiguration.
-	// The webhook is served by calico-kube-controllers; the caBundle is the
-	// operator CA that issued the serving cert above.
-	if wafGatewayExtensionEnabled {
-		components = append(components, render.NewPassthrough(
-			applicationlayer.WAFAdmissionWebhookComponents(certificateManager.KeyPair().GetCertificatePEM()), nil))
-	}
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller

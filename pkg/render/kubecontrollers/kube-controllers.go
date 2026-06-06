@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -69,12 +70,6 @@ const (
 	// the operator-managed tigera-ca-bundle ConfigMap (EV-6386). TODO: render the
 	// source copy here too (needs the full TrustedBundle, not the RO interface).
 	WASMCACertName = "tigera-waf-ca-bundle"
-
-	// wafWebhookContainerPort is the in-process WAF admission-webhook server
-	// port on calico-kube-controllers. Must match the TargetPort of the
-	// tigera-waf-webhook Service (see pkg/render/applicationlayer) and the port
-	// the calico-private applicationlayer manager's webhook server listens on.
-	wafWebhookContainerPort = int32(9443)
 
 	EsKubeController                    = "es-calico-kube-controllers"
 	EsKubeControllerRole                = "es-calico-kube-controllers"
@@ -147,6 +142,12 @@ type KubeControllersConfiguration struct {
 	// Service DNS name. Nil leaves the Deployment untouched (and the in-process
 	// server self-disables when the cert is absent).
 	WAFWebhookServerTLS certificatemanagement.KeyPairInterface
+
+	// WAFWebhookCABundle is the PEM of the CA that issued WAFWebhookServerTLS
+	// (the operator CA), stamped into the ValidatingWebhookConfiguration's
+	// caBundle so the apiserver can verify the in-process webhook endpoint.
+	// Only consulted when WAFGatewayExtensionEnabled is true.
+	WAFWebhookCABundle []byte
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -343,6 +344,19 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.cfg.WASMPullSecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.WASMPullSecret)...)...)
+	}
+
+	// The in-process WAF admission webhook surface (Service fronting this Pod +
+	// ValidatingWebhookConfiguration). Rendered here, rather than as a
+	// passthrough in the core controller, so the objects are cleaned up when the
+	// WAF extension is disabled or the GatewayAPI CR is removed.
+	if c.kubeControllerName == KubeController {
+		webhookObjs := applicationlayer.WAFAdmissionWebhookComponents(c.cfg.WAFWebhookCABundle)
+		if c.cfg.WAFGatewayExtensionEnabled {
+			objectsToCreate = append(objectsToCreate, webhookObjs...)
+		} else {
+			objectsToDelete = append(objectsToDelete, webhookObjs...)
+		}
 	}
 
 	if c.cfg.MetricsPort != 0 {
@@ -822,7 +836,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		// tigera-waf-webhook Service forwards to.
 		container.Ports = append(container.Ports, corev1.ContainerPort{
 			Name:          "waf-webhook",
-			ContainerPort: wafWebhookContainerPort,
+			ContainerPort: applicationlayer.WAFWebhookContainerPort,
 			Protocol:      corev1.ProtocolTCP,
 		})
 	}
@@ -1063,7 +1077,7 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(9443),
+				Ports: networkpolicy.Ports(uint16(applicationlayer.WAFWebhookContainerPort)),
 			},
 		})
 	}

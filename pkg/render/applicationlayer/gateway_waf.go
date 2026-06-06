@@ -39,10 +39,11 @@ const (
 	// DNS name and mounted into kube-controllers (see pkg/render/kubecontrollers).
 	WAFWebhookServiceName = "tigera-waf-webhook"
 
-	// wafWebhookContainerPort is the in-process webhook server port on the
+	// WAFWebhookContainerPort is the in-process webhook server port on the
 	// calico-kube-controllers Pod (controller-runtime webhook server). Must match
-	// the port the kube-controllers applicationlayer manager listens on.
-	wafWebhookContainerPort = int32(9443)
+	// the port the kube-controllers applicationlayer manager listens on. Shared
+	// with pkg/render/kubecontrollers (container port + NetworkPolicy ingress).
+	WAFWebhookContainerPort = int32(9443)
 
 	// wafWebhookPath is the admission path the kube-controllers webhook server
 	// registers. Must match WAFWebhookPath in the calico-private applicationlayer
@@ -92,7 +93,7 @@ func wafWebhookService() *corev1.Service {
 					Name:       "https",
 					Port:       443,
 					Protocol:   corev1.ProtocolTCP,
-					TargetPort: intstr.FromInt32(wafWebhookContainerPort),
+					TargetPort: intstr.FromInt32(WAFWebhookContainerPort),
 				},
 			},
 			Type: corev1.ServiceTypeClusterIP,

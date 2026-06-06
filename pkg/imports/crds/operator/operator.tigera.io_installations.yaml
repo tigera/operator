@@ -1465,12 +1465,18 @@ spec:
                         LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
                         causes the operator to add required mounts and environment variables for the particular dataplane.
                         If not specified, iptables mode is used.
+                        The value None disables the Linux dataplane entirely: calico-node, Typha, and
+                        calico-kube-controllers are not deployed. It requires spec.cni.type to be None, and is
+                        intended for "headless" clusters that install only standalone components (such as Gateway
+                        API support or Istio) on top of a third-party CNI. Note that switching an existing
+                        cluster to None does not remove previously deployed dataplane components.
                         Default: Iptables
                       enum:
                         - Iptables
                         - BPF
                         - VPP
                         - Nftables
+                        - None
                       type: string
                     linuxPodInterfaceType:
                       description: |-
@@ -5741,6 +5747,7 @@ spec:
                             The IPAM plugin is installed and configured only if the CNI plugin is set to Calico,
                             for all other values of the CNI plugin the plugin binaries and CNI config is a dependency
                             that is expected to be installed separately.
+                            For CNI Plugin None, this field must not be set.
                             Default: Calico
                           enum:
                             - Calico
@@ -5762,12 +5769,18 @@ spec:
                         For the value Calico, the CNI plugin binaries and CNI config will be installed as part of deployment,
                         for all other values the CNI plugin binaries and CNI config is a dependency that is expected
                         to be installed separately.
+                        The value None indicates that no Calico CNI plugin or config will be rendered, and that
+                        the operator makes no assumptions about the CNI in use. If calico-node is running
+                        (spec.calicoNetwork.linuxDataplane is not None), policy is still enforced; set
+                        interfacePrefix in FelixConfiguration to match the third-party CNI's interface prefix.
+                        spec.cni.ipam must not be set when the CNI plugin is None.
                         Default: Calico
                       enum:
                         - Calico
                         - GKE
                         - AmazonVPC
                         - AzureVNET
+                        - None
                       type: string
                   required:
                     - type
@@ -10809,12 +10822,18 @@ spec:
                             LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
                             causes the operator to add required mounts and environment variables for the particular dataplane.
                             If not specified, iptables mode is used.
+                            The value None disables the Linux dataplane entirely: calico-node, Typha, and
+                            calico-kube-controllers are not deployed. It requires spec.cni.type to be None, and is
+                            intended for "headless" clusters that install only standalone components (such as Gateway
+                            API support or Istio) on top of a third-party CNI. Note that switching an existing
+                            cluster to None does not remove previously deployed dataplane components.
                             Default: Iptables
                           enum:
                             - Iptables
                             - BPF
                             - VPP
                             - Nftables
+                            - None
                           type: string
                         linuxPodInterfaceType:
                           description: |-
@@ -15158,6 +15177,7 @@ spec:
                                 The IPAM plugin is installed and configured only if the CNI plugin is set to Calico,
                                 for all other values of the CNI plugin the plugin binaries and CNI config is a dependency
                                 that is expected to be installed separately.
+                                For CNI Plugin None, this field must not be set.
                                 Default: Calico
                               enum:
                                 - Calico
@@ -15179,12 +15199,18 @@ spec:
                             For the value Calico, the CNI plugin binaries and CNI config will be installed as part of deployment,
                             for all other values the CNI plugin binaries and CNI config is a dependency that is expected
                             to be installed separately.
+                            The value None indicates that no Calico CNI plugin or config will be rendered, and that
+                            the operator makes no assumptions about the CNI in use. If calico-node is running
+                            (spec.calicoNetwork.linuxDataplane is not None), policy is still enforced; set
+                            interfacePrefix in FelixConfiguration to match the third-party CNI's interface prefix.
+                            spec.cni.ipam must not be set when the CNI plugin is None.
                             Default: Calico
                           enum:
                             - Calico
                             - GKE
                             - AmazonVPC
                             - AzureVNET
+                            - None
                           type: string
                       required:
                         - type

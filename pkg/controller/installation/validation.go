@@ -130,6 +130,16 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
 				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAzureVNET)
 		}
+	case operatorv1.PluginNone:
+		// The None CNI plugin renders no CNI plugin or IPAM at all.
+		if instance.Spec.CNI.IPAM != nil {
+			return fmt.Errorf("spec.cni.ipam must not be set when spec.cni.type is %s", operatorv1.PluginNone)
+		}
+
+		// Calico for Windows is only supported with specific CNI plugins.
+		if common.WindowsEnabled(instance.Spec) {
+			return fmt.Errorf("spec.calicoNetwork.windowsDataplane must be Disabled when spec.cni.type is %s", operatorv1.PluginNone)
+		}
 	default:
 		// The specified CNI plugin is not supported by this version of the operator.
 		return fmt.Errorf("invalid value '%s' for spec.cni.type, it should be one of %s",
@@ -140,6 +150,31 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	if instance.Spec.CalicoNetwork != nil {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 		felixClusterRoutingMode := felixProgramsClusterRoutes(instance)
+
+		// Headless mode: the Linux dataplane is disabled entirely, so reject any
+		// configuration that implies a running dataplane.
+		if !instance.Spec.LinuxDataplaneEnabled() {
+			if instance.Spec.CNI.Type != operatorv1.PluginNone {
+				return fmt.Errorf("spec.calicoNetwork.linuxDataplane %s requires spec.cni.type %s (configured: %s)",
+					operatorv1.LinuxDataplaneNone, operatorv1.PluginNone, instance.Spec.CNI.Type)
+			}
+			if common.WindowsEnabled(instance.Spec) {
+				return fmt.Errorf("spec.calicoNetwork.windowsDataplane must be Disabled when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+			if len(instance.Spec.CalicoNetwork.IPPools) != 0 {
+				return fmt.Errorf("spec.calicoNetwork.ipPools must not be set when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+			if instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+				return fmt.Errorf("spec.calicoNetwork.bgp cannot be Enabled when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil || instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 != nil {
+				return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4/V6 must not be set when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+		}
 
 		// Perform validation on non-IPPool fields that rely on IP pool configuration. Validation of the IP pools themselves
 		// happens in the IP pool controller.

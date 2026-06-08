@@ -1640,6 +1640,58 @@ value:
 		}
 	})
 
+	It("should copy the trust bundle ConfigMap into each Gateway namespace (open-source)", func() {
+		// The data-plane proxy mounts the bundle from its own namespace regardless of
+		// variant, so the per-namespace copy must happen on open-source too.
+		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
+		Expect(err).NotTo(HaveOccurred())
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:            testScheme(),
+			Installation:      &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:        &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
+			TrustedBundle:     bundle,
+			GatewayNamespaces: []string{"default", "app-ns"},
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		objsToCreate, _ := gatewayComp.Objects()
+		for _, ns := range []string{"default", "app-ns"} {
+			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, ns)
+			Expect(err).NotTo(HaveOccurred(), "trust bundle ConfigMap should be copied into %s", ns)
+			Expect(cm.Labels).To(HaveKeyWithValue(GatewayNamespaceBundleLabel, "true"))
+		}
+
+		// The WAF per-namespace machinery stays Enterprise-only.
+		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
+		Expect(err).To(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("should clean up the trust bundle ConfigMap from stale Gateway namespaces (open-source)", func() {
+		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
+		Expect(err).NotTo(HaveOccurred())
+		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:                   testScheme(),
+			Installation:             &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			GatewayAPI:               &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
+			TrustedBundle:            bundle,
+			GatewayNamespaces:        []string{"default"},
+			CurrentGatewayNamespaces: set.New("default", "removed-ns"),
+		})
+		Expect(gatewayCompErr).NotTo(HaveOccurred())
+
+		objsToCreate, objsToDelete := gatewayComp.Objects()
+
+		// Still copied into the live namespace.
+		_, err = rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, "default")
+		Expect(err).NotTo(HaveOccurred())
+
+		// Removed from the namespace that no longer hosts a Gateway.
+		_, err = rtest.GetResourceOfType[*corev1.ConfigMap](objsToDelete, certificatemanagement.TrustedCertConfigMapName, "removed-ns")
+		Expect(err).NotTo(HaveOccurred(), "trust bundle ConfigMap should be deleted from removed-ns")
+	})
+
 	It("should not create per-namespace resources when no Gateway namespaces are provided (Enterprise)", func() {
 		installation := &operatorv1.InstallationSpec{
 			Variant: operatorv1.CalicoEnterprise,

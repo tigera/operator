@@ -2370,3 +2370,7 @@ func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 	panic("SubResource not implemented in mockClient")
 }
+
+func (mc *mockClient) Apply(ctx context.Context, obj runtime.ApplyConfiguration, opts ...client.ApplyOption) error {
+	panic("Apply not implemented in mockClient")
+}

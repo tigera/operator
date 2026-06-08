@@ -505,10 +505,10 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
 
-	// Enterprise: read previously-provisioned namespaces from the shared CRB's
-	// Subjects so we can clean them up when their Gateway is gone.
+	// Previously-provisioned namespaces, for cleanup. Enterprise reads the shared CRB's
+	// Subjects; OSS has no CRB, so it enumerates the mirrored trust-bundle ConfigMaps.
+	gatewayConfig.CurrentGatewayNamespaces = set.New[string]()
 	if variant.IsEnterprise() {
-		gatewayConfig.CurrentGatewayNamespaces = set.New[string]()
 		existingCRB := &rbacv1.ClusterRoleBinding{}
 		if err = r.client.Get(ctx, types.NamespacedName{Name: gatewayapi.GatewayNamespacesCRBName}, existingCRB); err == nil {
 			for _, s := range existingCRB.Subjects {
@@ -519,6 +519,15 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		} else if !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading gateway namespaces ClusterRoleBinding", err, log)
 			return reconcile.Result{}, err
+		}
+	} else {
+		cmList := &corev1.ConfigMapList{}
+		if err = r.client.List(ctx, cmList, client.MatchingLabels{gatewayapi.GatewayNamespaceBundleLabel: "true"}); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing gateway trust bundle ConfigMaps", err, log)
+			return reconcile.Result{}, err
+		}
+		for i := range cmList.Items {
+			gatewayConfig.CurrentGatewayNamespaces.Insert(cmList.Items[i].Namespace)
 		}
 	}
 

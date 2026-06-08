@@ -103,6 +103,7 @@ const (
 	GatewayAPIName                      = "calico-gateway-api"
 	GatewayControllerLabel              = GatewayAPIName + "-controller"
 	GatewayCertgenLabel                 = GatewayAPIName + "-certgen"
+	GatewayNamespaceBundleLabel         = GatewayAPIName + "-trusted-bundle"
 	EnvoyGatewayConfigName              = "envoy-gateway-config"
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
@@ -510,6 +511,16 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		pr.cfg.CurrentGatewayClasses.Delete(className)
 	}
 
+	// The data-plane proxy mounts the trust bundle from its own namespace on both variants;
+	// reserved namespaces already carry the core-owned copy.
+	if pr.cfg.TrustedBundle != nil {
+		for _, ns := range pr.cfg.GatewayNamespaces {
+			if !isReservedOperatorNamespace(ns) {
+				objs = append(objs, pr.gatewayNamespaceBundle(ns))
+			}
+		}
+	}
+
 	if pr.cfg.Installation.Variant.IsEnterprise() {
 		// Shared WAF ClusterRoles bound by per-namespace SAs.
 		objs = append(objs,
@@ -528,41 +539,43 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 			if !isReservedOperatorNamespace(ns) {
 				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
 				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-				// envoy-proxy pods mount the bundle from their own namespace.
-				if pr.cfg.TrustedBundle != nil {
-					objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(ns))
-				}
 			}
 		}
 		if len(pr.cfg.GatewayNamespaces) > 0 {
 			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
 		}
+	}
 
-		// Clean up resources for namespaces that no longer host a Gateway.
-		if pr.cfg.CurrentGatewayNamespaces != nil {
-			currentNS := set.New(pr.cfg.GatewayNamespaces...)
-			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
-				if !currentNS.Has(ns) {
-					// Secret must go before the RoleBinding that grants us delete perms; skip shared
-					// resources in reserved namespaces (core-owned).
-					if !isReservedOperatorNamespace(ns) {
-						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-						if pr.cfg.TrustedBundle != nil {
-							objsToDelete = append(objsToDelete, pr.cfg.TrustedBundle.ConfigMap(ns))
-						}
-					}
-					objsToDelete = append(objsToDelete,
-						pr.gatewayNamespaceSA(ns),
-						pr.gatewayNamespaceRoleBinding(ns),
-					)
-					if !isReservedOperatorNamespace(ns) {
-						objsToDelete = append(objsToDelete, render.CreateOperatorSecretsRoleBinding(ns))
-					}
+	// Clean up resources for namespaces that no longer host a Gateway. The trust bundle is
+	// mirrored on both variants; WAF/pull-secret/CRB are Enterprise-only.
+	if pr.cfg.CurrentGatewayNamespaces != nil {
+		currentNS := set.New(pr.cfg.GatewayNamespaces...)
+		enterprise := pr.cfg.Installation.Variant.IsEnterprise()
+		for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
+			if currentNS.Has(ns) {
+				continue
+			}
+			if !isReservedOperatorNamespace(ns) {
+				// Secret must go before the RoleBinding that grants us delete perms.
+				if enterprise {
+					objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
+				}
+				if pr.cfg.TrustedBundle != nil {
+					objsToDelete = append(objsToDelete, pr.gatewayNamespaceBundle(ns))
 				}
 			}
-			if len(pr.cfg.GatewayNamespaces) == 0 {
-				objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
+			if enterprise {
+				objsToDelete = append(objsToDelete,
+					pr.gatewayNamespaceSA(ns),
+					pr.gatewayNamespaceRoleBinding(ns),
+				)
+				if !isReservedOperatorNamespace(ns) {
+					objsToDelete = append(objsToDelete, render.CreateOperatorSecretsRoleBinding(ns))
+				}
 			}
+		}
+		if pr.cfg.Installation.Variant.IsEnterprise() && len(pr.cfg.GatewayNamespaces) == 0 {
+			objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
 		}
 	}
 
@@ -1343,6 +1356,17 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole()
 			},
 		},
 	}
+}
+
+// gatewayNamespaceBundle is the trust bundle ConfigMap for a Gateway namespace, labeled so
+// the controller can find previously-provisioned namespaces for cleanup.
+func (pr *gatewayAPIImplementationComponent) gatewayNamespaceBundle(namespace string) *corev1.ConfigMap {
+	cm := pr.cfg.TrustedBundle.ConfigMap(namespace)
+	if cm.Labels == nil {
+		cm.Labels = map[string]string{}
+	}
+	cm.Labels[GatewayNamespaceBundleLabel] = "true"
+	return cm
 }
 
 // gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace.

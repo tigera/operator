@@ -690,7 +690,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 	if envoyProxy.Spec.Provider == nil {
 		envoyProxy.Spec.Provider = &envoyapi.EnvoyProxyProvider{}
 	}
-	envoyProxy.Spec.Provider.Type = envoyapi.ProviderTypeKubernetes
+	envoyProxy.Spec.Provider.Type = envoyapi.EnvoyProxyProviderTypeKubernetes
 	if envoyProxy.Spec.Provider.Kubernetes == nil {
 		envoyProxy.Spec.Provider.Kubernetes = &envoyapi.EnvoyProxyKubernetesProvider{}
 	}
@@ -992,7 +992,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className string, 
 						},
 					},
 					Format: &envoyapi.ProxyAccessLogFormat{
-						Type: "JSON",
+						Type: ptr.ToPtr(envoyapi.ProxyAccessLogFormatTypeJSON),
 						JSON: map[string]string{
 							"reporter":                         "gateway",
 							"start_time":                       "%START_TIME%",

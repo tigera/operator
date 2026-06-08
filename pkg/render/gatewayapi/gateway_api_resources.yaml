@@ -21589,8 +21589,9 @@ spec:
                             type: array
                           hostname:
                             description: |-
-                              Hostname defines the HTTP host that will be requested during health checking.
-                              Default: HTTPRoute or GRPCRoute hostname.
+                              Hostname defines the HTTP Host header used for active HTTP health checks.
+                              Host selection uses this order: this field, the associated Backend endpoint
+                              hostname if available, then the effective Route hostname.
                             maxLength: 253
                             minLength: 1
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -26535,8 +26536,9 @@ spec:
                                       type: array
                                     hostname:
                                       description: |-
-                                        Hostname defines the HTTP host that will be requested during health checking.
-                                        Default: HTTPRoute or GRPCRoute hostname.
+                                        Hostname defines the HTTP Host header used for active HTTP health checks.
+                                        Host selection uses this order: this field, the associated Backend endpoint
+                                        hostname if available, then the effective Route hostname.
                                       maxLength: 253
                                       minLength: 1
                                       pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -40261,8 +40263,9 @@ spec:
                                                         type: array
                                                       hostname:
                                                         description: |-
-                                                          Hostname defines the HTTP host that will be requested during health checking.
-                                                          Default: HTTPRoute or GRPCRoute hostname.
+                                                          Hostname defines the HTTP Host header used for active HTTP health checks.
+                                                          Host selection uses this order: this field, the associated Backend endpoint
+                                                          hostname if available, then the effective Route hostname.
                                                         maxLength: 253
                                                         minLength: 1
                                                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -41513,8 +41516,9 @@ spec:
                                                         type: array
                                                       hostname:
                                                         description: |-
-                                                          Hostname defines the HTTP host that will be requested during health checking.
-                                                          Default: HTTPRoute or GRPCRoute hostname.
+                                                          Hostname defines the HTTP Host header used for active HTTP health checks.
+                                                          Host selection uses this order: this field, the associated Backend endpoint
+                                                          hostname if available, then the effective Route hostname.
                                                         maxLength: 253
                                                         minLength: 1
                                                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -42935,8 +42939,9 @@ spec:
                                                   type: array
                                                 hostname:
                                                   description: |-
-                                                    Hostname defines the HTTP host that will be requested during health checking.
-                                                    Default: HTTPRoute or GRPCRoute hostname.
+                                                    Hostname defines the HTTP Host header used for active HTTP health checks.
+                                                    Host selection uses this order: this field, the associated Backend endpoint
+                                                    hostname if available, then the effective Route hostname.
                                                   maxLength: 253
                                                   minLength: 1
                                                   pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -44262,8 +44267,9 @@ spec:
                                             type: array
                                           hostname:
                                             description: |-
-                                              Hostname defines the HTTP host that will be requested during health checking.
-                                              Default: HTTPRoute or GRPCRoute hostname.
+                                              Hostname defines the HTTP Host header used for active HTTP health checks.
+                                              Host selection uses this order: this field, the associated Backend endpoint
+                                              hostname if available, then the effective Route hostname.
                                             maxLength: 253
                                             minLength: 1
                                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -46940,8 +46946,9 @@ spec:
                                         type: array
                                       hostname:
                                         description: |-
-                                          Hostname defines the HTTP host that will be requested during health checking.
-                                          Default: HTTPRoute or GRPCRoute hostname.
+                                          Hostname defines the HTTP Host header used for active HTTP health checks.
+                                          Host selection uses this order: this field, the associated Backend endpoint
+                                          hostname if available, then the effective Route hostname.
                                         maxLength: 253
                                         minLength: 1
                                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -48080,8 +48087,9 @@ spec:
                                         type: array
                                       hostname:
                                         description: |-
-                                          Hostname defines the HTTP host that will be requested during health checking.
-                                          Default: HTTPRoute or GRPCRoute hostname.
+                                          Hostname defines the HTTP Host header used for active HTTP health checks.
+                                          Host selection uses this order: this field, the associated Backend endpoint
+                                          hostname if available, then the effective Route hostname.
                                         maxLength: 253
                                         minLength: 1
                                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -49421,8 +49429,9 @@ spec:
                                               type: array
                                             hostname:
                                               description: |-
-                                                Hostname defines the HTTP host that will be requested during health checking.
-                                                Default: HTTPRoute or GRPCRoute hostname.
+                                                Hostname defines the HTTP Host header used for active HTTP health checks.
+                                                Host selection uses this order: this field, the associated Backend endpoint
+                                                hostname if available, then the effective Route hostname.
                                               maxLength: 253
                                               minLength: 1
                                               pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -50840,8 +50849,9 @@ spec:
                                         type: array
                                       hostname:
                                         description: |-
-                                          Hostname defines the HTTP host that will be requested during health checking.
-                                          Default: HTTPRoute or GRPCRoute hostname.
+                                          Hostname defines the HTTP Host header used for active HTTP health checks.
+                                          Host selection uses this order: this field, the associated Backend endpoint
+                                          hostname if available, then the effective Route hostname.
                                         maxLength: 253
                                         minLength: 1
                                         pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$
@@ -52126,10 +52136,10 @@ metadata:
   name: envoy-gateway
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 ---
 # Source: gateway-helm/templates/envoy-gateway-config.yaml
@@ -52139,10 +52149,10 @@ metadata:
   name: envoy-gateway-config
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 data:
   envoy-gateway.yaml: |
@@ -52158,7 +52168,7 @@ data:
       kubernetes:
         rateLimitDeployment:
           container:
-            image: docker.io/envoyproxy/ratelimit:05c08d03
+            image: docker.io/envoyproxy/ratelimit:b8d893f3
           patch:
             type: StrategicMerge
             value:
@@ -52169,7 +52179,7 @@ data:
                     - imagePullPolicy: IfNotPresent
                       name: envoy-ratelimit
         shutdownManager:
-          image: docker.io/envoyproxy/gateway:v1.7.2
+          image: docker.io/envoyproxy/gateway:v1.7.4
       type: Kubernetes
 ---
 # Source: gateway-helm/templates/envoy-gateway-rbac.yaml
@@ -52339,10 +52349,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -52398,10 +52408,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-role
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 rules:
 - apiGroups:
@@ -52443,10 +52453,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-infra-manager
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -52464,10 +52474,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-leader-election-rolebinding
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 roleRef:
   apiGroup: rbac.authorization.k8s.io
@@ -52486,10 +52496,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 spec:
   type: ClusterIP
@@ -52522,10 +52532,10 @@ metadata:
   namespace: 'tigera-gateway'
   labels:
     control-plane: envoy-gateway
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 spec:
   replicas: 1
@@ -52556,7 +52566,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.7.2
+        image: docker.io/envoyproxy/gateway:v1.7.4
         imagePullPolicy: IfNotPresent
         livenessProbe:
           httpGet:
@@ -52625,10 +52635,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -52640,10 +52650,10 @@ kind: ClusterRole
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -52673,10 +52683,10 @@ kind: ClusterRoleBinding
 metadata:
   name: 'tigera-gateway-api-gateway-helm-certgen:tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -52697,10 +52707,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -52722,10 +52732,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -52746,10 +52756,10 @@ metadata:
   name: tigera-gateway-api-gateway-helm-certgen
   namespace: 'tigera-gateway'
   labels:
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
   annotations:
     "helm.sh/hook": pre-install, pre-upgrade
@@ -52774,7 +52784,7 @@ spec:
               fieldPath: metadata.namespace
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: cluster.local
-        image: docker.io/envoyproxy/gateway:v1.7.2
+        image: docker.io/envoyproxy/gateway:v1.7.4
         imagePullPolicy: IfNotPresent
         name: envoy-gateway-certgen
         securityContext:
@@ -52804,10 +52814,10 @@ metadata:
     "helm.sh/hook-weight": "-1"
   labels:
     app.kubernetes.io/component: topology-injector
-    helm.sh/chart: gateway-helm-v1.7.2
+    helm.sh/chart: gateway-helm-v1.7.4
     app.kubernetes.io/name: gateway-helm
     app.kubernetes.io/instance: tigera-gateway-api
-    app.kubernetes.io/version: "v1.7.2"
+    app.kubernetes.io/version: "v1.7.4"
     app.kubernetes.io/managed-by: Helm
 webhooks:
   - name: topology.webhook.gateway.envoyproxy.io

@@ -17,9 +17,6 @@ spec:
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
-        - jsonPath: .spec.enforcementMode
-          name: Mode
-          type: string
         - jsonPath: .status.securityPosture
           name: Posture
           type: string
@@ -52,41 +49,24 @@ spec:
             metadata:
               type: object
             spec:
-              description: WAFValidationPolicySpec defines namespace validation rules
+              description: |-
+                WAFValidationPolicySpec defines namespace validation rules.
+
+                Namespace WAFValidationPolicies are ADVISORY ONLY: they self-validate an App
+                Operator's namespace config and surface failures via status + SecurityPosture
+                but never block EnvoyExtensionPolicy generation. The enforcement role belongs
+                to the Cluster Operator's GlobalWAFValidationPolicy (which has an
+                EnforcementMode); this type intentionally has no EnforcementMode. See the
+                approved design (per-route/namespaced WAF, designs#25 §01/§02). A future
+                CO-delegated self-enforcement model would be added separately (RFE). EV-6386.
               properties:
-                enforcementMode:
-                  default: Audit
-                  description: |-
-                    EnforcementMode determines how validation failures are handled
-                    - Audit: Log warnings but generate EnvoyExtensionPolicy anyway
-                    - Enforce: Block EnvoyExtensionPolicy generation on critical failures
-                    Note: Namespace policies can only Enforce if GlobalPolicy allows it
-                  enum:
-                    - Audit
-                    - Enforce
-                  type: string
                 rules:
                   description: Rules defines the validation rules to apply
                   items:
                     description:
-                      ValidationRule defines a single CEL-based validation
+                      ValidationRule defines a single Rego-based validation
                       rule
                     properties:
-                      expression:
-                        description: |-
-                          Expression is a CEL expression that must evaluate to true for validation to pass.
-                          Available variables:
-                            - directives: []string - the final merged directive list
-                            - config.action: string - effective action ("Detect" or "Block")
-                            - config.crsState: string - CRS state ("Enabled" or "Disabled")
-                            - config.paranoiaLevel: int - effective paranoia level (1-4)
-                            - source.globalPolicy: string - name of GlobalWAFPolicy
-                            - source.namespacePolicy: string - name of WAFPolicy (if any)
-                            - source.globalPlugins: []string - names of global plugins applied
-                            - source.namespacePlugins: []string - names of namespace plugins applied
-                        maxLength: 16384
-                        minLength: 1
-                        type: string
                       message:
                         description: Message is displayed when validation fails
                         maxLength: 1024
@@ -94,6 +74,24 @@ spec:
                       name:
                         description: Name is a unique identifier for this rule
                         maxLength: 63
+                        minLength: 1
+                        type: string
+                      rego:
+                        description: |-
+                          Rego is a Rego module that decides violations against the merged WAF
+                          configuration. The module must declare `package waf` and produce a
+                          `violations` set; an empty set means the rule passed. Each violation
+                          may be a plain string message, or an object carrying a `msg` string.
+                          The `input` document available to the module:
+                            - input.directives: []string - the final merged directive list
+                            - input.config.action: string - effective action ("Detect" or "Block")
+                            - input.config.crsState: string - CRS state ("Enabled" or "Disabled")
+                            - input.config.paranoiaLevel: int - effective paranoia level (1-4)
+                            - input.source.globalPolicy: string - name of GlobalWAFPolicy
+                            - input.source.namespacePolicy: string - name of WAFPolicy (if any)
+                            - input.source.globalPlugins: []string - names of global plugins applied
+                            - input.source.namespacePlugins: []string - names of namespace plugins applied
+                        maxLength: 16384
                         minLength: 1
                         type: string
                       severity:
@@ -105,8 +103,8 @@ spec:
                           - critical
                         type: string
                     required:
-                      - expression
                       - name
+                      - rego
                     type: object
                   minItems: 1
                   type: array

@@ -134,24 +134,9 @@ spec:
                   description: Rules defines the validation rules to apply
                   items:
                     description:
-                      ValidationRule defines a single CEL-based validation
+                      ValidationRule defines a single Rego-based validation
                       rule
                     properties:
-                      expression:
-                        description: |-
-                          Expression is a CEL expression that must evaluate to true for validation to pass.
-                          Available variables:
-                            - directives: []string - the final merged directive list
-                            - config.action: string - effective action ("Detect" or "Block")
-                            - config.crsState: string - CRS state ("Enabled" or "Disabled")
-                            - config.paranoiaLevel: int - effective paranoia level (1-4)
-                            - source.globalPolicy: string - name of GlobalWAFPolicy
-                            - source.namespacePolicy: string - name of WAFPolicy (if any)
-                            - source.globalPlugins: []string - names of global plugins applied
-                            - source.namespacePlugins: []string - names of namespace plugins applied
-                        maxLength: 16384
-                        minLength: 1
-                        type: string
                       message:
                         description: Message is displayed when validation fails
                         maxLength: 1024
@@ -159,6 +144,24 @@ spec:
                       name:
                         description: Name is a unique identifier for this rule
                         maxLength: 63
+                        minLength: 1
+                        type: string
+                      rego:
+                        description: |-
+                          Rego is a Rego module that decides violations against the merged WAF
+                          configuration. The module must declare `package waf` and produce a
+                          `violations` set; an empty set means the rule passed. Each violation
+                          may be a plain string message, or an object carrying a `msg` string.
+                          The `input` document available to the module:
+                            - input.directives: []string - the final merged directive list
+                            - input.config.action: string - effective action ("Detect" or "Block")
+                            - input.config.crsState: string - CRS state ("Enabled" or "Disabled")
+                            - input.config.paranoiaLevel: int - effective paranoia level (1-4)
+                            - input.source.globalPolicy: string - name of GlobalWAFPolicy
+                            - input.source.namespacePolicy: string - name of WAFPolicy (if any)
+                            - input.source.globalPlugins: []string - names of global plugins applied
+                            - input.source.namespacePlugins: []string - names of namespace plugins applied
+                        maxLength: 16384
                         minLength: 1
                         type: string
                       severity:
@@ -170,8 +173,8 @@ spec:
                           - critical
                         type: string
                     required:
-                      - expression
                       - name
+                      - rego
                     type: object
                   minItems: 1
                   type: array

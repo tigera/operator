@@ -13,6 +13,10 @@
 # These values are used for fetching tools to run as part of the build process
 # and shouldn't vary based on the target we're building for
 NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then echo amd64; else uname -m; fi')
+# Linux reports arm64 as aarch64, but Go and release-artifact URLs use arm64.
+ifeq ($(NATIVE_ARCH),aarch64)
+    NATIVE_ARCH = arm64
+endif
 NATIVE_OS := $(shell uname -s | tr A-Z a-z)
 
 # The version of kustomize we use for generating bundles
@@ -307,13 +311,16 @@ sub-image-%:
 BINDIR?=build/init/bin
 $(BINDIR)/kubectl:
 	mkdir -p $(BINDIR)
-	curl -sSf -L --retry 5 https://dl.k8s.io/release/v1.30.5/bin/linux/$(ARCH)/kubectl -o $@
+	curl -sSf -L --retry 5 https://dl.k8s.io/release/v1.30.5/bin/$(NATIVE_OS)/$(NATIVE_ARCH)/kubectl -o $@
 	chmod +x $@
 
 kubectl: $(BINDIR)/kubectl
 
+# kind runs on the host (not in the build container), so cross-compile for the
+# native OS/arch. go build (rather than go install, which refuses to cross-compile
+# into GOBIN) keeps the version pinned by go.mod.
 $(BINDIR)/kind:
-	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOBIN=/go/src/$(PACKAGE_NAME)/$(BINDIR) go install sigs.k8s.io/kind"
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c "GOOS=$(NATIVE_OS) GOARCH=$(NATIVE_ARCH) CGO_ENABLED=0 go build -o /go/src/$(PACKAGE_NAME)/$(BINDIR)/kind sigs.k8s.io/kind"
 
 clean:
 	rm -rf $(BUILD_DIR)
@@ -365,7 +372,15 @@ run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 ## Run the headless-mode functional tests. These need a kind cluster with the default
 ## CNI (kindnet) enabled, since headless installations run no Calico dataplane; they are
 ## therefore excluded from the regular `fv` run and get their own cluster lifecycle.
-fv-headless: cluster-create-headless run-headless-fvs cluster-destroy
+## Pass KEEP_CLUSTER=true to leave the cluster running afterwards for manual inspection
+## (note: the specs clean up their own resources in AfterEach, so the cluster is left in a
+## bare state; for a running product install use `make cluster-create-headless-products`).
+fv-headless: cluster-create-headless run-headless-fvs
+ifeq ($(KEEP_CLUSTER),true)
+	@echo "==> KEEP_CLUSTER=true: leaving kind cluster '$(KIND_CLUSTER_NAME)' running. Tear down with: make cluster-destroy"
+else
+	$(MAKE) cluster-destroy
+endif
 run-headless-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
@@ -376,6 +391,8 @@ KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
 KINDEST_NODE_VERSION?=v1.31.12
 KIND_CONFIG?=./deploy/kind-config.yaml
+# Set KEEP_CLUSTER=true to skip cluster-destroy after an FV run (e.g. fv-headless).
+KEEP_CLUSTER?=false
 
 ## Create a kind cluster with the default CNI enabled, for headless-mode FV tests.
 cluster-create-headless: KIND_CONFIG=./deploy/kind-config-headless.yaml
@@ -398,6 +415,47 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 	# Wait for controller manager to be running and healthy.
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
+
+## Apply the sample CRs for a full Calico install plus all product options (Calico
+## Ingress Gateway, Calico Istio service mesh). Idempotent; safe to re-run. The
+## operator must be running for these to reconcile.
+.PHONY: apply-product-crs
+apply-product-crs: $(BINDIR)/kubectl
+	-KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_installation.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_gatewayapi.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_istio.yaml
+
+## Apply the sample CRs for a headless install plus all product options. Uses the
+## headless Installation (no Calico dataplane; products run on the default CNI).
+## Idempotent; safe to re-run. The operator must be running for these to reconcile.
+.PHONY: apply-headless-product-crs
+apply-headless-product-crs: $(BINDIR)/kubectl
+	-KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_installation_headless.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_gatewayapi.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_istio.yaml
+
+## Create a kind cluster with full Calico plus all product options (Calico Ingress
+## Gateway, Calico Istio service mesh), then run the operator locally in the foreground
+## (Ctrl-C to stop; the cluster keeps running). Tear down afterwards with
+## `make cluster-destroy`. Watch progress from another terminal with:
+## KUBECONFIG=./kubeconfig.yaml kubectl get tigerastatus -w
+.PHONY: cluster-create-products
+cluster-create-products: cluster-create apply-product-crs
+	@echo "==> Sample CRs applied. Starting the operator locally (Ctrl-C to stop)..."
+	KUBECONFIG=$(KIND_KUBECONFIG) go run ./cmd --enable-leader-election=false
+
+## Create a headless kind cluster (default CNI, no Calico dataplane) with all headless
+## product options installed (Calico Ingress Gateway, Calico Istio service mesh), then
+## run the operator locally in the foreground (Ctrl-C to stop; the cluster keeps
+## running). Tear down afterwards with `make cluster-destroy`. Watch progress from
+## another terminal with: KUBECONFIG=./kubeconfig.yaml kubectl get tigerastatus -w
+.PHONY: cluster-create-headless-products
+cluster-create-headless-products: KIND_CONFIG=./deploy/kind-config-headless.yaml
+cluster-create-headless-products: cluster-create apply-headless-product-crs
+	@echo "==> Sample CRs applied. Starting the operator locally (Ctrl-C to stop)..."
+	KUBECONFIG=$(KIND_KUBECONFIG) go run ./cmd --enable-leader-election=false
 
 FV_IMAGE_REGISTRY := docker.io
 VERSION_TAG := master

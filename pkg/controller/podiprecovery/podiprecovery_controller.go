@@ -65,7 +65,7 @@ var log = logf.Log.WithName("controller_podiprecovery")
 const podNodeNameIndex = "spec.nodeName"
 
 // Add wires the controller into the manager.
-func Add(mgr manager.Manager, _ options.ControllerOptions) error {
+func Add(mgr manager.Manager, _ options.AddOptions) error {
 	r := &Reconciler{
 		client: mgr.GetClient(),
 	}
@@ -157,7 +157,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 
 	// Gate on Installation: if Calico hasn't been installed yet, the
 	// operator-managed pods we'd act on don't exist. Bail out silently.
-	if _, _, err := utils.GetInstallationSpec(ctx, r.client); err != nil {
+	if _, _, err := utils.GetInstallation(ctx, r.client); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}

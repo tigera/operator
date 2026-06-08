@@ -34,6 +34,6 @@ type PodIPRecoveryReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-func (r *PodIPRecoveryReconciler) SetupWithManager(mgr ctrl.Manager, opts options.ControllerOptions) error {
+func (r *PodIPRecoveryReconciler) SetupWithManager(mgr ctrl.Manager, opts options.AddOptions) error {
 	return podiprecovery.Add(mgr, opts)
 }

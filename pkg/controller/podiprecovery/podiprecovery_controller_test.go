@@ -78,7 +78,7 @@ var _ = Describe("PodIPRecovery controller", func() {
 		ctx = context.Background()
 		scheme := runtime.NewScheme()
 		Expect(corev1.AddToScheme(scheme)).To(Succeed())
-		Expect(apis.AddToScheme(scheme, false)).To(Succeed())
+		Expect(apis.AddToScheme(scheme)).To(Succeed())
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).
 			// Mirror the cmd/main.go index registration so the fake client
 			// can honor `client.MatchingFields{"spec.nodeName": ...}`.

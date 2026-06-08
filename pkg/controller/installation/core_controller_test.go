@@ -185,7 +185,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
+			for !nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -814,7 +814,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
+			for !nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -1036,7 +1036,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
+			for !nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -2478,7 +2478,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
+			for !nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 
@@ -2615,7 +2615,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
+			for !nodeIndexInformer.HasSynced() {
 				time.Sleep(100 * time.Millisecond)
 			}
 

@@ -508,8 +508,9 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
 
 	// Legacy tigera-gateway teardown (TODO: remove once upgrades from 3.x are unsupported).
-	// Delete the old controller first and alone (while terminating it re-creates proxies we remove),
-	// then its orphaned proxies, requeueing until clean. Skipped if a Gateway lives in tigera-gateway,
+	// Foreground-delete the old controller so its Deployment lingers until its pods are gone — only
+	// then does the Get below return NotFound, guaranteeing nothing re-creates the proxies we then
+	// sweep. Owner-scoped, requeueing until clean. Skipped if a Gateway lives in tigera-gateway,
 	// since then the proxy there belongs to the new controller.
 	const legacyGatewayNamespace = "tigera-gateway"
 	legacyNamespaceHostsGateway := false
@@ -522,11 +523,14 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		legacyController := &v1.Deployment{}
 		switch err = r.client.Get(ctx, types.NamespacedName{Namespace: legacyGatewayNamespace, Name: "envoy-gateway"}, legacyController); {
 		case err == nil:
-			if derr := r.client.Delete(ctx, legacyController); derr != nil && !errors.IsNotFound(derr) {
-				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting legacy gateway controller", derr, reqLogger)
-				return reconcile.Result{}, derr
+			if legacyController.DeletionTimestamp == nil {
+				foreground := metav1.DeletePropagationForeground
+				if derr := r.client.Delete(ctx, legacyController, &client.DeleteOptions{PropagationPolicy: &foreground}); derr != nil && !errors.IsNotFound(derr) {
+					r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting legacy gateway controller", derr, reqLogger)
+					return reconcile.Result{}, derr
+				}
 			}
-			reqLogger.Info("Deleting legacy tigera-gateway controller before cleaning its proxies")
+			reqLogger.Info("Deleting legacy tigera-gateway controller; waiting for its pods before cleaning proxies")
 			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		case !errors.IsNotFound(err):
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for legacy tigera-gateway controller", err, reqLogger)

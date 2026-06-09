@@ -174,6 +174,21 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 		r.policyRecScopeWatchReady.MarkAsReady()
 	})
 
+	Context("headless installation", func() {
+		It("should degrade when the installation is headless", Label("headless"), func() {
+			installation := &operatorv1.Installation{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, installation)).NotTo(HaveOccurred())
+			dpNone := operatorv1.LinuxDataplaneNone
+			installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Policy Recommendation is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+		})
+	})
+
 	Context("image reconciliation", func() {
 		It("should use builtin images", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})

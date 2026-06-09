@@ -167,6 +167,19 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	Context("headless installation", func() {
+		It("should degrade when the installation is headless", Label("headless"), func() {
+			dpNone := operatorv1.LinuxDataplaneNone
+			installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "ManagementClusterConnection is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+		})
+	})
+
 	Context("default config", func() {
 		BeforeEach(func() {
 			Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())

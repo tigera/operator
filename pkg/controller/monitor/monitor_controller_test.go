@@ -732,4 +732,17 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 		})
 	})
+
+	It("should degrade in a headless installation", Label("headless"), func() {
+		dpNone := operatorv1.LinuxDataplaneNone
+		installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+		Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+
+		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Monitoring is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Monitoring is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+	})
 })

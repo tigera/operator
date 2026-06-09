@@ -403,6 +403,24 @@ var _ = Describe("authentication controller tests", func() {
 			})).ToNot(HaveOccurred())
 		})
 
+		It("should degrade when the installation is headless", Label("headless"), func() {
+			dpNone := operatorv1.LinuxDataplaneNone
+			installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+
+			r := ReconcileAuthentication{
+				client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: readyFlag,
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Authentication is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+		})
+
 		It("should use builtin images", func() {
 			r := ReconcileAuthentication{
 				client:         cli,

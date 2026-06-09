@@ -415,6 +415,14 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		managedClusterVersion = clusterInformation.Spec.CalicoVersion
 	}
 
+	// In a headless installation there is no Calico API server, so the calico-system Tier
+	// (projectcalico.org/v3) is never served and ManagementClusterConnection cannot be installed. Report this
+	// clearly instead of blocking forever on the Tier watch.
+	if utils.IsHeadlessInstallation(ctx, r.cli) {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "ManagementClusterConnection is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)

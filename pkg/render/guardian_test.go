@@ -343,7 +343,15 @@ var _ = Describe("Rendering tests", func() {
 			cfg.IncludeEgressNetworkPolicy = includeEgressNetworkPolicy
 			g, err := render.GuardianPolicy(cfg)
 			Expect(err).NotTo(HaveOccurred())
-			resources, _ = g.Objects()
+			objs, _ := g.Objects()
+			// Apply the registered enterprise modifier the way the componentHandler
+			// does, so the enterprise policy is exercised. For the Calico variant the
+			// modifier is a no-op and the OSS policy is returned.
+			rc := extensions.RenderContext{Installation: cfg.Installation}
+			if p, ok := g.(render.ExtensionContextProvider); ok {
+				rc.Component = p.ExtensionContext()
+			}
+			resources = extensions.ApplyModifiers(render.ComponentNameGuardianPolicy, rc, objs)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

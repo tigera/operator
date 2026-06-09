@@ -15,6 +15,10 @@
 package enterprise
 
 import (
+	"net"
+	"net/url"
+
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -22,17 +26,185 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	operatorurl "github.com/tigera/operator/pkg/url"
 )
 
 func registerGuardian() {
 	extensions.Register(operatorv1.CalicoEnterprise, render.GuardianName, extensions.Extension{
 		Modify: modifyGuardian,
 	})
+	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameGuardianPolicy, extensions.Extension{
+		Modify: modifyGuardianPolicy,
+	})
+}
+
+// modifyGuardianPolicy replaces the core OSS guardian network policy with the
+// enterprise management-cluster policy. Building the enterprise egress rules can
+// fail (proxy URL parsing); on failure we drop the policy entirely, matching the
+// core behavior of omitting it rather than installing a partial policy.
+func modifyGuardianPolicy(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+	gpc, _ := ctx.Component.(render.GuardianPolicyExtensionContext)
+
+	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
+	if !ok {
+		return objs
+	}
+
+	spec, err := enterpriseGuardianPolicySpec(gpc)
+	if err != nil {
+		logrus.WithError(err).Error("Failed to build guardian network policy, policy will be omitted")
+		return removeObject(objs, policy)
+	}
+	policy.Spec = spec
+	return objs
+}
+
+func removeObject(objs []client.Object, drop client.Object) []client.Object {
+	out := objs[:0]
+	for _, o := range objs {
+		if o != drop {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// enterpriseGuardianPolicySpec builds the network policy spec for guardian in a
+// managed cluster: egress to the management cluster components and the tunnel
+// destination(s), and ingress from the management-cluster components that reach
+// back over the tunnel.
+func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3.NetworkPolicySpec, error) {
+	egressRules := []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.PacketCaptureEntityRule,
+		},
+	}
+	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, gpc.OpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.PrometheusEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.TigeraAPIServerEntityRule,
+		},
+	}...)
+
+	// Create an egress rule for each unique destination the guardian pods connect
+	// to. With multiple pods whose proxy settings differ, there are multiple
+	// destinations that must be allowed.
+	allowedDestinations := map[string]bool{}
+	for _, podProxyConfig := range render.ProcessPodProxies(gpc.PodProxies) {
+		var proxyURL *url.URL
+		var err error
+		if podProxyConfig != nil && podProxyConfig.HTTPSProxy != "" {
+			// The scheme is HTTPS, as we establish an mTLS session with the target.
+			// We expect the URL to be of the form host:port.
+			targetURL := &url.URL{Scheme: "https", Host: gpc.URL}
+			proxyURL, err = podProxyConfig.ProxyFunc()(targetURL)
+			if err != nil {
+				return v3.NetworkPolicySpec{}, err
+			}
+		}
+
+		var tunnelDestinationHostPort string
+		if proxyURL != nil {
+			proxyHostPort, err := operatorurl.ParseHostPortFromHTTPProxyURL(proxyURL)
+			if err != nil {
+				return v3.NetworkPolicySpec{}, err
+			}
+			tunnelDestinationHostPort = proxyHostPort
+		} else {
+			// gpc.URL has host:port form.
+			tunnelDestinationHostPort = gpc.URL
+		}
+
+		if allowedDestinations[tunnelDestinationHostPort] {
+			continue
+		}
+
+		host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
+		if err != nil {
+			return v3.NetworkPolicySpec{}, err
+		}
+		parsedPort, err := numorstring.PortFromString(port)
+		if err != nil {
+			return v3.NetworkPolicySpec{}, err
+		}
+		parsedIP := net.ParseIP(host)
+		if parsedIP == nil {
+			// Domain-based egress rules require the EgressAccessControl license feature.
+			if !gpc.IncludeEgressNetworkPolicy {
+				continue
+			}
+			egressRules = append(egressRules, v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Domains: []string{host},
+					Ports:   []numorstring.Port{parsedPort},
+				},
+			})
+			allowedDestinations[tunnelDestinationHostPort] = true
+		} else {
+			netSuffix := "/32"
+			if parsedIP.To4() == nil {
+				netSuffix = "/128"
+			}
+			egressRules = append(egressRules, v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Nets:  []string{parsedIP.String() + netSuffix},
+					Ports: []numorstring.Port{parsedPort},
+				},
+			})
+			allowedDestinations[tunnelDestinationHostPort] = true
+		}
+	}
+
+	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
+
+	dest := v3.EntityRule{Ports: networkpolicy.Ports(render.GuardianTargetPort)}
+	helper := networkpolicy.DefaultHelper()
+	ingressRules := []v3.Rule{
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: render.FluentdSourceEntityRule, Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceBenchmarkerSourceEntityRule(), Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceReporterSourceEntityRule(), Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceSnapshotterSourceEntityRule(), Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceControllerSourceEntityRule(), Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: render.IntrusionDetectionSourceEntityRule, Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: render.IntrusionDetectionInstallerSourceEntityRule, Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Destination: dest},
+	}
+
+	return v3.NetworkPolicySpec{
+		Order:    &networkpolicy.HighPrecedenceOrder,
+		Tier:     networkpolicy.CalicoTierName,
+		Selector: networkpolicy.KubernetesAppSelector(render.GuardianName),
+		Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+		Ingress:  ingressRules,
+		Egress:   egressRules,
+	}, nil
 }
 
 // modifyGuardian layers Calico Enterprise behavior onto the rendered guardian

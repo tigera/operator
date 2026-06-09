@@ -18,12 +18,8 @@ package render
 
 import (
 	"fmt"
-	"net"
-	"net/url"
 
 	"golang.org/x/net/http/httpproxy"
-
-	operatorurl "github.com/tigera/operator/pkg/url"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,8 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
-	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -84,27 +78,51 @@ func Guardian(cfg *GuardianConfiguration) Component {
 	}
 }
 
+// GuardianPolicy renders the guardian network policy. The core operator renders
+// the OSS policy; the enterprise modifier (keyed ComponentNameGuardianPolicy)
+// replaces it with the management-cluster policy. The error return is retained
+// for callers but is always nil now that the fallible enterprise computation
+// lives in the modifier.
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
-	var policies []client.Object
+	return &guardianPolicyComponent{cfg: cfg}, nil
+}
 
-	guardianAccessPolicy, err := guardianCalicoSystemPolicy(cfg)
-	if err != nil {
-		return nil, err
-	}
-	if guardianAccessPolicy != nil {
-		policies = []client.Object{
-			guardianAccessPolicy,
-		}
-	}
+const ComponentNameGuardianPolicy = "guardian-policy"
 
-	return NewPassthrough(
-		policies,
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", GuardianNamespace),
-		},
-	), nil
+type guardianPolicyComponent struct {
+	cfg *GuardianConfiguration
+}
+
+func (c *guardianPolicyComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
+func (c *guardianPolicyComponent) SupportedOSType() rmeta.OSType            { return rmeta.OSTypeAny }
+func (c *guardianPolicyComponent) Ready() bool                              { return true }
+func (c *guardianPolicyComponent) ModifierKey() string                      { return ComponentNameGuardianPolicy }
+
+// GuardianPolicyExtensionContext is the per-component context the guardian
+// policy modifier reads (via RenderContext.Component). The enterprise guardian
+// network policy is built entirely from these inputs.
+type GuardianPolicyExtensionContext struct {
+	URL                        string
+	PodProxies                 []*httpproxy.Config
+	OpenShift                  bool
+	IncludeEgressNetworkPolicy bool
+}
+
+func (c *guardianPolicyComponent) ExtensionContext() any {
+	return GuardianPolicyExtensionContext{
+		URL:                        c.cfg.URL,
+		PodProxies:                 c.cfg.PodProxies,
+		OpenShift:                  c.cfg.OpenShift,
+		IncludeEgressNetworkPolicy: c.cfg.IncludeEgressNetworkPolicy,
+	}
+}
+
+func (c *guardianPolicyComponent) Objects() ([]client.Object, []client.Object) {
+	return []client.Object{ossNetworkPolicy()}, []client.Object{
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("guardian-access", GuardianNamespace),
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", GuardianNamespace),
+	}
 }
 
 // GuardianConfiguration contains all the config information needed to render the component.
@@ -465,198 +483,6 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 			},
 		},
 	}
-}
-
-func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
-	if !cfg.Installation.Variant.IsEnterprise() {
-		return ossNetworkPolicy(), nil
-	}
-
-	egressRules := []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: PacketCaptureEntityRule,
-		},
-	}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.PrometheusEntityRule,
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: TigeraAPIServerEntityRule,
-		},
-	}...)
-
-	// The loop below creates an egress rule for each unique destination that the Guardian pods connect to. If there are
-	// multiple guardian pods and their proxy  settings differ, then there are multiple destinations that must have egress allowed.
-	allowedDestinations := map[string]bool{}
-	processedPodProxies := ProcessPodProxies(cfg.PodProxies)
-	for _, podProxyConfig := range processedPodProxies {
-		var proxyURL *url.URL
-		var err error
-		if podProxyConfig != nil && podProxyConfig.HTTPSProxy != "" {
-			targetURL := &url.URL{
-				// The scheme should be HTTPS, as we are establishing an mTLS session with the target.
-				Scheme: "https",
-
-				// We expect `target` to be of the form host:port.
-				Host: cfg.URL,
-			}
-
-			proxyURL, err = podProxyConfig.ProxyFunc()(targetURL)
-			if err != nil {
-				return nil, err
-			}
-		}
-
-		var tunnelDestinationHostPort string
-		if proxyURL != nil {
-			proxyHostPort, err := operatorurl.ParseHostPortFromHTTPProxyURL(proxyURL)
-			if err != nil {
-				return nil, err
-			}
-
-			tunnelDestinationHostPort = proxyHostPort
-		} else {
-			// cfg.URL has host:port form
-			tunnelDestinationHostPort = cfg.URL
-		}
-
-		// Check if we've already created an egress rule for this destination.
-		if allowedDestinations[tunnelDestinationHostPort] {
-			continue
-		}
-
-		host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
-		if err != nil {
-			return nil, err
-		}
-		parsedPort, err := numorstring.PortFromString(port)
-		if err != nil {
-			return nil, err
-		}
-		parsedIp := net.ParseIP(host)
-		if parsedIp == nil {
-			// Domain-based egress rules require the EgressAccessControl license feature.
-			if !cfg.IncludeEgressNetworkPolicy {
-				continue
-			}
-			// Assume host is a valid hostname.
-			egressRules = append(egressRules, v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					Domains: []string{host},
-					Ports:   []numorstring.Port{parsedPort},
-				},
-			})
-			allowedDestinations[tunnelDestinationHostPort] = true
-
-		} else {
-			var netSuffix string
-			if parsedIp.To4() != nil {
-				netSuffix = "/32"
-			} else {
-				netSuffix = "/128"
-			}
-
-			egressRules = append(egressRules, v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					Nets:  []string{parsedIp.String() + netSuffix},
-					Ports: []numorstring.Port{parsedPort},
-				},
-			})
-			allowedDestinations[tunnelDestinationHostPort] = true
-		}
-	}
-
-	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
-
-	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
-	networkpolicyHelper := networkpolicy.DefaultHelper()
-	var ingressRules []v3.Rule
-	if cfg.Installation.Variant.IsEnterprise() {
-		ingressRules = append(ingressRules, []v3.Rule{
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      FluentdSourceEntityRule,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      IntrusionDetectionSourceEntityRule,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      IntrusionDetectionInstallerSourceEntityRule,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-		}...)
-	}
-
-	policy := &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GuardianPolicyName,
-			Namespace: GuardianNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
-			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress:  ingressRules,
-			Egress:   egressRules,
-		},
-	}
-
-	return policy, nil
 }
 
 func ProcessPodProxies(podProxies []*httpproxy.Config) []*httpproxy.Config {

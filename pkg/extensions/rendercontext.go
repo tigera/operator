@@ -23,11 +23,13 @@ import (
 // RenderContext carries reconcile-derived inputs from controllers into render
 // modifiers. Core operator code never reads these fields - only registered
 // modifiers do.
-// Two kinds of value live here:
+// Three kinds of value live here:
 //   - raw cluster state gathered generically (Installation, FelixConfiguration,
-//     ClusterDomain) that modifiers derive their own values from, and
+//     ClusterDomain) that modifiers derive their own values from,
 //   - controller-produced artifacts (TrustedBundle, NodePrometheusTLS) that can
-//     only be created controller-side because they have cluster side effects.
+//     only be created controller-side because they have cluster side effects, and
+//   - Component, the per-component context the component being modified supplies
+//     for config a modifier can't derive from the fields above.
 type RenderContext struct {
 	Installation       *operatorv1.InstallationSpec
 	FelixConfiguration *v3.FelixConfiguration
@@ -41,4 +43,12 @@ type RenderContext struct {
 	// consumer: it mounts the keypair onto the daemonset and sets the
 	// FELIX_PROMETHEUSREPORTER* certificate env vars.
 	NodePrometheusTLS certificatemanagement.KeyPairInterface
+
+	// Component is per-component context that the component being modified supplies
+	// via render.ExtensionContextProvider - config a modifier needs but can't
+	// derive from the fields above (e.g. a keypair the component's own controller
+	// created, or a CR field only that controller reads). The componentHandler
+	// sets it per component before applying the modifier; a modifier type-asserts
+	// it to the component's own context type. Nil when the component supplies none.
+	Component any
 }

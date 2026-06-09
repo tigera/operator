@@ -469,7 +469,11 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 
 	objsToCreate, objsToDelete := component.Objects()
 	if ext, ok := component.(render.Extensible); ok {
-		objsToCreate = extensions.ApplyModifiers(ext.ModifierKey(), c.renderCtx, objsToCreate)
+		rc := c.renderCtx
+		if p, ok := component.(render.ExtensionContextProvider); ok {
+			rc.Component = p.ExtensionContext()
+		}
+		objsToCreate = extensions.ApplyModifiers(ext.ModifierKey(), rc, objsToCreate)
 	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it

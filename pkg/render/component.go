@@ -49,9 +49,26 @@ type Extensible interface {
 	ModifierKey() string
 }
 
+// ExtensionContextProvider is an optional companion to Extensible. A component
+// implements it to hand its modifier component-specific context that can't be
+// derived from the shared extensions.RenderContext - config only the component's
+// controller has, such as a keypair the controller created. The componentHandler
+// reads the returned value into RenderContext.Component before applying the
+// modifier, and the modifier type-asserts it to the component's own context type.
+type ExtensionContextProvider interface {
+	ExtensionContext() any
+}
+
 // Component names used as keys into the extension modifier registry. Keep these
 // in sync with the ModifierKey() methods that return them.
 const (
 	ComponentNameTypha = "typha"
 	ComponentNameNode  = "node"
+
+	// ComponentNameWindows keys the windows daemonset modifier. The two windows
+	// images resolve through their own override keys, since one component renders
+	// both.
+	ComponentNameWindows        = "windows"
+	ComponentNameWindowsNodeImg = "windows-node-image"
+	ComponentNameWindowsCNIImg  = "windows-cni-image"
 )

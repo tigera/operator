@@ -20,5 +20,6 @@ package enterprise
 func Register() {
 	registerTypha()
 	registerNode()
+	registerWindows()
 	registerInstallation()
 }

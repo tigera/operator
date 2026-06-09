@@ -237,7 +237,7 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "tigera-cni-plugins" }}
+{{ with index .Components "tigera-third-party-cni-plugins" }}
 	ComponentTigeraCNIPlugins = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",

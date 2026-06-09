@@ -19,7 +19,7 @@ package components
 
 var (
 	CalicoRelease string = "{{ .Title }}"
-{{ with index .Components "cni-plugins" }}
+{{ with index .Components "third-party-cni-plugins" }}
 	ComponentCalicoCNIPlugins = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",

@@ -22,7 +22,7 @@ var (
 
 	ComponentCalicoCNIPlugins = Component{
 		Version:   "master",
-		Image:     "cni-plugins",
+		Image:     "third-party-cni-plugins",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,

@@ -508,7 +508,7 @@ var _ = Describe("Testing core-controller installation", func() {
 						Images: []operator.Image{
 							{Image: "tigera/calico", Digest: "sha256:tigeracalicohash"},
 							{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
-							{Image: "tigera/cni-plugins", Digest: "sha256:tigeracnipluginshash"},
+							{Image: "tigera/third-party-cni-plugins", Digest: "sha256:tigeracnipluginshash"},
 						},
 					},
 				}

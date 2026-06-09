@@ -25,11 +25,11 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// Inputs is the reconcile state a RenderContextBuilder builds a RenderContext
-// from. The installation controller populates it directly. It carries both the
-// values that flow straight into the RenderContext and the side-effecting
-// dependencies (Client, CertificateManager) a builder needs to produce
-// controller-side artifacts.
+// Inputs is the reconcile state a Setup builds a RenderContext from. The
+// installation controller populates it directly. It carries both the values
+// that flow straight into the RenderContext and the side-effecting dependencies
+// (Client, CertificateManager) a setup needs to produce controller-side
+// artifacts.
 type Inputs struct {
 	Ctx                context.Context
 	Client             client.Client
@@ -40,21 +40,21 @@ type Inputs struct {
 	ClusterDomain      string
 }
 
-// RenderContextBuilder builds the RenderContext handed to render modifiers. It
-// performs any controller-side work (creating certificates, extending the
-// trusted bundle) and returns the assembled RenderContext - or an error that
-// aborts the reconcile.
+// Setup is a variant's controller-side reconcile phase. It performs the work
+// modifiers can't (creating certificates, extending the trusted bundle,
+// validating config) and returns the RenderContext that is then handed to that
+// variant's modifiers - or an error that aborts the reconcile.
 //
 // This is the generic seam controllers use to extend base operator behavior;
 // its first consumer is Calico Enterprise, but nothing here is enterprise
-// specific. A builder is registered per variant, so it only runs for its own
-// variant and need not re-check it.
-type RenderContextBuilder func(in Inputs) (RenderContext, error)
+// specific. A setup runs only for the variant it was registered under, so it
+// need not re-check the variant.
+type Setup func(in Inputs) (RenderContext, error)
 
 // BaseRenderContext maps the generically-gathered inputs onto a RenderContext.
-// Every registered builder builds on it, so the base fields are assembled in
-// exactly one place. A builder layers its side-effect artifacts (e.g.
-// NodePrometheusTLS) on top of the returned value.
+// Every setup builds on it, so the base fields are assembled in exactly one
+// place. A setup layers its side-effect artifacts (e.g. NodePrometheusTLS) on
+// top of the returned value.
 func BaseRenderContext(in Inputs) RenderContext {
 	return RenderContext{
 		Installation:       in.Installation,
@@ -64,22 +64,21 @@ func BaseRenderContext(in Inputs) RenderContext {
 	}
 }
 
-var renderContextBuilders = map[operatorv1.ProductVariant]RenderContextBuilder{}
+var setups = map[operatorv1.ProductVariant]Setup{}
 
-// RegisterRenderContextBuilder installs f as the builder for the given variant.
-// Registration replaces any prior builder, so it is safe to call more than
-// once. Variants without a registered builder get the base render context.
-func RegisterRenderContextBuilder(variant operatorv1.ProductVariant, f RenderContextBuilder) {
-	renderContextBuilders[variant] = f
+// RegisterSetup installs s as the setup for the given variant. Registration
+// replaces any prior setup, so it is safe to call more than once. Variants
+// without a registered setup get the base render context.
+func RegisterSetup(variant operatorv1.ProductVariant, s Setup) {
+	setups[variant] = s
 }
 
-// BuildRenderContext builds the RenderContext from in using the builder
-// registered for the installation variant, or the base render context when the
-// variant has no registered builder.
-func BuildRenderContext(in Inputs) (RenderContext, error) {
+// RunSetup runs the setup registered for the installation variant and returns
+// its RenderContext, or the base render context when the variant has no setup.
+func RunSetup(in Inputs) (RenderContext, error) {
 	if in.Installation != nil {
-		if f, ok := renderContextBuilders[in.Installation.Variant]; ok {
-			return f(in)
+		if s, ok := setups[in.Installation.Variant]; ok {
+			return s(in)
 		}
 	}
 	return BaseRenderContext(in), nil

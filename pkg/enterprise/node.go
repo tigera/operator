@@ -47,10 +47,12 @@ const (
 )
 
 func registerNode() {
-	extensions.OverrideImage(operatorv1.CalicoEnterprise, render.ComponentNameNode, func(in *operatorv1.InstallationSpec) components.Component {
-		return components.ComponentTigeraNode
+	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameNode, extensions.Extension{
+		Image: func(in *operatorv1.InstallationSpec) components.Component {
+			return components.ComponentTigeraNode
+		},
+		Modify: modifyNode,
 	})
-	extensions.Modify(operatorv1.CalicoEnterprise, render.ComponentNameNode, modifyNode)
 }
 
 // modifyNode layers Calico Enterprise behavior onto the rendered calico/node

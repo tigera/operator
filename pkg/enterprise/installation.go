@@ -28,14 +28,13 @@ import (
 )
 
 func registerInstallation() {
-	extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, buildRenderContext)
+	extensions.RegisterSetup(operatorv1.CalicoEnterprise, setup)
 }
 
-// buildRenderContext is the Calico Enterprise RenderContextBuilder. It builds
-// the base render context and then does the controller-side work the modifiers
-// can't: validating config and creating/fetching the certificates that feed the
-// trusted bundle.
-func buildRenderContext(in extensions.Inputs) (extensions.RenderContext, error) {
+// setup is the Calico Enterprise setup phase. It builds the base render context
+// and then does the controller-side work the modifiers can't: validating config
+// and creating/fetching the certificates that feed the trusted bundle.
+func setup(in extensions.Inputs) (extensions.RenderContext, error) {
 	rc := extensions.BaseRenderContext(in)
 
 	// Reject the unsupported zero reporter port. The port value itself is derived

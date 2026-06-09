@@ -32,7 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("installation render context builder", func() {
+var _ = Describe("installation setup", func() {
 	BeforeEach(func() { enterprise.Register() })
 	AfterEach(func() { extensions.ResetForTest() })
 
@@ -42,18 +42,18 @@ var _ = Describe("installation render context builder", func() {
 		in.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		_, err := extensions.BuildRenderContext(in)
+		_, err := extensions.RunSetup(in)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		rc, err := extensions.BuildRenderContext(newInputs(operatorv1.CalicoEnterprise))
+		rc, err := extensions.RunSetup(newInputs(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).NotTo(BeNil())
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		rc, err := extensions.BuildRenderContext(newInputs(operatorv1.Calico))
+		rc, err := extensions.RunSetup(newInputs(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})

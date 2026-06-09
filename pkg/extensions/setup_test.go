@@ -24,12 +24,12 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("render context builder", func() {
+var _ = Describe("variant setup", func() {
 	AfterEach(func() { extensions.ResetForTest() })
 
-	It("returns the base render context when the variant has no builder", func() {
+	It("returns the base render context when the variant has no setup", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, err := extensions.BuildRenderContext(extensions.Inputs{
+		rc, err := extensions.RunSetup(extensions.Inputs{
 			Installation:  install,
 			ClusterDomain: "cluster.local",
 		})
@@ -39,16 +39,16 @@ var _ = Describe("render context builder", func() {
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})
 
-	It("uses the builder registered for the installation variant", func() {
-		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(nil))
-		rc, err := extensions.BuildRenderContext(enterpriseInputs())
+	It("uses the setup registered for the installation variant", func() {
+		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
+		rc, err := extensions.RunSetup(enterpriseInputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
-	It("ignores a builder registered for a different variant", func() {
-		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(nil))
-		rc, err := extensions.BuildRenderContext(extensions.Inputs{
+	It("ignores a setup registered for a different variant", func() {
+		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
+		rc, err := extensions.RunSetup(extensions.Inputs{
 			Installation:  &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
 			ClusterDomain: "real",
 		})
@@ -56,18 +56,18 @@ var _ = Describe("render context builder", func() {
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})
 
-	It("surfaces the builder error", func() {
-		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(errors.New("boom")))
-		_, err := extensions.BuildRenderContext(enterpriseInputs())
+	It("surfaces the setup error", func() {
+		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(errors.New("boom")))
+		_, err := extensions.RunSetup(enterpriseInputs())
 		Expect(err).To(MatchError("boom"))
 	})
 
-	It("restores the base builder on reset", func() {
-		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(nil))
+	It("restores the base context on reset", func() {
+		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
 		extensions.ResetForTest()
 		in := enterpriseInputs()
 		in.ClusterDomain = "real"
-		rc, err := extensions.BuildRenderContext(in)
+		rc, err := extensions.RunSetup(in)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})
@@ -77,7 +77,7 @@ func enterpriseInputs() extensions.Inputs {
 	return extensions.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 }
 
-func fakeBuilder(err error) extensions.RenderContextBuilder {
+func fakeSetup(err error) extensions.Setup {
 	return func(_ extensions.Inputs) (extensions.RenderContext, error) {
 		if err != nil {
 			return extensions.RenderContext{}, err

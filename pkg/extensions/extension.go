@@ -21,10 +21,24 @@ import (
 	"github.com/tigera/operator/pkg/imageoverride"
 )
 
+// Extension is everything a variant layers onto one render component. Every
+// field is optional: a component that only needs a different image sets Image
+// and leaves Modify nil, and vice versa. This is the single registration a
+// variant makes per component, so all of that component's variance lives in one
+// place.
+type Extension struct {
+	// Image overrides the component's image. Resolved during ResolveImages, in
+	// the render package, via the imageoverride leaf.
+	Image ImageOverride
+
+	// Modify post-processes the component's rendered objects, after Objects().
+	Modify Modifier
+}
+
 // Modifier post-processes the objects a render component produced. It may mutate
 // matched objects and/or append additional objects, and must return the
-// (possibly extended) slice. A modifier is registered per variant, so it only
-// runs for its own variant and need not re-check it.
+// (possibly extended) slice. A modifier runs only for the variant it was
+// registered under, so it need not re-check the variant.
 type Modifier func(ctx RenderContext, objs []client.Object) []client.Object
 
 type modifierKey struct {
@@ -34,13 +48,18 @@ type modifierKey struct {
 
 var modifiers = map[modifierKey]Modifier{}
 
-// Modify registers fn as the modifier for the named component under the given
-// variant. A (variant, component) pair has at most one modifier; it handles all
-// of that component's extension-specific mutations for that variant.
-// Registration replaces any prior modifier, so it is idempotent and safe to
-// call more than once.
-func Modify(variant operatorv1.ProductVariant, component string, fn Modifier) {
-	modifiers[modifierKey{variant, component}] = fn
+// Register installs e as the extension for the named component under the given
+// variant. A (variant, component) pair has at most one extension; registration
+// replaces any prior one, so it is idempotent and safe to call more than once.
+// The image override lives in the imageoverride leaf (so the render package can
+// resolve it without an import cycle); the modifier lives here.
+func Register(variant operatorv1.ProductVariant, component string, e Extension) {
+	if e.Image != nil {
+		imageoverride.Register(variant, component, e.Image)
+	}
+	if e.Modify != nil {
+		modifiers[modifierKey{variant, component}] = e.Modify
+	}
 }
 
 // ApplyModifiers runs the modifier registered for the named component and the
@@ -67,10 +86,10 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 	return zero, false
 }
 
-// ResetForTest clears every registry: modifiers, image overrides, and the
-// render context builder. Test-only.
+// ResetForTest clears every registry: modifiers, image overrides, and variant
+// setups. Test-only.
 func ResetForTest() {
 	modifiers = map[modifierKey]Modifier{}
-	renderContextBuilders = map[operatorv1.ProductVariant]RenderContextBuilder{}
+	setups = map[operatorv1.ProductVariant]Setup{}
 	imageoverride.ResetForTest()
 }

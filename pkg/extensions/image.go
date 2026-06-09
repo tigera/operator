@@ -20,19 +20,14 @@ import (
 	"github.com/tigera/operator/pkg/imageoverride"
 )
 
-// ImageOverride returns the component image to use for an installation. An
-// override is registered per variant, so it only runs for its own variant and
-// need not re-check it.
+// ImageOverride returns the component image to use for an installation. It is
+// the Image field of an Extension. An override runs only for the variant it was
+// registered under, so it need not re-check the variant.
 type ImageOverride = imageoverride.Override
 
-// OverrideImage registers an image override under key for the given variant.
-// The key is the render component's image identifier (e.g. "node").
-func OverrideImage(variant operatorv1.ProductVariant, key string, fn ImageOverride) {
-	imageoverride.Register(variant, key, fn)
-}
-
 // ResolveImage returns the override registered for key if it applies to in,
-// otherwise def. Render components call this inside ResolveImages.
+// otherwise def. The render package resolves images through the imageoverride
+// leaf directly; this is the same lookup for callers already inside extensions.
 func ResolveImage(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
 	return imageoverride.Resolve(key, def, in)
 }

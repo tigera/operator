@@ -25,7 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("modifier registry", func() {
+var _ = Describe("extension registry", func() {
 	AfterEach(func() {
 		extensions.ResetForTest()
 	})
@@ -33,11 +33,13 @@ var _ = Describe("modifier registry", func() {
 	entCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 
 	It("applies a registered modifier to the matching component and variant", func() {
-		extensions.Modify(operatorv1.CalicoEnterprise, "test", func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
-			cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
-			Expect(ok).To(BeTrue())
-			cm.Data = map[string]string{"k": "v"}
-			return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+		extensions.Register(operatorv1.CalicoEnterprise, "test", extensions.Extension{
+			Modify: func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+				cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
+				Expect(ok).To(BeTrue())
+				cm.Data = map[string]string{"k": "v"}
+				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+			},
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
@@ -56,8 +58,10 @@ var _ = Describe("modifier registry", func() {
 	})
 
 	It("does not apply a modifier registered for a different variant", func() {
-		extensions.Modify(operatorv1.CalicoEnterprise, "test", func(_ extensions.RenderContext, objs []client.Object) []client.Object {
-			return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+		extensions.Register(operatorv1.CalicoEnterprise, "test", extensions.Extension{
+			Modify: func(_ extensions.RenderContext, objs []client.Object) []client.Object {
+				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+			},
 		})
 
 		calicoCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
@@ -71,13 +75,15 @@ var _ = Describe("modifier registry", func() {
 	})
 
 	It("replaces rather than stacks when a (variant, component) is registered twice", func() {
-		add := func(name string) extensions.Modifier {
-			return func(_ extensions.RenderContext, objs []client.Object) []client.Object {
-				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}})
+		add := func(name string) extensions.Extension {
+			return extensions.Extension{
+				Modify: func(_ extensions.RenderContext, objs []client.Object) []client.Object {
+					return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}})
+				},
 			}
 		}
-		extensions.Modify(operatorv1.CalicoEnterprise, "test", add("first"))
-		extensions.Modify(operatorv1.CalicoEnterprise, "test", add("second"))
+		extensions.Register(operatorv1.CalicoEnterprise, "test", add("first"))
+		extensions.Register(operatorv1.CalicoEnterprise, "test", add("second"))
 
 		out := extensions.ApplyModifiers("test", entCtx, nil)
 		Expect(out).To(HaveLen(1))

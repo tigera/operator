@@ -1213,12 +1213,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	// Build the render context handed to registered modifiers. The core operator
-	// builder returns just the base context; an extension's builder additionally
-	// does controller-side work for its variant - validating config and creating
-	// the node-prometheus certificate, adding it (and the prometheus/esgw certs)
-	// to the trusted bundle - and may abort the reconcile by returning an error.
-	modCtx, err := extensions.BuildRenderContext(extensions.Inputs{
+	// Run the variant setup to build the render context handed to registered
+	// modifiers. The core operator has no setup, so it gets just the base
+	// context; an extension's setup additionally does controller-side work for
+	// its variant - validating config and creating the node-prometheus
+	// certificate, adding it (and the prometheus/esgw certs) to the trusted
+	// bundle - and may abort the reconcile by returning an error.
+	modCtx, err := extensions.RunSetup(extensions.Inputs{
 		Ctx:                ctx,
 		Client:             r.client,
 		Installation:       &instance.Spec,

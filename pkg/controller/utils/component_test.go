@@ -2493,10 +2493,12 @@ var _ = Describe("componentHandler modifier application", func() {
 	})
 
 	It("applies registered modifiers to a named component before create", func() {
-		extensions.Modify(operatorv1.CalicoEnterprise, "fake", func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
-			cm := objs[0].(*corev1.ConfigMap)
-			cm.Data = map[string]string{"patched": "yes"}
-			return objs
+		extensions.Register(operatorv1.CalicoEnterprise, "fake", extensions.Extension{
+			Modify: func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+				cm := objs[0].(*corev1.ConfigMap)
+				cm.Data = map[string]string{"patched": "yes"}
+				return objs
+			},
 		})
 
 		s := runtime.NewScheme()

@@ -29,8 +29,10 @@ var _ = Describe("image overrides", func() {
 	})
 
 	It("uses the override registered for the installation variant", func() {
-		extensions.OverrideImage(operatorv1.CalicoEnterprise, "node", func(in *operatorv1.InstallationSpec) components.Component {
-			return components.ComponentTigeraNode
+		extensions.Register(operatorv1.CalicoEnterprise, "node", extensions.Extension{
+			Image: func(in *operatorv1.InstallationSpec) components.Component {
+				return components.ComponentTigeraNode
+			},
 		})
 
 		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
@@ -38,8 +40,10 @@ var _ = Describe("image overrides", func() {
 	})
 
 	It("falls back to the default for a variant with no override", func() {
-		extensions.OverrideImage(operatorv1.CalicoEnterprise, "node", func(in *operatorv1.InstallationSpec) components.Component {
-			return components.ComponentTigeraNode
+		extensions.Register(operatorv1.CalicoEnterprise, "node", extensions.Extension{
+			Image: func(in *operatorv1.InstallationSpec) components.Component {
+				return components.ComponentTigeraNode
+			},
 		})
 
 		calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}

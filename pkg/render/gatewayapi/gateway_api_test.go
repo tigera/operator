@@ -37,7 +37,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/utils/ptr"
-	"k8s.io/utils/set"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml"
@@ -69,12 +68,14 @@ func testScheme() *runtime.Scheme {
 
 // expectLegacyCleanup asserts the legacy tigera-gateway upgrade-cleanup is
 // queued in objsToDelete and the Namespace itself is *not* deleted. enterprise
-// adds the WAF SA + the two orphaned legacy CRBs; hasPullSecret accounts for
-// the tigera-pull-secret previously copied into the legacy namespace.
+// adds the WAF SA, the two orphaned legacy CRBs, and the shared gateway-namespaces
+// CRB (removed when no Gateway namespaces remain); hasPullSecret accounts for the
+// tigera-pull-secret previously copied into the legacy namespace.
 func expectLegacyCleanup(objsToDelete []client.Object, enterprise, hasPullSecret bool) {
-	expected := 12 + 1 + 3 // helm-rendered in-namespace + tigera-operator-secrets RB + cluster-scoped (MWC, CR, CRB).
+	expected := 12 + 4 + 1 + 3 // helm-rendered in-namespace + certgen Secrets + tigera-operator-secrets RB + cluster-scoped (MWC, CR, CRB).
 	if enterprise {
-		expected += 3
+		expected += 4
+		rtest.ExpectResourceInList(objsToDelete, GatewayNamespacesCRBName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
 	}
 	if hasPullSecret {
 		expected += 1
@@ -88,6 +89,7 @@ func expectLegacyCleanup(objsToDelete []client.Object, enterprise, hasPullSecret
 	}
 	rtest.ExpectResourceInList(objsToDelete, "envoy-gateway-topology-injector.tigera-gateway", "", "admissionregistration.k8s.io", "v1", "MutatingWebhookConfiguration")
 	rtest.ExpectResourceInList(objsToDelete, "envoy-gateway", "tigera-gateway", "apps", "v1", "Deployment")
+	rtest.ExpectResourceInList(objsToDelete, "envoy", "tigera-gateway", "", "v1", "Secret")
 	rtest.ExpectResourceInList(objsToDelete, "tigera-operator-secrets", "tigera-gateway", "rbac.authorization.k8s.io", "v1", "RoleBinding")
 }
 
@@ -1531,63 +1533,36 @@ value:
 		Expect(err).To(HaveOccurred())
 	})
 
-	It("should create per-namespace resources for each Gateway namespace (Enterprise)", func() {
-		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.CalicoEnterprise,
-		}
-		pullSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
-			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
-		}
-		gatewayAPI := &operatorv1.GatewayAPI{
-			Spec: operatorv1.GatewayAPISpec{
-				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
-			},
-		}
+	It("renders the shared WAF CRB with a subject per Gateway namespace; per-namespace resources are controller-managed (Enterprise)", func() {
 		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
 			Scheme:            testScheme(),
-			Installation:      installation,
-			GatewayAPI:        gatewayAPI,
-			PullSecrets:       []*corev1.Secret{pullSecret},
+			Installation:      &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
+			GatewayAPI:        &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
+			PullSecrets:       []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"}}},
 			GatewayNamespaces: []string{"default", "app-ns"},
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
 		objsToCreate, _ := gatewayComp.Objects()
 
-		// Verify per-namespace ServiceAccounts.
-		sa1, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(sa1.Namespace).To(Equal("default"))
-
-		sa2, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "app-ns")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(sa2.Namespace).To(Equal("app-ns"))
-
-		// Verify a single shared ClusterRoleBinding (cluster-scoped role) with one Subject per namespace.
+		// The shared CRB carries one subject per Gateway namespace.
 		crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(crb.RoleRef.Name).To(Equal("waf-http-filter-cluster-scoped"))
-		Expect(crb.Subjects).To(HaveLen(2))
-		nsSubjects := []string{crb.Subjects[0].Namespace, crb.Subjects[1].Namespace}
+		nsSubjects := []string{}
+		for _, s := range crb.Subjects {
+			nsSubjects = append(nsSubjects, s.Namespace)
+		}
 		Expect(nsSubjects).To(ConsistOf("default", "app-ns"))
 
-		// Verify per-namespace RoleBindings for gateway resources scoped to that namespace.
-		rb1, err := rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "default")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(rb1.RoleRef.Name).To(Equal("waf-http-filter-gateway-resources"))
-		Expect(rb1.Subjects).To(HaveLen(1))
-		Expect(rb1.Subjects[0].Namespace).To(Equal("default"))
-
-		rb2, err := rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "app-ns")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(rb2.Subjects[0].Namespace).To(Equal("app-ns"))
-
-		// Verify pull secrets copied to each namespace.
+		// The per-namespace SA / RoleBinding / pull-secret are written by the controller (Gateway-owned),
+		// not rendered here.
+		_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
+		Expect(err).To(HaveOccurred())
+		_, err = rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", "default")
+		Expect(err).To(HaveOccurred())
 		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "default")
-		Expect(err).NotTo(HaveOccurred())
-		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "app-ns")
-		Expect(err).NotTo(HaveOccurred())
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("should not legacy-delete operator resources that the per-NS loop is re-creating in tigera-gateway", func() {
@@ -1619,77 +1594,6 @@ value:
 				Expect(obj.Name).NotTo(Equal("tigera-operator-secrets"), "must not queue tigera-operator-secrets RB for delete in tigera-gateway")
 			}
 		}
-	})
-
-	It("should copy the trust bundle ConfigMap into each Gateway namespace", func() {
-		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
-		Expect(err).NotTo(HaveOccurred())
-		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:            testScheme(),
-			Installation:      &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
-			GatewayAPI:        &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
-			TrustedBundle:     bundle,
-			GatewayNamespaces: []string{"default", "app-ns"},
-		})
-		Expect(gatewayCompErr).NotTo(HaveOccurred())
-
-		objsToCreate, _ := gatewayComp.Objects()
-		for _, ns := range []string{"default", "app-ns"} {
-			_, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, ns)
-			Expect(err).NotTo(HaveOccurred(), "trust bundle ConfigMap should be copied into %s", ns)
-		}
-	})
-
-	It("should copy the trust bundle ConfigMap into each Gateway namespace (open-source)", func() {
-		// The data-plane proxy mounts the bundle from its own namespace regardless of
-		// variant, so the per-namespace copy must happen on open-source too.
-		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
-		Expect(err).NotTo(HaveOccurred())
-		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:            testScheme(),
-			Installation:      &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
-			GatewayAPI:        &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
-			TrustedBundle:     bundle,
-			GatewayNamespaces: []string{"default", "app-ns"},
-		})
-		Expect(gatewayCompErr).NotTo(HaveOccurred())
-
-		objsToCreate, _ := gatewayComp.Objects()
-		for _, ns := range []string{"default", "app-ns"} {
-			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, ns)
-			Expect(err).NotTo(HaveOccurred(), "trust bundle ConfigMap should be copied into %s", ns)
-			Expect(cm.Labels).To(HaveKeyWithValue(GatewayNamespaceBundleLabel, "true"))
-		}
-
-		// The WAF per-namespace machinery stays Enterprise-only.
-		_, err = rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
-		Expect(err).To(HaveOccurred())
-		_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("should clean up the trust bundle ConfigMap from stale Gateway namespaces (open-source)", func() {
-		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
-		Expect(err).NotTo(HaveOccurred())
-		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:                   testScheme(),
-			Installation:             &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
-			GatewayAPI:               &operatorv1.GatewayAPI{Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}}},
-			TrustedBundle:            bundle,
-			GatewayNamespaces:        []string{"default"},
-			CurrentGatewayNamespaces: set.New("default", "removed-ns"),
-		})
-		Expect(gatewayCompErr).NotTo(HaveOccurred())
-
-		objsToCreate, objsToDelete := gatewayComp.Objects()
-
-		// Still copied into the live namespace.
-		_, err = rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, certificatemanagement.TrustedCertConfigMapName, "default")
-		Expect(err).NotTo(HaveOccurred())
-
-		// Removed from the namespace that no longer hosts a Gateway.
-		_, err = rtest.GetResourceOfType[*corev1.ConfigMap](objsToDelete, certificatemanagement.TrustedCertConfigMapName, "removed-ns")
-		Expect(err).NotTo(HaveOccurred(), "trust bundle ConfigMap should be deleted from removed-ns")
 	})
 
 	It("should not create per-namespace resources when no Gateway namespaces are provided (Enterprise)", func() {
@@ -1835,170 +1739,6 @@ value:
 		// Open-source should NOT have waf-http-filter SA at all.
 		_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
 		Expect(err).To(HaveOccurred())
-	})
-
-	It("should clean up stale per-namespace resources when Gateways are removed", func() {
-		installation := &operatorv1.InstallationSpec{
-			Variant: operatorv1.CalicoEnterprise,
-		}
-		gatewayAPI := &operatorv1.GatewayAPI{
-			Spec: operatorv1.GatewayAPISpec{
-				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
-			},
-		}
-		pullSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
-			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
-		}
-		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
-			PullSecrets:  []*corev1.Secret{pullSecret},
-			// "default" still has a Gateway, but "removed-ns" no longer does.
-			GatewayNamespaces:        []string{"default"},
-			CurrentGatewayNamespaces: set.New("default", "removed-ns"),
-		})
-		Expect(gatewayCompErr).NotTo(HaveOccurred())
-
-		objsToCreate, objsToDelete := gatewayComp.Objects()
-
-		// "default" resources should be created.
-		_, err := rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", "default")
-		Expect(err).NotTo(HaveOccurred())
-
-		// Shared CRB should still be created with only the "default" subject.
-		crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objsToCreate, GatewayNamespacesCRBName, "")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(crb.Subjects).To(HaveLen(1))
-		Expect(crb.Subjects[0].Namespace).To(Equal("default"))
-
-		// Verify stale "removed-ns" resources and the legacy tigera-gateway
-		// upgrade cleanup are in the delete list. The tigera-gateway Namespace
-		// itself is intentionally not present.
-		rtest.ExpectResources(objsToDelete, []client.Object{
-			// Legacy tigera-gateway upgrade cleanup: pull secret + helm-rendered
-			// in-namespace resources + Enterprise WAF SA + the orphaned legacy
-			// CRBs + tigera-operator-secrets RB + cluster-scoped legacy bits.
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-gateway"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "tigera-gateway"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
-			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-infra-manager", Namespace: "tigera-gateway"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-role", Namespace: "tigera-gateway"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-leader-election-rolebinding", Namespace: "tigera-gateway"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen", Namespace: "tigera-gateway"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "tigera-gateway"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-cluster-scoped"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-gateway-resources"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "tigera-gateway"}},
-			&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.tigera-gateway"}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter"}},
-			// Stale per-namespace resources for "removed-ns".
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-operator-secrets", Namespace: "removed-ns"}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter", Namespace: "removed-ns"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "waf-http-filter-gateway-resources", Namespace: "removed-ns"}},
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "removed-ns"}},
-		})
-
-		// Secret must be deleted before the RoleBinding that grants us delete perms (else 403).
-		secretIdx, rbIdx := -1, -1
-		for i, obj := range objsToDelete {
-			if obj.GetNamespace() != "removed-ns" {
-				continue
-			}
-			switch obj.(type) {
-			case *corev1.Secret:
-				if obj.GetName() == "tigera-pull-secret" {
-					secretIdx = i
-				}
-			case *rbacv1.RoleBinding:
-				if obj.GetName() == "tigera-operator-secrets" {
-					rbIdx = i
-				}
-			}
-		}
-		Expect(secretIdx).NotTo(Equal(-1))
-		Expect(rbIdx).NotTo(Equal(-1))
-		Expect(secretIdx).To(BeNumerically("<", rbIdx),
-			"tigera-pull-secret must be deleted before tigera-operator-secrets RoleBinding")
-	})
-
-	It("must not create or delete core-owned shared resources in reserved namespaces", func() {
-		installation := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
-		gatewayAPI := &operatorv1.GatewayAPI{
-			Spec: operatorv1.GatewayAPISpec{
-				GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
-			},
-		}
-		pullSecret := &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: "tigera-operator"},
-			Data:       map[string][]byte{".dockerconfigjson": []byte("{}")},
-		}
-		gatewayComp, gatewayCompErr := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:       testScheme(),
-			Installation: installation,
-			GatewayAPI:   gatewayAPI,
-			PullSecrets:  []*corev1.Secret{pullSecret},
-			// Gateways in reserved namespaces (odd but possible) plus a normal one.
-			GatewayNamespaces:        []string{common.CalicoNamespace, common.OperatorNamespace(), "app-ns"},
-			CurrentGatewayNamespaces: set.New(common.CalicoNamespace, common.OperatorNamespace(), "app-ns"),
-		})
-		Expect(gatewayCompErr).NotTo(HaveOccurred())
-
-		objsToCreate, _ := gatewayComp.Objects()
-
-		// app-ns gets the full treatment — WAF SA + both RoleBindings + pull secret.
-		_, err := rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "tigera-operator-secrets", "app-ns")
-		Expect(err).NotTo(HaveOccurred())
-		_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", "app-ns")
-		Expect(err).NotTo(HaveOccurred())
-
-		// Reserved namespaces get WAF-specific resources but not the shared ones.
-		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
-			_, err = rtest.GetResourceOfType[*corev1.ServiceAccount](objsToCreate, "waf-http-filter", ns)
-			Expect(err).NotTo(HaveOccurred(), "WAF SA should still be created in %s", ns)
-			_, err = rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "waf-http-filter-gateway-resources", ns)
-			Expect(err).NotTo(HaveOccurred(), "WAF gateway-resources RB should still be created in %s", ns)
-
-			_, err = rtest.GetResourceOfType[*rbacv1.RoleBinding](objsToCreate, "tigera-operator-secrets", ns)
-			Expect(err).To(HaveOccurred(), "must not create tigera-operator-secrets in reserved namespace %s", ns)
-			_, err = rtest.GetResourceOfType[*corev1.Secret](objsToCreate, "tigera-pull-secret", ns)
-			Expect(err).To(HaveOccurred(), "must not copy tigera-pull-secret into reserved namespace %s", ns)
-		}
-
-		// Delete path: never queue shared resources in reserved namespaces.
-		gatewayComp, gatewayCompErr = GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
-			Scheme:                   testScheme(),
-			Installation:             installation,
-			GatewayAPI:               gatewayAPI,
-			PullSecrets:              []*corev1.Secret{pullSecret},
-			GatewayNamespaces:        nil,
-			CurrentGatewayNamespaces: set.New(common.CalicoNamespace, common.OperatorNamespace()),
-		})
-		Expect(gatewayCompErr).NotTo(HaveOccurred())
-
-		_, objsToDelete := gatewayComp.Objects()
-		for _, obj := range objsToDelete {
-			ns := obj.GetNamespace()
-			if ns != common.CalicoNamespace && ns != common.OperatorNamespace() {
-				continue
-			}
-			switch o := obj.(type) {
-			case *rbacv1.RoleBinding:
-				Expect(o.Name).NotTo(Equal("tigera-operator-secrets"),
-					"must not delete tigera-operator-secrets in reserved namespace %s", ns)
-			case *corev1.Secret:
-				Expect(o.Name).NotTo(Equal("tigera-pull-secret"),
-					"must not delete tigera-pull-secret in reserved namespace %s", ns)
-			}
-		}
 	})
 
 	It("should queue the legacy tigera-gateway install for cleanup on every reconcile", func() {

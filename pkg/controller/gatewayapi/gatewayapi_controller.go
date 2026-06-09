@@ -17,11 +17,11 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
+	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +52,9 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -505,29 +507,46 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	}
 	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
 
-	// Previously-provisioned namespaces, for cleanup. Enterprise reads the shared CRB's
-	// Subjects; OSS has no CRB, so it enumerates the mirrored trust-bundle ConfigMaps.
-	gatewayConfig.CurrentGatewayNamespaces = set.New[string]()
-	if variant.IsEnterprise() {
-		existingCRB := &rbacv1.ClusterRoleBinding{}
-		if err = r.client.Get(ctx, types.NamespacedName{Name: gatewayapi.GatewayNamespacesCRBName}, existingCRB); err == nil {
-			for _, s := range existingCRB.Subjects {
-				if s.Kind == "ServiceAccount" {
-					gatewayConfig.CurrentGatewayNamespaces.Insert(s.Namespace)
+	// Legacy tigera-gateway teardown (TODO: remove once upgrades from 3.x are unsupported).
+	// Delete the old controller first and alone (while terminating it re-creates proxies we remove),
+	// then its orphaned proxies, requeueing until clean. Skipped if a Gateway lives in tigera-gateway,
+	// since then the proxy there belongs to the new controller.
+	const legacyGatewayNamespace = "tigera-gateway"
+	legacyNamespaceHostsGateway := false
+	for _, ns := range gatewayConfig.GatewayNamespaces {
+		if ns == legacyGatewayNamespace {
+			legacyNamespaceHostsGateway = true
+		}
+	}
+	if !legacyNamespaceHostsGateway {
+		legacyController := &v1.Deployment{}
+		switch err = r.client.Get(ctx, types.NamespacedName{Namespace: legacyGatewayNamespace, Name: "envoy-gateway"}, legacyController); {
+		case err == nil:
+			if derr := r.client.Delete(ctx, legacyController); derr != nil && !errors.IsNotFound(derr) {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting legacy gateway controller", derr, reqLogger)
+				return reconcile.Result{}, derr
+			}
+			reqLogger.Info("Deleting legacy tigera-gateway controller before cleaning its proxies")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		case !errors.IsNotFound(err):
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for legacy tigera-gateway controller", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		orphans, oerr := r.legacyGatewayOrphans(ctx, legacyGatewayNamespace)
+		if oerr != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing legacy gateway resources", oerr, reqLogger)
+			return reconcile.Result{}, oerr
+		}
+		if len(orphans) > 0 {
+			for _, obj := range orphans {
+				if derr := r.client.Delete(ctx, obj); derr != nil && !errors.IsNotFound(derr) {
+					r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting legacy gateway resource", derr, reqLogger)
+					return reconcile.Result{}, derr
 				}
 			}
-		} else if !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading gateway namespaces ClusterRoleBinding", err, log)
-			return reconcile.Result{}, err
-		}
-	} else {
-		cmList := &corev1.ConfigMapList{}
-		if err = r.client.List(ctx, cmList, client.MatchingLabels{gatewayapi.GatewayNamespaceBundleLabel: "true"}); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing gateway trust bundle ConfigMaps", err, log)
-			return reconcile.Result{}, err
-		}
-		for i := range cmList.Items {
-			gatewayConfig.CurrentGatewayNamespaces.Insert(cmList.Items[i].Namespace)
+			reqLogger.Info("Cleaning orphaned legacy tigera-gateway proxies", "count", len(orphans))
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 	}
 
@@ -553,6 +572,12 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	err = r.newComponentHandler(log, r.client, r.scheme, gatewayAPI).CreateOrUpdateOrDelete(ctx, nonCRDComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering GatewayAPI resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	// Per-namespace resources, owned by the namespace's Gateways so the GC cleans them up.
+	if err = r.reconcileGatewayNamespaceResources(ctx, trustedBundle, pullSecrets, variant.IsEnterprise(), gwList.Items, ownedClass); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error writing per-namespace Gateway resources", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -631,4 +656,113 @@ func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI 
 	// These objects require graceful termination before the CNI plugin is torn down.
 	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.CalicoNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
+}
+
+// reconcileGatewayNamespaceResources writes the per-namespace resources owned by the namespace's
+// Gateways, so the GC removes them once the last Gateway is gone (and the GatewayAPI CR's deletion
+// doesn't strand them). Reserved namespaces are skipped; trust bundle on both variants, the rest on
+// Enterprise.
+func (r *ReconcileGatewayAPI) reconcileGatewayNamespaceResources(ctx context.Context, bundle certificatemanagement.TrustedBundle, pullSecrets []*corev1.Secret, enterprise bool, gateways []gapi.Gateway, ownedClass map[string]bool) error {
+	ownersByNamespace := map[string][]metav1.OwnerReference{}
+	for i := range gateways {
+		gw := &gateways[i]
+		if !ownedClass[string(gw.Spec.GatewayClassName)] || gw.Namespace == common.CalicoNamespace || gw.Namespace == common.OperatorNamespace() {
+			continue
+		}
+		ownersByNamespace[gw.Namespace] = append(ownersByNamespace[gw.Namespace], metav1.OwnerReference{
+			APIVersion: "gateway.networking.k8s.io/v1",
+			Kind:       "Gateway",
+			Name:       gw.Name,
+			UID:        gw.UID,
+		})
+	}
+	for namespace, owners := range ownersByNamespace {
+		var objs []client.Object
+		if bundle != nil {
+			objs = append(objs, bundle.ConfigMap(namespace))
+		}
+		if enterprise {
+			objs = append(objs,
+				gatewayapi.GatewayNamespaceServiceAccount(namespace),
+				gatewayapi.GatewayNamespaceRoleBinding(namespace),
+				render.CreateOperatorSecretsRoleBinding(namespace),
+			)
+			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(namespace, pullSecrets...)...)...)
+		}
+		for _, obj := range objs {
+			if err := r.upsertGatewayOwned(ctx, obj, owners); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// legacyGatewayOrphans returns the resources in namespace owned by the tigera-gateway-class
+// GatewayClass or the GatewayAPI CR — the pre-namespaced proxies. Owner-scoped, so unrelated
+// resources are never returned.
+func (r *ReconcileGatewayAPI) legacyGatewayOrphans(ctx context.Context, namespace string) ([]client.Object, error) {
+	ownedByLegacyGateway := func(o client.Object) bool {
+		for _, ref := range o.GetOwnerReferences() {
+			if ref.Kind == "GatewayAPI" || (ref.Kind == "GatewayClass" && ref.Name == gatewayapi.GatewayClassName) {
+				return true
+			}
+		}
+		return false
+	}
+	deployments := &v1.DeploymentList{}
+	services := &corev1.ServiceList{}
+	serviceAccounts := &corev1.ServiceAccountList{}
+	configMaps := &corev1.ConfigMapList{}
+	for _, list := range []client.ObjectList{deployments, services, serviceAccounts, configMaps} {
+		if err := r.client.List(ctx, list, client.InNamespace(namespace)); err != nil {
+			return nil, err
+		}
+	}
+	var orphans []client.Object
+	for i := range deployments.Items {
+		if ownedByLegacyGateway(&deployments.Items[i]) {
+			orphans = append(orphans, &deployments.Items[i])
+		}
+	}
+	for i := range services.Items {
+		if ownedByLegacyGateway(&services.Items[i]) {
+			orphans = append(orphans, &services.Items[i])
+		}
+	}
+	for i := range serviceAccounts.Items {
+		if ownedByLegacyGateway(&serviceAccounts.Items[i]) {
+			orphans = append(orphans, &serviceAccounts.Items[i])
+		}
+	}
+	for i := range configMaps.Items {
+		if ownedByLegacyGateway(&configMaps.Items[i]) {
+			orphans = append(orphans, &configMaps.Items[i])
+		}
+	}
+	return orphans, nil
+}
+
+// upsertGatewayOwned creates or updates obj, refreshing its owner references (and ConfigMap/Secret
+// data) so the namespace's owner set stays current as its Gateways come and go.
+func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired client.Object, owners []metav1.OwnerReference) error {
+	desired.SetOwnerReferences(owners)
+	existing := desired.DeepCopyObject().(client.Object)
+	switch err := r.client.Get(ctx, client.ObjectKeyFromObject(desired), existing); {
+	case errors.IsNotFound(err):
+		return r.client.Create(ctx, desired)
+	case err != nil:
+		return err
+	default:
+		existing.SetOwnerReferences(owners)
+		switch d := desired.(type) {
+		case *corev1.ConfigMap:
+			e := existing.(*corev1.ConfigMap)
+			e.Data, e.Annotations = d.Data, d.Annotations
+		case *corev1.Secret:
+			e := existing.(*corev1.Secret)
+			e.Data, e.Type = d.Data, d.Type
+		}
+		return r.client.Update(ctx, existing)
+	}
 }

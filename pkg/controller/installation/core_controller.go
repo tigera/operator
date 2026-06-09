@@ -1219,7 +1219,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// its variant - validating config and creating the node-prometheus
 	// certificate, adding it (and the prometheus/esgw certs) to the trusted
 	// bundle - and may abort the reconcile by returning an error.
-	modCtx, err := extensions.RunSetup(extensions.Inputs{
+	renderCtx, err := extensions.RunSetup(extensions.Inputs{
 		Ctx:                ctx,
 		Client:             r.client,
 		Installation:       &instance.Spec,
@@ -1232,7 +1232,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	nodePrometheusTLS := modCtx.NodePrometheusTLS
+	nodePrometheusTLS := renderCtx.NodePrometheusTLS
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
 	if err != nil {
@@ -1271,7 +1271,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance, utils.WithRenderContext(modCtx))
+	handler := r.newComponentHandler(log, r.client, r.scheme, instance, utils.WithRenderContext(renderCtx))
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{

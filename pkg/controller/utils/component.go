@@ -81,7 +81,7 @@ type ComponentHandlerOption func(*componentHandler)
 // WithRenderContext supplies the extensions.RenderContext passed to registered
 // render modifiers.
 func WithRenderContext(ctx extensions.RenderContext) ComponentHandlerOption {
-	return func(c *componentHandler) { c.modCtx = ctx }
+	return func(c *componentHandler) { c.renderCtx = ctx }
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -107,7 +107,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
-	modCtx       extensions.RenderContext
+	renderCtx    extensions.RenderContext
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -469,7 +469,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 
 	objsToCreate, objsToDelete := component.Objects()
 	if ext, ok := component.(render.Extensible); ok {
-		objsToCreate = extensions.ApplyModifiers(ext.ModifierKey(), c.modCtx, objsToCreate)
+		objsToCreate = extensions.ApplyModifiers(ext.ModifierKey(), c.renderCtx, objsToCreate)
 	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it

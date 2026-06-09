@@ -2506,8 +2506,8 @@ var _ = Describe("componentHandler modifier application", func() {
 		Expect(corev1.SchemeBuilder.AddToScheme(s)).NotTo(HaveOccurred())
 
 		c := ctrlrfake.DefaultFakeClientBuilder(s).Build()
-		modCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
-		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderContext(modCtx))
+		renderCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderContext(renderCtx))
 		comp := &namedFakeComponent{name: "fake", obj: &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},

@@ -83,6 +83,11 @@ const (
 	AlertmanagerPort           = 9093
 	MeshAlertmanagerPolicyName = AlertmanagerPolicyName + "-mesh"
 
+	// AlertmanagerLinseedClusterRoleName is the ClusterRole that grants Alertmanager
+	// permission to push Prometheus alerts to Linseed as events. It is bound to the
+	// Prometheus service account, which Alertmanager runs as.
+	AlertmanagerLinseedClusterRoleName = "tigera-alertmanager-linseed"
+
 	ElasticsearchMetrics = "elasticsearch-metrics"
 	FluentdMetrics       = "fluentd-metrics"
 
@@ -104,6 +109,14 @@ var alertmanagerSelector = fmt.Sprintf(
 	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
 	CalicoNodeAlertmanager,
 )
+
+// AlertmanagerSourceEntityRule selects the Alertmanager pods as a network policy
+// source. It is used by other components (e.g. Linseed) that need to allow
+// ingress from Alertmanager.
+var AlertmanagerSourceEntityRule = v3.EntityRule{
+	Selector:          alertmanagerSelector,
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", common.TigeraPrometheusNamespace),
+}
 
 // Register secret/certs that need Server and Client Key usage
 func init() {
@@ -264,11 +277,15 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate,
 			mc.alertmanagerService(),
 			mc.alertmanager(),
+			mc.alertmanagerLinseedClusterRole(),
+			mc.alertmanagerLinseedClusterRoleBinding(),
 		)
 	} else {
 		toDelete = append(toDelete,
 			mc.alertmanager(),
 			mc.alertmanagerService(),
+			mc.alertmanagerLinseedClusterRole(),
+			mc.alertmanagerLinseedClusterRoleBinding(),
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 				Name:      "alertmanager-" + CalicoNodeAlertmanager,
 				Namespace: common.TigeraPrometheusNamespace,
@@ -528,6 +545,24 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
+			// Annotate the pod with a hash of the Alertmanager configuration so that
+			// changing the config (e.g. toggling the UI alerts integration on/off, which
+			// swaps the webhook receiver) rolls the Alertmanager pod and reloads the new
+			// config rather than leaving it running with the stale in-memory config.
+			PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
+				// Labels must be non-nil: the component handler copies the object's
+				// labels into PodMetadata.Labels (see setStandardSelectorAndLabels).
+				Labels: map[string]string{},
+				Annotations: map[string]string{
+					"hash.operator.tigera.io/alertmanager-config": rmeta.SecretsAnnotationHash(mc.cfg.AlertmanagerConfigSecret),
+				},
+			},
+			// Mount the client certificate and CA bundle so the Linseed webhook
+			// receiver can establish an mTLS connection. The prometheus-operator
+			// surfaces these at /etc/alertmanager/secrets/<name>/ and
+			// /etc/alertmanager/configmaps/<name>/ respectively.
+			Secrets:    []string{PrometheusClientTLSSecretName},
+			ConfigMaps: []string{certificatemanagement.TrustedCertConfigMapName},
 		},
 	}
 	return am
@@ -551,6 +586,44 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 			},
 			Selector: map[string]string{
 				"alertmanager": CalicoNodeAlertmanager,
+			},
+		},
+	}
+}
+
+// alertmanagerLinseedClusterRole grants permission to push events to Linseed.
+// Linseed authorizes writes via SubjectAccessReview, so Alertmanager needs
+// create access on the events resource in the linseed.tigera.io API group.
+func (mc *monitorComponent) alertmanagerLinseedClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: AlertmanagerLinseedClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+// alertmanagerLinseedClusterRoleBinding binds the Linseed event-creation role to
+// the Prometheus service account, which Alertmanager runs as.
+func (mc *monitorComponent) alertmanagerLinseedClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: AlertmanagerLinseedClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     AlertmanagerLinseedClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      PrometheusServiceAccountName,
+				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
 	}

@@ -402,11 +402,8 @@ type GatewayAPIImplementationConfig struct {
 	IncludeV3NetworkPolicy bool
 
 	// GatewayNamespaces is the list of namespaces containing a Gateway managed by
-	// this operator (Enterprise only).
+	// this operator, used to keep the shared WAF CRB's subjects in sync (Enterprise only).
 	GatewayNamespaces []string
-	// CurrentGatewayNamespaces tracks previously provisioned namespaces for cleanup
-	// when Gateways are removed.
-	CurrentGatewayNamespaces set.Set[string]
 
 	// TrustedBundle carries the public CA bundle (extracted from the operator's UBI
 	// base image) plus Calico's internal CA. Mounted on the envoy-gateway controller
@@ -510,59 +507,20 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		pr.cfg.CurrentGatewayClasses.Delete(className)
 	}
 
+	// Per-namespace resources (trust bundle + Enterprise WAF SA/RoleBindings/pull-secret) are
+	// controller-managed and Gateway-owned, so the GC cleans them up — not rendered here.
+
 	if pr.cfg.Installation.Variant.IsEnterprise() {
-		// Shared WAF ClusterRoles bound by per-namespace SAs.
+		// Shared WAF ClusterRoles bound per-namespace by the controller-managed SAs.
 		objs = append(objs,
 			pr.wafHttpFilterClusterScopedRole(),
 			pr.wafHttpFilterGatewayResourcesRole(),
 		)
-
-		// Per-namespace resources for namespaces containing a Gateway managed by
-		// this operator (populated by the GatewayAPI controller).
-		for _, ns := range pr.cfg.GatewayNamespaces {
-			objs = append(objs,
-				pr.gatewayNamespaceSA(ns),
-				pr.gatewayNamespaceRoleBinding(ns),
-			)
-			// Skip shared resources in reserved namespaces — core Installation owns them.
-			if !isReservedOperatorNamespace(ns) {
-				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
-				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-				// envoy-proxy pods mount the bundle from their own namespace.
-				if pr.cfg.TrustedBundle != nil {
-					objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(ns))
-				}
-			}
-		}
+		// Shared CRB: subjects recomputed each reconcile, removed when no Gateway namespaces remain.
 		if len(pr.cfg.GatewayNamespaces) > 0 {
 			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
-		}
-
-		// Clean up resources for namespaces that no longer host a Gateway.
-		if pr.cfg.CurrentGatewayNamespaces != nil {
-			currentNS := set.New(pr.cfg.GatewayNamespaces...)
-			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
-				if !currentNS.Has(ns) {
-					// Secret must go before the RoleBinding that grants us delete perms; skip shared
-					// resources in reserved namespaces (core-owned).
-					if !isReservedOperatorNamespace(ns) {
-						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-						if pr.cfg.TrustedBundle != nil {
-							objsToDelete = append(objsToDelete, pr.cfg.TrustedBundle.ConfigMap(ns))
-						}
-					}
-					objsToDelete = append(objsToDelete,
-						pr.gatewayNamespaceSA(ns),
-						pr.gatewayNamespaceRoleBinding(ns),
-					)
-					if !isReservedOperatorNamespace(ns) {
-						objsToDelete = append(objsToDelete, render.CreateOperatorSecretsRoleBinding(ns))
-					}
-				}
-			}
-			if len(pr.cfg.GatewayNamespaces) == 0 {
-				objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
-			}
+		} else {
+			objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
 		}
 	}
 
@@ -600,6 +558,17 @@ func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []cl
 	for _, o := range creating {
 		if o.GetNamespace() == legacyNS {
 			skip.Insert(key(o))
+		}
+	}
+	// If a Gateway lives in tigera-gateway, the controller manages its per-namespace resources
+	// (Gateway-owned) — don't queue those for legacy delete or we'd fight it every reconcile.
+	for _, ns := range pr.cfg.GatewayNamespaces {
+		if ns == legacyNS {
+			skip.Insert(key(GatewayNamespaceServiceAccount(legacyNS)))
+			skip.Insert(key(render.CreateOperatorSecretsRoleBinding(legacyNS)))
+			for _, s := range secret.ToRuntimeObjects(secret.CopyToNamespace(legacyNS, pr.cfg.PullSecrets...)...) {
+				skip.Insert(key(s))
+			}
 		}
 	}
 
@@ -659,6 +628,14 @@ func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []cl
 			ObjectMeta: metav1.ObjectMeta{Name: helmPrefix + "-certgen", Namespace: legacyNS},
 		},
 	)
+
+	// envoy-gateway certgen TLS Secrets — unowned, so nothing else GCs them.
+	for _, name := range []string{"envoy", "envoy-gateway", "envoy-oidc-hmac", "envoy-rate-limit"} {
+		objs = append(objs, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: legacyNS},
+		})
+	}
 
 	// Enterprise-only WAF SA in tigera-gateway, plus the orphaned legacy CRBs
 	// that bound it (the new install uses waf-http-filter-gateway-namespaces
@@ -1345,8 +1322,8 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole()
 	}
 }
 
-// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace.
-func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string) *corev1.ServiceAccount {
+// GatewayNamespaceServiceAccount returns the waf-http-filter ServiceAccount for a Gateway namespace.
+func GatewayNamespaceServiceAccount(namespace string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1388,7 +1365,8 @@ func (pr *gatewayAPIImplementationComponent) gatewayNamespacesCRB(namespaces []s
 
 // gatewayNamespaceRoleBinding scopes the WAF SA's Gateway API read access
 // to its own namespace (least privilege for proxies in user namespaces).
-func (pr *gatewayAPIImplementationComponent) gatewayNamespaceRoleBinding(namespace string) *rbacv1.RoleBinding {
+// GatewayNamespaceRoleBinding returns the waf-http-filter-gateway-resources RoleBinding for a Gateway namespace.
+func GatewayNamespaceRoleBinding(namespace string) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{

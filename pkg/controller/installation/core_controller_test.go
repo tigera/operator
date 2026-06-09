@@ -1461,6 +1461,26 @@ var _ = Describe("Testing core-controller installation", func() {
 				err = c.Get(ctx, client.ObjectKey{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace}, &appsv1.DaemonSet{})
 				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected csi-node-driver DaemonSet to be deleted")
 			})
+
+			It("should not start the non-cluster-host typha autoscaler in an Enterprise headless install", func() {
+				cr.Spec.Variant = operator.CalicoEnterprise
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// A NonClusterHost CR exists, but headless mode runs no dataplane, so the
+				// operator must not start a Typha autoscaler for a Deployment it never renders.
+				Expect(c.Create(ctx, &operator.NonClusterHost{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Spec: operator.NonClusterHostSpec{
+						Endpoint:      "https://1.2.3.4:443",
+						TyphaEndpoint: "1.2.3.4:5473",
+					},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(r.typhaAutoscalerNonClusterHost).To(BeNil(), "expected no non-cluster-host typha autoscaler in headless mode")
+			})
 		})
 
 		// Sweep every valid combination of variant, CNI plugin and Linux dataplane through a

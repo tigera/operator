@@ -1447,9 +1447,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:   typhaNodeTLS.TrustedBundle,
 		}))
 
-	// Check if non-cluster host feature is enabled.
+	// Check if non-cluster host feature is enabled. NonClusterHost is a dataplane feature
+	// (it scales Typha to serve out-of-cluster Felix/calico-node instances), so it has no
+	// meaning in a headless installation where no dataplane runs. Skip it entirely so we
+	// don't start a Typha autoscaler for a Deployment that is never rendered; the
+	// nonclusterhost controller separately rejects the NonClusterHost CR in headless mode.
 	var nonclusterhost *operatorv1.NonClusterHost
-	if instance.Spec.Variant.IsEnterprise() {
+	if instance.Spec.Variant.IsEnterprise() && !headless {
 		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)

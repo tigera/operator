@@ -433,6 +433,38 @@ var _ = Describe("LogStorage controller", func() {
 				mockStatus.AssertExpectations(GinkgoT())
 			})
 
+			It("degrades in a headless installation", Label("headless"), func() {
+				// Make the Installation headless (no Linux dataplane / no Calico API server).
+				dpNone := operatorv1.LinuxDataplaneNone
+				install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+				install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+				Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
+
+				CreateLogStorage(cli, &operatorv1.LogStorage{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operatorv1.LogStorageSpec{
+						Nodes: &operatorv1.Nodes{
+							Count: int64(1),
+						},
+						StorageClassName: storageClassName,
+					},
+					Status: operatorv1.LogStorageStatus{
+						State: operatorv1.TigeraStatusReady,
+					},
+				})
+
+				mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+				r, err := NewReconcilerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, MockESCLICreator, dns.DefaultClusterDomain, readyFlag)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "LogStorage is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+			})
+
 			It("test LogStorage reconciles successfully for elasticsearch basic license", func() {
 				Expect(cli.Create(ctx, &operatorv1.Authentication{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},

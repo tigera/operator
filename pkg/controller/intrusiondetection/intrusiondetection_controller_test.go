@@ -804,4 +804,19 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			Expect(pullSecret.Kind).To(Equal("Tenant"))
 		})
 	})
+
+	It("should degrade in a headless installation", Label("headless"), func() {
+		installation := &operatorv1.Installation{}
+		Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, installation)).NotTo(HaveOccurred())
+		dpNone := operatorv1.LinuxDataplaneNone
+		installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+		Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
+
+		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Intrusion Detection is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Intrusion Detection is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+	})
 })

@@ -238,6 +238,42 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 			Expect(test.GetResource(cli, &dashboardJob)).To(HaveOccurred())
 		})
 
+		It("should stand down without error in a headless installation when no LogStorage exists", func() {
+			mockStatus.On("OnCRNotFound").Return()
+
+			// Switch the install to headless and remove the LogStorage created in the BeforeEach.
+			dpNone := operatorv1.LinuxDataplaneNone
+			install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
+			Expect(cli.Delete(ctx, &operatorv1.LogStorage{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).Should(Equal(successResult))
+
+			// No dashboard Job should be created, and the controller should idle (no degrade).
+			dashboardJob := batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: dashboards.Name, Namespace: render.ElasticsearchNamespace}}
+			Expect(test.GetResource(cli, &dashboardJob)).To(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "OnCRNotFound")
+		})
+
+		It("should report unsupported and not install in a headless installation when LogStorage exists", func() {
+			// Switch the install to headless; the LogStorage from the BeforeEach remains.
+			dpNone := operatorv1.LinuxDataplaneNone
+			install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
+			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(result).Should(Equal(successResult))
+
+			dashboardJob := batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: dashboards.Name, Namespace: render.ElasticsearchNamespace}}
+			Expect(test.GetResource(cli, &dashboardJob)).To(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "LogStorage Dashboards are not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+		})
+
 		It("should use images from ImageSet", func() {
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},

@@ -36,9 +36,9 @@ type RenderContext struct {
 	// TrustedBundle is the shared CA bundle for the calico-system namespace.
 	TrustedBundle certificatemanagement.TrustedBundle
 
-	// NodePrometheusTLS is created by the enterprise render context builder (it
-	// has cluster side effects, so it can't be built in a modifier). The node
-	// modifier is its only consumer: it mounts the keypair onto the daemonset and
-	// sets the FELIX_PROMETHEUSREPORTER* certificate env vars.
+	// NodePrometheusTLS is created by the enterprise setup (it has cluster side
+	// effects, so it can't be built in a modifier). The node modifier is its only
+	// consumer: it mounts the keypair onto the daemonset and sets the
+	// FELIX_PROMETHEUSREPORTER* certificate env vars.
 	NodePrometheusTLS certificatemanagement.KeyPairInterface
 }

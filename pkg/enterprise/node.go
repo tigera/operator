@@ -147,10 +147,10 @@ func modifyNodeDaemonSet(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
 // mountNodePrometheusTLS mounts the node prometheus reporter keypair onto the
 // daemonset: the volume, the calico-node volume mount, the cert-management init
 // container (when in use), and the pod hash annotation that rolls the pods on
-// cert rotation. The keypair has cluster side effects, so the enterprise render
-// context builder creates it and hands it in via ctx rather than the modifier
-// building it. In core (calico) the keypair is never created, so the base node
-// render carries no prometheus mount at all.
+// cert rotation. The keypair has cluster side effects, so the enterprise setup
+// creates it and hands it in via ctx rather than the modifier building it. In
+// core (calico) the keypair is never created, so the base node render carries
+// no prometheus mount at all.
 func mountNodePrometheusTLS(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
 	if ctx.NodePrometheusTLS == nil {
 		return

@@ -204,6 +204,27 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	// In a headless installation (spec.calicoNetwork.linuxDataplane: None) there is no Calico
+	// API server, so the calico-system Tier (projectcalico.org/v3) is never served and the
+	// Tier watch below would never become ready. Stand down cleanly instead of blocking
+	// forever: if no LogStorage is configured there is nothing to do, otherwise report that
+	// the feature is unsupported in a headless cluster. This check must precede the tier
+	// watch (unlike the other LogStorage sub-controllers, this one queries the tier before
+	// fetching LogStorage).
+	if !installationSpec.LinuxDataplaneEnabled() {
+		logStorage := &operatorv1.LogStorage{}
+		if err := d.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, logStorage); err != nil {
+			if errors.IsNotFound(err) {
+				d.status.OnCRNotFound()
+				return reconcile.Result{}, nil
+			}
+			d.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		d.status.SetDegraded(operatorv1.ResourceValidationError, "LogStorage Dashboards are not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !d.tierWatchReady.IsReady() {
 		d.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)

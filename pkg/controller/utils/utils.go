@@ -622,6 +622,22 @@ func GetInstallationSpec(ctx context.Context, client client.Client) (operatorv1.
 	return instance.Status.Variant, &spec, nil
 }
 
+// IsHeadlessInstallation reports whether the default Installation disables the Linux
+// dataplane (spec.calicoNetwork.linuxDataplane: None) — a "headless" install that runs no
+// Calico dataplane and no Calico API server, so the projectcalico.org/v3 API and the
+// calico-system Tier are never served. Enterprise products that render policy into that
+// Tier cannot be installed in such a cluster.
+//
+// It is a best-effort guard: if the Installation cannot be read it returns false and the
+// caller falls through to its normal Installation handling, which reports the read error.
+func IsHeadlessInstallation(ctx context.Context, c client.Client) bool {
+	_, spec, err := GetInstallationSpec(ctx, c)
+	if err != nil {
+		return false
+	}
+	return !spec.LinuxDataplaneEnabled()
+}
+
 // GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.
 func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APIServer, string, error) {
 	// Fetch the APIServer instance. Look for the "default" instance first.

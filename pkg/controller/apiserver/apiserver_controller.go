@@ -444,6 +444,14 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	// In a headless installation there is no Calico API server, so the calico-system Tier
+	// (projectcalico.org/v3) is never served and The Calico API server cannot be installed. Report this
+	// clearly instead of blocking forever on the Tier watch.
+	if utils.IsHeadlessInstallation(ctx, r.client) {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "The Calico API server is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
 	//
 	// The creation of the Tier depends on this controller to reconcile it's non-NetworkPolicy resources so that

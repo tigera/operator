@@ -172,4 +172,34 @@ var _ = Describe("LogStorage Linseed controller", func() {
 		_, err = r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
 	})
+
+	It("should degrade in a headless installation", Label("headless"), func() {
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		dpNone := operatorv1.LinuxDataplaneNone
+		install := &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "default",
+			},
+			Status: operatorv1.InstallationStatus{
+				Variant:  operatorv1.CalicoEnterprise,
+				Computed: &operatorv1.InstallationSpec{},
+			},
+			Spec: operatorv1.InstallationSpec{
+				Variant:       operatorv1.CalicoEnterprise,
+				CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginNone},
+				CalicoNetwork: &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone},
+			},
+		}
+		Expect(cli.Create(ctx, install)).ShouldNot(HaveOccurred())
+
+		ls := &operatorv1.LogStorage{}
+		ls.Name = "tigera-secure"
+		ls.Status.State = operatorv1.TigeraStatusReady
+		Expect(cli.Create(ctx, ls)).ShouldNot(HaveOccurred())
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Elasticsearch metrics is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+	})
 })

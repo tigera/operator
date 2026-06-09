@@ -114,6 +114,17 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling Tiers")
 
+	// In a headless installation (spec.calicoNetwork.linuxDataplane: None) there is no Calico
+	// API server, so the projectcalico.org/v3 API is never served and the base tiers cannot be
+	// created. They are not needed either: the products that render policy into the
+	// calico-system tier (Gateway API, Istio) tolerate its absence. Stand down without reporting
+	// a degraded tiers status rather than blocking forever on the Tigera API server.
+	if utils.IsHeadlessInstallation(ctx, r.client) {
+		reqLogger.Info("Linux dataplane is disabled (headless); tiers are not managed")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
+	}
+
 	// Mark CR as found even though this controller is not associated with a CR, as OnCRFound() enables TigeraStatus reporting.
 	r.status.OnCRFound()
 

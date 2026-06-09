@@ -117,7 +117,7 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.3-llvm21.1.8-k8s1.35.5
+GO_BUILD_VER?=1.25.11-llvm18.1.8-k8s1.33.12
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')
@@ -157,6 +157,7 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-e ACK_GINKGO_RC=true \
 		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
+		-e GOTOOLCHAIN=go1.26.4+auto \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)
@@ -506,8 +507,13 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 ###############################################################################
 .PHONY: static-checks
 ## Perform static checks on the code.
+# Use the newer go-build image for lint because golangci-lint bundled in the
+# 1.25.x image was built with Go 1.25 and refuses to lint code targeting
+# Go 1.26.3. The binary build still uses GO_BUILD_VER (1.25.x) to ensure
+# glibc compatibility with the runtime UBI image.
+CALICO_BUILD_LINT ?= calico/go-build:1.26.3-llvm21.1.8-k8s1.35.5-$(BUILDARCH)
 static-checks:
-	$(CONTAINERIZED) $(CALICO_BUILD) golangci-lint run --timeout 5m
+	$(CONTAINERIZED) $(CALICO_BUILD_LINT) golangci-lint run --timeout 5m
 
 .PHONY: fix
 ## Fix static checks

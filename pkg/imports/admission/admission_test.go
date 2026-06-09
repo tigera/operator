@@ -18,59 +18,104 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 
 	opv1 "github.com/tigera/operator/api/v1"
 )
 
 var _ = Describe("MutatingAdmissionPolicies", func() {
-	It("returns Calico MAPs when v3=true", func() {
-		objs := GetMutatingAdmissionPolicies(opv1.Calico, true)
-		Expect(objs).To(HaveLen(4), "Expected 4 admission objects, got %d", len(objs))
+	Describe("GetMutatingAdmissionPolicies", func() {
+		It("returns Calico v1beta1 MAPs when v3=true", func() {
+			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1Beta1)
+			Expect(objs).To(HaveLen(4))
 
-		// Verify we get two MAPs and two MAPBs.
-		var mapCount, mapbCount int
-		for _, obj := range objs {
-			switch obj.(type) {
-			case *admissionv1beta1.MutatingAdmissionPolicy:
-				mapCount++
-			case *admissionv1beta1.MutatingAdmissionPolicyBinding:
-				mapbCount++
+			var mapCount, mapbCount int
+			for _, obj := range objs {
+				switch obj.(type) {
+				case *admissionv1beta1.MutatingAdmissionPolicy:
+					mapCount++
+				case *admissionv1beta1.MutatingAdmissionPolicyBinding:
+					mapbCount++
+				}
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
 			}
-			// Verify the managed label is set.
-			Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue), "Expected MAP object to have label %s=%s", ManagedMAPLabel, ManagedMAPLabelValue)
-		}
-		Expect(mapCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicy, got %d", mapCount)
-		Expect(mapbCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicyBinding, got %d", mapbCount)
-	})
+			Expect(mapCount).To(Equal(2))
+			Expect(mapbCount).To(Equal(2))
+		})
 
-	It("returns Enterprise MAPs when v3=true", func() {
-		objs := GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, true)
-		Expect(objs).To(HaveLen(4), "Expected 4 admission objects, got %d", len(objs))
+		It("returns Calico v1 MAPs when discovered version is v1", func() {
+			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1)
+			Expect(objs).To(HaveLen(4))
 
-		var mapCount, mapbCount int
-		for _, obj := range objs {
-			switch obj.(type) {
-			case *admissionv1beta1.MutatingAdmissionPolicy:
-				mapCount++
-			case *admissionv1beta1.MutatingAdmissionPolicyBinding:
-				mapbCount++
+			var mapCount, mapbCount int
+			for _, obj := range objs {
+				switch o := obj.(type) {
+				case *admissionregistrationv1.MutatingAdmissionPolicy:
+					mapCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1))
+				case *admissionregistrationv1.MutatingAdmissionPolicyBinding:
+					mapbCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1))
+				}
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
 			}
-			Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue), "Expected MAP object to have label %s=%s", ManagedMAPLabel, ManagedMAPLabelValue)
-		}
-		Expect(mapCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicy, got %d", mapCount)
-		Expect(mapbCount).To(Equal(2), "Expected 2 MutatingAdmissionPolicyBinding, got %d", mapbCount)
-	})
+			Expect(mapCount).To(Equal(2))
+			Expect(mapbCount).To(Equal(2))
+		})
 
-	It("returns empty when v3=false", func() {
-		Expect(GetMutatingAdmissionPolicies(opv1.Calico, false)).To(BeEmpty(), "Expected no admission objects when v3=false")
-		Expect(GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, false)).To(BeEmpty(), "Expected no admission objects when v3=false")
-	})
+		It("returns Calico v1alpha1 MAPs when discovered version is v1alpha1", func() {
+			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1Alpha1)
+			Expect(objs).To(HaveLen(4))
 
-	It("parses MAP names correctly", func() {
-		objs := GetMutatingAdmissionPolicies(opv1.Calico, true)
-		for _, obj := range objs {
-			Expect(obj.GetName()).ToNot(BeEmpty(), "Expected MAP object to have a name")
-		}
+			var mapCount, mapbCount int
+			for _, obj := range objs {
+				switch o := obj.(type) {
+				case *admissionregistrationv1alpha1.MutatingAdmissionPolicy:
+					mapCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1Alpha1))
+				case *admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding:
+					mapbCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1Alpha1))
+				}
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
+			}
+			Expect(mapCount).To(Equal(2))
+			Expect(mapbCount).To(Equal(2))
+		})
+
+		It("returns Enterprise MAPs at the chosen version", func() {
+			objs := GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, true, VersionV1)
+			Expect(objs).To(HaveLen(4))
+
+			var mapCount, mapbCount int
+			for _, obj := range objs {
+				switch obj.(type) {
+				case *admissionregistrationv1.MutatingAdmissionPolicy:
+					mapCount++
+				case *admissionregistrationv1.MutatingAdmissionPolicyBinding:
+					mapbCount++
+				}
+			}
+			Expect(mapCount).To(Equal(2))
+			Expect(mapbCount).To(Equal(2))
+		})
+
+		It("returns empty when v3=false", func() {
+			Expect(GetMutatingAdmissionPolicies(opv1.Calico, false, VersionV1)).To(BeEmpty())
+			Expect(GetMutatingAdmissionPolicies(opv1.TigeraSecureEnterprise, false, VersionV1)).To(BeEmpty())
+		})
+
+		It("returns empty when apiVersion is empty", func() {
+			Expect(GetMutatingAdmissionPolicies(opv1.Calico, true, "")).To(BeEmpty())
+		})
+
+		It("parses MAP names correctly", func() {
+			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1)
+			for _, obj := range objs {
+				Expect(obj.GetName()).ToNot(BeEmpty())
+			}
+		})
 	})
 })

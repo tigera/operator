@@ -25,11 +25,11 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// Inputs is the reconcile state a RenderContextFactory builds a RenderContext
-// from. The installation controller populates it through the With* options. It
-// carries both the values that flow straight into the RenderContext and the
-// side-effecting dependencies (Client, CertificateManager) a factory needs to
-// produce controller-side artifacts.
+// Inputs is the reconcile state a RenderContextBuilder builds a RenderContext
+// from. The installation controller populates it directly. It carries both the
+// values that flow straight into the RenderContext and the side-effecting
+// dependencies (Client, CertificateManager) a builder needs to produce
+// controller-side artifacts.
 type Inputs struct {
 	Ctx                context.Context
 	Client             client.Client
@@ -40,62 +40,19 @@ type Inputs struct {
 	ClusterDomain      string
 }
 
-// RenderContextOption sets a field on the Inputs a factory builds from.
-type RenderContextOption func(*Inputs)
-
-func WithContext(ctx context.Context) RenderContextOption {
-	return func(in *Inputs) { in.Ctx = ctx }
-}
-
-func WithClient(c client.Client) RenderContextOption {
-	return func(in *Inputs) { in.Client = c }
-}
-
-func WithInstallation(i *operatorv1.InstallationSpec) RenderContextOption {
-	return func(in *Inputs) { in.Installation = i }
-}
-
-func WithFelixConfiguration(fc *v3.FelixConfiguration) RenderContextOption {
-	return func(in *Inputs) { in.FelixConfiguration = fc }
-}
-
-func WithCertificateManager(cm certificatemanager.CertificateManager) RenderContextOption {
-	return func(in *Inputs) { in.CertificateManager = cm }
-}
-
-func WithTrustedBundle(tb certificatemanagement.TrustedBundle) RenderContextOption {
-	return func(in *Inputs) { in.TrustedBundle = tb }
-}
-
-func WithClusterDomain(d string) RenderContextOption {
-	return func(in *Inputs) { in.ClusterDomain = d }
-}
-
-// RenderContextFactory builds the RenderContext handed to render modifiers. New
-// applies the options, performs any controller-side work (creating
-// certificates, extending the trusted bundle), and returns the assembled
-// RenderContext - or an error that aborts the reconcile.
+// RenderContextBuilder builds the RenderContext handed to render modifiers. It
+// performs any controller-side work (creating certificates, extending the
+// trusted bundle) and returns the assembled RenderContext - or an error that
+// aborts the reconcile.
 //
 // This is the generic seam controllers use to extend base operator behavior;
 // its first consumer is Calico Enterprise, but nothing here is enterprise
 // specific. The core operator default does no side-effecting work.
-type RenderContextFactory interface {
-	New(opts ...RenderContextOption) (RenderContext, error)
-}
-
-// ApplyInputs returns the Inputs produced by applying opts. Factories use it to
-// collect the option-supplied state before doing their work.
-func ApplyInputs(opts ...RenderContextOption) Inputs {
-	var in Inputs
-	for _, o := range opts {
-		o(&in)
-	}
-	return in
-}
+type RenderContextBuilder func(in Inputs) (RenderContext, error)
 
 // BaseRenderContext maps the generically-gathered inputs onto a RenderContext.
-// The default factory and every registered factory build on it, so the base
-// fields are assembled in exactly one place. A factory layers its side-effect
+// The default builder and every registered builder build on it, so the base
+// fields are assembled in exactly one place. A builder layers its side-effect
 // artifacts (e.g. NodePrometheusTLS) on top of the returned value.
 func BaseRenderContext(in Inputs) RenderContext {
 	return RenderContext{
@@ -106,22 +63,20 @@ func BaseRenderContext(in Inputs) RenderContext {
 	}
 }
 
-// defaultFactory is the core operator's RenderContextFactory. It does no
+// defaultRenderContextBuilder is the core operator's builder. It does no
 // side-effecting work and returns just the base RenderContext.
-type defaultFactory struct{}
-
-func (defaultFactory) New(opts ...RenderContextOption) (RenderContext, error) {
-	return BaseRenderContext(ApplyInputs(opts...)), nil
+func defaultRenderContextBuilder(in Inputs) (RenderContext, error) {
+	return BaseRenderContext(in), nil
 }
 
-var renderContextFactory RenderContextFactory = defaultFactory{}
+var renderContextBuilder RenderContextBuilder = defaultRenderContextBuilder
 
-// RegisterRenderContextFactory installs f as the factory the installation
-// controller uses. Registration replaces any prior factory, so it is safe to
-// call more than once. Without a registered factory the core operator default
+// RegisterRenderContextBuilder installs f as the builder the installation
+// controller uses. Registration replaces any prior builder, so it is safe to
+// call more than once. Without a registered builder the core operator default
 // applies.
-func RegisterRenderContextFactory(f RenderContextFactory) { renderContextFactory = f }
+func RegisterRenderContextBuilder(f RenderContextBuilder) { renderContextBuilder = f }
 
-// GetRenderContextFactory returns the registered factory, or the core operator
-// default when none is registered.
-func GetRenderContextFactory() RenderContextFactory { return renderContextFactory }
+// BuildRenderContext builds the RenderContext from in using the registered
+// builder, or the core operator default when none is registered.
+func BuildRenderContext(in Inputs) (RenderContext, error) { return renderContextBuilder(in) }

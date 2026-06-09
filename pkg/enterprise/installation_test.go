@@ -32,34 +32,34 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("installation render context factory", func() {
+var _ = Describe("installation render context builder", func() {
 	BeforeEach(func() { enterprise.Register() })
 	AfterEach(func() { extensions.ResetForTest() })
 
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
-		opts := newOpts(operatorv1.CalicoEnterprise)
-		opts = append(opts, extensions.WithFelixConfiguration(&v3.FelixConfiguration{
+		in := newInputs(operatorv1.CalicoEnterprise)
+		in.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
-		}))
-		_, err := extensions.GetRenderContextFactory().New(opts...)
+		}
+		_, err := extensions.BuildRenderContext(in)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		rc, err := extensions.GetRenderContextFactory().New(newOpts(operatorv1.CalicoEnterprise)...)
+		rc, err := extensions.BuildRenderContext(newInputs(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).NotTo(BeNil())
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		rc, err := extensions.GetRenderContextFactory().New(newOpts(operatorv1.Calico)...)
+		rc, err := extensions.BuildRenderContext(newInputs(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})
 })
 
-func newOpts(variant operatorv1.ProductVariant) []extensions.RenderContextOption {
+func newInputs(variant operatorv1.ProductVariant) extensions.Inputs {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -68,13 +68,13 @@ func newOpts(variant operatorv1.ProductVariant) []extensions.RenderContextOption
 	Expect(err).NotTo(HaveOccurred())
 	trustedBundle := certManager.CreateTrustedBundle()
 
-	return []extensions.RenderContextOption{
-		extensions.WithContext(context.Background()),
-		extensions.WithClient(c),
-		extensions.WithInstallation(&operatorv1.InstallationSpec{Variant: variant}),
-		extensions.WithFelixConfiguration(&v3.FelixConfiguration{}),
-		extensions.WithCertificateManager(certManager),
-		extensions.WithTrustedBundle(trustedBundle),
-		extensions.WithClusterDomain("cluster.local"),
+	return extensions.Inputs{
+		Ctx:                context.Background(),
+		Client:             c,
+		Installation:       &operatorv1.InstallationSpec{Variant: variant},
+		FelixConfiguration: &v3.FelixConfiguration{},
+		CertificateManager: certManager,
+		TrustedBundle:      trustedBundle,
+		ClusterDomain:      "cluster.local",
 	}
 }

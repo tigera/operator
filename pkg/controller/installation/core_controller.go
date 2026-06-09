@@ -1214,19 +1214,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Build the render context handed to registered modifiers. The core operator
-	// factory returns just the base context; an extension's factory additionally
+	// builder returns just the base context; an extension's builder additionally
 	// does controller-side work for its variant - validating config and creating
 	// the node-prometheus certificate, adding it (and the prometheus/esgw certs)
 	// to the trusted bundle - and may abort the reconcile by returning an error.
-	modCtx, err := extensions.GetRenderContextFactory().New(
-		extensions.WithContext(ctx),
-		extensions.WithClient(r.client),
-		extensions.WithInstallation(&instance.Spec),
-		extensions.WithFelixConfiguration(felixConfiguration),
-		extensions.WithCertificateManager(certificateManager),
-		extensions.WithTrustedBundle(typhaNodeTLS.TrustedBundle),
-		extensions.WithClusterDomain(r.clusterDomain),
-	)
+	modCtx, err := extensions.BuildRenderContext(extensions.Inputs{
+		Ctx:                ctx,
+		Client:             r.client,
+		Installation:       &instance.Spec,
+		FelixConfiguration: felixConfiguration,
+		CertificateManager: certificateManager,
+		TrustedBundle:      typhaNodeTLS.TrustedBundle,
+		ClusterDomain:      r.clusterDomain,
+	})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err

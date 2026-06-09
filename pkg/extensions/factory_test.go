@@ -24,50 +24,48 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("render context factory", func() {
+var _ = Describe("render context builder", func() {
 	AfterEach(func() { extensions.ResetForTest() })
 
-	It("returns the base render context from the default factory", func() {
+	It("returns the base render context from the default builder", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, err := extensions.GetRenderContextFactory().New(
-			extensions.WithInstallation(install),
-			extensions.WithClusterDomain("cluster.local"),
-		)
+		rc, err := extensions.BuildRenderContext(extensions.Inputs{
+			Installation:  install,
+			ClusterDomain: "cluster.local",
+		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.Installation).To(BeIdenticalTo(install))
 		Expect(rc.ClusterDomain).To(Equal("cluster.local"))
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})
 
-	It("uses a registered factory in place of the default", func() {
-		extensions.RegisterRenderContextFactory(&fakeFactory{})
-		rc, err := extensions.GetRenderContextFactory().New()
+	It("uses a registered builder in place of the default", func() {
+		extensions.RegisterRenderContextBuilder(fakeBuilder(nil))
+		rc, err := extensions.BuildRenderContext(extensions.Inputs{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
-	It("surfaces the factory error", func() {
-		extensions.RegisterRenderContextFactory(&fakeFactory{err: errors.New("boom")})
-		_, err := extensions.GetRenderContextFactory().New()
+	It("surfaces the builder error", func() {
+		extensions.RegisterRenderContextBuilder(fakeBuilder(errors.New("boom")))
+		_, err := extensions.BuildRenderContext(extensions.Inputs{})
 		Expect(err).To(MatchError("boom"))
 	})
 
-	It("restores the default factory on reset", func() {
-		extensions.RegisterRenderContextFactory(&fakeFactory{})
+	It("restores the default builder on reset", func() {
+		extensions.RegisterRenderContextBuilder(fakeBuilder(nil))
 		extensions.ResetForTest()
-		rc, err := extensions.GetRenderContextFactory().New(extensions.WithClusterDomain("real"))
+		rc, err := extensions.BuildRenderContext(extensions.Inputs{ClusterDomain: "real"})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})
 })
 
-type fakeFactory struct {
-	err error
-}
-
-func (f *fakeFactory) New(_ ...extensions.RenderContextOption) (extensions.RenderContext, error) {
-	if f.err != nil {
-		return extensions.RenderContext{}, f.err
+func fakeBuilder(err error) extensions.RenderContextBuilder {
+	return func(_ extensions.Inputs) (extensions.RenderContext, error) {
+		if err != nil {
+			return extensions.RenderContext{}, err
+		}
+		return extensions.RenderContext{ClusterDomain: "from-fake"}, nil
 	}
-	return extensions.RenderContext{ClusterDomain: "from-fake"}, nil
 }

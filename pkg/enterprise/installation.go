@@ -26,18 +26,15 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-// installationFactory is the Calico Enterprise RenderContextFactory. It builds
+func registerInstallation() {
+	extensions.RegisterRenderContextBuilder(buildRenderContext)
+}
+
+// buildRenderContext is the Calico Enterprise RenderContextBuilder. It builds
 // the base render context and then does the controller-side work the modifiers
 // can't: validating config and creating/fetching the certificates that feed the
 // trusted bundle.
-type installationFactory struct{}
-
-func registerInstallation() {
-	extensions.RegisterRenderContextFactory(&installationFactory{})
-}
-
-func (f *installationFactory) New(opts ...extensions.RenderContextOption) (extensions.RenderContext, error) {
-	in := extensions.ApplyInputs(opts...)
+func buildRenderContext(in extensions.Inputs) (extensions.RenderContext, error) {
 	rc := extensions.BaseRenderContext(in)
 	if in.Installation == nil || !in.Installation.Variant.IsEnterprise() {
 		return rc, nil

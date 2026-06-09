@@ -57,9 +57,9 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 }
 
 // ResetForTest clears every registry: modifiers, image overrides, and the
-// render context factory. Test-only.
+// render context builder. Test-only.
 func ResetForTest() {
 	modifiers = map[string]Modifier{}
-	renderContextFactory = defaultFactory{}
+	renderContextBuilder = defaultRenderContextBuilder
 	imageoverride.ResetForTest()
 }

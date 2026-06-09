@@ -658,6 +658,10 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
 		instance.Spec.CNI.BinDir = &defaultCNIBinDir
 	}
+	if instance.Spec.CNI.InstallMode == nil {
+		mode := operatorv1.CNIInstallModeAll
+		instance.Spec.CNI.InstallMode = &mode
+	}
 
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.

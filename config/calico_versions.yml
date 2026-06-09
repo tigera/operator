@@ -13,6 +13,8 @@ components:
     version: master
   cni-windows:
     version: master
+  third-party-cni-plugins:
+    version: master
   kube-controllers:
     version: master
   goldmane:

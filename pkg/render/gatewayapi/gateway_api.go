@@ -187,12 +187,6 @@ func toMap(v any) (map[string]any, error) {
 	return out, nil
 }
 
-// isReservedOperatorNamespace reports whether core Installation already owns
-// tigera-operator-secrets / tigera-pull-secret in ns (deleting ours would wipe them).
-func isReservedOperatorNamespace(ns string) bool {
-	return ns == common.CalicoNamespace || ns == common.OperatorNamespace()
-}
-
 // Chart output is deterministic for our single render, so it's cached by
 // sync.Once. Callers must deep-copy any object they intend to mutate.
 var (

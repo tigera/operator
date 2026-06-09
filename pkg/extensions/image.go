@@ -20,15 +20,15 @@ import (
 	"github.com/tigera/operator/pkg/imageoverride"
 )
 
-// ImageOverride returns the component image to use for an installation, and
-// false to decline (leaving the default in place). Implementations self-gate
-// on in.Variant.
+// ImageOverride returns the component image to use for an installation. An
+// override is registered per variant, so it only runs for its own variant and
+// need not re-check it.
 type ImageOverride = imageoverride.Override
 
-// OverrideImage registers an image override under key. The key is the render
-// component's image identifier (e.g. "node").
-func OverrideImage(key string, fn ImageOverride) {
-	imageoverride.Register(key, fn)
+// OverrideImage registers an image override under key for the given variant.
+// The key is the render component's image identifier (e.g. "node").
+func OverrideImage(variant operatorv1.ProductVariant, key string, fn ImageOverride) {
+	imageoverride.Register(variant, key, fn)
 }
 
 // ResolveImage returns the override registered for key if it applies to in,

@@ -47,13 +47,14 @@ type Inputs struct {
 //
 // This is the generic seam controllers use to extend base operator behavior;
 // its first consumer is Calico Enterprise, but nothing here is enterprise
-// specific. The core operator default does no side-effecting work.
+// specific. A builder is registered per variant, so it only runs for its own
+// variant and need not re-check it.
 type RenderContextBuilder func(in Inputs) (RenderContext, error)
 
 // BaseRenderContext maps the generically-gathered inputs onto a RenderContext.
-// The default builder and every registered builder build on it, so the base
-// fields are assembled in exactly one place. A builder layers its side-effect
-// artifacts (e.g. NodePrometheusTLS) on top of the returned value.
+// Every registered builder builds on it, so the base fields are assembled in
+// exactly one place. A builder layers its side-effect artifacts (e.g.
+// NodePrometheusTLS) on top of the returned value.
 func BaseRenderContext(in Inputs) RenderContext {
 	return RenderContext{
 		Installation:       in.Installation,
@@ -63,20 +64,23 @@ func BaseRenderContext(in Inputs) RenderContext {
 	}
 }
 
-// defaultRenderContextBuilder is the core operator's builder. It does no
-// side-effecting work and returns just the base RenderContext.
-func defaultRenderContextBuilder(in Inputs) (RenderContext, error) {
-	return BaseRenderContext(in), nil
+var renderContextBuilders = map[operatorv1.ProductVariant]RenderContextBuilder{}
+
+// RegisterRenderContextBuilder installs f as the builder for the given variant.
+// Registration replaces any prior builder, so it is safe to call more than
+// once. Variants without a registered builder get the base render context.
+func RegisterRenderContextBuilder(variant operatorv1.ProductVariant, f RenderContextBuilder) {
+	renderContextBuilders[variant] = f
 }
 
-var renderContextBuilder RenderContextBuilder = defaultRenderContextBuilder
-
-// RegisterRenderContextBuilder installs f as the builder the installation
-// controller uses. Registration replaces any prior builder, so it is safe to
-// call more than once. Without a registered builder the core operator default
-// applies.
-func RegisterRenderContextBuilder(f RenderContextBuilder) { renderContextBuilder = f }
-
-// BuildRenderContext builds the RenderContext from in using the registered
-// builder, or the core operator default when none is registered.
-func BuildRenderContext(in Inputs) (RenderContext, error) { return renderContextBuilder(in) }
+// BuildRenderContext builds the RenderContext from in using the builder
+// registered for the installation variant, or the base render context when the
+// variant has no registered builder.
+func BuildRenderContext(in Inputs) (RenderContext, error) {
+	if in.Installation != nil {
+		if f, ok := renderContextBuilders[in.Installation.Variant]; ok {
+			return f(in)
+		}
+	}
+	return BaseRenderContext(in), nil
+}

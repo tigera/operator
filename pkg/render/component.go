@@ -41,18 +41,16 @@ type Component interface {
 }
 
 // Extensible is implemented by components that expose extension points. The
-// componentHandler uses Name() to look up registered modifiers. Components
-// without extensions need not implement it.
-//
-// Note this interface is structural: any component that grows a Name() string
-// method for an unrelated reason becomes modifier-eligible. There are no name
-// collisions today, but keep it in mind when adding a Name() method.
+// componentHandler uses ModifierKey() to look up registered modifiers.
+// Components without extensions need not implement it. The method name is
+// deliberately specific (not a generic Name()) so an unrelated method can't
+// make a component modifier-eligible by accident.
 type Extensible interface {
-	Name() string
+	ModifierKey() string
 }
 
 // Component names used as keys into the extension modifier registry. Keep these
-// in sync with the Name() methods that return them.
+// in sync with the ModifierKey() methods that return them.
 const (
 	ComponentNameTypha = "typha"
 	ComponentNameNode  = "node"

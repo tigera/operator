@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
@@ -27,7 +28,7 @@ import (
 )
 
 func registerInstallation() {
-	extensions.RegisterRenderContextBuilder(buildRenderContext)
+	extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, buildRenderContext)
 }
 
 // buildRenderContext is the Calico Enterprise RenderContextBuilder. It builds
@@ -36,9 +37,6 @@ func registerInstallation() {
 // trusted bundle.
 func buildRenderContext(in extensions.Inputs) (extensions.RenderContext, error) {
 	rc := extensions.BaseRenderContext(in)
-	if in.Installation == nil || !in.Installation.Variant.IsEnterprise() {
-		return rc, nil
-	}
 
 	// Reject the unsupported zero reporter port. The port value itself is derived
 	// in the node modifier; only this validation lives here.

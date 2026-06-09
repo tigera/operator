@@ -27,7 +27,7 @@ import (
 var _ = Describe("render context builder", func() {
 	AfterEach(func() { extensions.ResetForTest() })
 
-	It("returns the base render context from the default builder", func() {
+	It("returns the base render context when the variant has no builder", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
 		rc, err := extensions.BuildRenderContext(extensions.Inputs{
 			Installation:  install,
@@ -39,27 +39,43 @@ var _ = Describe("render context builder", func() {
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})
 
-	It("uses a registered builder in place of the default", func() {
-		extensions.RegisterRenderContextBuilder(fakeBuilder(nil))
-		rc, err := extensions.BuildRenderContext(extensions.Inputs{})
+	It("uses the builder registered for the installation variant", func() {
+		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(nil))
+		rc, err := extensions.BuildRenderContext(enterpriseInputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
+	It("ignores a builder registered for a different variant", func() {
+		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(nil))
+		rc, err := extensions.BuildRenderContext(extensions.Inputs{
+			Installation:  &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
+			ClusterDomain: "real",
+		})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(rc.ClusterDomain).To(Equal("real"))
+	})
+
 	It("surfaces the builder error", func() {
-		extensions.RegisterRenderContextBuilder(fakeBuilder(errors.New("boom")))
-		_, err := extensions.BuildRenderContext(extensions.Inputs{})
+		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(errors.New("boom")))
+		_, err := extensions.BuildRenderContext(enterpriseInputs())
 		Expect(err).To(MatchError("boom"))
 	})
 
-	It("restores the default builder on reset", func() {
-		extensions.RegisterRenderContextBuilder(fakeBuilder(nil))
+	It("restores the base builder on reset", func() {
+		extensions.RegisterRenderContextBuilder(operatorv1.CalicoEnterprise, fakeBuilder(nil))
 		extensions.ResetForTest()
-		rc, err := extensions.BuildRenderContext(extensions.Inputs{ClusterDomain: "real"})
+		in := enterpriseInputs()
+		in.ClusterDomain = "real"
+		rc, err := extensions.BuildRenderContext(in)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})
 })
+
+func enterpriseInputs() extensions.Inputs {
+	return extensions.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+}
 
 func fakeBuilder(err error) extensions.RenderContextBuilder {
 	return func(_ extensions.Inputs) (extensions.RenderContext, error) {

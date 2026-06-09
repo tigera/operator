@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 const (
@@ -46,13 +47,10 @@ const (
 )
 
 func registerNode() {
-	extensions.OverrideImage(render.ComponentNameNode, func(in *operatorv1.InstallationSpec) (components.Component, bool) {
-		if !in.Variant.IsEnterprise() {
-			return components.Component{}, false
-		}
-		return components.ComponentTigeraNode, true
+	extensions.OverrideImage(operatorv1.CalicoEnterprise, render.ComponentNameNode, func(in *operatorv1.InstallationSpec) components.Component {
+		return components.ComponentTigeraNode
 	})
-	extensions.Modify(render.ComponentNameNode, modifyNode)
+	extensions.Modify(operatorv1.CalicoEnterprise, render.ComponentNameNode, modifyNode)
 }
 
 // modifyNode layers Calico Enterprise behavior onto the rendered calico/node
@@ -60,10 +58,6 @@ func registerNode() {
 // daemonset configuration (flow/DNS log env, prometheus reporter, BGP metrics
 // readiness check, multi-interface mode, and the calico log volume).
 func modifyNode(ctx extensions.RenderContext, objs []client.Object) []client.Object {
-	if ctx.Installation == nil || !ctx.Installation.Variant.IsEnterprise() {
-		return objs
-	}
-
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName); ok {
 		role.Rules = append(role.Rules, nodeEnterpriseRules()...)
 	}
@@ -115,9 +109,10 @@ func nodeEnterpriseRules() []rbacv1.PolicyRule {
 }
 
 // modifyNodeDaemonSet applies the Enterprise-specific daemonset changes that the
-// base render leaves out: the Enterprise felix env, multi-interface mode, and the
-// BGP metrics readiness check. The calico log volume is mounted by the base
-// render for both variants, so it is not handled here.
+// base render leaves out: the Enterprise felix env, multi-interface mode, the
+// BGP metrics readiness check, and the prometheus reporter keypair mount. The
+// calico log volume is mounted by the base render for both variants, so it is
+// not handled here.
 func modifyNodeDaemonSet(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
 	spec := &ds.Spec.Template.Spec
 
@@ -143,6 +138,41 @@ func modifyNodeDaemonSet(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
 			c.ReadinessProbe.Exec.Command = append(c.ReadinessProbe.Exec.Command, "--bgp-metrics-ready")
 		}
 	}
+
+	mountNodePrometheusTLS(ctx, ds)
+}
+
+// mountNodePrometheusTLS mounts the node prometheus reporter keypair onto the
+// daemonset: the volume, the calico-node volume mount, the cert-management init
+// container (when in use), and the pod hash annotation that rolls the pods on
+// cert rotation. The keypair has cluster side effects, so the enterprise render
+// context builder creates it and hands it in via ctx rather than the modifier
+// building it. In core (calico) the keypair is never created, so the base node
+// render carries no prometheus mount at all.
+func mountNodePrometheusTLS(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
+	if ctx.NodePrometheusTLS == nil {
+		return
+	}
+	tls := ctx.NodePrometheusTLS
+	spec := &ds.Spec.Template.Spec
+
+	spec.Volumes = append(spec.Volumes, tls.Volume())
+
+	for i := range spec.Containers {
+		c := &spec.Containers[i]
+		if c.Name != render.CalicoNodeObjectName {
+			continue
+		}
+		c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeLinux))
+		if tls.UseCertificateManagement() {
+			spec.InitContainers = append(spec.InitContainers, tls.InitContainer(common.CalicoNamespace, c.SecurityContext))
+		}
+	}
+
+	if ds.Spec.Template.Annotations == nil {
+		ds.Spec.Template.Annotations = map[string]string{}
+	}
+	ds.Spec.Template.Annotations[tls.HashAnnotationKey()] = tls.HashAnnotationValue()
 }
 
 // nodeEnterpriseEnv is the Enterprise felix configuration added to the

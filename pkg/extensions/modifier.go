@@ -17,29 +17,40 @@ package extensions
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/imageoverride"
 )
 
 // Modifier post-processes the objects a render component produced. It may mutate
 // matched objects and/or append additional objects, and must return the
-// (possibly extended) slice. Implementations self-gate on ctx.Installation.Variant.
+// (possibly extended) slice. A modifier is registered per variant, so it only
+// runs for its own variant and need not re-check it.
 type Modifier func(ctx RenderContext, objs []client.Object) []client.Object
 
-var modifiers = map[string]Modifier{}
-
-// Modify registers fn as the modifier for the named component. A component has
-// at most one modifier; the modifier handles all of that component's
-// extension-specific mutations. Registration replaces any prior modifier, so it
-// is idempotent and safe to call more than once - matching the image-override
-// registry rather than stacking duplicate work.
-func Modify(component string, fn Modifier) {
-	modifiers[component] = fn
+type modifierKey struct {
+	variant   operatorv1.ProductVariant
+	component string
 }
 
-// ApplyModifiers runs the modifier registered for the named component over objs,
-// returning objs unchanged when none is registered.
+var modifiers = map[modifierKey]Modifier{}
+
+// Modify registers fn as the modifier for the named component under the given
+// variant. A (variant, component) pair has at most one modifier; it handles all
+// of that component's extension-specific mutations for that variant.
+// Registration replaces any prior modifier, so it is idempotent and safe to
+// call more than once.
+func Modify(variant operatorv1.ProductVariant, component string, fn Modifier) {
+	modifiers[modifierKey{variant, component}] = fn
+}
+
+// ApplyModifiers runs the modifier registered for the named component and the
+// installation's variant over objs, returning objs unchanged when none is
+// registered (or when no installation is set).
 func ApplyModifiers(component string, ctx RenderContext, objs []client.Object) []client.Object {
-	if fn, ok := modifiers[component]; ok {
+	if ctx.Installation == nil {
+		return objs
+	}
+	if fn, ok := modifiers[modifierKey{ctx.Installation.Variant, component}]; ok {
 		objs = fn(ctx, objs)
 	}
 	return objs
@@ -59,7 +70,7 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 // ResetForTest clears every registry: modifiers, image overrides, and the
 // render context builder. Test-only.
 func ResetForTest() {
-	modifiers = map[string]Modifier{}
-	renderContextBuilder = defaultRenderContextBuilder
+	modifiers = map[modifierKey]Modifier{}
+	renderContextBuilders = map[operatorv1.ProductVariant]RenderContextBuilder{}
 	imageoverride.ResetForTest()
 }

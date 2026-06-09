@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
+	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
 
 // These tests run the real node/typha render output through the registered
@@ -99,13 +100,12 @@ var _ = Describe("node enterprise modifier integration", func() {
 	// modifier, exactly as the componentHandler does.
 	renderNodeObjects := func() []client.Object {
 		cfg := &render.NodeConfiguration{
-			K8sServiceEp:        k8sapi.ServiceEndpoint{},
-			Installation:        instance,
-			TLS:                 typhaNodeTLS,
-			ClusterDomain:       dns.DefaultClusterDomain,
-			FelixHealthPort:     9099,
-			IPPools:             instance.CalicoNetwork.IPPools,
-			PrometheusServerTLS: renderCtx.NodePrometheusTLS,
+			K8sServiceEp:    k8sapi.ServiceEndpoint{},
+			Installation:    instance,
+			TLS:             typhaNodeTLS,
+			ClusterDomain:   dns.DefaultClusterDomain,
+			FelixHealthPort: 9099,
+			IPPools:         instance.CalicoNetwork.IPPools,
 		}
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -145,8 +145,11 @@ var _ = Describe("node enterprise modifier integration", func() {
 			corev1.EnvVar{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 		))
 		// The reporter cert env is wired from the NodePrometheusTLS keypair the
-		// factory creates.
+		// builder creates, and the modifier mounts that keypair onto the daemonset.
 		Expect(c.Env).To(ContainElement(HaveField("Name", "FELIX_PROMETHEUSREPORTERCERTFILE")))
+		Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(renderCtx.NodePrometheusTLS.Volume()))
+		Expect(c.VolumeMounts).To(ContainElement(renderCtx.NodePrometheusTLS.VolumeMount(rmeta.OSTypeLinux)))
+		Expect(ds.Spec.Template.Annotations).To(HaveKey(renderCtx.NodePrometheusTLS.HashAnnotationKey()))
 
 		// BGP is enabled, so the bird readiness check is present and the modifier
 		// adds the BGP metrics check.

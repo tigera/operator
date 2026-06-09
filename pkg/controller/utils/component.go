@@ -468,8 +468,8 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
-	if named, ok := component.(render.Extensible); ok {
-		objsToCreate = extensions.ApplyModifiers(named.Name(), c.modCtx, objsToCreate)
+	if ext, ok := component.(render.Extensible); ok {
+		objsToCreate = extensions.ApplyModifiers(ext.ModifierKey(), c.modCtx, objsToCreate)
 	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it

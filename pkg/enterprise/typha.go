@@ -20,19 +20,16 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
 func registerTypha() {
-	extensions.Modify(render.ComponentNameTypha, modifyTypha)
+	extensions.Modify(operatorv1.CalicoEnterprise, render.ComponentNameTypha, modifyTypha)
 }
 
 func modifyTypha(ctx extensions.RenderContext, objs []client.Object) []client.Object {
-	if ctx.Installation == nil || !ctx.Installation.Variant.IsEnterprise() {
-		return objs
-	}
-
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha"); ok {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},

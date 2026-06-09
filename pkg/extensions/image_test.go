@@ -28,19 +28,20 @@ var _ = Describe("image overrides", func() {
 		extensions.ResetForTest()
 	})
 
-	It("uses the override when one matches", func() {
-		extensions.OverrideImage("node", func(in *operatorv1.InstallationSpec) (components.Component, bool) {
-			if !in.Variant.IsEnterprise() {
-				return components.Component{}, false
-			}
-			return components.ComponentTigeraNode, true
+	It("uses the override registered for the installation variant", func() {
+		extensions.OverrideImage(operatorv1.CalicoEnterprise, "node", func(in *operatorv1.InstallationSpec) components.Component {
+			return components.ComponentTigeraNode
 		})
 
 		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 
-	It("falls back to the default when no override matches", func() {
+	It("falls back to the default for a variant with no override", func() {
+		extensions.OverrideImage(operatorv1.CalicoEnterprise, "node", func(in *operatorv1.InstallationSpec) components.Component {
+			return components.ComponentTigeraNode
+		})
+
 		calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
 		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
 	})

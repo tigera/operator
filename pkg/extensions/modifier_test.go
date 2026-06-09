@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
@@ -29,8 +30,10 @@ var _ = Describe("modifier registry", func() {
 		extensions.ResetForTest()
 	})
 
-	It("applies a registered modifier to the matching component", func() {
-		extensions.Modify("test", func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+	entCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+
+	It("applies a registered modifier to the matching component and variant", func() {
+		extensions.Modify(operatorv1.CalicoEnterprise, "test", func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
 			cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
 			Expect(ok).To(BeTrue())
 			cm.Data = map[string]string{"k": "v"}
@@ -38,7 +41,7 @@ var _ = Describe("modifier registry", func() {
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out := extensions.ApplyModifiers("test", extensions.RenderContext{}, in)
+		out := extensions.ApplyModifiers("test", entCtx, in)
 
 		Expect(out).To(HaveLen(2))
 		cm := out[0].(*corev1.ConfigMap)
@@ -48,20 +51,35 @@ var _ = Describe("modifier registry", func() {
 
 	It("returns objects unchanged when no modifier is registered", func() {
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out := extensions.ApplyModifiers("unregistered", extensions.RenderContext{}, in)
+		out := extensions.ApplyModifiers("unregistered", entCtx, in)
 		Expect(out).To(Equal(in))
 	})
 
-	It("replaces rather than stacks when a component is registered twice", func() {
+	It("does not apply a modifier registered for a different variant", func() {
+		extensions.Modify(operatorv1.CalicoEnterprise, "test", func(_ extensions.RenderContext, objs []client.Object) []client.Object {
+			return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+		})
+
+		calicoCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
+		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
+		Expect(extensions.ApplyModifiers("test", calicoCtx, in)).To(Equal(in))
+	})
+
+	It("returns objects unchanged when no installation is set", func() {
+		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
+		Expect(extensions.ApplyModifiers("test", extensions.RenderContext{}, in)).To(Equal(in))
+	})
+
+	It("replaces rather than stacks when a (variant, component) is registered twice", func() {
 		add := func(name string) extensions.Modifier {
 			return func(_ extensions.RenderContext, objs []client.Object) []client.Object {
 				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}})
 			}
 		}
-		extensions.Modify("test", add("first"))
-		extensions.Modify("test", add("second"))
+		extensions.Modify(operatorv1.CalicoEnterprise, "test", add("first"))
+		extensions.Modify(operatorv1.CalicoEnterprise, "test", add("second"))
 
-		out := extensions.ApplyModifiers("test", extensions.RenderContext{}, nil)
+		out := extensions.ApplyModifiers("test", entCtx, nil)
 		Expect(out).To(HaveLen(1))
 		Expect(out[0].GetName()).To(Equal("second"))
 	})

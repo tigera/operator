@@ -22,30 +22,35 @@ import (
 	"github.com/tigera/operator/pkg/components"
 )
 
-// Override selects the component image to use for an installation, returning
-// false to decline (leaving the default in place).
-type Override func(in *operatorv1.InstallationSpec) (components.Component, bool)
+// Override selects the component image to use for an installation.
+type Override func(in *operatorv1.InstallationSpec) components.Component
 
-var registry = map[string]Override{}
-
-// Register stores fn under key. The key is the render component's image
-// identifier (e.g. "node").
-func Register(key string, fn Override) {
-	registry[key] = fn
+type overrideKey struct {
+	variant operatorv1.ProductVariant
+	key     string
 }
 
-// Resolve returns the override registered for key if it applies to in,
-// otherwise def.
+var registry = map[overrideKey]Override{}
+
+// Register stores fn under key for the given variant. The key is the render
+// component's image identifier (e.g. "node").
+func Register(variant operatorv1.ProductVariant, key string, fn Override) {
+	registry[overrideKey{variant, key}] = fn
+}
+
+// Resolve returns the override registered for key under the installation's
+// variant, otherwise def.
 func Resolve(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
-	if fn, ok := registry[key]; ok {
-		if c, override := fn(in); override {
-			return c
-		}
+	if in == nil {
+		return def
+	}
+	if fn, ok := registry[overrideKey{in.Variant, key}]; ok {
+		return fn(in)
 	}
 	return def
 }
 
 // ResetForTest clears the registry. Test-only.
 func ResetForTest() {
-	registry = map[string]Override{}
+	registry = map[overrideKey]Override{}
 }

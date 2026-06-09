@@ -127,8 +127,6 @@ type NodeConfiguration struct {
 	// For details on why this is needed see 'Node and Installation finalizer' in the core_controller.
 	CanRemoveCNIFinalizer bool
 
-	PrometheusServerTLS certificatemanagement.KeyPairInterface
-
 	// BGPLayouts is returned by the rendering code after modifying its namespace
 	// so that it can be deployed into the cluster.
 	// TODO: The controller should pass the contents, the renderer should build its own
@@ -193,7 +191,7 @@ func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *nodeComponent) Name() string {
+func (c *nodeComponent) ModifierKey() string {
 	return ComponentNameNode
 }
 
@@ -897,16 +895,9 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	if len(c.cfg.BirdTemplates) != 0 {
 		annotations[birdTemplateHashAnnotation] = rmeta.AnnotationHash(c.cfg.BirdTemplates)
 	}
-	if c.cfg.PrometheusServerTLS != nil {
-		annotations[c.cfg.PrometheusServerTLS.HashAnnotationKey()] = c.cfg.PrometheusServerTLS.HashAnnotationValue()
-	}
 
 	if c.cfg.TLS.NodeSecret.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.TLS.NodeSecret.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
-	}
-
-	if c.cfg.PrometheusServerTLS != nil && c.cfg.PrometheusServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.PrometheusServerTLS.InitContainer(common.CalicoNamespace, nodeContainer.SecurityContext))
 	}
 
 	if cniCfgMap != nil {
@@ -1114,10 +1105,6 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 				},
 			})
 	}
-	if c.cfg.PrometheusServerTLS != nil {
-		volumes = append(volumes, c.cfg.PrometheusServerTLS.Volume())
-	}
-
 	return volumes
 }
 
@@ -1357,9 +1344,6 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 				MountPath: BGPLayoutPath,
 				SubPath:   BGPLayoutConfigMapKey,
 			})
-	}
-	if c.cfg.PrometheusServerTLS != nil {
-		nodeVolumeMounts = append(nodeVolumeMounts, c.cfg.PrometheusServerTLS.VolumeMount(c.SupportedOSType()))
 	}
 	return nodeVolumeMounts
 }

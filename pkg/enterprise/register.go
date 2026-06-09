@@ -21,5 +21,6 @@ func Register() {
 	registerTypha()
 	registerNode()
 	registerWindows()
+	registerGuardian()
 	registerInstallation()
 }

@@ -221,7 +221,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			d.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying LogStorage", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		d.status.SetDegraded(operatorv1.ResourceValidationError, "LogStorage Dashboards are not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, reqLogger)
+		d.status.SetDegraded(operatorv1.ResourceValidationError, utils.HeadlessUnsupportedMessage("LogStorage Dashboards"), nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 

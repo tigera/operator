@@ -300,8 +300,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// In a headless installation there is no Calico API server, so the calico-system Tier
 	// (projectcalico.org/v3) is never served and Intrusion Detection cannot be installed. Report this
 	// clearly instead of blocking forever on the Tier watch.
-	if utils.IsHeadlessInstallation(ctx, r.client) {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Intrusion Detection is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, reqLogger)
+	if utils.RejectIfHeadless(ctx, r.client, r.status, "Intrusion Detection", reqLogger) {
 		return reconcile.Result{}, nil
 	}
 

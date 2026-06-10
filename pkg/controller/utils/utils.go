@@ -57,6 +57,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
@@ -636,6 +637,30 @@ func IsHeadlessInstallation(ctx context.Context, c client.Client) bool {
 		return false
 	}
 	return !spec.LinuxDataplaneEnabled()
+}
+
+// HeadlessUnsupportedMessage is the degraded message reported for a component that cannot
+// be installed in a headless installation. Use RejectIfHeadless where possible; this is for
+// callers that need the message itself (e.g. to also set per-resource status conditions).
+func HeadlessUnsupportedMessage(component string) string {
+	return component + " is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)"
+}
+
+// RejectIfHeadless reports whether the default Installation is headless (see
+// IsHeadlessInstallation), and if so marks the named component degraded with a clear,
+// consistent message. The caller must stand down by returning a nil result from its
+// Reconcile when this returns true.
+//
+// Call it as early as possible in Reconcile — in particular before any read or wait on a
+// projectcalico.org/v3 resource (Tier, LicenseKey, ClusterInformation): those never exist in
+// a headless cluster, so a v3 read placed earlier would fail or retry forever and this
+// message would never be reported.
+func RejectIfHeadless(ctx context.Context, c client.Client, st status.StatusManager, component string, log logr.Logger) bool {
+	if !IsHeadlessInstallation(ctx, c) {
+		return false
+	}
+	st.SetDegraded(operatorv1.ResourceValidationError, HeadlessUnsupportedMessage(component), nil, log)
+	return true
 }
 
 // GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.

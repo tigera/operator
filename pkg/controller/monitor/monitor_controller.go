@@ -16,11 +16,10 @@ package monitor
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
-	"reflect"
 	"time"
 
+	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -48,7 +47,6 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -398,9 +396,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	alertmanagerConfigSecret, createInOperatorNamespace, err := r.readAlertmanagerConfigSecret(ctx, instance.Spec.UIAlertsEnabled())
+	alertmanagerConfig, err := r.readAlertmanagerConfig(ctx, instance.Spec.UIAlertsEnabled())
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration secret", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -435,7 +433,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		Monitor:                       instance.Spec,
 		Installation:                  installationSpec,
 		PullSecrets:                   pullSecrets,
-		AlertmanagerConfigSecret:      alertmanagerConfigSecret,
+		AlertmanagerConfig:            alertmanagerConfig,
 		KeyValidatorConfig:            keyValidatorConfig,
 		ServerTLSSecret:               serverTLSSecret,
 		ClientTLSSecret:               clientTLSSecret,
@@ -464,10 +462,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			},
 			TrustedBundle: trustedBundle,
 		}),
-	}
-
-	if createInOperatorNamespace {
-		components = append(components, render.NewCreationPassthrough(alertmanagerConfigSecret))
 	}
 
 	// v3 NetworkPolicy will fail to reconcile if the Tier is not created, which can only occur once a License is created.
@@ -577,97 +571,29 @@ func PrometheusTLSServerDNSNames(clusterDomain string) []string {
 	return dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, clusterDomain)
 }
 
-//go:embed alertmanager-config.yaml
-var alertmanagerConfig string
-
-//go:embed alertmanager-config-disabled.yaml
-var alertmanagerConfigDisabled string
-
-// readAlertmanagerConfigSecret attempts to retrieve Alertmanager configuration secret from either the Tigera Operator
-// namespace or the Tigera Prometheus namespace. If it doesn't exist in either of the namespace, a new default configuration
-// secret will be created.
-func (r *ReconcileMonitor) readAlertmanagerConfigSecret(ctx context.Context, uiAlertsEnabled bool) (*corev1.Secret, bool, error) {
-	// Previous to this change, a customer was expected to deploy the Alertmanager configuration secret
-	// in the tigera-prometheus namespace directly. Now that this secret is managed by the Operator,
-	// the customer must deploy this secret in the tigera-operator namespace. The Operator then copies
-	// the secret from the tigera-operator namespace to the tigera-prometheus namespace.
-	//
-	// For new installation:
-	//   A new secret will be created in the tigera-operator namespace and then copied to the tigera-prometheus namespace.
-	//   Monitor controller holds the ownership of this secret.
-	//
-	// To handle upgrades:
-	//   The tigera-prometheus secret will be copied back to the tigera-operator namespace.
-	//   If this secret is modified by the user, Monitor controller won't set the ownership. Otherwise, it is owned by the Monitor.
-	//
-	// Tigera Operator will then watch for secret changes in the tigera-operator namespace and overwrite
-	// any changes for this secret in the tigera-prometheus namespace. For future Alertmanager configuration changes,
-	// Monitor controller can verify the owner reference of the configuration secret and decide if we want to
-	// upgrade it automatically.
-
-	// Select the desired default configuration based on whether the UI alerts integration is enabled.
-	// The enabled variant forwards alerts to Linseed; the disabled variant routes to a null receiver.
-	desiredConfig := alertmanagerConfig
-	if !uiAlertsEnabled {
-		desiredConfig = alertmanagerConfigDisabled
-	}
-
-	defaultConfigSecret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      monitor.AlertmanagerConfigSecret,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			"alertmanager.yaml": []byte(desiredConfig),
-		},
-	}
-
-	// operatorManaged reports whether a secret's data matches one of the Operator's default
-	// configurations (the enabled or disabled variant). Such a secret is owned by the Monitor
-	// controller and may be regenerated to the desired configuration when the integration is
-	// toggled. A secret matching neither was customized by the user and is left untouched.
-	operatorManaged := func(data map[string][]byte) bool {
-		return reflect.DeepEqual(data, map[string][]byte{"alertmanager.yaml": []byte(alertmanagerConfig)}) ||
-			reflect.DeepEqual(data, map[string][]byte{"alertmanager.yaml": []byte(alertmanagerConfigDisabled)})
-	}
-
-	// Read Alertmanager configuration secret if it is found in the tigera-operator namespace.
-	secret, err := utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.OperatorNamespace())
+// readAlertmanagerConfig returns the AlertmanagerConfig to render in the tigera-prometheus
+// namespace, where it is referenced by Alertmanager.spec.alertmanagerConfiguration.
+//
+// If the user supplies their own AlertmanagerConfig in the tigera-operator namespace (named
+// monitor.AlertmanagerConfigName), the operator renders a copy of it in tigera-prometheus.
+// Otherwise it renders the operator's default config (the Linseed webhook receiver when the UI
+// alerts integration is enabled, or a null receiver when disabled).
+func (r *ReconcileMonitor) readAlertmanagerConfig(ctx context.Context, uiAlertsEnabled bool) (*monitoringv1alpha1.AlertmanagerConfig, error) {
+	userConfig := &monitoringv1alpha1.AlertmanagerConfig{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: monitor.AlertmanagerConfigName, Namespace: common.OperatorNamespace()}, userConfig)
 	if err != nil {
-		return nil, false, err
-	} else if secret != nil {
-		// If the Operator owns the configuration, regenerate it to the desired variant so that
-		// toggling the integration takes effect (the rendered tigera-prometheus copy is then updated
-		// by the component handler). User-modified configurations are returned as-is and unmanaged.
-		if operatorManaged(secret.Data) {
-			secret.Data = defaultConfigSecret.Data
+		if !errors.IsNotFound(err) {
+			return nil, err
 		}
-		return secret, false, nil
+		// No user-provided config: render the operator default.
+		return monitor.DefaultAlertmanagerConfig(uiAlertsEnabled), nil
 	}
 
-	// When Alertmanager configuration isn't found in the tigera-operator namespace, copy it from the tigera-prometheus namespace (upgrade).
-	// If it is modified by the user, Monitor controller will not set the owner reference.
-	secret, err = utils.GetSecret(ctx, r.client, monitor.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace)
-	if err != nil {
-		return nil, false, err
-	} else if secret != nil {
-		// Monitor controller will own the secret if it matches one of the Operator defaults.
-		if operatorManaged(secret.Data) {
-			s := rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0]
-			s.Data = defaultConfigSecret.Data
-			return s, true, nil
-		}
-
-		// If the secret isn't a managed default, leave it unmanaged.
-		s := rsecret.CopyToNamespace(common.OperatorNamespace(), secret)[0]
-		if err := r.client.Create(ctx, s); err != nil {
-			return nil, false, err
-		}
-		return s, false, nil
-	}
-
-	// Alertmanager configuration secret is not found in the tigera-operator or tigera-prometheus namespace (new install).
-	// Operator should create a new default secret and set the owner reference.
-	return defaultConfigSecret, true, nil
+	// A user-provided config exists in the operator namespace: render a copy of its spec in the
+	// tigera-prometheus namespace (where the Alertmanager and its alertmanagerConfiguration live).
+	return &monitoringv1alpha1.AlertmanagerConfig{
+		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1alpha1.AlertmanagerConfigKind, APIVersion: monitoringv1alpha1.SchemeGroupVersion.String()},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.AlertmanagerConfigName, Namespace: common.TigeraPrometheusNamespace},
+		Spec:       userConfig.Spec,
+	}, nil
 }

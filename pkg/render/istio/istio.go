@@ -290,24 +290,32 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		rcomp.ApplyDaemonSetOverrides(res.ZTunnelDaemonSet, overrides)
 	}
 
-	// Set required configs
-	for i := range res.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
-		cont := &res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
-		if cont.Name == "istio-proxy" {
-			cont.Env = append(cont.Env, corev1.EnvVar{
-				Name:  "TRANSPARENT_NETWORK_POLICIES",
-				Value: "true",
-			})
-			break
+	// Enable the Transparent Network Policies datapath only when the Calico dataplane is
+	// running. With TRANSPARENT_NETWORK_POLICIES, ztunnel sends HBONE to the original
+	// destination port and relies on Felix to DSCP-mark those packets so that the
+	// istio-cni in-pod rule (matching MAGIC_DSCP_MARK) can steer them to the HBONE
+	// listener. In a headless installation there is no Felix to apply the mark, which
+	// would leave HBONE traffic misclassified as plaintext and break all in-mesh
+	// traffic, so ztunnel is left in its default (port 15008) mode instead.
+	if c.cfg.Installation.LinuxDataplaneEnabled() {
+		for i := range res.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+			cont := &res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+			if cont.Name == "istio-proxy" {
+				cont.Env = append(cont.Env, corev1.EnvVar{
+					Name:  "TRANSPARENT_NETWORK_POLICIES",
+					Value: "true",
+				})
+				break
+			}
 		}
-	}
-	for i := range res.CNIDaemonSet.Spec.Template.Spec.Containers {
-		cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
-		if cont.Name == "install-cni" {
-			cont.Env = append(cont.Env, corev1.EnvVar{
-				Name:  "MAGIC_DSCP_MARK",
-				Value: strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10),
-			})
+		for i := range res.CNIDaemonSet.Spec.Template.Spec.Containers {
+			cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
+			if cont.Name == "install-cni" {
+				cont.Env = append(cont.Env, corev1.EnvVar{
+					Name:  "MAGIC_DSCP_MARK",
+					Value: strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10),
+				})
+			}
 		}
 	}
 

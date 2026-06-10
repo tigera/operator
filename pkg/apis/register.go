@@ -25,6 +25,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	ocsv1 "github.com/openshift/api/security/v1"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringv1beta1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1beta1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
@@ -72,6 +73,7 @@ func init() {
 	AddToSchemes = append(AddToSchemes, operatorv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, admissionregistrationv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, monitoringv1.AddToScheme)
+	AddToSchemes = append(AddToSchemes, monitoringv1beta1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, corev1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, rbacv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, appsv1.AddToScheme)

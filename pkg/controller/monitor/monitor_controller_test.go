@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringv1beta1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1beta1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -347,135 +348,60 @@ var _ = Describe("Monitor controller tests", func() {
 		})
 	})
 
-	Context("Alertmanager Configuration secrets", func() {
-		var secretOperator *corev1.Secret
-		var secretPrometheus *corev1.Secret
+	Context("Alertmanager Configuration", func() {
+		amConfigKey := client.ObjectKey{Name: monitor.AlertmanagerConfigName, Namespace: common.TigeraPrometheusNamespace}
 
-		BeforeEach(func() {
-			secretOperator = &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      monitor.AlertmanagerConfigSecret,
-					Namespace: common.OperatorNamespace(),
-				},
-				Data: map[string][]byte{
-					"alertmanager.yaml": []byte("Alertmanager secret in tigera-operator namespace"),
-				},
-			}
-			secretPrometheus = &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      monitor.AlertmanagerConfigSecret,
-					Namespace: common.TigeraPrometheusNamespace,
-				},
-				Data: map[string][]byte{
-					"alertmanager.yaml": []byte("Alertmanager secret in tigera-prometheus namespace"),
-				},
-			}
+		It("should render the default Linseed AlertmanagerConfig in the prometheus namespace for new install", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			amc := &monitoringv1beta1.AlertmanagerConfig{}
+			Expect(cli.Get(ctx, amConfigKey, amc)).NotTo(HaveOccurred())
+			Expect(amc.Spec.Route.Receiver).To(Equal("linseed"))
+			Expect(amc.Spec.Receivers).To(HaveLen(1))
+			Expect(amc.Spec.Receivers[0].WebhookConfigs).To(HaveLen(1))
+			Expect(*amc.Spec.Receivers[0].WebhookConfigs[0].URL).To(Equal(monitor.LinseedEventsURL))
+
+			ownerRefs := amc.GetObjectMeta().GetOwnerReferences()
+			Expect(ownerRefs).To(HaveLen(1))
+			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
 		})
 
-		AfterEach(func() {
-			Expect(cli.Delete(ctx, secretOperator)).To(BeNil())
-			Expect(cli.Delete(ctx, secretPrometheus)).To(BeNil())
-		})
-
-		It("should create the Alertmanager secret for new install", func() {
-			s := &corev1.Secret{}
-			// Make sure Alertmanager secrets don't exist in either Operator or Prometheus namespace.
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretOperator), s)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).To(HaveOccurred())
+		It("should use a user-provided AlertmanagerConfig from the operator namespace", func() {
+			userReceiver := "user-receiver"
+			Expect(cli.Create(ctx, &monitoringv1beta1.AlertmanagerConfig{
+				TypeMeta:   metav1.TypeMeta{Kind: monitoringv1beta1.AlertmanagerConfigKind, APIVersion: monitoringv1beta1.SchemeGroupVersion.String()},
+				ObjectMeta: metav1.ObjectMeta{Name: monitor.AlertmanagerConfigName, Namespace: common.OperatorNamespace()},
+				Spec: monitoringv1beta1.AlertmanagerConfigSpec{
+					Route:     &monitoringv1beta1.Route{Receiver: userReceiver},
+					Receivers: []monitoringv1beta1.Receiver{{Name: userReceiver}},
+				},
+			})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 
-			var ownerRefs []metav1.OwnerReference
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretOperator), s)).NotTo(HaveOccurred())
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
+			amc := &monitoringv1beta1.AlertmanagerConfig{}
+			Expect(cli.Get(ctx, amConfigKey, amc)).NotTo(HaveOccurred())
+			Expect(amc.Spec.Route.Receiver).To(Equal(userReceiver))
+			Expect(amc.Spec.Receivers).To(HaveLen(1))
+			Expect(amc.Spec.Receivers[0].WebhookConfigs).To(BeEmpty())
 		})
 
-		It("should read Alertmanager secret from the Operator namespace if exists", func() {
-			Expect(cli.Create(ctx, secretOperator)).To(BeNil())
-			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
+		It("should render the null-receiver AlertmanagerConfig when the UI alerts integration is disabled", func() {
+			Expect(cli.Get(ctx, client.ObjectKeyFromObject(monitorCR), monitorCR)).NotTo(HaveOccurred())
+			disabled := operatorv1.UIAlertsIntegrationDisabled
+			monitorCR.Spec.UIAlertsIntegration = &disabled
+			Expect(cli.Update(ctx, monitorCR)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 
-			s := &corev1.Secret{}
-			var ownerRefs []metav1.OwnerReference
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretOperator), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-operator namespace")))
-			Expect(ownerRefs).To(HaveLen(0))
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-operator namespace")))
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
-		})
-
-		It("should copy back the Alertmanager secret when upgrading and take ownership if it is unmodified", func() {
-			secretPrometheus := &corev1.Secret{
-				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      monitor.AlertmanagerConfigSecret,
-					Namespace: common.TigeraPrometheusNamespace,
-				},
-				Data: map[string][]byte{
-					"alertmanager.yaml": []byte(alertmanagerConfig),
-				},
-			}
-			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred())
-
-			s := &corev1.Secret{}
-			var ownerRefs []metav1.OwnerReference
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretOperator), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte(alertmanagerConfig)))
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
-		})
-
-		It("should copy back the Alertmanager secret when upgrading and won't take ownership if it is modified", func() {
-			Expect(cli.Create(ctx, secretPrometheus)).To(BeNil())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred())
-
-			s := &corev1.Secret{}
-			var ownerRefs []metav1.OwnerReference
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretOperator), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-prometheus namespace")))
-			Expect(ownerRefs).To(HaveLen(0))
-
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(secretPrometheus), s)).NotTo(HaveOccurred())
-			ownerRefs = s.GetObjectMeta().GetOwnerReferences()
-			Expect(s.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager secret in tigera-prometheus namespace")))
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
+			amc := &monitoringv1beta1.AlertmanagerConfig{}
+			Expect(cli.Get(ctx, amConfigKey, amc)).NotTo(HaveOccurred())
+			Expect(amc.Spec.Route.Receiver).To(Equal("null"))
+			Expect(amc.Spec.Receivers).To(HaveLen(1))
+			Expect(amc.Spec.Receivers[0].WebhookConfigs).To(BeEmpty())
 		})
 	})
 

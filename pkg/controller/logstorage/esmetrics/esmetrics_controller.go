@@ -156,8 +156,7 @@ func (r *ESMetricsSubController) Reconcile(ctx context.Context, request reconcil
 	// In a headless installation there is no Calico API server, so the calico-system Tier
 	// (projectcalico.org/v3) is never served and Elasticsearch metrics cannot be installed. Report this
 	// clearly instead of blocking forever on the Tier watch.
-	if utils.IsHeadlessInstallation(ctx, r.client) {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch metrics is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, reqLogger)
+	if utils.RejectIfHeadless(ctx, r.client, r.status, "Elasticsearch metrics", reqLogger) {
 		return reconcile.Result{}, nil
 	}
 

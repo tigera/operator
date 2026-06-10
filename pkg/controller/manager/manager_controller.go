@@ -314,8 +314,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// In a headless installation there is no Calico API server, so the calico-system Tier
 	// (projectcalico.org/v3) is never served and Manager cannot be installed. Report this
 	// clearly instead of blocking forever on the Tier watch.
-	if utils.IsHeadlessInstallation(ctx, r.client) {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Manager is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, logc)
+	if utils.RejectIfHeadless(ctx, r.client, r.status, "Manager", logc) {
 		return reconcile.Result{}, nil
 	}
 

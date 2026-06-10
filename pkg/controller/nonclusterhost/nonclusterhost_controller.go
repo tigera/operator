@@ -104,8 +104,7 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 	// out-of-cluster endpoints. A headless installation (spec.calicoNetwork.linuxDataplane: None)
 	// runs no dataplane, so the resource cannot take effect. Reject it with a clear message rather
 	// than rendering resources that would never become healthy.
-	if _, installationSpec, err := utils.GetInstallationSpec(ctx, r.client); err == nil && !installationSpec.LinuxDataplaneEnabled() {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "NonClusterHost is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", nil, logc)
+	if utils.RejectIfHeadless(ctx, r.client, r.status, "NonClusterHost", logc) {
 		return reconcile.Result{}, nil
 	}
 

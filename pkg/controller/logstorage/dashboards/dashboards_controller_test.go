@@ -271,7 +271,7 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 
 			dashboardJob := batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: dashboards.Name, Namespace: render.ElasticsearchNamespace}}
 			Expect(test.GetResource(cli, &dashboardJob)).To(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "LogStorage Dashboards are not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "LogStorage Dashboards is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
 		})
 
 		It("should use images from ImageSet", func() {

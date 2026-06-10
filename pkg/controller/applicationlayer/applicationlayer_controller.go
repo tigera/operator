@@ -230,6 +230,15 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		return reconcile.Result{}, nil
 	}
 
+	// ApplicationLayer is a dataplane feature: L7 log collection, WAF, and sidecar injection
+	// all rely on Felix and its policy sync API. A headless installation
+	// (spec.calicoNetwork.linuxDataplane: None) runs no Felix, so the feature cannot work and
+	// there is no FelixConfiguration to patch.
+	if !installationSpec.LinuxDataplaneEnabled() {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, utils.HeadlessUnsupportedMessage("ApplicationLayer"), nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)

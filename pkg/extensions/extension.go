@@ -35,11 +35,13 @@ type Extension struct {
 	Modify Modifier
 }
 
-// Modifier post-processes the objects a render component produced. It may mutate
-// matched objects and/or append additional objects, and must return the
-// (possibly extended) slice. A modifier runs only for the variant it was
-// registered under, so it need not re-check the variant.
-type Modifier func(ctx RenderContext, objs []client.Object) []client.Object
+// Modifier post-processes the objects a render component produced. It receives
+// the component's create and delete lists and returns the (possibly extended)
+// lists. A modifier may mutate matched objects, append objects to create, and
+// append objects to delete (e.g. to clean up resources another variant left
+// behind). A modifier runs only for the variant it was registered under, so it
+// need not re-check the variant.
+type Modifier func(ctx RenderContext, create, delete []client.Object) (newCreate, newDelete []client.Object)
 
 type modifierKey struct {
 	variant   operatorv1.ProductVariant
@@ -63,16 +65,16 @@ func Register(variant operatorv1.ProductVariant, component string, e Extension) 
 }
 
 // ApplyModifiers runs the modifier registered for the named component and the
-// installation's variant over objs, returning objs unchanged when none is
-// registered (or when no installation is set).
-func ApplyModifiers(component string, ctx RenderContext, objs []client.Object) []client.Object {
+// installation's variant over the create and delete lists, returning them
+// unchanged when none is registered (or when no installation is set).
+func ApplyModifiers(component string, ctx RenderContext, create, delete []client.Object) ([]client.Object, []client.Object) {
 	if ctx.Installation == nil {
-		return objs
+		return create, delete
 	}
 	if fn, ok := modifiers[modifierKey{ctx.Installation.Variant, component}]; ok {
-		objs = fn(ctx, objs)
+		create, delete = fn(ctx, create, delete)
 	}
-	return objs
+	return create, delete
 }
 
 // FindObject returns the first object of type T with the given name.

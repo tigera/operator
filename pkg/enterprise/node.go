@@ -59,7 +59,7 @@ func registerNode() {
 // objects: the extra RBAC rules, the node-metrics Service, and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, BGP metrics
 // readiness check, multi-interface mode, and the calico log volume).
-func modifyNode(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+func modifyNode(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName); ok {
 		role.Rules = append(role.Rules, nodeEnterpriseRules()...)
 	}
@@ -77,7 +77,7 @@ func modifyNode(ctx extensions.RenderContext, objs []client.Object) []client.Obj
 		modifyNodeDaemonSet(ctx, ds)
 	}
 
-	return append(objs, nodeMetricsService(ctx))
+	return append(objs, nodeMetricsService(ctx)), del
 }
 
 // nodeEnterpriseRules are the additional cluster role rules calico/node needs in

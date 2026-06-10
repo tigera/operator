@@ -23,4 +23,5 @@ func Register() {
 	registerWindows()
 	registerGuardian()
 	registerInstallation()
+	registerAPIServer()
 }

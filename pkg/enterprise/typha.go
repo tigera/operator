@@ -31,7 +31,7 @@ func registerTypha() {
 	})
 }
 
-func modifyTypha(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+func modifyTypha(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha"); ok {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
@@ -61,5 +61,5 @@ func modifyTypha(ctx extensions.RenderContext, objs []client.Object) []client.Ob
 		}
 	}
 
-	return objs
+	return objs, del
 }

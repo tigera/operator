@@ -54,7 +54,8 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	if p, ok := comp.(render.ExtensionContextProvider); ok {
 		rc.Component = p.ExtensionContext()
 	}
-	return extensions.ApplyModifiers(render.ComponentNameWindows, rc, objs)
+	out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, rc, objs, nil)
+	return out
 }
 
 var _ = Describe("Windows rendering tests", func() {

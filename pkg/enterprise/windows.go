@@ -51,14 +51,14 @@ func registerWindows() {
 // calico-node-windows objects: the node-metrics Service and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
-func modifyWindows(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+func modifyWindows(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	wc, _ := ctx.Component.(render.WindowsExtensionContext)
 
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
 		modifyWindowsDaemonSet(ctx, wc, ds)
 	}
 
-	return append(objs, windowsNodeMetricsService(wc))
+	return append(objs, windowsNodeMetricsService(wc)), del
 }
 
 func modifyWindowsDaemonSet(ctx extensions.RenderContext, wc render.WindowsExtensionContext, ds *appsv1.DaemonSet) {

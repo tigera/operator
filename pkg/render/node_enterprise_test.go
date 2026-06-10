@@ -110,7 +110,8 @@ var _ = Describe("node enterprise modifier integration", func() {
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		return extensions.ApplyModifiers(render.ComponentNameNode, renderCtx, objs)
+		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, renderCtx, objs, nil)
+		return out
 	}
 
 	It("appends the node metrics service to the real render output", func() {
@@ -166,7 +167,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		})
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		objs = extensions.ApplyModifiers(render.ComponentNameTypha, renderCtx, objs)
+		objs, _ = extensions.ApplyModifiers(render.ComponentNameTypha, renderCtx, objs, nil)
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha")
 		Expect(ok).To(BeTrue())

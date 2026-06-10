@@ -51,21 +51,21 @@ func registerGuardian() {
 // enterprise management-cluster policy. Building the enterprise egress rules can
 // fail (proxy URL parsing); on failure we drop the policy entirely, matching the
 // core behavior of omitting it rather than installing a partial policy.
-func modifyGuardianPolicy(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+func modifyGuardianPolicy(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	gpc, _ := ctx.Component.(render.GuardianPolicyExtensionContext)
 
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
 	if !ok {
-		return objs
+		return objs, del
 	}
 
 	spec, err := enterpriseGuardianPolicySpec(gpc)
 	if err != nil {
 		logrus.WithError(err).Error("Failed to build guardian network policy, policy will be omitted")
-		return removeObject(objs, policy)
+		return removeObject(objs, policy), del
 	}
 	policy.Spec = spec
-	return objs
+	return objs, del
 }
 
 func removeObject(objs []client.Object, drop client.Object) []client.Object {
@@ -211,7 +211,7 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3
 // objects: the secrets Role/RoleBinding and default UI settings, the
 // elasticsearch/kibana service ports, the management-cluster-request cluster
 // role rules (which replace the OSS rules), and the CA bundle env vars.
-func modifyGuardian(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+func modifyGuardian(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	gc, _ := ctx.Component.(render.GuardianExtensionContext)
 
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
@@ -234,7 +234,7 @@ func modifyGuardian(ctx extensions.RenderContext, objs []client.Object) []client
 		render.ManagerUserSpecificSettingsGroup(),
 		render.ManagerClusterWideTigeraLayer(),
 		render.ManagerClusterWideDefaultView(),
-	)
+	), del
 }
 
 // guardianEnterpriseRules are the cluster role rules guardian needs in Calico

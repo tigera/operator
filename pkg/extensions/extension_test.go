@@ -34,16 +34,16 @@ var _ = Describe("extension registry", func() {
 
 	It("applies a registered modifier to the matching component and variant", func() {
 		extensions.Register(operatorv1.CalicoEnterprise, "test", extensions.Extension{
-			Modify: func(ctx extensions.RenderContext, objs []client.Object) []client.Object {
+			Modify: func(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 				cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
 				Expect(ok).To(BeTrue())
 				cm.Data = map[string]string{"k": "v"}
-				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}}), del
 			},
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out := extensions.ApplyModifiers("test", entCtx, in)
+		out, _ := extensions.ApplyModifiers("test", entCtx, in, nil)
 
 		Expect(out).To(HaveLen(2))
 		cm := out[0].(*corev1.ConfigMap)
@@ -51,41 +51,57 @@ var _ = Describe("extension registry", func() {
 		Expect(out[1].GetName()).To(Equal("extra"))
 	})
 
+	It("lets a modifier append to the delete list", func() {
+		extensions.Register(operatorv1.CalicoEnterprise, "test", extensions.Extension{
+			Modify: func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+				return objs, append(del, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "stale"}})
+			},
+		})
+
+		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
+		out, del := extensions.ApplyModifiers("test", entCtx, in, nil)
+		Expect(out).To(Equal(in))
+		Expect(del).To(HaveLen(1))
+		Expect(del[0].GetName()).To(Equal("stale"))
+	})
+
 	It("returns objects unchanged when no modifier is registered", func() {
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out := extensions.ApplyModifiers("unregistered", entCtx, in)
+		out, _ := extensions.ApplyModifiers("unregistered", entCtx, in, nil)
 		Expect(out).To(Equal(in))
 	})
 
 	It("does not apply a modifier registered for a different variant", func() {
 		extensions.Register(operatorv1.CalicoEnterprise, "test", extensions.Extension{
-			Modify: func(_ extensions.RenderContext, objs []client.Object) []client.Object {
-				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}})
+			Modify: func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}}), del
 			},
 		})
 
 		calicoCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		Expect(extensions.ApplyModifiers("test", calicoCtx, in)).To(Equal(in))
+		out, _ := extensions.ApplyModifiers("test", calicoCtx, in, nil)
+		Expect(out).To(Equal(in))
 	})
 
 	It("returns objects unchanged when no installation is set", func() {
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		Expect(extensions.ApplyModifiers("test", extensions.RenderContext{}, in)).To(Equal(in))
+		out, _ := extensions.ApplyModifiers("test", extensions.RenderContext{}, in, nil)
+		Expect(out).To(Equal(in))
 	})
 
 	It("replaces rather than stacks when a (variant, component) is registered twice", func() {
 		add := func(name string) extensions.Extension {
 			return extensions.Extension{
-				Modify: func(_ extensions.RenderContext, objs []client.Object) []client.Object {
-					return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}})
+				Modify: func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+					return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}}), del
 				},
 			}
 		}
 		extensions.Register(operatorv1.CalicoEnterprise, "test", add("first"))
 		extensions.Register(operatorv1.CalicoEnterprise, "test", add("second"))
 
-		out := extensions.ApplyModifiers("test", entCtx, nil)
+		out, _ := extensions.ApplyModifiers("test", entCtx, nil, nil)
 		Expect(out).To(HaveLen(1))
 		Expect(out[0].GetName()).To(Equal("second"))
 	})

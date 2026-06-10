@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -59,6 +60,21 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+// apiServerObjects renders the API server component and applies the registered variant
+// modifier the way the componentHandler does, so the Enterprise objects (query server,
+// audit logging, Enterprise RBAC) and the Calico cleanup deletes are reflected in the
+// returned create and delete lists.
+func apiServerObjects(c render.Component) ([]client.Object, []client.Object) {
+	create, del := c.Objects()
+	rc := extensions.RenderContext{}
+	if p, ok := c.(render.ExtensionContextProvider); ok {
+		ec := p.ExtensionContext().(render.APIServerExtensionContext)
+		rc.Installation = ec.Config.Installation
+		rc.Component = ec
+	}
+	return extensions.ApplyModifiers(render.ComponentNameAPIServer, rc, create, del)
+}
 
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	apiServerPolicy := testutils.GetExpectedPolicyFromFile("./testutils/expected_policies/apiserver.json")
@@ -97,6 +113,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		cfg = &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
+			RequiresQueryServer:       true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
 			Installation:              instance,
 			APIServer:                 apiserver,
@@ -149,7 +166,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		// Should render the correct resources.
 		// - 1 namespace
@@ -389,7 +406,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		expectedResources := []client.Object{
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
@@ -427,7 +444,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 	It("should grant the calico-apiserver SA write access to globalreports/status", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		cr := rtest.GetResource(resources, "calico-apiserver", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 
@@ -465,7 +482,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -503,7 +520,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -535,7 +552,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		role := rtest.GetResource(resources, "calico-extension-apiserver-auth-access", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
@@ -585,7 +602,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -630,7 +647,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -699,7 +716,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -720,7 +737,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
 	})
@@ -759,7 +776,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -790,7 +807,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
@@ -803,7 +820,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		cfg.ForceHostNetwork = true
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 	})
@@ -814,7 +831,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		cfg.ForceHostNetwork = true
 
 		component := render.APIServerPolicy(cfg)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
 		policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 		Expect(policy).ToNot(BeNil())
@@ -836,7 +853,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		cfg.ForceHostNetwork = false
 
 		component := render.APIServerPolicy(cfg)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
 		policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 		Expect(policy).ToNot(BeNil())
@@ -860,7 +877,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
@@ -877,7 +894,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
@@ -892,7 +909,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		expectedResources := []client.Object{
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "calico-audit-policy", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
@@ -958,7 +975,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		expected := []client.Object{
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "calico-audit-policy", Namespace: "calico-system"}},
@@ -1018,7 +1035,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		dep := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
@@ -1035,7 +1052,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		dep := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(dep).ToNot(BeNil())
@@ -1057,7 +1074,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		expectedResources := []client.Object{
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "calico-audit-policy", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
@@ -1102,7 +1119,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		cfg.Installation.ControlPlaneReplicas = ptr.To(int32(1))
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -1113,7 +1130,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		cfg.Installation.ControlPlaneReplicas = ptr.To(int32(2))
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -1127,7 +1144,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		rb, ok := rtest.GetResource(resources, "tigera-linseed", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
 		Expect(ok).To(BeTrue(), "expected tigera-linseed RoleBinding in calico-system")
@@ -1179,7 +1196,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 				}
 
 				component := render.APIServerPolicy(cfg)
-				resources, _ := component.Objects()
+				resources, _ := apiServerObjects(component)
 
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				expectedPolicy := testutils.SelectPolicyByProvider(scenario, apiServerPolicy, apiServerPolicyForOCP)
@@ -1325,7 +1342,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 
 			d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
@@ -1438,7 +1455,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			// nodeSelectors are merged
@@ -1469,7 +1486,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
@@ -1483,7 +1500,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			}
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Containers[0].Args).To(ConsistOf([]string{
 				"--secure-port=5443",
@@ -1945,7 +1962,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 
-		resources, deleteResources := component.Objects()
+		resources, deleteResources := apiServerObjects(component)
 
 		rtest.ExpectResources(resources, expectedResources)
 		rtest.ExpectResourceInList(deleteResources, "allow-apiserver", "calico-system", "networking.k8s.io", "v1", "NetworkPolicy")
@@ -2041,7 +2058,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, deleteResources := component.Objects()
+		resources, deleteResources := apiServerObjects(component)
 
 		// Should not include deployment, service, SA, or PDB.
 		Expect(rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")).To(BeNil())
@@ -2084,7 +2101,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, deleteResources := component.Objects()
+		resources, deleteResources := apiServerObjects(component)
 
 		// Should render the correct resources.
 		By("Checking each expected resource is actually rendered")
@@ -2121,7 +2138,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(1))
 		Expect(d.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("nodeName", "control01"))
@@ -2137,7 +2154,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		cfg.Installation.ControlPlaneTolerations = []corev1.Toleration{tol}
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Template.Spec.Tolerations).To(ContainElements(append(rmeta.TolerateControlPlane, tol)))
 	})
@@ -2151,7 +2168,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
@@ -2164,7 +2181,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		cfg.ForceHostNetwork = true
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 		d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d.Spec.Strategy.Type).To(Equal(appsv1.RecreateDeploymentStrategyType))
 	})
@@ -2177,7 +2194,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
@@ -2194,7 +2211,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploymentResource := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		Expect(deploymentResource).ToNot(BeNil())
@@ -2209,7 +2226,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -2222,7 +2239,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -2236,7 +2253,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 		Expect(component.ResolveImages(nil)).To(BeNil())
-		_, _ = component.Objects()
+		_, _ = apiServerObjects(component)
 	})
 
 	It("should render host networked with TKG provider", func() {
@@ -2247,7 +2264,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-		resources, _ := component.Objects()
+		resources, _ := apiServerObjects(component)
 
 		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -2359,7 +2376,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 
 			d, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(ok).To(BeTrue())
@@ -2433,7 +2450,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			// nodeSelectors are merged
 			Expect(d.Spec.Template.Spec.NodeSelector).To(HaveLen(2))
@@ -2463,7 +2480,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
 			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
@@ -2475,7 +2492,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).NotTo(HaveOccurred(), "Expected APIServer to create successfully %s", err)
 			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 			Expect(d).NotTo(BeNil())
 			Expect(d.Spec.Template.Spec.Tolerations).To(ContainElement(corev1.Toleration{
@@ -2503,7 +2520,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			// Expect no UISettings / UISettingsGroups to be installed.
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			obj := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
 			Expect(obj).To(BeNil())
 			obj = rtest.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole")
@@ -2514,7 +2531,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).NotTo(HaveOccurred())
 
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			managedClusterAccessRole := rtest.GetResource(resources,
 				render.MultiTenantManagedClustersAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			expectedManagedClusterAccessRules := []rbacv1.PolicyRule{
@@ -2531,7 +2548,7 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			component, err := render.APIServer(cfg)
 			Expect(err).NotTo(HaveOccurred())
 
-			resources, _ := component.Objects()
+			resources, _ := apiServerObjects(component)
 			managedClusterAccessRole := rtest.GetResource(resources,
 				render.ManagedClustersWatchClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
 			expectedManagedClusterAccessRules := []rbacv1.PolicyRule{

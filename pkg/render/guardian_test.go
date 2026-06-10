@@ -54,7 +54,8 @@ func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 	if p, ok := g.(render.ExtensionContextProvider); ok {
 		rc.Component = p.ExtensionContext()
 	}
-	return extensions.ApplyModifiers(render.GuardianName, rc, objs)
+	out, _ := extensions.ApplyModifiers(render.GuardianName, rc, objs, nil)
+	return out
 }
 
 var _ = Describe("Rendering tests", func() {
@@ -115,7 +116,7 @@ var _ = Describe("Rendering tests", func() {
 			if p, ok := g.(render.ExtensionContextProvider); ok {
 				rc.Component = p.ExtensionContext()
 			}
-			resources = extensions.ApplyModifiers(render.GuardianName, rc, resources)
+			resources, _ = extensions.ApplyModifiers(render.GuardianName, rc, resources, nil)
 		}
 
 		BeforeEach(func() {
@@ -351,7 +352,7 @@ var _ = Describe("Rendering tests", func() {
 			if p, ok := g.(render.ExtensionContextProvider); ok {
 				rc.Component = p.ExtensionContext()
 			}
-			resources = extensions.ApplyModifiers(render.ComponentNameGuardianPolicy, rc, objs)
+			resources, _ = extensions.ApplyModifiers(render.ComponentNameGuardianPolicy, rc, objs, nil)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

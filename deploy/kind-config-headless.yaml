@@ -28,6 +28,9 @@ kubeadmConfigPatches:
     kind: KubeProxyConfiguration
     metadata:
       name: config
-    mode: ipvs
+    # iptables, not ipvs: ipvs kube-proxy has known friction with Istio ambient's
+    # ztunnel-to-ztunnel HBONE data path, and it buys nothing here since headless
+    # installs run no Calico dataplane. iptables is the kind default.
+    mode: iptables
     conntrack:
       maxPerCore: 0

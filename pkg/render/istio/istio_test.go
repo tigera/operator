@@ -327,6 +327,30 @@ var _ = Describe("Istio Component Rendering", func() {
 				Value: "11",
 			}))
 		})
+
+		It("should not enable Transparent Network Policies in headless mode", Label("headless"), func() {
+			// Without the Calico dataplane there is no Felix to DSCP-mark HBONE traffic,
+			// so the Transparent Network Policies datapath must stay disabled or all
+			// in-mesh traffic would be misclassified as plaintext on the destination.
+			dpNone := operatorv1.LinuxDataplaneNone
+			cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			ztunnel, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			for _, env := range ztunnel.Spec.Template.Spec.Containers[0].Env {
+				Expect(env.Name).NotTo(Equal("TRANSPARENT_NETWORK_POLICIES"))
+			}
+
+			cni, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			for _, env := range cni.Spec.Template.Spec.Containers[0].Env {
+				Expect(env.Name).NotTo(Equal("MAGIC_DSCP_MARK"))
+			}
+		})
 	})
 
 	Describe("Pull Secrets", func() {

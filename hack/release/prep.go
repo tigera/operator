@@ -171,11 +171,13 @@ var prepAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error 
 			return fmt.Errorf("error modifying Enterprise config: %w", err)
 		}
 		// Update registry for Enterprise
-		if eRegistry := c.String(enterpriseRegistryFlag.Name); eRegistry != "" {
-			logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
-			if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, eRegistry); err != nil {
-				return err
-			}
+		eRegistry := c.String(enterpriseRegistryFlag.Name)
+		if eRegistry == "" {
+			eRegistry = quayRegistry
+		}
+		logrus.Debugf("Updating Enterprise registry to %s", eRegistry)
+		if err := modifyComponentImageConfig(repoRootDir, componentImageConfigRelPath, enterpriseRegistryConfigKey, addTrailingSlash(eRegistry)); err != nil {
+			return err
 		}
 		// Set ENTERPRISE_CRDS_DIR if specified
 		if crdsDir := c.String(enterpriseDirFlag.Name); crdsDir != "" {

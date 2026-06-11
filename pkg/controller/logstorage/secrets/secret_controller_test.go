@@ -270,7 +270,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		ls.Status.State = operatorv1.TigeraStatusReady
 		CreateLogStorage(cli, ls)
 
-		By("Creating a fluentd certificate secret without all necessary usages")
+		By("Creating a fluent-bit certificate secret without all necessary usages")
 		cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 		Expect(err).NotTo(HaveOccurred())
 		tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.New[string]("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
@@ -278,15 +278,15 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 		Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
 		privateKeyPEM, certificatePEM := keyContent.Bytes(), crtContent.Bytes()
-		fluentdCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+		fluentBitCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
-		fluentdSecret := fluentdCert.Secret(common.OperatorNamespace())
-		fluentdSecret.Data[corev1.TLSCertKey] = certificatePEM
-		fluentdSecret.Data[corev1.TLSPrivateKeyKey] = privateKeyPEM
+		fluentBitSecret := fluentBitCert.Secret(common.OperatorNamespace())
+		fluentBitSecret.Data[corev1.TLSCertKey] = certificatePEM
+		fluentBitSecret.Data[corev1.TLSPrivateKeyKey] = privateKeyPEM
 		Expect(err).NotTo(HaveOccurred())
 		r, err := NewSecretControllerWithShims(cli, scheme, mockStatus, operatorv1.ProviderNone, dns.DefaultClusterDomain)
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(r.client.Create(ctx, fluentdSecret)).NotTo(HaveOccurred())
+		Expect(r.client.Create(ctx, fluentBitSecret)).NotTo(HaveOccurred())
 
 		By("reconciling the controller after a bad secret was created, we expect no problems, because bad secrets should be skipped")
 		_, err = r.Reconcile(ctx, reconcile.Request{})

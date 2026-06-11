@@ -17,6 +17,7 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -513,12 +514,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// sweep. Owner-scoped, requeueing until clean. Skipped if a Gateway lives in tigera-gateway,
 	// since then the proxy there belongs to the new controller.
 	const legacyGatewayNamespace = "tigera-gateway"
-	legacyNamespaceHostsGateway := false
-	for _, ns := range gatewayConfig.GatewayNamespaces {
-		if ns == legacyGatewayNamespace {
-			legacyNamespaceHostsGateway = true
-		}
-	}
+	legacyNamespaceHostsGateway := slices.Contains(gatewayConfig.GatewayNamespaces, legacyGatewayNamespace)
 	if !legacyNamespaceHostsGateway {
 		legacyController := &v1.Deployment{}
 		switch err = r.client.Get(ctx, types.NamespacedName{Namespace: legacyGatewayNamespace, Name: "envoy-gateway"}, legacyController); {

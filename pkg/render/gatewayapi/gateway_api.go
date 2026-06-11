@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -556,13 +557,11 @@ func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []cl
 	}
 	// If a Gateway lives in tigera-gateway, the controller manages its per-namespace resources
 	// (Gateway-owned) — don't queue those for legacy delete or we'd fight it every reconcile.
-	for _, ns := range pr.cfg.GatewayNamespaces {
-		if ns == legacyNS {
-			skip.Insert(key(GatewayNamespaceServiceAccount(legacyNS)))
-			skip.Insert(key(render.CreateOperatorSecretsRoleBinding(legacyNS)))
-			for _, s := range secret.ToRuntimeObjects(secret.CopyToNamespace(legacyNS, pr.cfg.PullSecrets...)...) {
-				skip.Insert(key(s))
-			}
+	if slices.Contains(pr.cfg.GatewayNamespaces, legacyNS) {
+		skip.Insert(key(GatewayNamespaceServiceAccount(legacyNS)))
+		skip.Insert(key(render.CreateOperatorSecretsRoleBinding(legacyNS)))
+		for _, s := range secret.ToRuntimeObjects(secret.CopyToNamespace(legacyNS, pr.cfg.PullSecrets...)...) {
+			skip.Insert(key(s))
 		}
 	}
 

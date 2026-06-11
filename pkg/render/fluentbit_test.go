@@ -164,8 +164,26 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
-		Expect(fluentBitConf).To(ContainSubstring("linseed"))
-		Expect(fluentBitConf).To(ContainSubstring("tigera-linseed"))
+		// Linseed shipping uses the built-in http output (no Go proxy
+		// plugins): one block per tag, NDJSON body, mTLS plus a bearer token
+		// re-read from file on every request.
+		Expect(fluentBitConf).To(ContainSubstring(`"name": "http"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"host": "tigera-linseed.tigera-elasticsearch.svc"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/flows/logs/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/dns/logs/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/audit/logs/ee/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/audit/logs/kube/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/bgp/logs/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"format": "json_lines"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"json_date_key": false`))
+		Expect(fluentBitConf).To(ContainSubstring(`"bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token"`))
+		// Per-tag filesystem retry caps: flows is the dominant volume and
+		// keeps the budget the single shared output used to have.
+		Expect(fluentBitConf).To(ContainSubstring(`"storage.total_limit_size": "500M"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"storage.total_limit_size": "100M"`))
+		// No Go proxy plugins are loaded.
+		Expect(fluentBitConf).NotTo(ContainSubstring("plugins_file"))
+		Expect(fluentBitConf).NotTo(ContainSubstring(`"name": "linseed"`))
 
 		container := ds.Spec.Template.Spec.Containers[0]
 
@@ -349,8 +367,12 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cm := rtest.GetResource(createResources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
-		Expect(fluentBitConf).To(ContainSubstring("linseed"))
-		Expect(fluentBitConf).To(ContainSubstring("tigera-linseed"))
+		Expect(fluentBitConf).To(ContainSubstring(`"name": "http"`))
+		// Managed clusters post to the external tigera-linseed service (which
+		// redirects to Guardian) with the operator-provisioned token, not the
+		// pod's ServiceAccount token.
+		Expect(fluentBitConf).To(ContainSubstring(`"host": "tigera-linseed"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"bearer_token_file": "/var/run/secrets/tigera.io/linseed/token"`))
 
 		container := ds.Spec.Template.Spec.Containers[0]
 
@@ -573,9 +595,15 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName+"-windows", render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
-		Expect(fluentBitConf).To(ContainSubstring("linseed"))
+		// Windows ships through the built-in http output too — the image
+		// carries no plugin DLLs and no Go runtime at all.
+		Expect(fluentBitConf).To(ContainSubstring(`"name": "http"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/flows/logs/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/audit/logs/ee/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"uri": "/api/v1/audit/logs/kube/bulk"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"bearer_token_file": "c:/var/run/secrets/kubernetes.io/serviceaccount/token"`))
+		Expect(fluentBitConf).NotTo(ContainSubstring("plugins_file"))
 		// The Windows image lays everything out under C:\fluent-bit.
-		Expect(fluentBitConf).To(ContainSubstring(`"plugins_file": "c:/fluent-bit/plugins.conf"`))
 		Expect(fluentBitConf).To(ContainSubstring(`"script": "c:/fluent-bit/record_transformer.lua"`))
 		// Windows tails only the log types the fluentd Windows variant shipped.
 		Expect(fluentBitConf).To(ContainSubstring("c:/var/log/calico/flowlogs/flows.log"))
@@ -885,7 +913,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		// The fluentd-era startup init container is gone: the in_eks input
-		// plugin resolves its own resume point from Linseed.
+		// plugin resolves its own resume point from Linseed on every start.
 		Expect(deploy.Spec.Template.Spec.InitContainers).To(BeEmpty())
 		Expect(deploy.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(deploy.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/eks-cloudwatch-log-credentials"))
@@ -916,8 +944,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		expectedEnvVars := []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "info", ValueFrom: nil},
 			{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: "dummy-eks-cluster-cloudwatch-log-group"},
-			{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: ""},
-			{Name: "EKS_CLOUDWATCH_POLL_INTERVAL", Value: "900s"},
 			{Name: "AWS_REGION", Value: "us-west-1", ValueFrom: nil},
 			{
 				Name: "AWS_ACCESS_KEY_ID",
@@ -947,9 +973,43 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			{Name: "TLS_CRT_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.crt"},
 			{Name: "TLS_KEY_PATH", Value: "/tigera-eks-log-forwarder-tls/tls.key"},
 			{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
+			// streamPrefix is unset in this render config (the controller
+			// would have defaulted it), so the env var is omitted and the
+			// plugin's kube-apiserver-audit- default applies; fetchInterval
+			// is set (900) so it is rendered.
+			{Name: "EKS_CLOUDWATCH_POLL_INTERVAL", Value: "900s"},
 		}
 
 		Expect(envs).To(Equal(expectedEnvVars))
+
+		// The rendered config wires the in_eks input into the Linseed http
+		// output.
+		cm := rtest.GetResource(resources, render.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		eksConf := cm.Data["fluent-bit.yaml"]
+		Expect(eksConf).To(ContainSubstring(`"name": "in_eks"`))
+		Expect(eksConf).To(ContainSubstring(`"plugins_file": "/etc/fluent-bit/plugins.conf"`))
+		Expect(eksConf).To(ContainSubstring(`"name": "http"`))
+		Expect(eksConf).To(ContainSubstring(`"uri": "/api/v1/audit/logs/kube/bulk"`))
+		Expect(eksConf).To(ContainSubstring(`"tls.verify_hostname": "on"`))
+	})
+
+	It("should omit unset EKS CloudWatch settings so plugin defaults apply", func() {
+		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
+		cfg.EKSConfig.FetchInterval = 0
+		cfg.Installation = &operatorv1.InstallationSpec{
+			KubernetesProvider: operatorv1.ProviderEKS,
+		}
+
+		resources, _ := render.FluentBit(cfg).Objects()
+		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		// The controller defaults these before render in production; this
+		// pins the render-level defense in depth — an empty prefix or "0s"
+		// interval must never reach the plugin, which would override its
+		// envconfig defaults with broken settings.
+		for _, env := range deploy.Spec.Template.Spec.Containers[0].Env {
+			Expect(env.Name).NotTo(Equal("EKS_CLOUDWATCH_LOG_STREAM_PREFIX"))
+			Expect(env.Name).NotTo(Equal("EKS_CLOUDWATCH_POLL_INTERVAL"))
+		}
 	})
 
 	It("should render EKS Cloudwatch Log toleration on GKE", func() {
@@ -1050,6 +1110,10 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENDPOINT", Value: "https://tigera-linseed.tenant-namespace.svc"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "test-tenant-id"}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
+
+		// The tenant header rides on the http output config.
+		cm := rtest.GetResource(resources, render.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring(`"header": "x-tenant-id test-tenant-id"`))
 	})
 
 	It("should render with EKS Cloudwatch Log for managed cluster with linseed token volume", func() {
@@ -1079,8 +1143,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		envs := deploy.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"}))
 
+		// The container mounts the operator-provisioned token for both the
+		// in_eks resume-point query and the http output's bearer_token_file,
+		// which re-reads it on every request.
 		volumeMounts := deploy.Spec.Template.Spec.Containers[0].VolumeMounts
 		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
+
+		cm := rtest.GetResource(resources, render.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring(`"bearer_token_file": "/var/run/secrets/tigera.io/linseed/token"`))
 	})
 
 	DescribeTable("should render with a valid configuration for non-cluster host and forwarding enabled",
@@ -1143,6 +1213,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			cm = rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			allHostsConf := cm.Data["fluent-bit.yaml"]
 			Expect(allHostsConf).To(ContainSubstring(strings.ToLower(destination)))
+
+			// The voltron-relayed non-cluster host tags each get their own http
+			// output posting to the base tag's bulk URI; a tag without a
+			// matching output would be silently dropped by the router.
+			Expect(allHostsConf).To(ContainSubstring(`"match": "non_cluster_flows"`))
+			Expect(allHostsConf).To(ContainSubstring(`"match": "non_cluster_dns"`))
+			Expect(allHostsConf).To(ContainSubstring(`"match": "non_cluster_policy_activity"`))
+			Expect(allHostsConf).To(ContainSubstring(`"uri": "/api/v1/policy_activity/logs/bulk"`))
 
 			By("enabling forwarding of only non-cluster logs")
 			cfg.LogCollector.Spec.AdditionalStores = additionalStoreSpecNonClusterHosts

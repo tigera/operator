@@ -18,6 +18,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"sigs.k8s.io/yaml"
@@ -282,10 +283,10 @@ func (c *fluentBitComponent) binPath() string {
 	return "/usr/bin/fluent-bit"
 }
 
+// pluginsFilePath is the loader config for the in_eks Go plugin shipped in
+// the Linux image. The Windows image carries no Go plugins, so the Windows
+// configs never reference it.
 func (c *fluentBitComponent) pluginsFilePath() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
-		return "c:/fluent-bit/plugins.conf"
-	}
 	return "/etc/fluent-bit/plugins.conf"
 }
 
@@ -735,7 +736,7 @@ func (c *fluentBitComponent) container() corev1.Container {
 	} else {
 		// Mount only the rendered config as a single file (SubPath) so it does
 		// not shadow the image's /etc/fluent-bit directory, which ships
-		// plugins.conf, record_transformer.lua and the loaded plugins.
+		// plugins.conf, record_transformer.lua and the in_eks plugin.
 		volumeMounts = append(volumeMounts,
 			corev1.VolumeMount{MountPath: "/etc/fluent-bit/fluent-bit.yaml", Name: "fluent-bit-conf", SubPath: "fluent-bit.yaml", ReadOnly: true})
 	}
@@ -931,31 +932,120 @@ func (c *fluentBitComponent) logDirsCSV() string {
 	return strings.Join(dirs, ",")
 }
 
-// linseedMatchRegex builds the match for the linseed output: every tailed tag
-// except ids.events and compliance.reports — those are deliberately not
-// Linseed-bound (IDS events use a different ingestion path; compliance reports
-// are S3-only), and an unknown tag makes out_linseed drop the chunk with an
-// error. The non_cluster_* tags are produced by the voltron-facing http input.
-func (c *fluentBitComponent) linseedMatchRegex() string {
+// linseedTags lists the tags shipped to Linseed: every tailed tag except
+// ids.events and compliance.reports — those are deliberately not
+// Linseed-bound (IDS events use a different ingestion path; compliance
+// reports are S3-only). The non_cluster_* tags are produced by the
+// voltron-facing http input relaying non-cluster host posts; hosts ship
+// flow, DNS and policy activity logs.
+func (c *fluentBitComponent) linseedTags() []string {
 	var tags []string
 	for _, in := range c.logInputs() {
 		if in.tag == "ids.events" || in.tag == "compliance.reports" {
 			continue
 		}
-		tags = append(tags, strings.ReplaceAll(in.tag, ".", `\.`))
+		tags = append(tags, in.tag)
 	}
 	if c.cfg.NonClusterHost != nil && c.cfg.OSType == rmeta.OSTypeLinux {
 		tags = append(tags, "non_cluster_flows", "non_cluster_dns", "non_cluster_policy_activity")
 	}
-	return fmt.Sprintf("^(%s)$", strings.Join(tags, "|"))
+	return tags
+}
+
+// linseedBulkURI maps a tag to its Linseed bulk-ingestion URI. Voltron-relayed
+// non_cluster_* tags post to the same path as their base tag.
+func linseedBulkURI(tag string) string {
+	tag = strings.TrimPrefix(tag, "non_cluster_")
+	switch tag {
+	case "runtime":
+		return "/api/v1/runtime/reports/bulk"
+	case "audit.tsee":
+		return "/api/v1/audit/logs/ee/bulk"
+	case "audit.kube":
+		return "/api/v1/audit/logs/kube/bulk"
+	case "bird", "bird6":
+		return "/api/v1/bgp/logs/bulk"
+	default:
+		// flows, dns, l7, waf, policy_activity
+		return fmt.Sprintf("/api/v1/%s/logs/bulk", tag)
+	}
+}
+
+// splitEndpoint splits an https:// endpoint into the host and port fields
+// fluent-bit's native net layer expects (the port defaults to 443). Plain
+// string handling: pkg/url's ParseEndpoint rejects endpoints without an
+// explicit port, and Linseed endpoints usually carry none.
+func splitEndpoint(endpoint string) (string, int) {
+	host := strings.TrimPrefix(endpoint, "https://")
+	host = strings.TrimSuffix(host, "/")
+	port := 443
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		if n, err := strconv.Atoi(host[i+1:]); err == nil {
+			host, port = host[:i], n
+		}
+	}
+	return host, port
+}
+
+// linseedHTTPOutput renders one built-in http output block shipping a tag's
+// chunks to its Linseed bulk endpoint. The http output is plain C compiled
+// into fluent-bit — no Go proxy plugin is involved — and `format json_lines`
+// with the date key disabled produces exactly the NDJSON body Linseed's bulk
+// APIs expect. The bearer token file is re-read on every request (a Tigera
+// patch carried by the fluent-bit base build), so kubelet-rotated
+// ServiceAccount tokens and operator-refreshed managed-cluster tokens are
+// picked up without a restart. certPath/keyPath are the mTLS client keypair;
+// storageLimit, when non-empty, caps this output's filesystem retry backlog.
+func (c *fluentBitComponent) linseedHTTPOutput(tag, certPath, keyPath, storageLimit string) map[string]interface{} {
+	host, port := splitEndpoint(relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true))
+	out := map[string]interface{}{
+		"name":   "http",
+		"match":  tag,
+		"host":   host,
+		"port":   port,
+		"uri":    linseedBulkURI(tag),
+		"format": "json_lines",
+		// One record per line, nothing else: Linseed parses each line as the
+		// log document itself, so no synthetic date field is added.
+		"json_date_key": false,
+		"tls":           "on",
+		"tls.verify":    "on",
+		// tls.verify only checks the chain; hostname/SAN verification is a
+		// separate knob that defaults off in fluent-bit. The Go plugin this
+		// replaces verified hostnames (crypto/tls default), so keep parity.
+		"tls.verify_hostname": "on",
+		"tls.ca_file":         c.trustedBundlePath(),
+		"tls.crt_file":        certPath,
+		"tls.key_file":        keyPath,
+		"bearer_token_file":   c.path(GetLinseedTokenPath(c.cfg.ManagedCluster)),
+		// Retry failed chunks until they send instead of dropping them after
+		// the default single retry; the filesystem storage bounds what can
+		// accumulate during a Linseed outage.
+		"retry_limit": "no_limits",
+	}
+	if storageLimit != "" {
+		out["storage.total_limit_size"] = storageLimit
+	}
+	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
+		out["header"] = fmt.Sprintf("x-tenant-id %s", c.cfg.Tenant.Spec.ID)
+	}
+	return out
+}
+
+// linseedStorageLimit sizes a tag's filesystem retry backlog: flow logs are
+// the dominant volume and keep the budget the single shared output used to
+// have; everything else is low-volume.
+func linseedStorageLimit(tag string) string {
+	if tag == "flows" || tag == "non_cluster_flows" {
+		return "500M"
+	}
+	return "100M"
 }
 
 func (c *fluentBitComponent) renderFluentBitConf() string {
-	linseedEndpoint := relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true)
 	caPath := c.trustedBundlePath()
 	keyPath := c.keyPath()
 	certPath := c.certPath()
-	tokenPath := c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))
 
 	cfg := fluentBitConfig{
 		Service: map[string]interface{}{
@@ -967,9 +1057,6 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 			// startup probes hit (without this it returns 404 and pods never
 			// become Ready).
 			"health_check": true,
-			// Load the custom out_linseed (and in_eks) Go plugins shipped in the
-			// image. Without this the `linseed` output is an unknown plugin.
-			"plugins_file": c.pluginsFilePath(),
 			// Filesystem buffering under the same hostPath-backed state dir as
 			// the tail offset DBs, so buffered-but-unsent chunks survive pod
 			// restarts (fluentd buffered to disk for up to 72h).
@@ -1033,33 +1120,14 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 	// Each ConfigMap key holds a YAML list of fluent-bit filter entries.
 	c.addUserFilters(&cfg)
 
-	// NOTE: linseed is a Go proxy output plugin that performs its own HTTPS
-	// (it builds an http.Client from the CA pool + client keypair). fluent-bit
-	// reserves the native `tls.*` property namespace for outputs that use its
-	// built-in TLS layer and rejects those keys on proxy plugins
-	// ("linseed.0 does not support TLS"). So the CA/cert/key are passed with
-	// non-tls key names that the plugin reads itself; it always verifies the
-	// server certificate (skip_verify defaults to false).
-	linseedOutput := map[string]interface{}{
-		"name":        "linseed",
-		"match_regex": c.linseedMatchRegex(),
-		"endpoint":    linseedEndpoint,
-		"ca_file":     caPath,
-		"cert_file":   certPath,
-		"key_file":    keyPath,
-		// Retry failed chunks until they send instead of dropping them after
-		// the default single retry; the filesystem storage bounds what can
-		// accumulate during a Linseed outage.
-		"retry_limit":              "no_limits",
-		"storage.total_limit_size": "500M",
+	// One built-in http output per Linseed-bound tag: chunks are per-tag, so
+	// an exact match per block routes every record to its bulk endpoint. The
+	// per-tag split replaces the single out_linseed Go proxy output — the C
+	// http output keeps the container free of Go proxy plugins.
+	for _, tag := range c.linseedTags() {
+		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs,
+			c.linseedHTTPOutput(tag, certPath, keyPath, linseedStorageLimit(tag)))
 	}
-	if c.cfg.ManagedCluster {
-		linseedOutput["token_path"] = tokenPath
-	}
-	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
-		linseedOutput["tenant_id"] = c.cfg.Tenant.Spec.ID
-	}
-	cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, linseedOutput)
 
 	// Additional stores are Linux-only, matching the fluentd Windows variant
 	// (Linseed only).
@@ -1410,10 +1478,11 @@ func (c *fluentBitComponent) eksLogForwarderSecret() *corev1.Secret {
 }
 
 // renderEKSFluentBitConf renders the fluent-bit config for the eks-log-forwarder
-// Deployment: a single in_eks input (which polls CloudWatch, applies the EKS
-// audit filtering itself, and resumes from the last Linseed-ingested timestamp)
-// feeding the linseed output. The in_eks plugin reads its CloudWatch/Linseed
-// settings from the Deployment's env vars rather than plugin properties.
+// Deployment: a single in_eks input (the Go plugin polls CloudWatch, applies
+// the EKS audit shaping itself, and resumes from the last Linseed-ingested
+// timestamp on every process start) feeding the built-in http output that
+// ships to Linseed. The in_eks plugin reads its CloudWatch/Linseed settings
+// from the Deployment's env vars rather than plugin properties.
 func (c *fluentBitComponent) renderEKSFluentBitConf() string {
 	cfg := fluentBitConfig{
 		Service: map[string]interface{}{
@@ -1422,6 +1491,8 @@ func (c *fluentBitComponent) renderEKSFluentBitConf() string {
 			"http_server":  true,
 			"http_port":    FluentBitMetricsPort,
 			"health_check": true,
+			// Load the custom in_eks Go plugin shipped in the image. Without
+			// this the `in_eks` input is an unknown plugin.
 			"plugins_file": c.pluginsFilePath(),
 		},
 	}
@@ -1429,22 +1500,12 @@ func (c *fluentBitComponent) renderEKSFluentBitConf() string {
 		"name": "in_eks",
 		"tag":  "audit.kube",
 	})
-	linseedOutput := map[string]interface{}{
-		"name":        "linseed",
-		"match":       "audit.kube",
-		"endpoint":    relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true),
-		"ca_file":     c.trustedBundlePath(),
-		"cert_file":   c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath(),
-		"key_file":    c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath(),
-		"retry_limit": "no_limits",
-	}
-	if c.cfg.ManagedCluster {
-		linseedOutput["token_path"] = c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))
-	}
-	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
-		linseedOutput["tenant_id"] = c.cfg.Tenant.Spec.ID
-	}
-	cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, linseedOutput)
+	cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, c.linseedHTTPOutput(
+		"audit.kube",
+		c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath(),
+		c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath(),
+		// No filesystem storage on this Deployment, so no backlog cap applies.
+		""))
 
 	out, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -1472,8 +1533,6 @@ func (c *fluentBitComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		// CloudWatch config, credentials — consumed by the in_eks input plugin
 		// (fluent-bit/plugins/in_eks/pkg/config) and the AWS SDK credential chain.
 		{Name: "EKS_CLOUDWATCH_LOG_GROUP", Value: c.cfg.EKSConfig.GroupName},
-		{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: c.cfg.EKSConfig.StreamPrefix},
-		{Name: "EKS_CLOUDWATCH_POLL_INTERVAL", Value: fmt.Sprintf("%ds", c.cfg.EKSConfig.FetchInterval)},
 		{Name: "AWS_REGION", Value: c.cfg.EKSConfig.AwsRegion},
 		{Name: "AWS_ACCESS_KEY_ID", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsId, false)},
 		{Name: "AWS_SECRET_ACCESS_KEY", ValueFrom: secret.GetEnvVarSource(EksLogForwarderSecret, EksLogForwarderAwsKey, false)},
@@ -1486,6 +1545,18 @@ func (c *fluentBitComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		{Name: "TLS_CRT_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},
+	}
+	// The logcollector controller defaults these before render
+	// (getEksCloudwatchLogConfig: prefix kube-apiserver-audit-, interval
+	// 60), so in practice both env vars are always set. The guards are
+	// defense in depth for other callers: rendering an empty prefix or a
+	// zero interval would override the plugin's own defaults with a broken
+	// setting (an empty prefix matches every stream in the group).
+	if c.cfg.EKSConfig.StreamPrefix != "" {
+		envVars = append(envVars, corev1.EnvVar{Name: "EKS_CLOUDWATCH_LOG_STREAM_PREFIX", Value: c.cfg.EKSConfig.StreamPrefix})
+	}
+	if c.cfg.EKSConfig.FetchInterval > 0 {
+		envVars = append(envVars, corev1.EnvVar{Name: "EKS_CLOUDWATCH_POLL_INTERVAL", Value: fmt.Sprintf("%ds", c.cfg.EKSConfig.FetchInterval)})
 	}
 	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
 		envVars = append(envVars, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})

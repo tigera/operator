@@ -64,6 +64,11 @@ recent Operator release for your Calico or Enterprise minor version.
 Run the following command:
 
 ```sh
+# for Calico OSS releases
+make release-prep VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION>
+# for Calico Enterprise releases
+make release-prep VERSION=<OPERATOR_VERSION> ENTERPRISE_VERSION=<ENTERPRISE_VERSION>
+# for Calico OSS + Enterprise releases
 make release-prep VERSION=<OPERATOR_VERSION> CALICO_VERSION=<CALICO_VERSION> ENTERPRISE_VERSION=<ENTERPRISE_VERSION>
 ```
 

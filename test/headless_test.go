@@ -334,19 +334,11 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 			return nil
 		}, 300*time.Second).ShouldNot(HaveOccurred())
 
+		// The istio TigeraStatus only reports Available once both DaemonSets are fully
+		// rolled out on every node, so wait for full readiness rather than a single pod.
 		By("Waiting for the istio-cni and ztunnel DaemonSets to become ready")
-		for _, name := range []string{istio.IstioCNIDaemonSetName, istio.IstioZTunnelDaemonSetName} {
-			Eventually(func() error {
-				ds := &appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: istio.IstioNamespace}}
-				if err := GetResource(c, ds); err != nil {
-					return err
-				}
-				if ds.Status.NumberReady < 1 {
-					return fmt.Errorf("%s has no ready pods yet (desired=%d)", name, ds.Status.DesiredNumberScheduled)
-				}
-				return nil
-			}, 300*time.Second).ShouldNot(HaveOccurred(), "DaemonSet %s did not become ready", name)
-		}
+		waitForDaemonSetReady(c, istio.IstioNamespace, istio.IstioCNIDaemonSetName, 300*time.Second)
+		waitForDaemonSetReady(c, istio.IstioNamespace, istio.IstioZTunnelDaemonSetName, 300*time.Second)
 
 		By("Waiting for the istio TigeraStatus to become Available")
 		Eventually(func() error {

@@ -417,6 +417,10 @@ func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir strin
 	// Missing context keys are treated as empty strings; Generate() skips the update for empty versions.
 	calicoVersion, _ := ctx.Value(calicoConfigVersionCtxKey).(string)
 	enterpriseVersion, _ := ctx.Value(enterpriseConfigVersionCtxKey).(string)
+	enterpriseRegistry := c.String(enterpriseRegistryFlag.Name)
+	if enterpriseRegistry == "" {
+		enterpriseRegistry = quayRegistry
+	}
 	verCfg := &versions.VersionsConfig{
 		RepoRootDir: repoRootDir,
 		Calico: versions.VersionConfig{
@@ -425,7 +429,7 @@ func modifyConfigVersions(ctx context.Context, c *cli.Command, repoRootDir strin
 		},
 		Enterprise: versions.VersionConfig{
 			Version:  enterpriseVersion,
-			Registry: c.String(enterpriseRegistryFlag.Name),
+			Registry: addTrailingSlash(enterpriseRegistry),
 			Dir:      c.String(enterpriseDirFlag.Name),
 		},
 	}

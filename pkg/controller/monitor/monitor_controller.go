@@ -149,7 +149,7 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		monitor.PrometheusServerTLSSecretName,
-		render.FluentdPrometheusTLSSecretName,
+		render.FluentBitTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
 		render.EKSLogForwarderTLSSecretName,
@@ -338,7 +338,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, certificateName := range []string{
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.FluentdPrometheusTLSSecretName,
+		render.FluentBitTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		render.CalicoAPIServerTLSSecretName,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,

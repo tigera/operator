@@ -1659,6 +1659,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			reqLogger.Info("Skipped unparseable imagePullSecrets when building the WAF wasm pull secret", "skipped", skipped)
 		}
 	}
+	// Provision the dedicated WAF wasm CA-bundle ConfigMap as a renamed copy of
+	// the trusted CA bundle, so the WAF reconciler replicates it into tenant
+	// namespaces for the Coraza wasm OCI registry TLS check without clashing with
+	// the operator-managed tigera-ca-bundle the GatewayAPI render also copies
+	// there (EV-6386). The dedicated source was previously a TODO; the full
+	// TrustedBundle (not the RO interface the kube-controllers render sees) is
+	// available here, so build it in the core controller.
+	var wasmCACert *corev1.ConfigMap
+	if wafGatewayExtensionEnabled {
+		wasmCACert = typhaNodeTLS.TrustedBundle.ConfigMap(common.CalicoNamespace)
+		wasmCACert.Name = kubecontrollers.WASMCACertName
+	}
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
 		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
@@ -1675,6 +1687,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
 		WAFWebhookServerTLS:         wafWebhookTLS,
 		WASMPullSecret:              wasmPullSecret,
+		WASMCACert:                  wasmCACert,
 		// The webhook Service + ValidatingWebhookConfiguration are rendered by
 		// the kube-controllers component (and deleted when the WAF extension is
 		// disabled); the caBundle is the operator CA that issued the serving

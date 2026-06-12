@@ -18,10 +18,10 @@
 package components
 
 var (
-	CalicoRelease string = "master"
+	CalicoRelease string = "v3.32.0"
 
 	ComponentCalicoCNIWindows = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "cni-windows",
 		Registry:  "",
 		imagePath: "",
@@ -29,7 +29,7 @@ var (
 	}
 
 	ComponentCalicoNode = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "node",
 		Registry:  "",
 		imagePath: "",
@@ -37,7 +37,7 @@ var (
 	}
 
 	ComponentCalicoNodeWindows = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "node-windows",
 		Registry:  "",
 		imagePath: "",
@@ -45,7 +45,7 @@ var (
 	}
 
 	ComponentCalicoWhisker = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "whisker",
 		Registry:  "",
 		imagePath: "",
@@ -53,7 +53,7 @@ var (
 	}
 
 	ComponentCalicoEnvoyGateway = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "envoy-gateway",
 		Registry:  "",
 		imagePath: "",
@@ -61,7 +61,7 @@ var (
 	}
 
 	ComponentCalicoEnvoyProxy = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "envoy-proxy",
 		Registry:  "",
 		imagePath: "",
@@ -69,7 +69,7 @@ var (
 	}
 
 	ComponentCalicoEnvoyRatelimit = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "envoy-ratelimit",
 		Registry:  "",
 		imagePath: "",
@@ -77,7 +77,7 @@ var (
 	}
 
 	ComponentCalicoIstioPilot = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "istio-pilot",
 		Registry:  "",
 		imagePath: "",
@@ -85,7 +85,7 @@ var (
 	}
 
 	ComponentCalicoIstioInstallCNI = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "istio-install-cni",
 		Registry:  "",
 		imagePath: "",
@@ -93,7 +93,7 @@ var (
 	}
 
 	ComponentCalicoIstioZTunnel = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "istio-ztunnel",
 		Registry:  "",
 		imagePath: "",
@@ -101,7 +101,7 @@ var (
 	}
 
 	ComponentCalicoIstioProxyv2 = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "istio-proxyv2",
 		Registry:  "",
 		imagePath: "",
@@ -109,7 +109,7 @@ var (
 	}
 
 	ComponentCalico = Component{
-		Version:   "master",
+		Version:   "v3.32.0",
 		Image:     "calico",
 		Registry:  "",
 		imagePath: "",

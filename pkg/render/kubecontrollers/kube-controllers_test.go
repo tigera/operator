@@ -290,7 +290,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Application-layer reconcilers consume these env vars to program WAF
 		// EnvoyExtensionPolicy attachments.
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "WASM_IMAGE", Value: "test-reg/tigera/coraza-wasm:" + components.ComponentCorazaWASM.Version,
+			Name: "WASM_IMAGE", Value: "test-reg/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version,
 		}))
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name: "WASM_PULL_SECRET", Value: kubecontrollers.WASMPullSecretName,

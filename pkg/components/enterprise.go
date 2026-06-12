@@ -162,14 +162,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentCorazaWASM = Component{
-		Version:   "master",
-		Image:     "coraza-wasm",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentCoreOSPrometheus = Component{
 		Version: "v3.9.1",
 		variant: enterpriseVariant,
@@ -291,7 +283,6 @@ var (
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
 		ComponentDikastes,
-		ComponentCorazaWASM,
 		ComponentPrometheus,
 		ComponentPrometheusAlertmanager,
 		ComponentTigeraNode,

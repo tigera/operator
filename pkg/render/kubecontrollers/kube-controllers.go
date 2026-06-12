@@ -132,7 +132,7 @@ type KubeControllersConfiguration struct {
 	// on calico-kube-controllers: the applicationlayer controller enablement,
 	// the WAF / Gateway-API / EnvoyExtensionPolicy / event / secret-replication
 	// RBAC, the WASM_IMAGE / WASM_PULL_SECRET / WASM_CA_CERT env vars, and the
-	// coraza-wasm image resolution.  Sourced from
+	// gateway envoy-proxy wasm image resolution.  Sourced from
 	// `GatewayAPI.spec.extensions.waf.state == Enabled` (default off).
 	// See design `tigera/designs#25` (PMREQ-384).
 	WAFGatewayExtensionEnabled bool
@@ -297,7 +297,10 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 		return err
 	}
 	if c.cfg.Installation.Variant.IsEnterprise() && c.cfg.WAFGatewayExtensionEnabled {
-		c.wasmImage, err = components.GetReference(components.ComponentCorazaWASM, reg, path, prefix, is)
+		// The Coraza WAF wasm is baked into the gateway envoy-proxy image as its
+		// final layer; Envoy Gateway extracts it from there. Point WASM_IMAGE at
+		// that same image (no standalone coraza-wasm image needed).
+		c.wasmImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyProxy, reg, path, prefix, is)
 		if err != nil {
 			return err
 		}

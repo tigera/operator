@@ -67,8 +67,9 @@ const (
 	// WASMCACertName is the dedicated CA-bundle ConfigMap (in the controller
 	// namespace) the WAF reconciler replicates into tenant namespaces for the
 	// Coraza wasm OCI registry TLS check — a dedicated name avoids clashing with
-	// the operator-managed tigera-ca-bundle ConfigMap (EV-6386). TODO: render the
-	// source copy here too (needs the full TrustedBundle, not the RO interface).
+	// the operator-managed tigera-ca-bundle ConfigMap the GatewayAPI render also
+	// copies there (EV-6386). The source copy is a renamed copy of the trusted
+	// bundle, provisioned by the core controller and passed in as WASMCACert.
 	WASMCACertName = "tigera-waf-ca-bundle"
 
 	EsKubeController                    = "es-calico-kube-controllers"
@@ -112,6 +113,7 @@ type KubeControllersConfiguration struct {
 	// take care to pass the same secret on each reconcile where possible.
 	KubeControllersGatewaySecret *corev1.Secret
 	WASMPullSecret               *corev1.Secret
+	WASMCACert                   *corev1.ConfigMap
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
 	MetricsServerTLS certificatemanagement.KeyPairInterface
@@ -344,6 +346,9 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.cfg.WASMPullSecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.WASMPullSecret)...)...)
+	}
+	if c.cfg.WASMCACert != nil {
+		objectsToCreate = append(objectsToCreate, c.cfg.WASMCACert)
 	}
 
 	// The in-process WAF admission webhook surface (Service fronting this Pod +
@@ -757,12 +762,12 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 				env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.WASMPullSecret.Name})
 			}
 
-			// WASM_CA_CERT names the trusted CA bundle ConfigMap (already mounted
-			// on this Deployment via TrustedBundle) that the reconciler replicates
-			// alongside WASM_PULL_SECRET so the EnvoyExtensionPolicy wasm fetcher
-			// trusts the registry's TLS chain.
-			if c.cfg.TrustedBundle != nil {
-				env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: WASMCACertName})
+			// WASM_CA_CERT names the dedicated CA bundle ConfigMap (provisioned as
+			// WASMCACert) that the reconciler replicates alongside WASM_PULL_SECRET
+			// so the EnvoyExtensionPolicy wasm fetcher trusts the registry's TLS
+			// chain. Only set when the source ConfigMap is actually rendered.
+			if c.cfg.WASMCACert != nil {
+				env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: c.cfg.WASMCACert.Name})
 			}
 		}
 	}

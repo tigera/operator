@@ -244,6 +244,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: kubecontrollers.WASMPullSecretName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: kubecontrollers.WASMCACertName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: applicationlayer.WAFWebhookServiceName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-waf.applicationlayer.projectcalico.org", ns: "", group: "admissionregistration.k8s.io", version: "v1", kind: "ValidatingWebhookConfiguration"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
@@ -260,6 +261,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// WAFPolicy namespaces without clashing with the operator-managed
 		// tigera-pull-secret; surface it here so it renders and WASM_PULL_SECRET is set.
 		cfg.WASMPullSecret = &corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.WASMPullSecretName, Namespace: common.CalicoNamespace}}
+		// Likewise core_controller provisions the dedicated WAF wasm CA-bundle
+		// ConfigMap (a renamed copy of the trusted bundle); surface it here so it
+		// renders and WASM_CA_CERT is set.
+		cfg.WASMCACert = &corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: kubecontrollers.WASMCACertName, Namespace: common.CalicoNamespace}}
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

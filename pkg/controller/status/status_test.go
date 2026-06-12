@@ -611,9 +611,10 @@ var _ = Describe("Status reporting tests", func() {
 				// Current ReplicaSet.
 				Expect(client.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "NS1",
-						Name:      "DP1-new",
-						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						Namespace:   "NS1",
+						Name:        "DP1-new",
+						Labels:      map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
 						OwnerReferences: []metav1.OwnerReference{
 							{UID: "dp1-uid", Controller: ptr.To(true)},
 						},
@@ -627,9 +628,10 @@ var _ = Describe("Status reporting tests", func() {
 				// Old ReplicaSet.
 				Expect(client.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "NS1",
-						Name:      "DP1-old",
-						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						Namespace:   "NS1",
+						Name:        "DP1-old",
+						Labels:      map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
 						OwnerReferences: []metav1.OwnerReference{
 							{UID: "dp1-uid", Controller: ptr.To(true)},
 						},
@@ -1362,9 +1364,10 @@ var _ = Describe("Status reporting tests", func() {
 				// Current ReplicaSet.
 				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns",
-						Name:      "dep1-abc123",
-						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
+						Namespace:   "ns",
+						Name:        "dep1-abc123",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
 						OwnerReferences: []metav1.OwnerReference{
 							{UID: "dep-uid", Controller: ptr.To(true)},
 						},
@@ -1377,9 +1380,10 @@ var _ = Describe("Status reporting tests", func() {
 				// Old ReplicaSet.
 				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns",
-						Name:      "dep1-old999",
-						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
+						Namespace:   "ns",
+						Name:        "dep1-old999",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
 						OwnerReferences: []metav1.OwnerReference{
 							{UID: "dep-uid", Controller: ptr.To(true)},
 						},
@@ -1392,6 +1396,52 @@ var _ = Describe("Status reporting tests", func() {
 
 				rev := sm.currentDeploymentRevision(dep)
 				Expect(rev).To(Equal("abc123"))
+			})
+
+			It("should return the newest revision when the old ReplicaSet still has running pods mid-rollout", func() {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", UID: "dep-uid"},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+				}
+				// New ReplicaSet, still scaling up - both ReplicaSets have
+				// Replicas > 0 during the rollout, so the revision annotation
+				// is what distinguishes them.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:   "ns",
+						Name:        "dep1-new",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: ptr.To(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 1},
+				})).NotTo(HaveOccurred())
+				// Old ReplicaSet, still scaling down.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:   "ns",
+						Name:        "dep1-old",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: ptr.To(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 2},
+				})).NotTo(HaveOccurred())
+
+				rev := sm.currentDeploymentRevision(dep)
+				Expect(rev).To(Equal("new-hash"))
 			})
 
 			It("should return empty string when no ReplicaSets exist", func() {
@@ -1724,9 +1774,10 @@ var _ = Describe("Status manager integration tests", Ordered, func() {
 			// Current ReplicaSet.
 			Expect(cl.Create(ctx, &appsv1.ReplicaSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "ns",
-					Name:      "dep-rollout-new",
-					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+					Namespace:   "ns",
+					Name:        "dep-rollout-new",
+					Labels:      map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+					Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
 					OwnerReferences: []metav1.OwnerReference{
 						{UID: "rollout-uid", Controller: ptr.To(true)},
 					},
@@ -1738,9 +1789,10 @@ var _ = Describe("Status manager integration tests", Ordered, func() {
 			// Old ReplicaSet.
 			Expect(cl.Create(ctx, &appsv1.ReplicaSet{
 				ObjectMeta: metav1.ObjectMeta{
-					Namespace: "ns",
-					Name:      "dep-rollout-old",
-					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+					Namespace:   "ns",
+					Name:        "dep-rollout-old",
+					Labels:      map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+					Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
 					OwnerReferences: []metav1.OwnerReference{
 						{UID: "rollout-uid", Controller: ptr.To(true)},
 					},

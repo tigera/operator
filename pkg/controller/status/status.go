@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -57,6 +58,11 @@ const (
 	waitingCrashLoopBackOff = "CrashLoopBackOff"
 	waitingImagePullBackOff = "ImagePullBackOff"
 	waitingErrImagePull     = "ErrImagePull"
+
+	// deploymentRevisionAnnotation records the revision number of a ReplicaSet
+	// within its owning Deployment. Set by the deployment controller; Kubernetes
+	// does not export a constant for it.
+	deploymentRevisionAnnotation = "deployment.kubernetes.io/revision"
 )
 
 type podIssueSeverity int
@@ -969,6 +975,13 @@ func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string
 		return ""
 	}
 
+	// During a rolling update both the new and old ReplicaSets can have
+	// Replicas > 0, so "has running pods" doesn't identify the active one.
+	// The active ReplicaSet is the one with the highest revision, recorded in
+	// the deployment.kubernetes.io/revision annotation - same idea as picking
+	// the max ControllerRevision in currentDaemonSetRevision.
+	var maxRevision int64
+	var currentHash string
 	for _, rs := range rsList.Items {
 		// The Deployment selector can match ReplicaSets it doesn't own (e.g. from a
 		// previous Deployment with the same selector). Filter to ReplicaSets owned
@@ -976,11 +989,16 @@ func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string
 		if ref := metav1.GetControllerOf(&rs); ref == nil || ref.UID != dep.UID {
 			continue
 		}
-		if rs.Status.Replicas > 0 {
-			return rs.Labels[appsv1.DefaultDeploymentUniqueLabelKey]
+		rev, err := strconv.ParseInt(rs.Annotations[deploymentRevisionAnnotation], 10, 64)
+		if err != nil {
+			continue
+		}
+		if rev > maxRevision {
+			maxRevision = rev
+			currentHash = rs.Labels[appsv1.DefaultDeploymentUniqueLabelKey]
 		}
 	}
-	return ""
+	return currentHash
 }
 
 // currentDaemonSetRevision returns the controller-revision-hash of the most recent

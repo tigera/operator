@@ -16,6 +16,7 @@ package status
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -503,8 +504,9 @@ var _ = Describe("Status reporting tests", func() {
 						Phase: corev1.PodRunning,
 						Conditions: []corev1.PodCondition{
 							{
-								Type:   corev1.ContainersReady,
-								Status: corev1.ConditionFalse,
+								Type:               corev1.ContainersReady,
+								Status:             corev1.ConditionFalse,
+								LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute)),
 							},
 						},
 					},
@@ -536,6 +538,51 @@ var _ = Describe("Status reporting tests", func() {
 				sm.updateStatus()
 				Expect(sm.IsDegraded()).To(BeTrue())
 				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
+			})
+
+			Context("readiness grace period", func() {
+				selector := &metav1.LabelSelector{MatchLabels: map[string]string{"grace": "true"}}
+
+				notReadyPod := func(name string, transitioned time.Time) *corev1.Pod {
+					return &corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "NS1",
+							Name:      name,
+							Labels:    map[string]string{"grace": "true"},
+						},
+						Status: corev1.PodStatus{
+							Phase: corev1.PodRunning,
+							Conditions: []corev1.PodCondition{
+								{
+									Type:               corev1.ContainersReady,
+									Status:             corev1.ConditionFalse,
+									LastTransitionTime: metav1.NewTime(transitioned),
+								},
+							},
+						},
+					}
+				}
+
+				It("should not flag a pod unready for less than the grace period", func() {
+					Expect(client.Create(ctx, notReadyPod("recently-unready", time.Now().Add(-10*time.Second)))).NotTo(HaveOccurred())
+					msg, err := sm.podsFailing(selector, "NS1")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(msg).To(BeEmpty())
+				})
+
+				It("should flag a pod unready for longer than the grace period", func() {
+					Expect(client.Create(ctx, notReadyPod("long-unready", time.Now().Add(-90*time.Second)))).NotTo(HaveOccurred())
+					msg, err := sm.podsFailing(selector, "NS1")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(msg).To(ContainSubstring("running but not ready"))
+				})
+
+				It("should not flag a pod with an unset LastTransitionTime", func() {
+					Expect(client.Create(ctx, notReadyPod("no-transition-time", time.Time{}))).NotTo(HaveOccurred())
+					msg, err := sm.podsFailing(selector, "NS1")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(msg).To(BeEmpty())
+				})
 			})
 		})
 

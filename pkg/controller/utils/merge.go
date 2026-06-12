@@ -285,6 +285,11 @@ func mergeCNISpecs(cfg, override *operatorv1.CNISpec) *operatorv1.CNISpec {
 		out.ConfDir = override.ConfDir
 	}
 
+	switch compareFields(out.InstallMode, override.InstallMode) {
+	case BOnlySet, Different:
+		out.InstallMode = override.InstallMode
+	}
+
 	return out
 }
 

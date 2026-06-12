@@ -20,10 +20,12 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v3"
+
+	"github.com/tigera/operator/hack/release/internal/command"
 )
 
 func main() {
-	version, err := gitVersion()
+	version, err := command.GitVersion()
 	if err != nil {
 		logrus.WithError(err).Fatal("Could not determine git version")
 	}

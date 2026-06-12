@@ -24,6 +24,7 @@ import (
 	"strings"
 	"sync"
 
+	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
@@ -42,6 +43,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -198,7 +200,7 @@ func (c *componentHandler) needsUpdate(ctx context.Context, obj client.Object) b
 	return true
 }
 
-func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType) error {
+func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.Object, osType rmeta.OSType, installationSpec *operatorv1.InstallationSpec) error {
 	om, ok := obj.(metav1.ObjectMetaAccessor)
 	if !ok {
 		return fmt.Errorf("object is not ObjectMetaAccessor")
@@ -230,8 +232,14 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// system as specified by the osType.
 	ensureOSSchedulingRestrictions(obj, osType)
 
-	// Make sure any objects with images also have an image pull policy.
-	modifyPodSpec(obj, setImagePullPolicy)
+	// Set image pull policy based on user input, if specified.
+	var configuredPolicy *v1.PullPolicy
+	if installationSpec != nil {
+		configuredPolicy = installationSpec.ImagePullPolicy
+	}
+	modifyPodSpec(obj, func(podSpec *v1.PodSpec) {
+		setImagePullPolicy(podSpec, configuredPolicy)
+	})
 	// Order volumes and volume mounts
 	modifyPodSpec(obj, orderVolumes)
 	modifyPodSpec(obj, orderVolumeMounts)
@@ -242,7 +250,7 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 	// Make sure we have our standard selector and pod labels
 	setStandardSelectorAndLabels(obj, c.cr)
 
-	if err := ensureTLSCiphers(ctx, obj, c.client); err != nil {
+	if err := ensureTLSCiphers(obj, installationSpec); err != nil {
 		return fmt.Errorf("failed to set TLS Ciphers: %w", err)
 	}
 
@@ -445,6 +453,29 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
+
+	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it
+	// for image pull policy and TLS ciphers, and we use it here to decide whether the user has
+	// disabled policy management.
+	_, installationSpec, err := GetInstallationSpec(ctx, c.client)
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	// If the user has disabled policy management, we should not create any NetworkPolicies, and we
+	// should actively delete any that we have already created.
+	if installationSpec != nil && policyManagementDisabled(installationSpec) {
+		newToCreate := []client.Object{}
+		for _, obj := range objsToCreate {
+			if isNetworkPolicy(obj) {
+				objsToDelete = append(objsToDelete, obj)
+			} else {
+				newToCreate = append(newToCreate, obj)
+			}
+		}
+		objsToCreate = newToCreate
+	}
+
 	osType := component.SupportedOSType()
 
 	if len(c.apiGroupEnvs) > 0 {
@@ -462,7 +493,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 		// if we need to retry the function
 		alreadyRetriedConflict := false
 	conflictRetry:
-		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType)
+		err := c.createOrUpdateObject(ctx, obj.DeepCopyObject().(client.Object), osType, installationSpec)
 		if err != nil {
 			if errors.IsAlreadyExists(err) {
 				// Remember that we've had an "already exists" error, but otherwise
@@ -796,17 +827,33 @@ func modifyPodSpec(obj client.Object, f func(*v1.PodSpec)) {
 	}
 }
 
-// setImagePullPolicy ensures that an image pull policy is set if not set already.
-func setImagePullPolicy(podSpec *v1.PodSpec) {
-	for i := range podSpec.Containers {
-		if len(podSpec.Containers[i].ImagePullPolicy) == 0 {
-			podSpec.Containers[i].ImagePullPolicy = v1.PullIfNotPresent
+// setImagePullPolicy applies an image pull policy to all containers and init containers in
+// the given pod spec. If configuredPolicy is non-nil it is applied to every container,
+// overriding any policy the renderer set — this is what lets a user force IfNotPresent or
+// Never for air-gapped clusters. If configuredPolicy is nil, containers that do not already
+// specify a policy fall back to IfNotPresent.
+func setImagePullPolicy(podSpec *v1.PodSpec, configuredPolicy *v1.PullPolicy) {
+	apply := func(c *v1.Container) {
+		switch {
+		case configuredPolicy != nil:
+			c.ImagePullPolicy = *configuredPolicy
+		case c.ImagePullPolicy == "":
+			c.ImagePullPolicy = v1.PullIfNotPresent
 		}
+	}
+	for i := range podSpec.Containers {
+		apply(&podSpec.Containers[i])
+	}
+	for i := range podSpec.InitContainers {
+		apply(&podSpec.InitContainers[i])
 	}
 }
 
 // ensureTLSCiphers sets the TLSCipherSuites configuration as a Env Var to the Deployments and DaemonSets.
-func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) error {
+func ensureTLSCiphers(obj client.Object, installationSpec *operatorv1.InstallationSpec) error {
+	if installationSpec == nil {
+		return nil
+	}
 	var containers []v1.Container
 	switch obj := obj.(type) {
 	case *apps.Deployment:
@@ -815,15 +862,6 @@ func ensureTLSCiphers(ctx context.Context, obj client.Object, c client.Client) e
 		containers = obj.Spec.Template.Spec.Containers
 	default:
 		return nil
-	}
-
-	_, installationSpec, err := GetInstallationSpec(ctx, c)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		} else {
-			return err
-		}
 	}
 
 	for i := range containers {
@@ -1042,6 +1080,12 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 		if podTemplate.Labels["k8s-app"] == "" {
 			podTemplate.Labels["k8s-app"] = name
 		}
+		if podTemplate.Spec.HostNetwork {
+			// The podiprecovery controller uses this label to find
+			// operator-managed hostNetwork pods that need their IPs
+			// re-checked after a node IP change.
+			podTemplate.Labels[common.HostNetworkedPodLabel] = "true"
+		}
 		if customResource != nil {
 			// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
 			// owner ref and are not controlled by our operator.
@@ -1184,4 +1228,20 @@ func mergeEnvVars(existing []v1.EnvVar, toMerge []v1.EnvVar) []v1.EnvVar {
 		}
 	}
 	return existing
+}
+
+func isNetworkPolicy(obj client.Object) bool {
+	switch obj.(type) {
+	case *v3.NetworkPolicy, *v3.GlobalNetworkPolicy, *netv1.NetworkPolicy:
+		return true
+	}
+	return false
+}
+
+// policyManagementDisabled returns true if the user has explicitly disabled operator management of
+// the NetworkPolicies it installs.
+func policyManagementDisabled(installation *operatorv1.InstallationSpec) bool {
+	return installation.NetworkPolicy != nil &&
+		installation.NetworkPolicy.ManagePolicies != nil &&
+		*installation.NetworkPolicy.ManagePolicies == operatorv1.NetworkPolicyManagementDisabled
 }

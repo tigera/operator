@@ -93,8 +93,8 @@ type Configuration struct {
 type Component struct {
 	cfg *Configuration
 
-	whiskerImage        string
-	whiskerBackendImage string
+	whiskerImage string
+	calicoImage  string
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -108,13 +108,8 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-
-	c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	return err
 }
 
 func (c *Component) SupportedOSType() rmeta.OSType {
@@ -162,9 +157,8 @@ func (c *Component) serviceAccount() *corev1.ServiceAccount {
 
 func (c *Component) whiskerContainer() corev1.Container {
 	return corev1.Container{
-		Name:            WhiskerContainerName,
-		Image:           c.whiskerImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
+		Name:  WhiskerContainerName,
+		Image: c.whiskerImage,
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "CALICO_VERSION", Value: c.cfg.CalicoVersion},
@@ -200,9 +194,9 @@ func (c *Component) whiskerService() *corev1.Service {
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
 	return corev1.Container{
-		Name:            WhiskerBackendContainerName,
-		Image:           c.whiskerBackendImage,
-		ImagePullPolicy: render.ImagePullPolicy(),
+		Name:    WhiskerBackendContainerName,
+		Image:   c.calicoImage,
+		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},

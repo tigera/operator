@@ -12,16 +12,16 @@ NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then e
 NATIVE_OS := $(shell uname -s | tr A-Z a-z)
 
 # The version of kustomize we use for generating bundles
-KUSTOMIZE_VERSION = v5.6.0
+KUSTOMIZE_VERSION = v5.8.1
 KUSTOMIZE_DOWNLOAD_URL = https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F$(KUSTOMIZE_VERSION)/kustomize_$(KUSTOMIZE_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
 
 # Our version of operator-sdk
-OPERATOR_SDK_VERSION = v1.39.2
+OPERATOR_SDK_VERSION = v1.42.2
 OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(NATIVE_OS)_$(NATIVE_ARCH)
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.20.1
+HELM3_VERSION = v3.20.2
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.1-llvm20.1.8-k8s1.35.3
-CALICO_BASE_VER ?= ubi9-1774634880
+GO_BUILD_VER?=1.26.3-llvm21.1.8-k8s1.36.1
+CALICO_BASE_VER ?= ubi9-1779935431
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -232,7 +232,7 @@ endif
 
 # To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
 ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
-ISTIO_VERSION ?= 1.28.1
+ISTIO_VERSION ?= 1.29.2
 ISTIO_RESOURCES_DIR = pkg/render/istio
 ISTIO_CHARTS = base istiod cni ztunnel
 ISTIO_CHART_FILES = $(addprefix $(ISTIO_RESOURCES_DIR)/,$(addsuffix .tgz,$(ISTIO_CHARTS)))
@@ -247,22 +247,14 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.0
-ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
-ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
-ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
+ENVOY_GATEWAY_VERSION ?= v1.7.2
+ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
-$(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
-	echo "---" > $@
-	echo "apiVersion: v1" >> $@
-	echo "kind: Namespace" >> $@
-	echo "metadata:" >> $@
-	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
-	$(HELM_BUILDARCH_BINARY) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+$(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
+	$(HELM_BUILDARCH_BINARY) pull $(ENVOY_GATEWAY_HELM_CHART) \
 		--version $(ENVOY_GATEWAY_VERSION) \
-		-n $(ENVOY_GATEWAY_NAMESPACE) \
-		--include-crds \
-	>> $@
+		--destination pkg/render/gatewayapi/
+	@mv pkg/render/gatewayapi/gateway-helm-$(ENVOY_GATEWAY_VERSION).tgz $@
 
 $(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
@@ -276,7 +268,7 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -339,7 +331,7 @@ GINKGO_FOCUS?=.*
 ENVTEST_K8S_VERSION?=1.34.x
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
@@ -348,7 +340,7 @@ ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
@@ -377,84 +369,28 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 FV_IMAGE_REGISTRY := docker.io
 VERSION_TAG := master
+CALICO_IMAGE := calico/calico
 NODE_IMAGE := calico/node
-APISERVER_IMAGE := calico/apiserver
-CNI_IMAGE := calico/cni
-FLEXVOL_IMAGE := calico/pod2daemon-flexvol
-KUBECONTROLLERS_IMAGE := calico/kube-controllers
-TYPHA_IMAGE := calico/typha
-CSI_IMAGE := calico/csi
-NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
-GOLDMANE_IMAGE := calico/goldmane
 WHISKER_IMAGE := calico/whisker
-WHISKER_BACKEND_IMAGE := calico/whisker-backend
+
+.PHONY: calico-calico.tar
+calico-calico.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(CALICO_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-node.tar
 calico-node.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
 
-.PHONY: calico-apiserver.tar
-calico-apiserver.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(APISERVER_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(APISERVER_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-cni.tar
-calico-cni.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CNI_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(CNI_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-pod2daemon-flexvol.tar
-calico-pod2daemon-flexvol.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(FLEXVOL_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(FLEXVOL_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-kube-controllers.tar
-calico-kube-controllers.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-typha.tar
-calico-typha.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(TYPHA_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(TYPHA_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-csi.tar
-calico-csi.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CSI_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(CSI_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-node-driver-registrar.tar
-calico-node-driver-registrar.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-goldmane.tar
-calico-goldmane.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(GOLDMANE_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(GOLDMANE_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-goldmane.tar
+.PHONY: calico-whisker.tar
 calico-whisker.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(WHISKER_IMAGE):$(VERSION_TAG)
 
-.PHONY: calico-goldmane.tar
-calico-whisker-backend.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
-
-IMAGE_TARS := calico-node.tar \
-	calico-apiserver.tar \
-	calico-cni.tar \
-	calico-pod2daemon-flexvol.tar \
-	calico-kube-controllers.tar \
-	calico-typha.tar \
-	calico-csi.tar \
-	calico-node-driver-registrar.tar \
-	calico-goldmane.tar \
-	calico-whisker.tar \
-	calico-whisker-backend.tar
+IMAGE_TARS := calico-calico.tar \
+	calico-node.tar \
+	calico-whisker.tar
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.
@@ -618,7 +554,7 @@ hack/release/ut:
 	mkdir -p report/release
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
+	gotestsum --format=testname --junitfile report/release/ut.xml $$(go list $(PACKAGE_NAME)/hack/release/... | grep -v /hack/release/validate)'
 
 release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
 	hack/bin/release from
@@ -636,7 +572,17 @@ release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-o
 	@REPO=$(REPO) hack/bin/release prep
 
 create-release-branch: hack/bin/release var-require-all-CALICO_REF-ENTERPRISE_REF var-require-one-of-STREAM-RELEASE_STREAM
-	hack/bin/release branch
+	hack/bin/release branch cut
+
+GOTESTSUM_VERSION?=1.13.0
+$(HACK_BIN)/gotestsum: $(HACK_BIN)
+	@curl -sSL -o $(HACK_BIN)/gotestsum.tar.gz https://github.com/gotestyourself/gotestsum/releases/download/v$(GOTESTSUM_VERSION)/gotestsum_$(GOTESTSUM_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
+	@tar -zxvf $(HACK_BIN)/gotestsum.tar.gz -C $(HACK_BIN) gotestsum
+	@chmod +x $@
+	@rm $(HACK_BIN)/gotestsum.tar.gz
+
+branch-validate: hack/bin/release $(HACK_BIN)/gotestsum var-require-one-of-STREAM-RELEASE_STREAM
+	PATH=$$PATH:$(CURDIR)/$(HACK_BIN) hack/bin/release branch validate
 
 ###############################################################################
 # Utilities
@@ -1072,7 +1018,6 @@ gen-enterprise-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-enterprise.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(enterprise_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1091,7 +1036,6 @@ gen-calico-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-calico.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(calico_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1100,7 +1044,7 @@ gen-calico-imageset: $(BUILD_DIR)
 	done
 ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
 	@docker run $(OPERATOR_IMAGE) --print-images=list | \
-	  grep -v -e "Failed to read" -e fips | \
+	  grep -v -e "Failed to read" | \
 	  grep -e 'tigera/key-cert-provisioner' | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \

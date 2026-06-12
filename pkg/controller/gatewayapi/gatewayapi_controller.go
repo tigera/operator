@@ -17,14 +17,18 @@ package gatewayapi
 import (
 	"context"
 	"fmt"
+	"slices"
+	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"k8s.io/utils/set"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -40,13 +44,18 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -65,6 +74,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:              mgr.GetClient(),
 		scheme:              mgr.GetScheme(),
 		enterpriseCRDsExist: opts.EnterpriseCRDExists,
+		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
 		multiTenant:         opts.MultiTenant,
@@ -76,6 +86,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create gatewayapi-controller: %w", err)
 	}
+
+	// Lazy tier watch; policies only render when the calico-system Tier exists.
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
 	// Watch for changes to primary resource GatewayAPI
 	err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{})
@@ -131,6 +144,21 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return nil
 	}
 
+	// Watch Gateway resources lazily — the CRD is created by this controller, so we can
+	// only start watching after it exists. Called from Reconcile once CRDs are in place.
+	gatewaysWatched := false
+	r.watchGateways = func() error {
+		if gatewaysWatched {
+			return nil
+		}
+		log.V(1).Info("Adding watch for Gateway resources")
+		if err = c.WatchObject(&gapi.Gateway{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("gatewayapi-controller failed to watch Gateway resource: %w", err)
+		}
+		gatewaysWatched = true
+		return nil
+	}
+
 	return nil
 }
 
@@ -142,12 +170,14 @@ type ReconcileGatewayAPI struct {
 	client              client.Client
 	scheme              *runtime.Scheme
 	enterpriseCRDsExist bool
+	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
 	clusterDomain       string
 	multiTenant         bool
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
 	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
+	watchGateways       func() error
 }
 
 // Reconcile reads that state of the cluster for a GatewayAPI object and makes changes based on the state read
@@ -213,7 +243,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// not already exist and cannot be installed.  The "optional" set is everything else that we
 	// would ideally install, to provide more options to our users; but this controller will
 	// only warn if any of those cannot be installed (and do not already exist).
-	essentialCRDs, optionalCRDs := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider)
+	essentialCRDs, optionalCRDs, err := gatewayapi.GatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
 	if gatewayAPI.Spec.CRDManagement == nil || *gatewayAPI.Spec.CRDManagement == operatorv1.CRDManagementPreferExisting {
 		handler.SetCreateOnly()
@@ -274,12 +308,44 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Render v3 NetworkPolicies only when the calico-system Tier exists — same pattern
+	// as the other controllers; tolerates clusters without Calico installed.
+	includeV3NetworkPolicy := false
+	if r.tierWatchReady.IsReady() {
+		if err := r.client.Get(ctx, types.NamespacedName{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
+		}
+	}
+
+	// Build a trust bundle containing public CA roots (extracted from the operator's
+	// UBI base image) plus the Calico operator CA. Envoy-gateway pulls wasm OCI
+	// images and envoy-proxy may originate TLS to public upstreams, JWT/OIDC
+	// providers, and tracing exporters -- none of which work without public CAs.
+	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create gateway trust bundle", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	gatewayConfig := &gatewayapi.GatewayAPIImplementationConfig{
-		Installation:          installationSpec,
-		PullSecrets:           pullSecrets,
-		GatewayAPI:            gatewayAPI,
-		CustomEnvoyProxies:    make(map[string]*envoyapi.EnvoyProxy),
-		CurrentGatewayClasses: set.New[string](),
+		Scheme:                 r.scheme,
+		Installation:           installationSpec,
+		PullSecrets:            pullSecrets,
+		GatewayAPI:             gatewayAPI,
+		CustomEnvoyProxies:     make(map[string]*envoyapi.EnvoyProxy),
+		CurrentGatewayClasses:  set.New[string](),
+		IncludeV3NetworkPolicy: includeV3NetworkPolicy,
+		TrustedBundle:          trustedBundle,
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {
@@ -350,6 +416,14 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading EnvoyProxyRef", err, log)
 				return reconcile.Result{}, err
 			}
+			// Upstream rejects mergeGateways with GatewayNamespaceMode; force to false on our copy.
+			if envoyProxy.Spec.MergeGateways != nil && *envoyProxy.Spec.MergeGateways {
+				log.Info("EnvoyProxy sets mergeGateways: true, which is not compatible with namespaced deployments — forcing to false",
+					"envoyProxyNamespace", envoyProxy.Namespace,
+					"envoyProxyName", envoyProxy.Name,
+					"gatewayClass", gatewayAPI.Spec.GatewayClasses[i].Name)
+				envoyProxy.Spec.MergeGateways = ptr.To(false)
+			}
 			if gatewayAPI.Spec.GatewayClasses[i].GatewayKind != nil &&
 				envoyProxy.Spec.Provider != nil &&
 				envoyProxy.Spec.Provider.Kubernetes != nil {
@@ -401,10 +475,89 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
+	// Start watching Gateway resources now that the CRDs are in place, so future
+	// Gateway changes trigger reconciliation.
+	if err = r.watchGateways(); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching Gateway resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	var gwList gapi.GatewayList
+	if err = r.client.List(ctx, &gwList); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing Gateway resources", err, log)
+		return reconcile.Result{}, err
+	}
+
+	// Collect namespaces hosting a Gateway whose class is ours (controllerName
+	// matches, or it's declared in Spec.GatewayClasses).
+	ownedClass := make(map[string]bool, len(gatewayAPI.Spec.GatewayClasses)+1)
+	ownedClass[gatewayapi.GatewayClassName] = true
+	for _, c := range gatewayAPI.Spec.GatewayClasses {
+		ownedClass[c.Name] = true
+	}
+	for i := range gcList.Items {
+		if string(gcList.Items[i].Spec.ControllerName) == gatewayapi.ControllerName {
+			ownedClass[gcList.Items[i].Name] = true
+		}
+	}
+	nsSet := set.New[string]()
+	for i := range gwList.Items {
+		if ownedClass[string(gwList.Items[i].Spec.GatewayClassName)] {
+			nsSet.Insert(gwList.Items[i].Namespace)
+		}
+	}
+	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
+
+	// Legacy tigera-gateway teardown (TODO: remove once upgrades from 3.x are unsupported).
+	// Foreground-delete the old controller so its Deployment lingers until its pods are gone — only
+	// then does the Get below return NotFound, guaranteeing nothing re-creates the proxies we then
+	// sweep. Owner-scoped, requeueing until clean. Skipped if a Gateway lives in tigera-gateway,
+	// since then the proxy there belongs to the new controller.
+	const legacyGatewayNamespace = "tigera-gateway"
+	legacyNamespaceHostsGateway := slices.Contains(gatewayConfig.GatewayNamespaces, legacyGatewayNamespace)
+	if !legacyNamespaceHostsGateway {
+		legacyController := &v1.Deployment{}
+		switch err = r.client.Get(ctx, types.NamespacedName{Namespace: legacyGatewayNamespace, Name: "envoy-gateway"}, legacyController); {
+		case err == nil:
+			if legacyController.DeletionTimestamp == nil {
+				foreground := metav1.DeletePropagationForeground
+				if derr := r.client.Delete(ctx, legacyController, &client.DeleteOptions{PropagationPolicy: &foreground}); derr != nil && !errors.IsNotFound(derr) {
+					r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting legacy gateway controller", derr, reqLogger)
+					return reconcile.Result{}, derr
+				}
+			}
+			reqLogger.Info("Deleting legacy tigera-gateway controller; waiting for its pods before cleaning proxies")
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		case !errors.IsNotFound(err):
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for legacy tigera-gateway controller", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		orphans, oerr := r.legacyGatewayOrphans(ctx, legacyGatewayNamespace)
+		if oerr != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing legacy gateway resources", oerr, reqLogger)
+			return reconcile.Result{}, oerr
+		}
+		if len(orphans) > 0 {
+			for _, obj := range orphans {
+				if derr := r.client.Delete(ctx, obj); derr != nil && !errors.IsNotFound(derr) {
+					r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error deleting legacy gateway resource", derr, reqLogger)
+					return reconcile.Result{}, derr
+				}
+			}
+			reqLogger.Info("Cleaning orphaned legacy tigera-gateway proxies", "count", len(orphans))
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
 	// Render non-CRD resources for Gateway API support, i.e. for our specific bundled
 	// implementation of the Gateway API.  For these we specify the GatewayAPI CR as the owner,
 	// so that they all get automatically cleaned up if the GatewayAPI CR is removed again.
-	nonCRDComponent := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
+	nonCRDComponent, err := gatewayapi.GatewayAPIImplementationComponent(gatewayConfig)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Gateway API resources", err, log)
+		return reconcile.Result{}, err
+	}
 	err = imageset.ApplyImageSet(ctx, r.client, variant, nonCRDComponent)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error with images from ImageSet", err, log)
@@ -422,10 +575,15 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	// Per-namespace resources, owned by the namespace's Gateways so the GC cleans them up.
+	if err = r.reconcileGatewayNamespaceResources(ctx, trustedBundle, pullSecrets, variant.IsEnterprise(), gwList.Items, ownedClass); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error writing per-namespace Gateway resources", err, log)
+		return reconcile.Result{}, err
+	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
-	// Update the status of the GatewayAPI instance and StatusManager.
 	return reconcile.Result{}, nil
 }
 
@@ -496,6 +654,115 @@ func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurat
 // The bool return value indicates if the finalizer is Set
 func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI client.Object) (bool, error) {
 	// These objects require graceful termination before the CNI plugin is torn down.
-	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "tigera-gateway"}}
+	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.CalicoNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
+}
+
+// reconcileGatewayNamespaceResources writes the per-namespace resources owned by the namespace's
+// Gateways, so the GC removes them once the last Gateway is gone (and the GatewayAPI CR's deletion
+// doesn't strand them). Reserved namespaces are skipped; trust bundle on both variants, the rest on
+// Enterprise.
+func (r *ReconcileGatewayAPI) reconcileGatewayNamespaceResources(ctx context.Context, bundle certificatemanagement.TrustedBundle, pullSecrets []*corev1.Secret, enterprise bool, gateways []gapi.Gateway, ownedClass map[string]bool) error {
+	ownersByNamespace := map[string][]metav1.OwnerReference{}
+	for i := range gateways {
+		gw := &gateways[i]
+		if !ownedClass[string(gw.Spec.GatewayClassName)] || gw.Namespace == common.CalicoNamespace || gw.Namespace == common.OperatorNamespace() {
+			continue
+		}
+		ownersByNamespace[gw.Namespace] = append(ownersByNamespace[gw.Namespace], metav1.OwnerReference{
+			APIVersion: "gateway.networking.k8s.io/v1",
+			Kind:       "Gateway",
+			Name:       gw.Name,
+			UID:        gw.UID,
+		})
+	}
+	for namespace, owners := range ownersByNamespace {
+		var objs []client.Object
+		if bundle != nil {
+			objs = append(objs, bundle.ConfigMap(namespace))
+		}
+		if enterprise {
+			objs = append(objs,
+				gatewayapi.GatewayNamespaceServiceAccount(namespace),
+				gatewayapi.GatewayNamespaceRoleBinding(namespace),
+				render.CreateOperatorSecretsRoleBinding(namespace),
+			)
+			objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(namespace, pullSecrets...)...)...)
+		}
+		for _, obj := range objs {
+			if err := r.upsertGatewayOwned(ctx, obj, owners); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// legacyGatewayOrphans returns the resources in namespace owned by the tigera-gateway-class
+// GatewayClass or the GatewayAPI CR — the pre-namespaced proxies. Owner-scoped, so unrelated
+// resources are never returned.
+func (r *ReconcileGatewayAPI) legacyGatewayOrphans(ctx context.Context, namespace string) ([]client.Object, error) {
+	ownedByLegacyGateway := func(o client.Object) bool {
+		for _, ref := range o.GetOwnerReferences() {
+			if ref.Kind == "GatewayAPI" || (ref.Kind == "GatewayClass" && ref.Name == gatewayapi.GatewayClassName) {
+				return true
+			}
+		}
+		return false
+	}
+	deployments := &v1.DeploymentList{}
+	services := &corev1.ServiceList{}
+	serviceAccounts := &corev1.ServiceAccountList{}
+	configMaps := &corev1.ConfigMapList{}
+	for _, list := range []client.ObjectList{deployments, services, serviceAccounts, configMaps} {
+		if err := r.client.List(ctx, list, client.InNamespace(namespace)); err != nil {
+			return nil, err
+		}
+	}
+	var orphans []client.Object
+	for i := range deployments.Items {
+		if ownedByLegacyGateway(&deployments.Items[i]) {
+			orphans = append(orphans, &deployments.Items[i])
+		}
+	}
+	for i := range services.Items {
+		if ownedByLegacyGateway(&services.Items[i]) {
+			orphans = append(orphans, &services.Items[i])
+		}
+	}
+	for i := range serviceAccounts.Items {
+		if ownedByLegacyGateway(&serviceAccounts.Items[i]) {
+			orphans = append(orphans, &serviceAccounts.Items[i])
+		}
+	}
+	for i := range configMaps.Items {
+		if ownedByLegacyGateway(&configMaps.Items[i]) {
+			orphans = append(orphans, &configMaps.Items[i])
+		}
+	}
+	return orphans, nil
+}
+
+// upsertGatewayOwned creates or updates obj, refreshing its owner references (and ConfigMap/Secret
+// data) so the namespace's owner set stays current as its Gateways come and go.
+func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired client.Object, owners []metav1.OwnerReference) error {
+	desired.SetOwnerReferences(owners)
+	existing := desired.DeepCopyObject().(client.Object)
+	switch err := r.client.Get(ctx, client.ObjectKeyFromObject(desired), existing); {
+	case errors.IsNotFound(err):
+		return r.client.Create(ctx, desired)
+	case err != nil:
+		return err
+	default:
+		existing.SetOwnerReferences(owners)
+		switch d := desired.(type) {
+		case *corev1.ConfigMap:
+			e := existing.(*corev1.ConfigMap)
+			e.Data, e.Annotations = d.Data, d.Annotations
+		case *corev1.Secret:
+			e := existing.(*corev1.Secret)
+			e.Data, e.Type = d.Data, d.Type
+		}
+		return r.client.Update(ctx, existing)
+	}
 }

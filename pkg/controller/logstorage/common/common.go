@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -108,6 +108,18 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 	}
 
 	return kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, nil
+}
+
+// KibanaEnabled returns true if Kibana should be enabled based on the LogStorage spec and multi-tenancy mode.
+func KibanaEnabled(ls *operatorv1.LogStorage, multiTenant bool) bool {
+	if multiTenant {
+		return false
+	}
+	if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
+		ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
+		return false
+	}
+	return true
 }
 
 func CalculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

@@ -133,8 +133,8 @@ type GuardianConfiguration struct {
 }
 
 type GuardianComponent struct {
-	cfg   *GuardianConfiguration
-	image string
+	cfg         *GuardianConfiguration
+	calicoImage string
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -142,11 +142,7 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.image, err = components.GetReference(components.ComponentGuardian, reg, path, prefix, is)
-	} else {
-		c.image, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
-	}
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -499,15 +495,15 @@ func (c *GuardianComponent) container() []corev1.Container {
 
 	return []corev1.Container{
 		{
-			Name:            GuardianContainerName,
-			Image:           c.image,
-			ImagePullPolicy: ImagePullPolicy(),
-			Env:             envVars,
-			VolumeMounts:    c.volumeMounts(),
+			Name:         GuardianContainerName,
+			Image:        c.calicoImage,
+			Command:      []string{components.CalicoBinaryPath, "component", "guardian"},
+			Env:          envVars,
+			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/health",
+						Path: "/liveness",
 						Port: intstr.FromInt(9080),
 					},
 				},
@@ -516,7 +512,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
-						Path: "/health",
+						Path: "/readiness",
 						Port: intstr.FromInt(9080),
 					},
 				},
@@ -834,7 +830,7 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			// Needed by kube-controllers to validate licenses; also used by ID.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"licensekeys"},
 			Verbs:     []string{"get", "watch"},
 		},
@@ -971,25 +967,25 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 		},
 		{
 			// Needs to manage hostendpoints.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"hostendpoints"},
 			Verbs:     []string{"create", "delete", "get", "list", "update", "watch"},
 		},
 		{
 			// Needs access to update clusterinformations.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"clusterinformations"},
 			Verbs:     []string{"create", "get", "list", "update", "watch"},
 		},
 		{
 			// Needs to manipulate kubecontrollersconfiguration, which contains its config.
 			// It creates a default if none exists, and updates status as well.
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"kubecontrollersconfigurations"},
 			Verbs:     []string{"create", "get", "list", "update", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"tiers"},
 			Verbs:     []string{"create"},
 		},
@@ -999,17 +995,17 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"deeppacketinspections/status"},
 			Verbs:     []string{"update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "update"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"remoteclusterconfigurations"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
@@ -1042,12 +1038,12 @@ func rulesForManagementClusterRequests(isOpenShift bool) []rbacv1.PolicyRule {
 			Verbs:     []string{"get"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"alertexceptions"},
 			Verbs:     []string{"get", "list"},
 		},
 		{
-			APIGroups: []string{"crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "update", "watch"},
 		},

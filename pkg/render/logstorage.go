@@ -402,9 +402,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	initOSSettingsContainer := corev1.Container{
-		Name:            "elastic-internal-init-os-settings",
-		Image:           es.esImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:  "elastic-internal-init-os-settings",
+		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
 		},
@@ -417,9 +416,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 	initFSContainer := corev1.Container{
-		Name:            "elastic-internal-init-filesystem",
-		Image:           es.esImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:  "elastic-internal-init-filesystem",
+		Image: es.esImage,
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":    resource.MustParse("100m"),
@@ -435,9 +433,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	suspendContainer := corev1.Container{
-		Name:            "elastic-internal-suspend",
-		Image:           es.esImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:  "elastic-internal-suspend",
+		Image: es.esImage,
 		// Without a root context, it is not able to start.
 		SecurityContext: securitycontext.NewRootContext(true),
 	}
@@ -474,7 +471,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			"transport.tls.crt",
 			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.cfg.ClusterDomain),
 			ElasticsearchNamespace,
-			esContainer.SecurityContext)
+			esContainer.SecurityContext,
+		)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 
 		initContainers = append(

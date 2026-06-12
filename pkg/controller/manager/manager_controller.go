@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/compliance"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -96,10 +97,19 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+	policiesToWatch := []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
-		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
-	})
+	}
+	// The default-deny policy in calico-system is owned by the Installation
+	// controller; only watch it here when we render it ourselves, i.e. in
+	// multi-tenant mode where the Manager lives in a tenant namespace.
+	if helper.InstallNamespace() != common.CalicoNamespace {
+		policiesToWatch = append(policiesToWatch, types.NamespacedName{
+			Name:      networkpolicy.CalicoComponentDefaultDenyPolicyName,
+			Namespace: helper.InstallNamespace(),
+		})
+	}
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policiesToWatch)
 
 	// Watch for changes to primary resource Manager
 	err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
@@ -145,6 +155,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.ImageSet{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
+	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch LogStorage resource: %w", err)
+	}
 	if opts.MultiTenant {
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
@@ -161,7 +174,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			// We need to watch for es-gateway certificate because ui-apis still creates a
 			// client to talk to elastic via es-gateway
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
+			render.VoltronTunnelSecretName, render.VoltronAdditionalTunnelSecretName,
+			render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -353,7 +367,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 		return reconcile.Result{}, err
 	}
-
 	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.opts.ClusterDomain)
 
 	// Continue to add in the legacy names and namespaces of manager components to cover version skew scenarios. These
@@ -652,32 +665,62 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// If an additional tunnel CA secret has been provisioned in the truth namespace, Voltron
+	// will mount it and serve TLS from it. This is only relevant for management clusters
+	// (Voltron is what consumes the additional CA). The secret is managed out-of-band; the
+	// controller just watches and consumes it.
+	var additionalTunnelServerCert certificatemanagement.KeyPairInterface
+	if managementCluster != nil {
+		additionalTunnelServerCert, err = r.resolveAdditionalTunnelCert(ctx, helper.TruthNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error resolving additional tunnel CA", err, logc)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Determine if Kibana is enabled based on multi-tenancy and LogStorage replicas.
+	kibanaEnabled := !r.opts.MultiTenant
+	if kibanaEnabled {
+		ls := &operatorv1.LogStorage{}
+		if err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls); err != nil {
+			if !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query LogStorage resource", err, logc)
+				return reconcile.Result{}, err
+			}
+		} else {
+			kibanaEnabled = lscommon.KibanaEnabled(ls, r.opts.MultiTenant)
+		}
+	}
+
 	managerCfg := &render.ManagerConfiguration{
-		VoltronRouteConfig:      routeConfig,
-		KeyValidatorConfig:      keyValidatorConfig,
-		TrustedCertBundle:       trustedBundle,
-		TLSKeyPair:              tlsSecret,
-		VoltronLinseedKeyPair:   linseedVoltronServerCert,
-		PullSecrets:             pullSecrets,
-		OpenShift:               r.opts.DetectedProvider.IsOpenShift(),
-		Installation:            installationSpec,
-		ManagementCluster:       managementCluster,
-		NonClusterHost:          nonclusterhost,
-		TunnelServerCert:        tunnelServerCert,
-		InternalTLSKeyPair:      internalTrafficSecret,
-		ClusterDomain:           r.opts.ClusterDomain,
-		ESLicenseType:           elasticLicenseType,
-		Replicas:                replicas,
-		Compliance:              complianceCR,
-		ComplianceLicenseActive: complianceLicenseFeatureActive,
-		ComplianceNamespace:     utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
-		Namespace:               helper.InstallNamespace(),
-		TruthNamespace:          helper.TruthNamespace(),
-		Tenant:                  tenant,
-		ExternalElastic:         r.opts.ElasticExternal,
-		BindingNamespaces:       namespaces,
-		OSSTenantNamespaces:     ossTenantNamespaces,
-		Manager:                 instance,
+		VoltronRouteConfig:         routeConfig,
+		KeyValidatorConfig:         keyValidatorConfig,
+		TrustedCertBundle:          trustedBundle,
+		TLSKeyPair:                 tlsSecret,
+		VoltronLinseedKeyPair:      linseedVoltronServerCert,
+		PullSecrets:                pullSecrets,
+		OpenShift:                  r.opts.DetectedProvider.IsOpenShift(),
+		Installation:               installationSpec,
+		ManagementCluster:          managementCluster,
+		NonClusterHost:             nonclusterhost,
+		TunnelServerCert:           tunnelServerCert,
+		AdditionalTunnelServerCert: additionalTunnelServerCert,
+		InternalTLSKeyPair:         internalTrafficSecret,
+		ClusterDomain:              r.opts.ClusterDomain,
+		ESLicenseType:              elasticLicenseType,
+		Replicas:                   replicas,
+		Compliance:                 complianceCR,
+		ComplianceLicenseActive:    complianceLicenseFeatureActive,
+		ComplianceNamespace:        utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
+		Namespace:                  helper.InstallNamespace(),
+		TruthNamespace:             helper.TruthNamespace(),
+		Tenant:                     tenant,
+		ExternalElastic:            r.opts.ElasticExternal,
+		BindingNamespaces:          namespaces,
+		OSSTenantNamespaces:        ossTenantNamespaces,
+		Manager:                    instance,
+		KibanaEnabled:              kibanaEnabled,
+		CACertCommonName:           certificateManager.CACertCommonName(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -706,6 +749,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
+				rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, true),
 			},
 			TrustedBundle: bundleMaker,
 		}),
@@ -806,4 +850,23 @@ func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamesp
 	}
 
 	return builder.Build()
+}
+
+// resolveAdditionalTunnelCert looks up the additional tunnel CA secret in the truth namespace.
+// When the secret is present, a KeyPair is returned so that Voltron mounts the CA and gets the
+// corresponding environment variables set. When the secret is absent, (nil, nil) is returned and
+// Voltron runs without the additional CA. The secret is created and rotated out-of-band; this
+// controller only consumes it.
+func (r *ReconcileManager) resolveAdditionalTunnelCert(
+	ctx context.Context,
+	truthNamespace string,
+) (certificatemanagement.KeyPairInterface, error) {
+	secret, err := utils.GetSecret(ctx, r.client, render.VoltronAdditionalTunnelSecretName, truthNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s secret: %w", render.VoltronAdditionalTunnelSecretName, err)
+	}
+	if secret == nil {
+		return nil, nil
+	}
+	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
 }

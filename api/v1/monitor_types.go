@@ -33,9 +33,9 @@ type MonitorSpec struct {
 	// +optional
 	Prometheus *Prometheus `json:"prometheus,omitempty"`
 
-	// AlertManager is the configuration for the AlertManager.
+	// Alertmanager is the configuration for the Alertmanager.
 	// +optional
-	AlertManager *AlertManager `json:"alertManager,omitempty"`
+	Alertmanager *Alertmanager `json:"alertmanager,omitempty"`
 }
 
 type ExternalPrometheus struct {
@@ -179,12 +179,17 @@ type PrometheusContainer struct {
 	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
 }
 
-type AlertManager struct {
+type Alertmanager struct {
 	// Spec is the specification of the Alertmanager.
 	// +optional
-	AlertManagerSpec *AlertManagerSpec `json:"spec,omitempty"`
+	AlertmanagerSpec *AlertmanagerSpec `json:"spec,omitempty"`
 }
-type AlertManagerSpec struct {
+type AlertmanagerSpec struct {
+	// Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
+	// Default: 0
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// Define resources requests and limits for single Pods.
 	Resources corev1.ResourceRequirements `json:"resources,omitempty"`
 }

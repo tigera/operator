@@ -243,6 +243,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		"xpack.fleet.isAirGapped":    true,
 		"xpack.fleet.packages":       []string{},
 		"xpack.fleet.registryUrl":    "http://localhost:5601",
+		// Without this, upgrades from Kibana 7.x crashloop on orphan `ingest_manager_settings` docs.
+		"migrations.discardUnknownObjects": components.ComponentEckKibana.Version,
 		// Setting this to false will prevent it from connecting to endpoints outside of this cluster.
 		// See: https://www.elastic.co/guide/en/kibana/8.19/settings.html
 		"newsfeed.enabled": false,
@@ -280,7 +282,8 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 			corev1.TLSCertKey,
 			dns.GetServiceDNSNames(ServiceName, Namespace, k.cfg.ClusterDomain),
 			Namespace,
-			sc)
+			sc,
+		)
 
 		initContainers = append(initContainers, csrInitContainer)
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
@@ -304,8 +307,9 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 	}
 
 	count := int32(1)
-	if k.cfg.Installation.ControlPlaneReplicas != nil {
-		count = *k.cfg.Installation.ControlPlaneReplicas
+	if k.cfg.LogStorage != nil && k.cfg.LogStorage.Spec.Kibana != nil &&
+		k.cfg.LogStorage.Spec.Kibana.Spec != nil && k.cfg.LogStorage.Spec.Kibana.Spec.Replicas != nil {
+		count = *k.cfg.LogStorage.Spec.Kibana.Spec.Replicas
 	}
 
 	tolerations := k.cfg.Installation.ControlPlaneTolerations
@@ -380,7 +384,7 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		},
 	}
 
-	if k.cfg.Installation.ControlPlaneReplicas != nil && *k.cfg.Installation.ControlPlaneReplicas > 1 {
+	if count > 1 {
 		kibana.Spec.PodTemplate.Spec.Affinity = podaffinity.NewPodAntiAffinity(CRName, []string{Namespace})
 	}
 

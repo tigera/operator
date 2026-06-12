@@ -461,7 +461,7 @@ var (
 	skipValidationFlag      = &cli.BoolFlag{
 		Name:     "skip-validation",
 		Category: developmentFlagCategory,
-		Usage:    "Skip various validation steps (development and testing purposes only)",
+		Usage:    "Skip various validation steps except version check (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_VALIDATION"),
 		Value:    false,
 	}
@@ -478,5 +478,12 @@ var (
 		Usage:    "Skip checking that the current git branch is master or a release branch (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_BRANCH_CHECK"),
 		Value:    false,
+	}
+	versionCheckFlag = &cli.BoolWithInverseFlag{
+		Name:     "version-check",
+		Category: developmentFlagCategory,
+		Usage:    "Check that the provided version is valid and matches the git version. (development and testing purposes only)",
+		Sources:  cli.EnvVars("VERSION_CHECK"),
+		Value:    true,
 	}
 )

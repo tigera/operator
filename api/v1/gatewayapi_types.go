@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -508,4 +509,17 @@ type GatewayServiceSpec struct {
 
 	// +optional
 	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
+
+	// Patch allows the Service for a gateway to be patched in ways that aren't more explicitly
+	// supported by the fields above.  For example, the following YAML could be used to set the
+	// Service's healthCheckNodePort:
+	//
+	//   patch:
+	//     type: StrategicMerge
+	//     value:
+	//       spec:
+	//         healthCheckNodePort: 12345
+	//
+	// +optional
+	Patch *envoyapi.KubernetesPatchSpec `json:"patch,omitempty"`
 }

@@ -26,6 +26,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/middleware"
 	"github.com/urfave/cli/v3"
 )
 
@@ -40,19 +42,18 @@ var publishCommand = &cli.Command{
 		registryFlag,
 		hashreleaseFlag,
 		skipValidationFlag,
+		versionCheckFlag,
 		createGithubReleaseFlag,
 		githubTokenFlag,
 		draftGithubReleaseFlag,
 	},
-	Before: publishBefore,
-	Action: publishAction,
+	Before: middleware.WithLogging(publishBefore),
+	Action: middleware.WithSummary("release-publish", publishAction),
 }
 
 // Pre-action for publish command.
 // It configures logging and performs validations.
 var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (context.Context, error) {
-	configureLogging(c)
-
 	var err error
 
 	ctx, err = addRepoInfoToCtx(ctx, c.String(gitRepoFlag.Name))
@@ -88,29 +89,33 @@ var publishBefore = cli.BeforeFunc(func(ctx context.Context, c *cli.Command) (co
 })
 
 // Action for publish command.
-var publishAction = cli.ActionFunc(func(ctx context.Context, c *cli.Command) error {
-	repoRootDir, err := gitDir()
+var publishAction = func(ctx context.Context, c *cli.Command) (string, map[string]any, error) {
+	version := c.String(versionFlag.Name)
+	repoRootDir, err := command.GitDir()
 	if err != nil {
-		return fmt.Errorf("getting git directory: %w", err)
+		return version, nil, fmt.Errorf("getting git directory: %w", err)
 	}
 
 	// Publish images
 	if err := publishImages(c, repoRootDir); err != nil {
-		return err
+		return version, nil, err
 	}
 
 	// Only images are published for hashrelease builds.
 	if c.Bool(hashreleaseFlag.Name) {
-		return nil
+		return version, nil, nil
 	}
 
 	// Publish GitHub release if requested
 	if !c.Bool(createGithubReleaseFlag.Name) {
 		logrus.Warnf("Skipping GitHub release creation. Either use %q to create a GitHub release or create manually.", publicCommand.FullName())
-		return nil
+		return version, nil, nil
 	}
-	return publishGithubRelease(ctx, c, repoRootDir)
-})
+	if err := publishGithubRelease(ctx, c, repoRootDir); err != nil {
+		return version, nil, err
+	}
+	return version, nil, nil
+}
 
 // publishImages publishes the operator images to the specified registry.
 // If the images are already published, it skips publishing.
@@ -152,7 +157,7 @@ var publishImages = func(c *cli.Command, repoRootDir string) error {
 	}
 
 	log.Info("Publishing Operator images")
-	if out, err := makeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
+	if out, err := command.MakeInDir(repoRootDir, "release-publish-images", publishEnv...); err != nil {
 		log.Error(out)
 		return fmt.Errorf("publishing images: %w", err)
 	}

@@ -26,12 +26,22 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/utils/ptr"
 
 	opv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/test"
 )
 
 func intPtr(i int32) *int32 { return &i }
+
+var (
+	enabled  = opv1.NetworkPolicyManagementEnabled
+	disabled = opv1.NetworkPolicyManagementDisabled
+)
+
+func npSpec(m *opv1.NetworkPolicyManagement) *opv1.NetworkPolicySpec {
+	return &opv1.NetworkPolicySpec{ManagePolicies: m}
+}
 
 var _ = Describe("Installation merge tests", func() {
 	DescribeTable("merge Variant", func(main, second, expectVariant *opv1.ProductVariant) {
@@ -113,6 +123,24 @@ var _ = Describe("Installation merge tests", func() {
 		Entry("Second only set", nil, []v1.LocalObjectReference{{Name: "pull-secret"}}, []v1.LocalObjectReference{{Name: "pull-secret"}}),
 		Entry("Both set equal", []v1.LocalObjectReference{{Name: "pull-secret"}}, []v1.LocalObjectReference{{Name: "pull-secret"}}, []v1.LocalObjectReference{{Name: "pull-secret"}}),
 		Entry("Both set not matching", []v1.LocalObjectReference{{Name: "pull-secret"}}, []v1.LocalObjectReference{{Name: "other-pull-secret"}}, []v1.LocalObjectReference{{Name: "other-pull-secret"}}),
+	)
+
+	DescribeTable("merge ImagePullPolicy", func(main, second, expect *v1.PullPolicy) {
+		m := opv1.InstallationSpec{ImagePullPolicy: main}
+		s := opv1.InstallationSpec{ImagePullPolicy: second}
+		inst := OverrideInstallationSpec(m, s)
+		if expect == nil {
+			Expect(inst.ImagePullPolicy).To(BeNil())
+		} else {
+			Expect(inst.ImagePullPolicy).NotTo(BeNil())
+			Expect(*inst.ImagePullPolicy).To(Equal(*expect))
+		}
+	},
+		Entry("Both unset", nil, nil, nil),
+		Entry("Main only set", ptr.To(v1.PullIfNotPresent), nil, ptr.To(v1.PullIfNotPresent)),
+		Entry("Second only set", nil, ptr.To(v1.PullAlways), ptr.To(v1.PullAlways)),
+		Entry("Both set equal", ptr.To(v1.PullIfNotPresent), ptr.To(v1.PullIfNotPresent), ptr.To(v1.PullIfNotPresent)),
+		Entry("Both set not matching", ptr.To(v1.PullAlways), ptr.To(v1.PullNever), ptr.To(v1.PullNever)),
 	)
 
 	DescribeTable("merge KubernetesProvider", func(main, second, expect *opv1.Provider) {
@@ -1573,6 +1601,18 @@ var _ = Describe("Installation merge tests", func() {
 					CNI:           &opv1.CNISpec{},
 				},
 				&defaulted),
+		)
+
+		DescribeTable("merge NetworkPolicy", func(main, second, expect *opv1.NetworkPolicySpec) {
+			m := opv1.InstallationSpec{NetworkPolicy: main}
+			s := opv1.InstallationSpec{NetworkPolicy: second}
+			inst := OverrideInstallationSpec(m, s)
+			Expect(inst.NetworkPolicy).To(Equal(expect))
+		},
+			Entry("Both unset", nil, nil, nil),
+			Entry("Main set, second unset", npSpec(&enabled), nil, npSpec(&enabled)),
+			Entry("Main unset, second set", nil, npSpec(&enabled), npSpec(&enabled)),
+			Entry("Both set, different", npSpec(&enabled), npSpec(&disabled), npSpec(&disabled)),
 		)
 	})
 })

@@ -70,7 +70,7 @@ type component struct {
 	cfg *Configuration
 
 	// Images.
-	webhooksImage string
+	calicoImage string
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -79,11 +79,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
-	} else {
-		c.webhooksImage, err = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
-	}
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -138,7 +134,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
 						Name:            WebhooksName,
-						Image:           c.webhooksImage,
+						Image:           c.calicoImage,
+						Command:         []string{components.CalicoBinaryPath, "component", "webhooks"},
 						SecurityContext: securtyContext,
 						Args: []string{
 							"webhook",
@@ -178,6 +175,38 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
+	// On management clusters, pass flags so the ManagedCluster webhook can
+	// generate the installation manifest with the correct tunnel address and certs.
+	if c.cfg.ManagementCluster != nil {
+		mc := c.cfg.ManagementCluster
+		if mc.Spec.Address != "" {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				fmt.Sprintf("--mcm-management-cluster-addr=%s", mc.Spec.Address),
+			)
+		}
+
+		secretName := render.TunnelSecretName(mc)
+		dep.Spec.Template.Spec.Containers[0].Args = append(
+			dep.Spec.Template.Spec.Containers[0].Args,
+			fmt.Sprintf("--mcm-tunnel-secret-name=%s", secretName),
+		)
+
+		if mc.Spec.TLS != nil && mc.Spec.TLS.SecretName == render.ManagerTLSSecretName {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				"--mcm-management-cluster-ca-type=Public",
+			)
+		}
+
+		if c.cfg.MultiTenant {
+			dep.Spec.Template.Spec.Containers[0].Args = append(
+				dep.Spec.Template.Spec.Containers[0].Args,
+				"--multi-tenant=true",
+			)
+		}
+	}
+
 	if c.cfg.Installation.ControlPlaneReplicas != nil && *c.cfg.Installation.ControlPlaneReplicas > 1 {
 		dep.Spec.Template.Spec.Affinity = podaffinity.NewPodAntiAffinity(WebhooksName, []string{common.CalicoNamespace})
 	}
@@ -209,6 +238,56 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Action: v3.Pass,
 			},
 		)
+
+		// Rule 1: Allow traffic from the kube-apiserver using serviceSelector.
+		// This covers the common case where the apiserver source IP survives unmodified
+		// to the webhook pod and matches the kubernetes Service's endpoints.
+		//
+		// Rule 2: Deny traffic from any Kubernetes workload endpoint. The selector
+		// "has(projectcalico.org/orchestrator)" matches only pods — Calico adds this
+		// label to every workload endpoint but not to NetworkSets or host endpoints, so
+		// a user-created NetworkSet (which could otherwise be picked up by a bare
+		// namespaceSelector: all()) does not short-circuit this deny. Traffic that has
+		// been SNAT'd to a node tunnel address (e.g. a hostnet apiserver sending through
+		// an IPIP/VXLAN overlay) arrives from the node, not from a workload endpoint,
+		// and so falls through to Rule 3. This is what makes the policy work for hostnet
+		// apiservers whose traffic arrives at the webhook with a tunnel IP source.
+		//
+		// Rule 3: Fallback allow for everything else on the webhook port. In practice
+		// this covers node-sourced traffic (including the SNAT'd hostnet-apiserver case
+		// above) and cluster-external sources routed to the pod.
+		//
+		// TODO: This three-rule structure exists because Calico's policy model has no
+		// native way to say "any node" or "any tunnel IP" as a source. If we add a
+		// first-class selector for that (e.g. a built-in label on host endpoints, or a
+		// Source match for tunnel-sourced traffic), we could collapse these rules into a
+		// single explicit allow from {apiserver service endpoints, cluster nodes} and
+		// drop the fallback.
+		ingressRules := []v3.Rule{
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source:   networkpolicy.KubeAPIServerEntityRule,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+			{
+				Action: v3.Deny,
+				Source: v3.EntityRule{
+					NamespaceSelector: "all()",
+					Selector:          "has(projectcalico.org/orchestrator)",
+				},
+			},
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+		}
+
 		np = &v3.NetworkPolicy{
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -220,16 +299,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Tier:     networkpolicy.CalicoTierName,
 				Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
 				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-				Ingress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							Ports: networkpolicy.Ports(uint16(containerPort)),
-						},
-					},
-				},
-				Egress: egressRules,
+				Ingress:  ingressRules,
+				Egress:   egressRules,
 			},
 		}
 	}
@@ -378,7 +449,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		},
 	}
 
-	// Create a MutatingWebhookConfiguration for UISettings webhooks.
+	// Create a MutatingWebhookConfiguration for Enterprise-only mutating webhooks.
 	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "api.projectcalico.org",
@@ -419,6 +490,40 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
 			},
 		},
+	}
+
+	// On management clusters, register the ManagedCluster webhook. This webhook
+	// generates the installation manifest (including tunnel certs) when a
+	// ManagedCluster CR is created.
+	if c.cfg.ManagementCluster != nil {
+		mwc.Webhooks = append(mwc.Webhooks, admissionregistrationv1.MutatingWebhook{
+			Name: "managedclusters.api.projectcalico.org",
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"projectcalico.org"},
+						APIVersions: []string{"v3"},
+						Resources:   []string{"managedclusters"},
+						Scope:       ptr.To(admissionregistrationv1.AllScopes),
+					},
+				},
+			},
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				Service: &admissionregistrationv1.ServiceReference{
+					Namespace: common.CalicoNamespace,
+					Name:      WebhooksName,
+					Path:      ptr.To("/managedcluster"),
+				},
+				CABundle: c.cfg.KeyPair.GetCertificatePEM(),
+			},
+			AdmissionReviewVersions: []string{"v1"},
+			SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+			TimeoutSeconds:          ptr.To(int32(10)),
+			FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
+		})
 	}
 
 	// Create a ClusterRole and ClusterRoleBinding for the webhook service account.
@@ -493,7 +598,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	}
 	objs = append(objs, cr, crb)
 
-	// Management clusters need access to the tunnel CA secret for signing managed cluster certificates.
 	var objsToDelete []client.Object
 	if c.cfg.ManagementCluster != nil {
 		objs = append(objs, render.TunnelSecretRBAC(WebhooksSecretsRBACName, WebhooksName, c.cfg.ManagementCluster, c.cfg.MultiTenant)...)
@@ -517,7 +621,7 @@ func (c *component) Ready() bool {
 // tolerations creates the tolerations used by the webhooks deployment.
 func (c *component) tolerations() []corev1.Toleration {
 	if render.HostNetworkRequired(c.cfg.Installation) {
-		return rmeta.TolerateAll
+		return rmeta.TolerateBootstrap
 	}
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {

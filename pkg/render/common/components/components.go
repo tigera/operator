@@ -17,7 +17,6 @@ package components
 import (
 	"fmt"
 	"reflect"
-	"strings"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -28,6 +27,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -291,18 +291,26 @@ func GetPriorityClassName(overrides any) string {
 	return ""
 }
 
-func getField(overrides any, fieldNames ...string) (value reflect.Value) {
+// normalizeFieldPath applies type-specific path adjustments before lookup.
+// Extracted so test code that wraps getField can reproduce the same path
+// transformations when recording.
+func normalizeFieldPath(overrides any, fieldNames []string) []string {
 	// SPECIAL CASE: ComplianceReporterPodTemplate doesn't follow the Spec, Template, Spec, ...
 	// pattern that all our other override structures follow.  Instead it skips the top-level
 	// Spec and has Template, Spec, ...
 	if _, isComplianceReporterPodTemplate := overrides.(*operator.ComplianceReporterPodTemplate); isComplianceReporterPodTemplate {
-		if fieldNames[0] == "Spec" {
-			fieldNames = fieldNames[1:]
+		if len(fieldNames) > 0 && fieldNames[0] == "Spec" {
+			return fieldNames[1:]
 		}
 	}
+	return fieldNames
+}
 
-	// Record that we're handling `fieldNames`.  See `overrideFieldsHandledInLastApplyCall` for why.
-	recordHandledField(fieldNames)
+// getField is a var rather than a func so tests can swap in a recording
+// wrapper. Production code never replaces it. See recordHandledFields in the
+// test file. NOT safe to swap concurrently with calls.
+var getField = func(overrides any, fieldNames ...string) (value reflect.Value) {
+	fieldNames = normalizeFieldPath(overrides, fieldNames)
 
 	typ := reflect.TypeOf(overrides)
 	for _, fieldName := range fieldNames {
@@ -330,8 +338,6 @@ func getField(overrides any, fieldNames ...string) (value reflect.Value) {
 
 // applyReplicatedPodResourceOverrides takes the given replicated pod resource data and applies the overrides.
 func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any) *replicatedPodResource {
-	resetHandledFields()
-
 	// If `overrides` has a Metadata field, and it's non-nil, non-clashing labels and annotations from that
 	// metadata are added into `r.labels` and `r.annotations`.
 	if metadata := GetMetadata(overrides); metadata != nil {
@@ -450,20 +456,6 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	return r
 }
 
-// For UT purposes, only, this variable stores the override fields that were handled in that most
-// recent `applyReplicatedPodResourceOverrides` call.  UT code then checks that the structures we
-// use for `overrides` do not have any _other_ fields than those (except for known special cases).
-var overrideFieldsHandledInLastApplyCall []string
-
-func resetHandledFields() {
-	overrideFieldsHandledInLastApplyCall = nil
-}
-
-func recordHandledField(fieldNames []string) {
-	dottedName := strings.Join(fieldNames, ".")
-	overrideFieldsHandledInLastApplyCall = append(overrideFieldsHandledInLastApplyCall, dottedName)
-}
-
 // ApplyDaemonSetOverrides applies the overrides to the given DaemonSet.
 // Note: overrides must not be nil pointer.
 func ApplyDaemonSetOverrides(ds *appsv1.DaemonSet, overrides any) {
@@ -538,6 +530,43 @@ func ApplyJobOverrides(job *batchv1.Job, overrides any) {
 	job.Labels = r.labels
 	job.Annotations = r.annotations
 	job.Spec.Template = *r.podTemplateSpec
+}
+
+// ApplyPodDisruptionBudgetOverrides applies the overrides to the given PodDisruptionBudget.
+// Overrides that are nil leave the corresponding field on the PDB untouched, preserving
+// the operator's default. Setting Spec.MinAvailable clears Spec.MaxUnavailable and vice
+// versa (the PDB API mandates these are mutually exclusive). The PDB's selector is never
+// modified. Labels and annotations from Metadata are merged into the PDB's existing
+// labels and annotations.
+func ApplyPodDisruptionBudgetOverrides(pdb *policyv1.PodDisruptionBudget, overrides *operator.PodDisruptionBudgetOverride) {
+	if pdb == nil || overrides == nil {
+		return
+	}
+	if md := overrides.Metadata; md != nil {
+		if len(md.Labels) > 0 {
+			pdb.Labels = common.MapExistsOrInitialize(pdb.Labels)
+			common.MergeMaps(md.Labels, pdb.Labels)
+		}
+		if len(md.Annotations) > 0 {
+			pdb.Annotations = common.MapExistsOrInitialize(pdb.Annotations)
+			common.MergeMaps(md.Annotations, pdb.Annotations)
+		}
+	}
+	spec := overrides.Spec
+	if spec == nil {
+		return
+	}
+	if spec.MinAvailable != nil {
+		pdb.Spec.MinAvailable = spec.MinAvailable
+		pdb.Spec.MaxUnavailable = nil
+	}
+	if spec.MaxUnavailable != nil {
+		pdb.Spec.MaxUnavailable = spec.MaxUnavailable
+		pdb.Spec.MinAvailable = nil
+	}
+	if spec.UnhealthyPodEvictionPolicy != nil {
+		pdb.Spec.UnhealthyPodEvictionPolicy = spec.UnhealthyPodEvictionPolicy
+	}
 }
 
 // ApplyStatefulSetOverrides applies the overrides to the given DaemonSet.

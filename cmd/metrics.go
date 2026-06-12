@@ -91,13 +91,16 @@ func getCertificateFromFile(certFile, keyFile string) func(*tls.ClientHelloInfo)
 }
 
 // loadClientCAFromFile reads a PEM CA certificate file and returns an x509.CertPool.
-// Returns an empty pool if the file doesn't exist yet (optional volume mount).
-func loadClientCAFromFile(caFile string) *x509.CertPool {
-	pool := x509.NewCertPool()
+// Returns an error if the file can't be read or contains no valid PEM certificates;
+// callers should propagate the error so the failure mode isn't silent.
+func loadClientCAFromFile(caFile string) (*x509.CertPool, error) {
 	caPEM, err := os.ReadFile(caFile)
 	if err != nil {
-		return pool
+		return nil, fmt.Errorf("failed to read metrics client CA from %s: %w", caFile, err)
 	}
-	pool.AppendCertsFromPEM(caPEM)
-	return pool
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("metrics client CA file %s contained no valid PEM certificates", caFile)
+	}
+	return pool, nil
 }

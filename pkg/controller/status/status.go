@@ -63,6 +63,11 @@ const (
 	// within its owning Deployment. Set by the deployment controller; Kubernetes
 	// does not export a constant for it.
 	deploymentRevisionAnnotation = "deployment.kubernetes.io/revision"
+
+	// readinessGracePeriod is how long a running pod may stay unready before we
+	// consider it failing. This avoids tripping Degraded for pods that are only
+	// briefly unready during a rolling update.
+	readinessGracePeriod = 60 * time.Second
 )
 
 type podIssueSeverity int
@@ -872,10 +877,20 @@ func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSele
 			continue
 		}
 
-		// Running - check if passing readiness checks.
+		// Running - check if passing readiness checks. We only flag a pod once
+		// it has been unready for longer than the grace period, to minimize
+		// false positives during rolling updates.
 		if p.Status.Phase == corev1.PodRunning {
 			for _, cond := range p.Status.Conditions {
-				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
+				if cond.Type != corev1.ContainersReady || cond.Status != corev1.ConditionFalse {
+					continue
+				}
+				// A zero LastTransitionTime means we can't tell how long the pod has been
+				// unready, so don't flag it - kubelet sets this field in practice.
+				if cond.LastTransitionTime.IsZero() {
+					continue
+				}
+				if time.Since(cond.LastTransitionTime.Time) > readinessGracePeriod {
 					issues = append(issues, podIssue{
 						workload:      workload,
 						severity:      severityFailing,

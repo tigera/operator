@@ -519,8 +519,10 @@ func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(c
 	}
 
 	prs.Name = "default"
-	prs.Spec.NamespaceSpec.RecStatus = "Disabled"
-	prs.Spec.NamespaceSpec.Selector = "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"
+	prs.Spec.NamespaceSpec = &v3.PolicyRecommendationScopeNamespaceSpec{
+		RecStatus: "Disabled",
+		Selector:  "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')",
+	}
 	if r.opts.DetectedProvider.IsOpenShift() {
 		prs.Spec.NamespaceSpec.Selector += " && !(projectcalico.org/name starts with 'openshift-')"
 	}

@@ -1056,6 +1056,16 @@ var _ = Describe("compliance rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
 			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
+
+		It("should queue deprecated objects for deletion", func() {
+			component, err := render.Compliance(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, toDelete := component.Objects()
+
+			rtest.ExpectResourceInList(toDelete, "allow-tigera.compliance-access", ns, "projectcalico.org", "v3", "NetworkPolicy")
+			rtest.ExpectResourceInList(toDelete, "allow-tigera.default-deny", ns, "projectcalico.org", "v3", "NetworkPolicy")
+			rtest.ExpectResourceInList(toDelete, "allow-tigera.compliance-server", ns, "projectcalico.org", "v3", "NetworkPolicy")
+		})
 	})
 
 	Context("multi-tenant rendering", func() {

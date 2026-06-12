@@ -31,7 +31,35 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-github/v53/github"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/versions"
 )
+
+func fakeOperatorRepo(t testing.TB, calicoVer, enterpriseVer string) string {
+	t.Helper()
+	td := t.TempDir()
+
+	// Simulate a git repository by creating a .git dir.
+	if _, err := command.RunInDir(td, "git", []string{"init"}, nil); err != nil {
+		t.Fatalf("failed to init dir (%s) as git repo: %v", td, err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(td, filepath.Dir(versions.CalicoConfigPath)), 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	// Create calico version file
+	calicoContent := fmt.Sprintf("title: %s\n", calicoVer)
+	if err := os.WriteFile(filepath.Join(td, versions.CalicoConfigPath), []byte(calicoContent), 0o644); err != nil {
+		t.Fatalf("failed to write calico version file: %v", err)
+	}
+	// Create enterprise version file
+	enterpriseContent := fmt.Sprintf("title: %s\n", enterpriseVer)
+	if err := os.WriteFile(filepath.Join(td, versions.EnterpriseConfigPath), []byte(enterpriseContent), 0o644); err != nil {
+		t.Fatalf("failed to write enterprise version file: %v", err)
+	}
+	return td
+}
 
 func fakeGithubServer(t testing.TB, pathResponseMap map[string]any) *httptest.Server {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

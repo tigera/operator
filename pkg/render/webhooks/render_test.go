@@ -93,6 +93,16 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		rtest.ExpectResources(resources, expectedResources)
 
+		// Verify the Calico (non-enterprise) variant uses the combined calico/calico image with Command set.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
+			fmt.Sprintf("test-registry.com/%s%s:%s",
+				components.CalicoImagePath,
+				components.ComponentCalico.Image,
+				components.ComponentCalico.Version)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/usr/bin/calico", "component", "webhooks"}))
+
 		// Verify the ClusterRole includes expected rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(cr.Rules).To(ContainElements(
@@ -169,8 +179,87 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("test-registry.com/%s%s:%s",
 				components.TigeraImagePath,
-				components.ComponentTigeraWebhooks.Image,
-				components.ComponentTigeraWebhooks.Version)))
+				components.ComponentTigeraCalico.Image,
+				components.ComponentTigeraCalico.Version)))
+	})
+
+	It("should register ManagedCluster webhook and MCM flags on management clusters", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{
+			Spec: operatorv1.ManagementClusterSpec{
+				Address: "mgmt.example.com:9449",
+				TLS: &operatorv1.TLS{
+					SecretName: "test-tunnel-secret",
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		// The MutatingWebhookConfiguration should have both UISettings and ManagedCluster webhooks.
+		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mwc.Webhooks).To(HaveLen(2))
+		Expect(mwc.Webhooks[0].Name).To(Equal("uisettings.api.projectcalico.org"))
+		Expect(mwc.Webhooks[1].Name).To(Equal("managedclusters.api.projectcalico.org"))
+		Expect(*mwc.Webhooks[1].ClientConfig.Service.Path).To(Equal("/managedcluster"))
+		Expect(*mwc.Webhooks[1].FailurePolicy).To(Equal(admissionregistrationv1.Fail))
+		Expect(mwc.Webhooks[1].Rules).To(HaveLen(1))
+		Expect(mwc.Webhooks[1].Rules[0].Operations).To(ConsistOf(admissionregistrationv1.Create))
+		Expect(mwc.Webhooks[1].Rules[0].Rule.Resources).To(Equal([]string{"managedclusters"}))
+
+		// The Deployment should include MCM-specific flags.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		args := dep.Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement("--mcm-management-cluster-addr=mgmt.example.com:9449"))
+		Expect(args).To(ContainElement("--mcm-tunnel-secret-name=test-tunnel-secret"))
+		Expect(args).NotTo(ContainElement("--mcm-management-cluster-ca-type=Public"))
+		Expect(args).NotTo(ContainElement("--multi-tenant=true"))
+	})
+
+	It("should set Public CA type when tunnel secret is manager-tls", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{
+			Spec: operatorv1.ManagementClusterSpec{
+				Address: "mgmt.example.com:9449",
+				TLS: &operatorv1.TLS{
+					SecretName: "manager-tls",
+				},
+			},
+		}
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		args := dep.Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement("--mcm-management-cluster-ca-type=Public"))
+	})
+
+	It("should pass multi-tenant flag when multi-tenancy is enabled", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
+		cfg.MultiTenant = true
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		args := dep.Spec.Template.Spec.Containers[0].Args
+		Expect(args).To(ContainElement("--multi-tenant=true"))
+	})
+
+	It("should not register ManagedCluster webhook without ManagementCluster", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(mwc.Webhooks).To(HaveLen(1))
+		Expect(mwc.Webhooks[0].Name).To(Equal("uisettings.api.projectcalico.org"))
 	})
 
 	It("should not include UISettingsGroup rule for Calico", func() {
@@ -317,10 +406,27 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(6443))
 
-		// Verify the network policy defaults to 6443.
+		// Verify the network policy.
 		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(np.Spec.Ingress).To(HaveLen(3))
+
+		// Rule 1: Allow from kube-apiserver.
+		Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[0].Source.Services).To(Equal(&v3.ServiceMatch{
+			Namespace: "default",
+			Name:      "kubernetes",
+		}))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
-		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(6443)))
+
+		// Rule 2: Deny from any workload endpoint (pod traffic); the orchestrator selector
+		// excludes NetworkSets so a user-defined set doesn't broaden or narrow the rule.
+		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Deny))
+		Expect(np.Spec.Ingress[1].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("has(projectcalico.org/orchestrator)"))
+
+		// Rule 3: Fallback allow for non-pod sources (including tunnel-SNAT'd hostnet apiserver traffic).
+		Expect(np.Spec.Ingress[2].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[2].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
 	})
 
 	It("should use custom container port", func() {
@@ -356,9 +462,12 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		// Verify the network policy uses the custom port.
 		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
-		Expect(np.Spec.Ingress[0].Destination.Ports).To(HaveLen(1))
+		Expect(np.Spec.Ingress).To(HaveLen(3))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
-		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(customPort)))
+		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Deny))
+		Expect(np.Spec.Ingress[1].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("has(projectcalico.org/orchestrator)"))
+		Expect(np.Spec.Ingress[2].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
 	})
 
 	It("should not use host network by default on non-EKS", func() {

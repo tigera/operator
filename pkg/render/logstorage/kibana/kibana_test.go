@@ -35,6 +35,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -149,6 +150,7 @@ var _ = Describe("Kibana rendering tests", func() {
 			Expect(resultKB.Spec.Config.Data["xpack.fleet.isAirGapped"]).To(BeTrue())
 			Expect(resultKB.Spec.Config.Data["xpack.fleet.packages"]).To(Equal([]string{}))
 			Expect(resultKB.Spec.Config.Data["xpack.fleet.registryUrl"]).To(Equal("http://localhost:5601"))
+			Expect(resultKB.Spec.Config.Data["migrations.discardUnknownObjects"]).To(Equal(components.ComponentEckKibana.Version))
 			Expect(resultKB.Spec.Config.Data["newsfeed.enabled"]).To(BeFalse())
 			Expect(resultKB.Spec.Config.Data["xpack.productDocBase.artifactRepositoryUrl"]).To(Equal("http://localhost:5601"))
 		})

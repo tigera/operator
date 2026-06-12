@@ -34,6 +34,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/istio/waypoint"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -88,6 +89,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
+	}
+
+	if err := waypoint.Add(mgr, opts); err != nil {
+		return fmt.Errorf("failed to add waypoint pull secrets controller: %w", err)
 	}
 
 	return nil
@@ -189,7 +194,11 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Kubernetes Gateway API CRDs.
-	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider)
+	essentialCRDs, optionalCRDs, err := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
 
 	// Check CRDs are present and only create it if not
 	handler := utils.NewComponentHandler(log, r, r.scheme, nil)

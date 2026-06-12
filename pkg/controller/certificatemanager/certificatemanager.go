@@ -34,7 +34,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -183,23 +182,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			return nil, err
 		}
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
-		if installation.Variant.IsEnterprise() {
-			csrImage, err = components.GetReference(
-				components.ComponentTigeraCSRInitContainer,
-				installation.Registry,
-				installation.ImagePath,
-				installation.ImagePrefix,
-				imageSet,
-			)
-		} else {
-			csrImage, err = components.GetReference(
-				components.ComponentCalicoCSRInitContainer,
-				installation.Registry,
-				installation.ImagePath,
-				installation.ImagePrefix,
-				imageSet,
-			)
-		}
+		csrImage, err = certificatemanagement.ResolveCSRInitImage(installation, imageSet)
 		if err != nil {
 			return nil, err
 		}

@@ -451,8 +451,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceController.Image,
-					components.ComponentComplianceController.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 
 			pt := corev1.PodTemplate{
 				TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
@@ -468,8 +468,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(reporter.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceReporter.Image,
-					components.ComponentComplianceReporter.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 
 			d = appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -485,8 +485,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(snap.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceSnapshotter.Image,
-					components.ComponentComplianceSnapshotter.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -519,8 +519,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(server.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceServer.Image,
-					components.ComponentComplianceServer.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
@@ -528,11 +528,7 @@ var _ = Describe("Compliance controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/compliance-benchmarker", Digest: "sha256:benchmarkerhash"},
-						{Image: "tigera/compliance-controller", Digest: "sha256:controllerhash"},
-						{Image: "tigera/compliance-reporter", Digest: "sha256:reporterhash"},
-						{Image: "tigera/compliance-server", Digest: "sha256:serverhash"},
-						{Image: "tigera/compliance-snapshotter", Digest: "sha256:snapshotterhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -554,8 +550,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceController.Image,
-					"sha256:controllerhash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:deadbeef0123456789")))
 
 			pt := corev1.PodTemplate{
 				TypeMeta: metav1.TypeMeta{Kind: "PodTemplate", APIVersion: "v1"},
@@ -571,8 +567,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(reporter.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceReporter.Image,
-					"sha256:reporterhash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:deadbeef0123456789")))
 
 			d = appsv1.Deployment{
 				TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -588,8 +584,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(snap.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceSnapshotter.Image,
-					"sha256:snapshotterhash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:deadbeef0123456789")))
 
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -622,8 +618,8 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(server.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentComplianceServer.Image,
-					"sha256:serverhash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:deadbeef0123456789")))
 		})
 	})
 

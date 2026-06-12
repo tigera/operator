@@ -16,6 +16,7 @@ package render
 
 import (
 	"fmt"
+	"slices"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -69,7 +70,12 @@ var (
 // TyphaConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/typha on a cluster.
 type TyphaConfiguration struct {
-	K8sServiceEp      k8sapi.ServiceEndpoint
+	K8sServiceEp k8sapi.ServiceEndpoint
+
+	// K8sServiceEpPodNetwork is used for pod-networked Typha (i.e. the non-cluster-host
+	// deployment), where K8sServiceEp may be unreachable from pods.
+	K8sServiceEpPodNetwork k8sapi.ServiceEndpoint
+
 	Installation      *operatorv1.InstallationSpec
 	TLS               *TyphaNodeTLS
 	MigrateNamespaces bool
@@ -91,7 +97,7 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage string
+	calicoImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -99,19 +105,8 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
-	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
-		} else {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
-		}
-	}
-	if err != nil {
-		return err
-	}
-	return nil
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	return err
 }
 
 func (c *typhaComponent) SupportedOSType() rmeta.OSType {
@@ -119,11 +114,15 @@ func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
+	pdb := c.typhaPodDisruptionBudget()
+	if overrides := c.cfg.Installation.TyphaPodDisruptionBudget; overrides != nil {
+		rcomp.ApplyPodDisruptionBudgetOverrides(pdb, overrides)
+	}
 	objs := []client.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
-		c.typhaPodDisruptionBudget(),
+		pdb,
 	}
 	objs = append(objs, c.typhaServices()...)
 
@@ -362,13 +361,14 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				// Tigera Secure needs to be able to read licenses, and config.
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
-					"licensekeys",
-					"remoteclusterconfigurations",
-					"packetcaptures",
-					"deeppacketinspections",
-					"externalnetworks",
-					"egressgatewaypolicies",
 					"bfdconfigurations",
+					"deeppacketinspections",
+					"egressgatewaypolicies",
+					"externalnetworks",
+					"licensekeys",
+					"networks",
+					"packetcaptures",
+					"remoteclusterconfigurations",
 				},
 				Verbs: []string{"get", "list", "watch"},
 			},
@@ -421,8 +421,11 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
-	// Allow tolerations to be overwritten by the end-user.
-	tolerations := rmeta.TolerateAll
+	// Allow tolerations to be overwritten by the end-user. By default Typha uses
+	// the bootstrap toleration set: broad enough to schedule on otherwise tainted
+	// nodes during install (before the CNI / cloud provider are ready), but narrow
+	// enough that cordoned nodes are still avoided.
+	tolerations := rmeta.TolerateBootstrap
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
 		tolerations = c.cfg.Installation.ControlPlaneTolerations
 	}
@@ -570,8 +573,8 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes("localhost")
 	return corev1.Container{
 		Name:            TyphaContainerName,
-		Image:           c.typhaImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "typha"},
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),
 		VolumeMounts:    c.typhaVolumeMounts(),
@@ -681,6 +684,16 @@ func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
 	envVars := c.typhaEnvVars(c.cfg.TLS.TyphaSecretNonClusterHost)
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTCN", c.cfg.TLS.NodeNonClusterHostCommonName)
 	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTURISAN", c.cfg.TLS.NodeNonClusterHostURISAN)
+
+	// NCH Typha runs pod-networked, so the host-network apiserver endpoint
+	// (e.g. MKE's proxy.local) may not be reachable. Strip the inherited env
+	// vars so we fall back to the default kubernetes Service that kubelet
+	// injects into every pod, then re-add a pod-network endpoint if one was
+	// configured explicitly.
+	envVars = slices.DeleteFunc(envVars, func(e corev1.EnvVar) bool {
+		return e.Name == "KUBERNETES_SERVICE_HOST" || e.Name == "KUBERNETES_SERVICE_PORT"
+	})
+	envVars = append(envVars, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
 	// Tell the health aggregator to listen on all interfaces.
 	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})

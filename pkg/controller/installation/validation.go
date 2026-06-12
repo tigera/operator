@@ -264,6 +264,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 			}
 		}
 
+		if instance.Spec.CalicoNetwork.LinuxPodInterfaceType != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.linuxPodInterfaceType is supported only for Calico CNI")
+			}
+		}
+
 		if instance.Spec.CalicoNetwork.Sysctl != nil {
 			// CNI tuning plugin
 			pluginData := instance.Spec.CalicoNetwork.Sysctl
@@ -408,8 +414,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	if operatorv1.IsFIPSModeEnabled(instance.Spec.FIPSMode) && instance.Spec.Variant.IsEnterprise() {
-		return fmt.Errorf("installation spec.FIPSMode=%v combined with spec.Variant=%s is not supported", *instance.Spec.FIPSMode, instance.Spec.Variant)
+	if operatorv1.IsFIPSModeEnabled(instance.Spec.FIPSMode) {
+		return fmt.Errorf("installation spec.FIPSMode=%v is not supported; FIPS mode has been removed", *instance.Spec.FIPSMode)
 	}
 
 	if instance.Spec.KubernetesProvider != operatorv1.ProviderAKS && instance.Spec.Azure != nil {

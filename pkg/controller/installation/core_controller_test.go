@@ -27,6 +27,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/mock"
 
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	admissionregistrationv1alpha1 "k8s.io/api/admissionregistration/v1alpha1"
 	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,6 +38,7 @@ import (
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	kfake "k8s.io/client-go/kubernetes/fake"
@@ -50,6 +53,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -408,8 +412,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraKubeControllers.Image,
-						components.ComponentTigeraKubeControllers.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 
 				d = appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -425,16 +429,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(typha.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraTypha.Image,
-						components.ComponentTigeraTypha.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						components.ComponentTigeraCSRInitContainer.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -458,29 +462,29 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(fv.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraFlexVolume.Image,
-						components.ComponentTigeraFlexVolume.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCNI.Image,
-						components.ComponentTigeraCNI.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						components.ComponentTigeraCSRInitContainer.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						components.ComponentTigeraCSRInitContainer.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
 				Expect(bpfInit.Image).To(Equal(
@@ -495,14 +499,8 @@ var _ = Describe("Testing core-controller installation", func() {
 					ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 					Spec: operator.ImageSetSpec{
 						Images: []operator.Image{
-							{Image: "tigera/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
-							{Image: "tigera/typha", Digest: "sha256:tigeratyphahash"},
+							{Image: "tigera/calico", Digest: "sha256:tigeracalicohash"},
 							{Image: "tigera/node", Digest: "sha256:tigeranodehash"},
-							{Image: "tigera/cni", Digest: "sha256:tigeracnihash"},
-							{Image: "tigera/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
-							{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-							{Image: "tigera/csi", Digest: "sha256:calicocsihash"},
-							{Image: "tigera/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 						},
 					},
 				}
@@ -525,8 +523,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraKubeControllers.Image,
-						"sha256:tigerakubecontrollerhash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 
 				d = appsv1.Deployment{
 					TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
@@ -542,16 +540,16 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(typha.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraTypha.Image,
-						"sha256:tigeratyphahash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				Expect(d.Spec.Template.Spec.InitContainers).To(HaveLen(1))
 				csrinit := test.GetContainer(d.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.TyphaTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						"sha256:calicocsrinithash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
@@ -575,29 +573,29 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(fv.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraFlexVolume.Image,
-						"sha256:calicoflexvolhash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				cni := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
 				Expect(cni).ToNot(BeNil())
 				Expect(cni.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCNI.Image,
-						"sha256:tigeracnihash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				csrinit = test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodeTLSSecretName))
 				Expect(csrinit).ToNot(BeNil())
 				Expect(csrinit.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						"sha256:calicocsrinithash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 				csrinit2 := test.GetContainer(ds.Spec.Template.Spec.InitContainers, fmt.Sprintf("%s-key-cert-provisioner", render.NodePrometheusTLSServerSecret))
 				Expect(csrinit2).ToNot(BeNil())
 				Expect(csrinit2.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s@%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraCSRInitContainer.Image,
-						"sha256:calicocsrinithash")))
+						components.ComponentTigeraCalico.Image,
+						"sha256:tigeracalicohash")))
 
 				bpfInit := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 				Expect(bpfInit).ToNot(BeNil())
@@ -647,8 +645,8 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(controller.Image).To(Equal(
 					fmt.Sprintf("some.registry.org/%s%s:%s",
 						components.TigeraImagePath,
-						components.ComponentTigeraKubeControllers.Image,
-						components.ComponentTigeraKubeControllers.Version)))
+						components.ComponentTigeraCalico.Image,
+						components.ComponentTigeraCalico.Version)))
 			})
 
 			It("should update version", func() {
@@ -1557,6 +1555,73 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(fc.Spec.BPFHostConntrackBypass).NotTo(BeNil())
 			Expect(*fc.Spec.BPFHostConntrackBypass).To(BeFalse())
+		})
+
+		It("should set BPFKubeProxyHealthzPort to 0 when BPF is enabled and operator does not manage kube-proxy", func() {
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).NotTo(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(0))
+		})
+
+		It("should not set BPFKubeProxyHealthzPort when BPF is disabled", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).To(BeNil())
+		})
+
+		It("should not set BPFKubeProxyHealthzPort when BPF is enabled and operator manages kube-proxy", func() {
+			network := operator.LinuxDataplaneBPF
+			kpManagement := operator.KubeProxyManagementEnabled
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+				LinuxDataplane:      &network,
+				KubeProxyManagement: &kpManagement,
+			}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).To(BeNil())
+		})
+
+		It("should not overwrite an existing user-set BPFKubeProxyHealthzPort", func() {
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+
+			userPort := 12345
+			Expect(c.Create(ctx, &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       v3.FelixConfigurationSpec{BPFKubeProxyHealthzPort: &userPort},
+			})).NotTo(HaveOccurred())
+
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).NotTo(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(12345))
 		})
 
 		It("should set BPFEnabled to ture on FelixConfiguration if BPF is enabled on installation", func() {
@@ -2498,7 +2563,6 @@ func (f *fakeComponentHandler) CreateOrUpdateOrDelete(ctx context.Context, compo
 
 var _ = Describe("updateMutatingAdmissionPolicies", func() {
 	var (
-		c                client.Client
 		ctx              context.Context
 		cancel           context.CancelFunc
 		r                ReconcileInstallation
@@ -2509,6 +2573,18 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		installation     *operator.Installation
 	)
 
+	clientFor := func(initial ...client.Object) client.Client {
+		return ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(initial...).Build()
+	}
+
+	discoveryFor := func(mapVersion string) *discovery.APIDiscovery {
+		m := map[schema.GroupKind]string{}
+		if mapVersion != "" {
+			m[admission.PolicyGroupKind] = mapVersion
+		}
+		return discovery.NewStaticAPIDiscovery(m)
+	}
+
 	BeforeEach(func() {
 		log = logr.Discard()
 		ctx, cancel = context.WithCancel(context.Background())
@@ -2516,9 +2592,9 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		scheme = runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1alpha1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
-
-		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
@@ -2536,31 +2612,29 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		cancel()
 	})
 
-	It("should create MAPs when manageCRDs=true, v3CRDs=true, k8s>=1.32", func() {
+	It("should create v1 MAPs when v1 is served", func() {
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            true,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
 
-		// Verify we got two MAPs and two MAPBs.
 		var mapCount, mapbCount int
 		for _, obj := range componentHandler.objectsToCreate {
 			switch obj.(type) {
-			case *admissionv1beta1.MutatingAdmissionPolicy:
+			case *admissionregistrationv1.MutatingAdmissionPolicy:
 				mapCount++
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedMAPLabel, admission.ManagedMAPLabelValue))
-			case *admissionv1beta1.MutatingAdmissionPolicyBinding:
+			case *admissionregistrationv1.MutatingAdmissionPolicyBinding:
 				mapbCount++
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedMAPLabel, admission.ManagedMAPLabelValue))
 			}
@@ -2569,116 +2643,144 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		Expect(mapbCount).To(Equal(2))
 	})
 
-	It("should not create MAPs when k8s<1.32 and should set degraded", func() {
+	It("should create v1beta1 MAPs when only v1beta1 is served", func() {
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            true,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 31},
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
+
+		var mapCount, mapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionv1beta1.MutatingAdmissionPolicy:
+				mapCount++
+			case *admissionv1beta1.MutatingAdmissionPolicyBinding:
+				mapbCount++
+			}
+		}
+		Expect(mapCount).To(Equal(2))
+		Expect(mapbCount).To(Equal(2))
+	})
+
+	It("should create v1alpha1 MAPs when only v1alpha1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
+
+		var mapCount, mapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionregistrationv1alpha1.MutatingAdmissionPolicy:
+				mapCount++
+			case *admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding:
+				mapbCount++
+			}
+		}
+		Expect(mapCount).To(Equal(2))
+		Expect(mapbCount).To(Equal(2))
+	})
+
+	It("should not create MAPs when no served version exists and should set degraded", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(""),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	It("should not create MAPs when v3CRDs=false", func() {
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            false,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       false,
+			apiDiscovery: discoveryFor(admission.VersionV1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 	})
 
 	It("should not create MAPs when manageCRDs=false", func() {
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        false,
-			v3CRDs:            true,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   false,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 	})
 
-	It("should not create MAPs when kubernetesVersion is nil and should set degraded", func() {
-		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            true,
-			kubernetesVersion: nil,
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
-				return componentHandler
-			},
-		}
-
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(componentHandler.objectsToCreate).To(BeEmpty())
-		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
-	})
-
-	It("should delete stale MAPs with managed label", func() {
-		// Pre-create a stale MAP with the managed label.
-		staleMAP := &admissionv1beta1.MutatingAdmissionPolicy{
+	It("should delete stale v1 MAPs with managed label", func() {
+		staleMAP := &admissionregistrationv1.MutatingAdmissionPolicy{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   "stale-policy",
 				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
 			},
 		}
-		staleMAPB := &admissionv1beta1.MutatingAdmissionPolicyBinding{
+		staleMAPB := &admissionregistrationv1.MutatingAdmissionPolicyBinding{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:   "stale-binding",
 				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
 			},
 		}
-		Expect(c.Create(ctx, staleMAP)).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, staleMAPB)).NotTo(HaveOccurred())
 
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            true,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
+			client:       clientFor(staleMAP, staleMAPB),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Should have created the desired resources.
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
-
-		// Should have marked the stale resources for deletion.
 		Expect(componentHandler.objectsToDelete).To(HaveLen(2))
 		deletedNames := map[string]bool{}
 		for _, obj := range componentHandler.objectsToDelete {
@@ -2689,66 +2791,49 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 	})
 
 	It("should not delete MAPs that are in the desired set", func() {
-		// Pre-create the desired MAPs with the managed label (simulating a previous reconcile).
-		desiredMAP1 := &admissionv1beta1.MutatingAdmissionPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "policytypes.policy.projectcalico.org",
-				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
-			},
+		var initial []client.Object
+		for _, n := range []string{"policytypes.policy.projectcalico.org", "tierlabel.policy.projectcalico.org"} {
+			initial = append(initial, &admissionregistrationv1.MutatingAdmissionPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   n,
+					Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
+				},
+			})
 		}
-		desiredMAP2 := &admissionv1beta1.MutatingAdmissionPolicy{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "tierlabel.policy.projectcalico.org",
-				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
-			},
+		for _, n := range []string{"set-policytypes-binding", "set-tier-label-binding"} {
+			initial = append(initial, &admissionregistrationv1.MutatingAdmissionPolicyBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   n,
+					Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
+				},
+			})
 		}
-		desiredMAPB1 := &admissionv1beta1.MutatingAdmissionPolicyBinding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "set-policytypes-binding",
-				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
-			},
-		}
-		desiredMAPB2 := &admissionv1beta1.MutatingAdmissionPolicyBinding{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:   "set-tier-label-binding",
-				Labels: map[string]string{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue},
-			},
-		}
-		Expect(c.Create(ctx, desiredMAP1)).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, desiredMAP2)).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, desiredMAPB1)).NotTo(HaveOccurred())
-		Expect(c.Create(ctx, desiredMAPB2)).NotTo(HaveOccurred())
 
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            true,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
+			client:       clientFor(initial...),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
-
-		// Should have created the desired resources (update via passthrough).
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
-
-		// Should NOT have deleted anything since existing resources match desired set.
 		Expect(componentHandler.objectsToDelete).To(BeEmpty())
 	})
 
 	It("should work with Enterprise variant", func() {
 		r = ReconcileInstallation{
-			client:            c,
-			scheme:            scheme,
-			status:            mockStatus,
-			manageCRDs:        true,
-			v3CRDs:            true,
-			kubernetesVersion: &common.VersionInfo{Major: 1, Minor: 32},
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
 			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
 				return componentHandler
 			},
@@ -2756,8 +2841,227 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 		installation.Spec.Variant = operator.CalicoEnterprise
 
-		err := r.updateMutatingAdmissionPolicies(ctx, installation, log)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(r.updateMutatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
 		Expect(componentHandler.objectsToCreate).To(HaveLen(4))
+	})
+})
+
+var _ = Describe("updateValidatingAdmissionPolicies", func() {
+	var (
+		ctx              context.Context
+		cancel           context.CancelFunc
+		r                ReconcileInstallation
+		scheme           *runtime.Scheme
+		mockStatus       *status.MockStatus
+		componentHandler *fakeComponentHandler
+		log              logr.Logger
+		installation     *operator.Installation
+	)
+
+	clientFor := func(initial ...client.Object) client.Client {
+		return ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(initial...).Build()
+	}
+
+	discoveryFor := func(vapVersion string) *discovery.APIDiscovery {
+		m := map[schema.GroupKind]string{}
+		if vapVersion != "" {
+			m[admission.ValidatingPolicyGroupKind] = vapVersion
+		}
+		return discovery.NewStaticAPIDiscovery(m)
+	}
+
+	BeforeEach(func() {
+		log = logr.Discard()
+		ctx, cancel = context.WithCancel(context.Background())
+
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+		Expect(operator.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionregistrationv1alpha1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(admissionv1beta1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
+
+		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		componentHandler = newFakeComponentHandler()
+		installation = &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operator.InstallationSpec{
+				Variant: operator.Calico,
+			},
+		}
+	})
+
+	AfterEach(func() {
+		cancel()
+	})
+
+	It("should create v1 VAPs when v1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+
+		var vapCount, vapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionregistrationv1.ValidatingAdmissionPolicy:
+				vapCount++
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedVAPLabel, admission.ManagedVAPLabelValue))
+			case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+				vapbCount++
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(admission.ManagedVAPLabel, admission.ManagedVAPLabelValue))
+			}
+		}
+		Expect(vapCount).To(Equal(1))
+		Expect(vapbCount).To(Equal(1))
+	})
+
+	It("should create v1beta1 VAPs when only v1beta1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+
+		var vapCount, vapbCount int
+		for _, obj := range componentHandler.objectsToCreate {
+			switch obj.(type) {
+			case *admissionv1beta1.ValidatingAdmissionPolicy:
+				vapCount++
+			case *admissionv1beta1.ValidatingAdmissionPolicyBinding:
+				vapbCount++
+			}
+		}
+		Expect(vapCount).To(Equal(1))
+		Expect(vapbCount).To(Equal(1))
+	})
+
+	It("should create v1alpha1 VAPs when only v1alpha1 is served", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+	})
+
+	It("should skip without degrading when no served version exists", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(""),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(BeEmpty())
+		mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operator.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	It("should not create VAPs when v3CRDs=false", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       false,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(BeEmpty())
+	})
+
+	It("should delete stale v1 VAPs with managed label", func() {
+		staleVAP := &admissionregistrationv1.ValidatingAdmissionPolicy{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "stale-policy",
+				Labels: map[string]string{admission.ManagedVAPLabel: admission.ManagedVAPLabelValue},
+			},
+		}
+		staleVAPB := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "stale-binding",
+				Labels: map[string]string{admission.ManagedVAPLabel: admission.ManagedVAPLabelValue},
+			},
+		}
+
+		r = ReconcileInstallation{
+			client:       clientFor(staleVAP, staleVAPB),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToDelete).To(HaveLen(2))
+		deletedNames := map[string]bool{}
+		for _, obj := range componentHandler.objectsToDelete {
+			deletedNames[obj.GetName()] = true
+		}
+		Expect(deletedNames).To(HaveKey("stale-policy"))
+		Expect(deletedNames).To(HaveKey("stale-binding"))
+	})
+
+	It("should work with Enterprise variant", func() {
+		r = ReconcileInstallation{
+			client:       clientFor(),
+			scheme:       scheme,
+			status:       mockStatus,
+			manageCRDs:   true,
+			v3CRDs:       true,
+			apiDiscovery: discoveryFor(admission.VersionV1),
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				return componentHandler
+			},
+		}
+
+		installation.Spec.Variant = operator.CalicoEnterprise
+
+		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
+		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
 	})
 })

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package main
+package versions
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -100,4 +101,50 @@ components:
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("modified config mismatch (-want +got):\n%s", diff)
 	}
+}
+
+func TestCalicoConfigVersions(t *testing.T) {
+	t.Parallel()
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		td := t.TempDir()
+		full := filepath.Join(td, CalicoConfigPath)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("failed to create config directory: %v", err)
+		}
+		content := "title: v3.25.0\n"
+		if err := os.WriteFile(full, []byte(content), 0o644); err != nil {
+			t.Fatalf("failed to write version file: %v", err)
+		}
+
+		got, err := CalicoConfigVersions(td)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		want := &CalicoVersion{Title: "v3.25.0"}
+		if diff := cmp.Diff(want, got); diff != "" {
+			t.Fatalf("retrieved version mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("unmarshal error", func(t *testing.T) {
+		t.Parallel()
+		td := t.TempDir()
+		full := filepath.Join(td, CalicoConfigPath)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("failed to create config directory: %v", err)
+		}
+		// invalid YAML that will cause unmarshal to fail for expected struct
+		if err := os.WriteFile(full, []byte(":::: not yaml :::"), 0o644); err != nil {
+			t.Fatalf("failed to write bad yaml file: %v", err)
+		}
+
+		_, err := CalicoConfigVersions(td)
+		if err == nil {
+			t.Fatalf("expected unmarshal error, got nil")
+		}
+		if !strings.Contains(err.Error(), "parsing config versions YAML") {
+			t.Fatalf("unexpected error message: %v", err)
+		}
+	})
 }

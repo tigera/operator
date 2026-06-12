@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,7 +48,7 @@ func addPrometheusWatch(c ctrlruntime.Controller) error {
 func addPrometheusRuleWatch(c ctrlruntime.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.PrometheusRule{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: monitor.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusDPRate, Namespace: common.TigeraPrometheusNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace},
 	}, &handler.EnqueueRequestForObject{})
 }
 

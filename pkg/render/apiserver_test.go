@@ -199,7 +199,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(2))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentAPIServer.Image, components.ComponentAPIServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
 		))
 
 		expectedArgs := []string{
@@ -245,7 +245,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 
 		Expect(d.Spec.Template.Spec.Containers[1].Name).To(Equal("tigera-queryserver"))
 		Expect(d.Spec.Template.Spec.Containers[1].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentQueryServer.Image, components.ComponentQueryServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
 		))
 		Expect(d.Spec.Template.Spec.Containers[1].Args).To(BeEmpty())
 
@@ -411,6 +411,48 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}
 
 		rtest.ExpectResources(resources, expectedResources)
+
+		// In CRD/webhooks mode the calico-uisettings-passthrough ClusterRole is not deployed, so
+		// tigera-network-admin needs to grant write access to uisettings itself for the
+		// calico-webhooks UISettings handler to do the narrowing instead of being short-circuited
+		// by kube-apiserver RBAC.
+		networkAdmin := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
+		}))
+	})
+
+	It("should grant the calico-apiserver SA write access to globalreports/status", func() {
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		cr := rtest.GetResource(resources, "calico-apiserver", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+
+		// Find the backing-storage rule and assert it covers globalreports/status.
+		// Without this, compliance-controller can't update status.lastScheduledReportJob
+		// and no compliance jobs ever run.
+		var found bool
+		for _, rule := range cr.Rules {
+			hasGlobalReports := false
+			hasGlobalReportsStatus := false
+			for _, r := range rule.Resources {
+				if r == "globalreports" {
+					hasGlobalReports = true
+				}
+				if r == "globalreports/status" {
+					hasGlobalReportsStatus = true
+				}
+			}
+			if hasGlobalReports {
+				found = true
+				Expect(hasGlobalReportsStatus).To(BeTrue(), "calico-apiserver ClusterRole rule covering globalreports must also cover globalreports/status")
+				Expect(rule.Verbs).To(ContainElement("update"))
+			}
+		}
+		Expect(found).To(BeTrue(), "calico-apiserver ClusterRole should have a rule covering globalreports")
 	})
 
 	It("should render L7 Admission Controller with default config when SidecarInjection is Enabled", func() {
@@ -1079,6 +1121,51 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(deploy.Spec.Template.Spec.Affinity).To(Equal(podaffinity.NewPodAntiAffinity("calico-apiserver", []string{"calico-system", "tigera-system", "calico-apiserver"})))
 	})
 
+	It("should render Linseed routing for the queryserver when ManagementClusterConnection is set", func() {
+		cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
+		cfg.ClusterDomain = "cluster.local"
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		resources, _ := component.Objects()
+
+		rb, ok := rtest.GetResource(resources, "tigera-linseed", "calico-system", "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(ok).To(BeTrue(), "expected tigera-linseed RoleBinding in calico-system")
+		Expect(rb.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
+		Expect(rb.Subjects).To(ConsistOf(rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      render.GuardianServiceAccountName,
+			Namespace: render.GuardianNamespace,
+		}))
+
+		deploy, ok := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(ok).To(BeTrue())
+		var qs *corev1.Container
+		for i := range deploy.Spec.Template.Spec.Containers {
+			if deploy.Spec.Template.Spec.Containers[i].Name == "tigera-queryserver" {
+				qs = &deploy.Spec.Template.Spec.Containers[i]
+			}
+		}
+		Expect(qs).NotTo(BeNil())
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_URL", Value: "https://guardian.calico-system.svc"}))
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "CLUSTER_ID", Value: ""}))
+		Expect(qs.Env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/tigera.io/linseed/token"}))
+		Expect(qs.VolumeMounts).To(ContainElement(corev1.VolumeMount{
+			Name:      render.LinseedTokenVolumeName,
+			MountPath: render.LinseedVolumeMountPath,
+		}))
+
+		var tokenVol *corev1.Volume
+		for i := range deploy.Spec.Template.Spec.Volumes {
+			if deploy.Spec.Template.Spec.Volumes[i].Name == render.LinseedTokenVolumeName {
+				tokenVol = &deploy.Spec.Template.Spec.Volumes[i]
+			}
+		}
+		Expect(tokenVol).NotTo(BeNil())
+		Expect(tokenVol.Secret).NotTo(BeNil())
+		Expect(tokenVol.Secret.SecretName).To(Equal("calico-apiserver-tigera-linseed-token"))
+	})
+
 	Context("calico-system rendering", func() {
 		policyName := types.NamespacedName{Name: "calico-system.apiserver-access", Namespace: "calico-system"}
 
@@ -1514,6 +1601,11 @@ var (
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},
@@ -1668,6 +1760,11 @@ var (
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{""},
@@ -1885,8 +1982,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(len(d.Spec.Template.Spec.Containers)).To(Equal(1))
 		Expect(d.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-apiserver"))
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
-			fmt.Sprintf("testregistry.com/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoAPIServer.Image, components.ComponentCalicoAPIServer.Version),
+			fmt.Sprintf("testregistry.com/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version),
 		))
+		Expect(d.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/usr/bin/calico", "component", "apiserver"}))
 
 		expectedArgs := []string{
 			"--secure-port=5443",
@@ -2396,20 +2494,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				Value:    "arm64",
 				Effect:   corev1.TaintEffectNoSchedule,
 			}))
-		})
-
-		It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
-			fipsEnabled := operatorv1.FIPSModeEnabled
-			cfg.Installation.FIPSMode = &fipsEnabled
-
-			component, err := render.APIServer(cfg)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 		})
 	})
 

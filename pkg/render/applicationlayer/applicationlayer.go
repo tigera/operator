@@ -101,7 +101,7 @@ type Config struct {
 
 	// Calculated internal fields.
 	proxyImage            string
-	collectorImage        string
+	calicoImage           string
 	dikastesImage         string
 	dikastesEnabled       bool
 	perHostEnvoyEnabled   bool
@@ -132,7 +132,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.config.collectorImage, err = components.GetReference(components.ComponentL7Collector, reg, path, prefix, is)
+	c.config.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.config.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -271,9 +271,8 @@ func (c *component) containers() []corev1.Container {
 			"NET_RAW",
 		}
 		proxy := corev1.Container{
-			Name:            ProxyContainerName,
-			Image:           c.config.proxyImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
+			Name:  ProxyContainerName,
+			Image: c.config.proxyImage,
 			Command: []string{
 				"envoy", "-c", "/etc/envoy/envoy-config.yaml",
 			},
@@ -289,8 +288,8 @@ func (c *component) containers() []corev1.Container {
 		// Log collection specific container
 		collector := corev1.Container{
 			Name:            L7CollectorContainerName,
-			Image:           c.config.collectorImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
+			Image:           c.config.calicoImage,
+			Command:         []string{components.CalicoBinaryPath, "component", "l7-collector"},
 			Env:             c.collectorEnv(),
 			SecurityContext: securitycontext.NewRootContext(false),
 			VolumeMounts:    c.collectorVolMounts(),
@@ -348,10 +347,9 @@ func (c *component) containers() []corev1.Container {
 		}
 
 		dikastes := corev1.Container{
-			Name:            DikastesContainerName,
-			Image:           c.config.dikastesImage,
-			ImagePullPolicy: render.ImagePullPolicy(),
-			Command:         commandArgs,
+			Name:    DikastesContainerName,
+			Image:   c.config.dikastesImage,
+			Command: commandArgs,
 			Env: []corev1.EnvVar{
 				{Name: "LOG_LEVEL", Value: "Info"},
 				{Name: "DIKASTES_SUBSCRIPTION_TYPE", Value: "per-host-policies"},

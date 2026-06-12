@@ -23,6 +23,7 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -81,6 +82,24 @@ var _ = Describe("Typha rendering tests", func() {
 			ClusterDomain:   defaultClusterDomain,
 			FelixHealthPort: 9099,
 			NonClusterHost:  nonclusterhost,
+		}
+	})
+
+	It("should default to bootstrap tolerations that respect cordoning", func() {
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		deploy := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(deploy).ToNot(BeNil())
+		Expect(deploy.Spec.Template.Spec.Tolerations).To(Equal(rmeta.TolerateBootstrap))
+
+		// Cordoned nodes get a node.kubernetes.io/unschedulable:NoSchedule taint;
+		// Typha must not tolerate it, otherwise replicas pile up on drained nodes.
+		for _, t := range deploy.Spec.Template.Spec.Tolerations {
+			Expect(t.Key).ToNot(Equal("node.kubernetes.io/unschedulable"))
+			Expect(t.Operator == corev1.TolerationOpExists && t.Key == "").To(BeFalse(),
+				"unbounded toleration would defeat node cordoning")
 		}
 	})
 
@@ -199,6 +218,41 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
+	It("should strip the host-network apiserver endpoint from the non-cluster-host Typha and fall back to the default Service", func() {
+		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		// NCH Typha is pod-networked; let kubelet's default service injection take over.
+		d := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		for _, e := range d.Spec.Template.Spec.Containers[0].Env {
+			Expect(e.Name).ToNot(Equal("KUBERNETES_SERVICE_HOST"))
+			Expect(e.Name).ToNot(Equal("KUBERNETES_SERVICE_PORT"))
+		}
+
+		// The host-networked Typha still gets the configured endpoint.
+		dMain := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dMain.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "proxy.local"},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "6444"},
+		))
+	})
+
+	It("should respect an explicit pod-network apiserver endpoint on the non-cluster-host Typha when configured", func() {
+		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
+		cfg.K8sServiceEpPodNetwork = k8sapi.ServiceEndpoint{Host: "10.96.0.1", Port: "443"}
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		d := rtest.GetResource(resources, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_HOST", Value: "10.96.0.1"},
+			corev1.EnvVar{Name: "KUBERNETES_SERVICE_PORT", Value: "443"},
+		))
+	})
+
 	It("should use custom client common name when specified for non-cluster host Typha deployment", func() {
 		cfg.TLS.NodeNonClusterHostCommonName = "custom-nch-cn"
 		component := render.Typha(&cfg)
@@ -231,23 +285,6 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
 			corev1.EnvVar{Name: "TYPHA_CLIENTURISAN", Value: "spiffe://custom-nch-uri-san"},
 		))
-	})
-
-	It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
-		cfg.Installation.Variant = operatorv1.Calico
-		fipsEnabled := operatorv1.FIPSModeEnabled
-		cfg.Installation.FIPSMode = &fipsEnabled
-		component := render.Typha(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
-		dResource := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment")
-		Expect(dResource).ToNot(BeNil())
-
-		d := dResource.(*appsv1.Deployment)
-		Expect(d.Spec.Template.Spec.Containers).To(HaveLen(1))
-
-		tc := d.Spec.Template.Spec.Containers[0]
-		Expect(tc.Image).To(ContainSubstring("-fips"))
 	})
 
 	It("should include updates needed for migration of core components from kube-system namespace", func() {
@@ -656,10 +693,11 @@ var _ = Describe("Typha rendering tests", func() {
 				},
 			}))
 
-			// At runtime, the operator will also add some standard labels to the
-			// deployment such as "k8s-app=calico-typha". But the deployment object
-			// produced by the render will have no labels so we expect just the one
-			// provided.
+			// At runtime, the operator's setStandardSelectorAndLabels helper
+			// adds standard labels such as "k8s-app=calico-typha" and the
+			// host-networked marker. The deployment object produced by the
+			// render itself only carries the override-supplied template-level
+			// label; the rest are layered on during apply.
 			Expect(d.Spec.Template.Labels).To(HaveLen(1))
 			Expect(d.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
@@ -792,6 +830,73 @@ var _ = Describe("Typha rendering tests", func() {
 
 			Expect(d.Spec.Template.Spec.Tolerations).To(HaveLen(1))
 			Expect(d.Spec.Template.Spec.Tolerations).To(ConsistOf(tol))
+		})
+	})
+
+	Describe("PodDisruptionBudget", func() {
+		getPDB := func() *policyv1.PodDisruptionBudget {
+			component := render.Typha(&cfg)
+			resources, _ := component.Objects()
+			res := rtest.GetResource(resources, "calico-typha", "calico-system", "policy", "v1", "PodDisruptionBudget")
+			Expect(res).ToNot(BeNil())
+			return res.(*policyv1.PodDisruptionBudget)
+		}
+
+		It("renders the default PDB when no override is set", func() {
+			pdb := getPDB()
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+			Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+			Expect(pdb.Spec.Selector).To(Equal(&metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": "calico-typha"},
+			}))
+		})
+
+		It("applies UnhealthyPodEvictionPolicy override and preserves default MaxUnavailable", func() {
+			policy := policyv1.AlwaysAllow
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					UnhealthyPodEvictionPolicy: &policy,
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+			Expect(*pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(policyv1.AlwaysAllow))
+		})
+
+		It("applies MinAvailable override and clears MaxUnavailable", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					MinAvailable: ptr.To(intstr.FromInt(2)),
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
+			Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+		})
+
+		It("applies MaxUnavailable percentage override", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Spec: &operatorv1.PodDisruptionBudgetOverrideSpec{
+					MaxUnavailable: ptr.To(intstr.FromString("50%")),
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromString("50%"))))
+			Expect(pdb.Spec.MinAvailable).To(BeNil())
+		})
+
+		It("applies metadata labels and annotations", func() {
+			cfg.Installation.TyphaPodDisruptionBudget = &operatorv1.PodDisruptionBudgetOverride{
+				Metadata: &operatorv1.Metadata{
+					Labels:      map[string]string{"custom": "label"},
+					Annotations: map[string]string{"custom": "ann"},
+				},
+			}
+			pdb := getPDB()
+			Expect(pdb.Labels).To(HaveKeyWithValue("custom", "label"))
+			Expect(pdb.Annotations).To(HaveKeyWithValue("custom", "ann"))
 		})
 	})
 })

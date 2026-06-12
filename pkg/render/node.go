@@ -167,9 +167,8 @@ type nodeComponent struct {
 	cfg *NodeConfiguration
 
 	// Calculated internal fields based on the given information.
-	cniImage     string
-	flexvolImage string
-	nodeImage    string
+	calicoImage string
+	nodeImage   string
 }
 
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -184,19 +183,12 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNI, reg, path, prefix, is))
+	c.calicoImage = appendIfErr(components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is))
+	switch {
+	case c.cfg.Installation.Variant.IsEnterprise():
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentTigeraFlexVolume, reg, path, prefix, is))
-	} else {
-		c.flexvolImage = appendIfErr(components.GetReference(components.ComponentCalicoFlexVolume, reg, path, prefix, is))
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIFIPS, reg, path, prefix, is))
-			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNodeFIPS, reg, path, prefix, is))
-		} else {
-			c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
-			c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
-		}
+	default:
+		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
 	}
 
 	if len(errMsgs) != 0 {
@@ -576,6 +568,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"egressgatewaypolicies",
 					"externalnetworks",
 					"licensekeys",
+					"networks",
 					"packetcaptures",
 					"remoteclusterconfigurations",
 				},
@@ -586,6 +579,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{
 					"packetcaptures",
+					"packetcaptures/status",
 				},
 				Verbs: []string{"update"},
 			},
@@ -652,6 +646,14 @@ func (c *nodeComponent) cniPluginRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get"},
 			},
 		},
+	}
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		// The Network resource is only available in Enterprise / Cloud at this time.
+		role.Rules = append(role.Rules, rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get"},
+		})
 	}
 	return role
 }
@@ -750,6 +752,14 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 			"type":   "grpc",
 			"socket": "unix:///var/run/calico/cni-server.sock",
 		}
+	}
+
+	// device_type tells the Calico CNI plugin which virtual device to create for
+	// the pod interface. Only emit when explicitly set to Netkit: leaving it out
+	// keeps the default (veth) behavior and avoids churning existing CNI configs.
+	if c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType != nil &&
+		*c.cfg.Installation.CalicoNetwork.LinuxPodInterfaceType == operatorv1.LinuxPodInterfaceNetkit {
+		calicoPluginConfig["device_type"] = "netkit"
 	}
 
 	return calicoPluginConfig
@@ -1197,9 +1207,8 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "install-cni",
-		Image:           c.cniImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{"/opt/cni/bin/install"},
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "cni", "install"},
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    cniVolumeMounts,
@@ -1215,8 +1224,8 @@ func (c *nodeComponent) flexVolumeContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            "flexvol-driver",
-		Image:           c.flexvolImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "flexvol", "install", "--target", "/host/driver/uds"},
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    flexVolumeMounts,
 	}
@@ -1250,18 +1259,13 @@ func (c *nodeComponent) bpfBootstrapInitContainer() corev1.Container {
 		},
 	}
 
-	command := []string{CalicoNodeObjectName, "-init"}
-	// If BPF is not enabled, then we run the init container in best-effort mode.
-	// This means that it will not fail if the BPF filesystem is not mounted, but
-	// it will still attempt to mount it if it is available. This is useful when we
-	// are running calico in test environments like KinD or K3s.
+	command := []string{components.CalicoBinaryPath, "component", "node", "init"}
 	if !c.cfg.Installation.BPFEnabled() {
-		command = append(command, "-best-effort")
+		command = append(command, "--best-effort")
 	}
 	return corev1.Container{
 		Name:            "ebpf-bootstrap",
 		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.bpffsEnvvars(),
 		Command:         command,
 		SecurityContext: securitycontext.NewRootContext(true),
@@ -1344,7 +1348,6 @@ func (c *nodeComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
 		Name:            CalicoNodeObjectName,
 		Image:           c.nodeImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Resources:       c.nodeResources(),
 		SecurityContext: sc,
 		Env:             c.nodeEnvVars(),
@@ -1723,27 +1726,26 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 
 // nodeLifecycle creates the node's postStart and preStop hooks.
 func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
-	preStopCmd := []string{"/bin/calico-node", "-shutdown"}
-	lc := &corev1.Lifecycle{
-		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{Command: preStopCmd}},
+	return &corev1.Lifecycle{
+		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
+			Command: []string{components.CalicoBinaryPath, "component", "node", "shutdown"},
+		}},
 	}
-	return lc
 }
 
 // nodeLivenessReadinessProbes creates the node's liveness and readiness probes.
 func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(c.cfg.FelixHealthPort)
-	readinessCmd := []string{"/bin/calico-node", "-bird-ready", "-felix-ready"}
+	var readinessCmd []string
 
-	// Want to check for BGP metrics server if this is enterprise
+	readinessCmd = []string{components.CalicoBinaryPath, "component", "node", "health", "--bird-ready", "--felix-ready"}
 	if c.cfg.Installation.Variant.IsEnterprise() {
-		readinessCmd = []string{"/bin/calico-node", "-bird-ready", "-felix-ready", "-bgp-metrics-ready"}
+		readinessCmd = append(readinessCmd, "--bgp-metrics-ready")
 	}
-
 	// If not using BGP or using VPP, don't check bird status (or bgp metrics server for enterprise).
 	if !bgpEnabled(c.cfg.Installation) || c.vppDataplaneEnabled() {
-		readinessCmd = []string{"/bin/calico-node", "-felix-ready"}
+		readinessCmd = []string{components.CalicoBinaryPath, "component", "node", "health", "--felix-ready"}
 	}
 
 	lp := &corev1.Probe{

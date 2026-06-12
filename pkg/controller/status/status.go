@@ -51,6 +51,11 @@ const (
 	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
 	// killer, manual kill) can also produce this code.
 	exitCodeSIGKILL = 137
+
+	// readinessGracePeriod is how long a running pod may stay unready before we
+	// consider it failing. This avoids tripping Degraded for pods that are only
+	// briefly unready during a rolling update.
+	readinessGracePeriod = 60 * time.Second
 )
 
 // StatusManager manages the status for a single controller and component, and reports the status via
@@ -704,10 +709,20 @@ func (m *statusManager) podsFailing(selector *metav1.LabelSelector, namespace st
 		}
 
 		// If none of the container-level checks matched, check if the pod is running but
-		// not passing readiness checks.
+		// not passing readiness checks. We only note a pod as failing if it has been
+		// unready for longer than the grace period, to minimize false positives during
+		// rolling updates.
 		if p.Status.Phase == corev1.PodRunning {
 			for _, cond := range p.Status.Conditions {
-				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
+				if cond.Type != corev1.ContainersReady || cond.Status != corev1.ConditionFalse {
+					continue
+				}
+				// A zero LastTransitionTime means we can't tell how long the pod has been
+				// unready, so don't flag it - kubelet sets this field in practice.
+				if cond.LastTransitionTime.IsZero() {
+					continue
+				}
+				if time.Since(cond.LastTransitionTime.Time) > readinessGracePeriod {
 					return fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name), nil
 				}
 			}

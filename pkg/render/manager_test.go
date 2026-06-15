@@ -17,7 +17,6 @@ package render_test
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"

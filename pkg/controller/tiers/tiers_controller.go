@@ -163,7 +163,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 	}
 	if r.opts.EnterpriseCRDExists {
 		namespaces = append(namespaces,
-			render.ComplianceNamespace,
 			render.DexNamespace,
 			render.ElasticsearchNamespace,
 			render.LogCollectorNamespace,

@@ -643,6 +643,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
 		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
+		OTelLogTypes:           otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific
@@ -894,4 +895,11 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 	syslogCert := certificatemanagement.NewCertificate(rlogcollector.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
+}
+
+func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OTelLogType {
+	if lc.Spec.OTelCollector == nil || lc.Spec.OTelCollector.Logs == nil {
+		return nil
+	}
+	return lc.Spec.OTelCollector.Logs.Types
 }

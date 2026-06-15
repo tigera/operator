@@ -15,8 +15,10 @@
 package otelcollector
 
 import (
+	"bytes"
 	"fmt"
 	"strings"
+	"text/template"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -28,9 +30,12 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -51,9 +56,13 @@ const (
 	OTLPGRPCPort      = 4317
 	OTLPHTTPPort      = 4318
 	HealthCheckPort   = 13133
-	PrometheusPort    = 9090
 
-	PrometheusRemoteWriteEndpoint = "http://prometheus-http-api.tigera-prometheus.svc:9090/api/v1/write"
+	MetricsTLSServerName = "calico-node-metrics"
+
+	DefaultMemoryLimit        = "512Mi"
+	DefaultMemoryRequest      = "128Mi"
+	DefaultMemoryLimitMiB     = 409 // 80% of 512Mi
+	DefaultMemorySpikeLimitMiB = 100 // ~25% of limit_mib
 )
 
 // LogForwarderProtocol determines which receiver the collector uses for log ingestion.
@@ -72,6 +81,8 @@ type Configuration struct {
 	Installation         *operatorv1.InstallationSpec
 	OTelCollector        *operatorv1.OTelCollectorSpec
 	LogForwarderProtocol LogForwarderProtocol
+	ClientTLSSecret      certificatemanagement.KeyPairInterface
+	TrustedCertBundle    certificatemanagement.TrustedBundleRO
 }
 
 type component struct {
@@ -89,7 +100,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentTigeraCalico, reg, path, prefix, is)
+	c.image, err = components.GetReference(components.ComponentOTelCollector, reg, path, prefix, is)
 	return err
 }
 
@@ -176,81 +187,160 @@ func (c *component) configMap() *corev1.ConfigMap {
 	}
 }
 
-func (c *component) collectorConfig() string {
-	var b strings.Builder
-
-	// Receivers
-	b.WriteString("receivers:\n")
-
-	hasLogs := c.cfg.OTelCollector.Logs != nil && len(c.cfg.OTelCollector.Logs.Types) > 0
-	if hasLogs {
-		switch c.cfg.LogForwarderProtocol {
-		case LogForwarderOTLP:
-			b.WriteString(fmt.Sprintf("  otlp:\n    protocols:\n      http:\n        endpoint: 0.0.0.0:%d\n", OTLPHTTPPort))
-		default:
-			b.WriteString(fmt.Sprintf("  fluentdhttp:\n    endpoint: 0.0.0.0:%d\n", FluentForwardPort))
-		}
-	}
-
-	metricsEnabled := c.cfg.OTelCollector.Metrics != nil &&
+func (c *component) metricsEnabled() bool {
+	return c.cfg.OTelCollector.Metrics != nil &&
 		c.cfg.OTelCollector.Metrics.Enabled != nil &&
 		*c.cfg.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
-	if metricsEnabled {
-		b.WriteString("  prometheus:\n    config:\n      scrape_configs:\n")
-		b.WriteString("        - job_name: 'calico-metrics'\n")
-		b.WriteString("          kubernetes_sd_configs:\n")
-		b.WriteString("            - role: endpoints\n")
-	}
-
-	// Exporters
-	b.WriteString("\nexporters:\n")
-	for _, exp := range c.cfg.OTelCollector.Exporters {
-		switch exp.Protocol {
-		case operatorv1.OTelProtocolHTTP:
-			b.WriteString(fmt.Sprintf("  otlphttp/%s:\n    endpoint: %s\n", exp.Name, exp.Endpoint))
-		default:
-			b.WriteString(fmt.Sprintf("  otlp/%s:\n    endpoint: %s\n", exp.Name, exp.Endpoint))
-			if exp.TLSInsecure != nil && *exp.TLSInsecure {
-				b.WriteString("    tls:\n      insecure: true\n")
-			}
-		}
-	}
-	if metricsEnabled {
-		b.WriteString(fmt.Sprintf("  prometheusremotewrite:\n    endpoint: %s\n    tls:\n      insecure: true\n", PrometheusRemoteWriteEndpoint))
-	}
-
-	// Extensions
-	b.WriteString(fmt.Sprintf("\nextensions:\n  health_check:\n    endpoint: 0.0.0.0:%d\n", HealthCheckPort))
-
-	// Service pipelines
-	b.WriteString("\nservice:\n  extensions: [health_check]\n  pipelines:\n")
-
-	if hasLogs {
-		b.WriteString("    logs:\n      receivers: [")
-		b.WriteString(c.logReceiverName())
-		b.WriteString("]\n      exporters: [")
-		b.WriteString(c.exporterNames())
-		b.WriteString("]\n")
-	}
-
-	if metricsEnabled {
-		b.WriteString("    metrics:\n      receivers: [prometheus]\n      exporters: [prometheusremotewrite]\n")
-	}
-
-	return b.String()
 }
 
-func (c *component) exporterNames() string {
-	var names []string
+func (c *component) hasLogs() bool {
+	return c.cfg.OTelCollector.Logs != nil && len(c.cfg.OTelCollector.Logs.Types) > 0
+}
+
+type configTemplateData struct {
+	HasLogs           bool
+	LogReceiverName   string
+	LogReceiverPort   int32
+	UseOTLP           bool
+	MetricsEnabled    bool
+	MetricsCAFile     string
+	MetricsCertFile   string
+	MetricsKeyFile    string
+	MetricsServerName string
+	MetricsNamespace  string
+	Exporters            []exporterEntry
+	ExporterNames        string
+	HealthCheckPort      int
+	MemoryLimitMiB       int
+	MemorySpikeLimitMiB  int
+}
+
+type exporterEntry struct {
+	Prefix      string
+	Name        string
+	Endpoint    string
+	TLSInsecure bool
+}
+
+var collectorConfigTmpl = template.Must(template.New("config").Parse(`receivers:
+{{- if .HasLogs}}
+{{- if .UseOTLP}}
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:{{.LogReceiverPort}}
+{{- else}}
+  fluentdhttp:
+    endpoint: 0.0.0.0:{{.LogReceiverPort}}
+{{- end}}
+{{- end}}
+{{- if .MetricsEnabled}}
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'calico-metrics'
+          scheme: https
+          tls_config:
+            ca_file: {{.MetricsCAFile}}
+            cert_file: {{.MetricsCertFile}}
+            key_file: {{.MetricsKeyFile}}
+            server_name: {{.MetricsServerName}}
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                  - {{.MetricsNamespace}}
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_service_label_k8s_app]
+              regex: calico-node
+              action: keep
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              regex: calico-metrics-port|calico-bgp-metrics-port
+              action: keep
+{{- end}}
+
+exporters:
+{{- range .Exporters}}
+  {{.Prefix}}/{{.Name}}:
+    endpoint: {{.Endpoint}}
+{{- if .TLSInsecure}}
+    tls:
+      insecure: true
+{{- end}}
+{{- end}}
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: {{.MemoryLimitMiB}}
+    spike_limit_mib: {{.MemorySpikeLimitMiB}}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:{{.HealthCheckPort}}
+
+service:
+  extensions: [health_check]
+  pipelines:
+{{- if .HasLogs}}
+    logs:
+      receivers: [{{.LogReceiverName}}]
+      processors: [memory_limiter]
+      exporters: [{{.ExporterNames}}]
+{{- end}}
+{{- if .MetricsEnabled}}
+    metrics:
+      receivers: [prometheus]
+      processors: [memory_limiter]
+      exporters: [{{.ExporterNames}}]
+{{- end}}
+`))
+
+func (c *component) collectorConfig() string {
+	var exporters []exporterEntry
+	var exporterNames []string
 	for _, exp := range c.cfg.OTelCollector.Exporters {
-		switch exp.Protocol {
-		case operatorv1.OTelProtocolHTTP:
-			names = append(names, fmt.Sprintf("otlphttp/%s", exp.Name))
-		default:
-			names = append(names, fmt.Sprintf("otlp/%s", exp.Name))
+		var prefix string
+		if exp.Protocol == operatorv1.OTelProtocolHTTP {
+			prefix = "otlphttp"
+		} else {
+			prefix = "otlp"
 		}
+		exporters = append(exporters, exporterEntry{
+			Prefix:      prefix,
+			Name:        exp.Name,
+			Endpoint:    exp.Endpoint,
+			TLSInsecure: exp.TLSInsecure != nil && *exp.TLSInsecure,
+		})
+		exporterNames = append(exporterNames, fmt.Sprintf("%s/%s", prefix, exp.Name))
 	}
-	return strings.Join(names, ", ")
+
+	data := configTemplateData{
+		HasLogs:         c.hasLogs(),
+		LogReceiverName: c.logReceiverName(),
+		LogReceiverPort: c.logReceiverPort(),
+		UseOTLP:         c.cfg.LogForwarderProtocol == LogForwarderOTLP,
+		MetricsEnabled:  c.metricsEnabled(),
+		Exporters:       exporters,
+		ExporterNames:       strings.Join(exporterNames, ", "),
+		HealthCheckPort:     HealthCheckPort,
+		MemoryLimitMiB:      DefaultMemoryLimitMiB,
+		MemorySpikeLimitMiB: DefaultMemorySpikeLimitMiB,
+	}
+
+	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
+		data.MetricsCAFile = c.cfg.TrustedCertBundle.MountPath()
+		data.MetricsCertFile = c.cfg.ClientTLSSecret.VolumeMountCertificateFilePath()
+		data.MetricsKeyFile = c.cfg.ClientTLSSecret.VolumeMountKeyFilePath()
+		data.MetricsServerName = MetricsTLSServerName
+		data.MetricsNamespace = OTelCollectorNamespace
+	}
+
+	var buf bytes.Buffer
+	if err := collectorConfigTmpl.Execute(&buf, data); err != nil {
+		panic(fmt.Sprintf("failed to render otel collector config: %v", err))
+	}
+	return buf.String()
 }
 
 func (c *component) logReceiverName() string {
@@ -293,6 +383,23 @@ func (c *component) service() *corev1.Service {
 }
 
 func (c *component) container() corev1.Container {
+	volumeMounts := []corev1.VolumeMount{
+		{
+			Name:      "config",
+			MountPath: "/etc/otel",
+			ReadOnly:  true,
+		},
+	}
+
+	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
+		volumeMounts = append(volumeMounts,
+			c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...,
+		)
+		volumeMounts = append(volumeMounts,
+			c.cfg.ClientTLSSecret.VolumeMount(rmeta.OSTypeLinux),
+		)
+	}
+
 	return corev1.Container{
 		Name:    OTelCollectorContainerName,
 		Image:   c.image,
@@ -302,6 +409,14 @@ func (c *component) container() corev1.Container {
 			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-http", ContainerPort: OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 			{Name: "health", ContainerPort: HealthCheckPort, Protocol: corev1.ProtocolTCP},
+		},
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse(DefaultMemoryLimit),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse(DefaultMemoryRequest),
+			},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{
@@ -322,13 +437,7 @@ func (c *component) container() corev1.Container {
 			},
 			PeriodSeconds: 10,
 		},
-		VolumeMounts: []corev1.VolumeMount{
-			{
-				Name:      "config",
-				MountPath: "/etc/otel",
-				ReadOnly:  true,
-			},
-		},
+		VolumeMounts: volumeMounts,
 	}
 }
 
@@ -336,6 +445,24 @@ func (c *component) statefulSet() *appsv1.StatefulSet {
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
+	}
+
+	volumes := []corev1.Volume{
+		{
+			Name: "config",
+			VolumeSource: corev1.VolumeSource{
+				ConfigMap: &corev1.ConfigMapVolumeSource{
+					LocalObjectReference: corev1.LocalObjectReference{Name: OTelCollectorConfigMapName},
+				},
+			},
+		},
+	}
+
+	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
+		volumes = append(volumes,
+			c.cfg.TrustedCertBundle.Volume(),
+			c.cfg.ClientTLSSecret.Volume(),
+		)
 	}
 
 	return &appsv1.StatefulSet{
@@ -361,16 +488,7 @@ func (c *component) statefulSet() *appsv1.StatefulSet {
 					Tolerations:        tolerations,
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers:         []corev1.Container{c.container()},
-					Volumes: []corev1.Volume{
-						{
-							Name: "config",
-							VolumeSource: corev1.VolumeSource{
-								ConfigMap: &corev1.ConfigMapVolumeSource{
-									LocalObjectReference: corev1.LocalObjectReference{Name: OTelCollectorConfigMapName},
-								},
-							},
-						},
-					},
+					Volumes:            volumes,
 				},
 			},
 		},
@@ -398,10 +516,7 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 		},
 	}
 
-	metricsEnabled := c.cfg.OTelCollector.Metrics != nil &&
-		c.cfg.OTelCollector.Metrics.Enabled != nil &&
-		*c.cfg.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
-	if metricsEnabled {
+	if c.metricsEnabled() {
 		egressRules = append(egressRules,
 			v3.Rule{
 				Action:      v3.Allow,
@@ -412,7 +527,7 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
 				Destination: v3.EntityRule{
-					Ports: networkpolicy.Ports(PrometheusPort),
+					Ports: networkpolicy.Ports(9081, 9900),
 				},
 			},
 		)

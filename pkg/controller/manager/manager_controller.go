@@ -330,8 +330,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// TODO: Do we need a license per-tenant in the management cluster?
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
+	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, logc)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil

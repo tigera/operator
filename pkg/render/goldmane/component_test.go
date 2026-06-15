@@ -30,7 +30,9 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -269,6 +271,31 @@ var _ = Describe("ComponentRendering", func() {
 		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, goldmane.GoldmanePolicyName, goldmane.GoldmaneNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(np.Spec.Ingress).To(HaveLen(1))
+
+		// Goldmane must allow egress so it can function under calico-system.default-deny: DNS,
+		// the Kubernetes API server, and Guardian. See https://github.com/tigera/operator/issues/4804.
+		Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+		Expect(np.Spec.Egress).To(Equal([]v3.Rule{
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.UDPProtocol,
+				Destination: v3.EntityRule{
+					NamespaceSelector: "projectcalico.org/name == 'kube-system'",
+					Selector:          "k8s-app in { 'kube-dns', 'coredns' }",
+					Ports:             networkpolicy.Ports(53),
+				},
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: networkpolicy.KubeAPIServerEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: render.GuardianEntityRule,
+			},
+		}))
 	})
 
 	It("Should apply overrides", func() {

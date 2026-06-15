@@ -278,6 +278,12 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
+	// Whisker is a UI that is reached from outside calico-system (e.g. via an ingress controller or
+	// load balancer), so the source of its ingress traffic is not knowable by the operator. Pass
+	// ingress to subsequent tiers so an administrator can allow it rather than having it hard-denied
+	// by calico-system.default-deny. See https://github.com/tigera/operator/issues/4804.
+	ingressRules := []v3.Rule{{Action: v3.Pass}}
+
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerPolicyName, Namespace: WhiskerNamespace},
@@ -285,6 +291,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			Tier:     networkpolicy.CalicoTierName,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
+			Ingress:  ingressRules,
 			Egress:   egressRules,
 		},
 	}

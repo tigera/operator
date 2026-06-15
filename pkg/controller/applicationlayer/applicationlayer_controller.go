@@ -50,10 +50,6 @@ const ResourceName = "applicationlayer"
 
 var log = logf.Log.WithName("controller_applicationlayer")
 
-// DefaultPolicySyncPrefix is the operator-managed value for
-// FelixConfiguration.policySyncPathPrefix.
-const DefaultPolicySyncPrefix = utils.DefaultPolicySyncPrefix
-
 // Add creates a new ApplicationLayer Controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {

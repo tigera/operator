@@ -611,6 +611,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
 		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
+		OTelLogTypes:           otelLogTypes(instance),
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -684,6 +685,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 			LicenseExpired:         licenseExpired,
 			OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
+			OTelLogTypes:           otelLogTypes(instance),
 		}
 		comp = render.Fluentd(fluentdCfg)
 
@@ -868,4 +870,11 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
+}
+
+func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OTelLogType {
+	if lc.Spec.OTelCollector == nil || lc.Spec.OTelCollector.Logs == nil {
+		return nil
+	}
+	return lc.Spec.OTelCollector.Logs.Types
 }

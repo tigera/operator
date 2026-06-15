@@ -27,6 +27,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render/istio"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -68,6 +69,9 @@ func init() {
 	AddToSchemes = append(AddToSchemes, policyv1beta1.SchemeBuilder.AddToScheme)
 	AddToSchemes = append(AddToSchemes, gateway.Install)
 	AddToSchemes = append(AddToSchemes, envoy.AddToScheme)
+	// EnvoyFilter is a hand-rolled shim type defined in pkg/render/istio (used
+	// for waypoint L7 logging); register it centrally like the other types.
+	AddToSchemes = append(AddToSchemes, istio.AddEnvoyFilterToScheme)
 	AddToSchemes = append(AddToSchemes, csisecret.AddToScheme)
 	AddToSchemes = append(AddToSchemes, operatorv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, admissionregistrationv1.AddToScheme)

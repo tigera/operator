@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/otelcollector"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("OTelCollector rendering", func() {
@@ -139,6 +140,14 @@ var _ = Describe("OTelCollector rendering", func() {
 										{Name: "otlp-http", ContainerPort: otelcollector.OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 										{Name: "health", ContainerPort: otelcollector.HealthCheckPort, Protocol: corev1.ProtocolTCP},
 									},
+									Resources: corev1.ResourceRequirements{
+										Limits: corev1.ResourceList{
+											corev1.ResourceMemory: resource.MustParse(otelcollector.DefaultMemoryLimit),
+										},
+										Requests: corev1.ResourceList{
+											corev1.ResourceMemory: resource.MustParse(otelcollector.DefaultMemoryRequest),
+										},
+									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{
@@ -186,6 +195,30 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(statefulSet.Spec.Template.Spec.Volumes).To(ConsistOf(expected.Spec.Template.Spec.Volumes))
 			Expect(statefulSet).To(Equal(expected), cmp.Diff(statefulSet, expected))
 		})
+
+		It("should include TLS volumes and mounts when metrics with certs are enabled", func() {
+			tlsKeyPair := certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "client-tls"}}, nil, "")
+			trustedBundle := certificatemanagement.CreateTrustedBundle(nil)
+
+			cfg := &otelcollector.Configuration{
+				Installation: defaultInstallation,
+				OTelCollector: &operatorv1.OTelCollectorSpec{
+					Metrics:   &operatorv1.OTelMetrics{Enabled: ptr.To(operatorv1.OTelMetricsEnable)},
+					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				},
+				ClientTLSSecret:   tlsKeyPair,
+				TrustedCertBundle: trustedBundle,
+			}
+			component := otelcollector.OTelCollector(cfg)
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+			objs, _ := component.Objects()
+
+			statefulSet, err := rtest.GetResourceOfType[*appsv1.StatefulSet](objs, otelcollector.OTelCollectorStatefulSetName, otelcollector.OTelCollectorNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(len(statefulSet.Spec.Template.Spec.Volumes)).To(BeNumerically(">", 1))
+			Expect(len(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts)).To(BeNumerically(">", 1))
+		})
 	})
 
 	Context("ConfigMap content", func() {
@@ -209,12 +242,17 @@ var _ = Describe("OTelCollector rendering", func() {
 		})
 
 		It("should include prometheus receiver when metrics are enabled", func() {
+			tlsKeyPair := certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "client-tls"}}, nil, "")
+			trustedBundle := certificatemanagement.CreateTrustedBundle(nil)
+
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OTelCollector: &operatorv1.OTelCollectorSpec{
 					Metrics:   &operatorv1.OTelMetrics{Enabled: ptr.To(operatorv1.OTelMetricsEnable)},
 					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
+				ClientTLSSecret:   tlsKeyPair,
+				TrustedCertBundle: trustedBundle,
 			}
 			objs, _ := otelcollector.OTelCollector(cfg).Objects()
 			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OTelCollectorConfigMapName, otelcollector.OTelCollectorNamespace)
@@ -223,11 +261,12 @@ var _ = Describe("OTelCollector rendering", func() {
 			config := cm.Data["config.yaml"]
 			Expect(config).To(ContainSubstring("prometheus:"))
 			Expect(config).To(ContainSubstring("kubernetes_sd_configs"))
-			Expect(config).To(ContainSubstring("prometheusremotewrite:"))
-			Expect(config).To(ContainSubstring(otelcollector.PrometheusRemoteWriteEndpoint))
+			Expect(config).To(ContainSubstring("tls_config:"))
+			Expect(config).To(ContainSubstring("server_name: calico-node-metrics"))
+			Expect(config).To(ContainSubstring("calico-metrics-port|calico-bgp-metrics-port"))
 			Expect(config).To(ContainSubstring("metrics:"))
 			Expect(config).To(ContainSubstring("receivers: [prometheus]"))
-			Expect(config).To(ContainSubstring("exporters: [prometheusremotewrite]"))
+			Expect(config).To(ContainSubstring("exporters: [otlp/backend]"))
 		})
 
 		It("should not include receivers or pipelines when logs and metrics are disabled", func() {

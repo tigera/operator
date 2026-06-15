@@ -135,7 +135,6 @@ var _ = Describe("OTelCollector rendering", func() {
 									Image:   "gcr.io/unique-caldron-775/cnx/tigera/calico:master",
 									Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 									Ports: []corev1.ContainerPort{
-										{Name: "fluentdhttp", ContainerPort: otelcollector.FluentForwardPort, Protocol: corev1.ProtocolTCP},
 										{Name: "otlp-grpc", ContainerPort: otelcollector.OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 										{Name: "otlp-http", ContainerPort: otelcollector.OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 										{Name: "health", ContainerPort: otelcollector.HealthCheckPort, Protocol: corev1.ProtocolTCP},
@@ -222,7 +221,7 @@ var _ = Describe("OTelCollector rendering", func() {
 	})
 
 	Context("ConfigMap content", func() {
-		It("should include fluentdhttp receiver when logs are enabled", func() {
+		It("should include otlp receiver when logs are enabled", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OTelCollector: &operatorv1.OTelCollectorSpec{
@@ -235,10 +234,10 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			config := cm.Data["config.yaml"]
-			Expect(config).To(ContainSubstring("fluentdhttp:"))
-			Expect(config).To(ContainSubstring("0.0.0.0:8006"))
+			Expect(config).To(ContainSubstring("otlp:"))
+			Expect(config).To(ContainSubstring("0.0.0.0:4318"))
 			Expect(config).To(ContainSubstring("logs:"))
-			Expect(config).To(ContainSubstring("receivers: [fluentdhttp]"))
+			Expect(config).To(ContainSubstring("receivers: [otlp]"))
 		})
 
 		It("should include prometheus receiver when metrics are enabled", func() {
@@ -281,7 +280,7 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			config := cm.Data["config.yaml"]
-			Expect(config).NotTo(ContainSubstring("fluentdhttp:"))
+			Expect(config).NotTo(ContainSubstring("otlp:"))
 			Expect(config).NotTo(ContainSubstring("prometheus:"))
 			Expect(config).NotTo(ContainSubstring("logs:"))
 			Expect(config).NotTo(ContainSubstring("metrics:"))
@@ -344,28 +343,6 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(config).To(ContainSubstring("exporters: [otlp/first, otlphttp/second]"))
 		})
 
-		It("should use otlp receiver when LogForwarderProtocol is OTLP", func() {
-			cfg := &otelcollector.Configuration{
-				Installation:         defaultInstallation,
-				LogForwarderProtocol: otelcollector.LogForwarderOTLP,
-				OTelCollector: &operatorv1.OTelCollectorSpec{
-					Logs:      &operatorv1.OTelLogs{Types: []operatorv1.OTelLogType{operatorv1.OTelFlowLog}},
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
-				},
-			}
-			objs, _ := otelcollector.OTelCollector(cfg).Objects()
-			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OTelCollectorConfigMapName, otelcollector.OTelCollectorNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			config := cm.Data["config.yaml"]
-			Expect(config).To(ContainSubstring("otlp:"))
-			Expect(config).To(ContainSubstring("protocols:"))
-			Expect(config).To(ContainSubstring("http:"))
-			Expect(config).To(ContainSubstring("0.0.0.0:4318"))
-			Expect(config).NotTo(ContainSubstring("fluentdhttp:"))
-			Expect(config).To(ContainSubstring("receivers: [otlp]"))
-		})
-
 		It("should always include the health_check extension", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
@@ -386,7 +363,7 @@ var _ = Describe("OTelCollector rendering", func() {
 	})
 
 	Context("Service", func() {
-		It("should expose the fluentdhttp port by default", func() {
+		It("should expose the OTLP HTTP port", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OTelCollector: &operatorv1.OTelCollectorSpec{
@@ -397,25 +374,9 @@ var _ = Describe("OTelCollector rendering", func() {
 			svc, err := rtest.GetResourceOfType[*corev1.Service](objs, otelcollector.OTelCollectorServiceName, otelcollector.OTelCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(svc.Spec.Ports).To(HaveLen(1))
-			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(otelcollector.FluentForwardPort)))
-			Expect(svc.Spec.Ports[0].Name).To(Equal("fluentdhttp"))
-			Expect(svc.Spec.Selector).To(Equal(map[string]string{"k8s-app": otelcollector.OTelCollectorStatefulSetName}))
-		})
-
-		It("should expose the OTLP HTTP port when LogForwarderProtocol is OTLP", func() {
-			cfg := &otelcollector.Configuration{
-				Installation:         defaultInstallation,
-				LogForwarderProtocol: otelcollector.LogForwarderOTLP,
-				OTelCollector: &operatorv1.OTelCollectorSpec{
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
-				},
-			}
-			objs, _ := otelcollector.OTelCollector(cfg).Objects()
-			svc, err := rtest.GetResourceOfType[*corev1.Service](objs, otelcollector.OTelCollectorServiceName, otelcollector.OTelCollectorNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(svc.Spec.Ports).To(HaveLen(1))
 			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(otelcollector.OTLPHTTPPort)))
-			Expect(svc.Spec.Ports[0].Name).To(Equal("otlp"))
+			Expect(svc.Spec.Ports[0].Name).To(Equal("otlp-http"))
+			Expect(svc.Spec.Selector).To(Equal(map[string]string{"k8s-app": otelcollector.OTelCollectorStatefulSetName}))
 		})
 	})
 
@@ -447,7 +408,7 @@ var _ = Describe("OTelCollector rendering", func() {
 	})
 
 	Context("NetworkPolicy", func() {
-		It("should allow ingress on the fluentdhttp port by default", func() {
+		It("should allow ingress on the OTLP HTTP port", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OTelCollector: &operatorv1.OTelCollectorSpec{
@@ -475,24 +436,7 @@ var _ = Describe("OTelCollector rendering", func() {
 
 			np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objs, otelcollector.OTelCollectorPolicyName, otelcollector.OTelCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			// Base egress (OTLP ports) + kube API + prometheus port + DNS rules
 			Expect(len(np.Spec.Egress)).To(BeNumerically(">=", 4))
-		})
-
-		It("should allow ingress on the OTLP HTTP port when LogForwarderProtocol is OTLP", func() {
-			cfg := &otelcollector.Configuration{
-				Installation:         defaultInstallation,
-				LogForwarderProtocol: otelcollector.LogForwarderOTLP,
-				OTelCollector: &operatorv1.OTelCollectorSpec{
-					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
-				},
-			}
-			objs, _ := otelcollector.OTelCollector(cfg).Objects()
-
-			np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objs, otelcollector.OTelCollectorPolicyName, otelcollector.OTelCollectorNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-			Expect(np.Spec.Ingress).To(HaveLen(1))
-			Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow))
 		})
 	})
 

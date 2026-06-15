@@ -69,6 +69,7 @@ const (
 	GuardianKeyPairSecret = "guardian-key-pair"
 
 	GoldmaneDeploymentName         = "goldmane"
+	GoldmaneServicePort            = 7443
 	GuardianSecretsRole            = "calico-guardian-secrets"
 	GuardianSecretsRoleBindingName = "calico-guardian-secrets"
 )
@@ -77,6 +78,7 @@ var (
 	GuardianEntityRule                = networkpolicy.CreateEntityRule(GuardianNamespace, GuardianDeploymentName, GuardianTargetPort)
 	GuardianSourceEntityRule          = networkpolicy.CreateSourceEntityRule(GuardianNamespace, GuardianDeploymentName)
 	GuardianServiceSelectorEntityRule = networkpolicy.CreateServiceSelectorEntityRule(GuardianNamespace, GuardianName)
+	GoldmaneEntityRule                = networkpolicy.CreateEntityRule(GuardianNamespace, GoldmaneDeploymentName, GoldmaneServicePort)
 )
 
 func Guardian(cfg *GuardianConfiguration) Component {
@@ -544,7 +546,36 @@ func (c *GuardianComponent) annotations() map[string]string {
 	return annotations
 }
 
-func ossNetworkPolicy() *v3.NetworkPolicy {
+func ossNetworkPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
+	// Guardian only runs in the OSS variant when the cluster is connected to a management
+	// cluster (Calico Cloud). It therefore needs egress to reach the tunnel endpoint, the
+	// Kubernetes API server, DNS, and Goldmane (which it proxies management-cluster requests
+	// to). Without these the calico-system.default-deny policy blocks the traffic. See
+	// https://github.com/tigera/operator/issues/4804.
+	egressRules := networkpolicy.AppendDNSEgressRules([]v3.Rule{}, cfg.OpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: GoldmaneEntityRule,
+		},
+	}...)
+
+	tunnelEgressRules, err := guardianTunnelEgressRules(cfg)
+	if err != nil {
+		return nil, err
+	}
+	egressRules = append(egressRules, tunnelEgressRules...)
+
+	// Pass any remaining egress to subsequent tiers so administrators can define
+	// supplemental allow rules without them being short-circuited by default-deny.
+	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
+
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianPolicyName, Namespace: GuardianNamespace},
@@ -552,7 +583,7 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
 					Action:   v3.Allow,
@@ -572,13 +603,14 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 					},
 				},
 			},
+			Egress: egressRules,
 		},
-	}
+	}, nil
 }
 
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
 	if !cfg.Installation.Variant.IsEnterprise() {
-		return ossNetworkPolicy(), nil
+		return ossNetworkPolicy(cfg)
 	}
 
 	egressRules := []v3.Rule{
@@ -607,8 +639,93 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		},
 	}...)
 
-	// The loop below creates an egress rule for each unique destination that the Guardian pods connect to. If there are
-	// multiple guardian pods and their proxy  settings differ, then there are multiple destinations that must have egress allowed.
+	tunnelEgressRules, err := guardianTunnelEgressRules(cfg)
+	if err != nil {
+		return nil, err
+	}
+	egressRules = append(egressRules, tunnelEgressRules...)
+
+	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
+
+	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
+	networkpolicyHelper := networkpolicy.DefaultHelper()
+	var ingressRules []v3.Rule
+	if cfg.Installation.Variant.IsEnterprise() {
+		ingressRules = append(ingressRules, []v3.Rule{
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      FluentdSourceEntityRule,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      IntrusionDetectionSourceEntityRule,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Source:      IntrusionDetectionInstallerSourceEntityRule,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+			{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: guardianIngressDestinationEntityRule,
+			},
+		}...)
+	}
+
+	policy := &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      GuardianPolicyName,
+			Namespace: GuardianNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingressRules,
+			Egress:   egressRules,
+		},
+	}
+
+	return policy, nil
+}
+
+// guardianTunnelEgressRules returns an egress rule for each unique destination that the Guardian pods connect to in
+// order to reach the management cluster tunnel endpoint. If there are multiple guardian pods and their proxy settings
+// differ, then there are multiple destinations that must have egress allowed.
+func guardianTunnelEgressRules(cfg *GuardianConfiguration) ([]v3.Rule, error) {
+	var egressRules []v3.Rule
 	allowedDestinations := map[string]bool{}
 	processedPodProxies := ProcessPodProxies(cfg.PodProxies)
 	for _, podProxyConfig := range processedPodProxies {
@@ -692,80 +809,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 		}
 	}
 
-	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
-
-	guardianIngressDestinationEntityRule := v3.EntityRule{Ports: networkpolicy.Ports(GuardianTargetPort)}
-	networkpolicyHelper := networkpolicy.DefaultHelper()
-	var ingressRules []v3.Rule
-	if cfg.Installation.Variant.IsEnterprise() {
-		ingressRules = append(ingressRules, []v3.Rule{
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      FluentdSourceEntityRule,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceBenchmarkerSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceReporterSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceSnapshotterSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      networkpolicyHelper.ComplianceControllerSourceEntityRule(),
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      IntrusionDetectionSourceEntityRule,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      IntrusionDetectionInstallerSourceEntityRule,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-			{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Destination: guardianIngressDestinationEntityRule,
-			},
-		}...)
-	}
-
-	policy := &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      GuardianPolicyName,
-			Namespace: GuardianNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
-			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress:  ingressRules,
-			Egress:   egressRules,
-		},
-	}
-
-	return policy, nil
+	return egressRules, nil
 }
 
 func ProcessPodProxies(podProxies []*httpproxy.Config) []*httpproxy.Config {

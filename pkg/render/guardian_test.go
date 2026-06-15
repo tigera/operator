@@ -339,9 +339,42 @@ var _ = Describe("Rendering tests", func() {
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy).NotTo(BeNil(), "OSS variant should always render a network policy")
 
-				// Verify it's the OSS policy (should only have Ingress type, no Egress)
-				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress))
-				Expect(policy.Spec.Egress).To(BeEmpty())
+				// The OSS policy must include egress so Guardian can function under calico-system.default-deny.
+				// See https://github.com/tigera/operator/issues/4804.
+				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+
+				// Expect egress for DNS, the Kubernetes API server, Goldmane, the (IP-based) tunnel
+				// destination, and a trailing Pass.
+				Expect(policy.Spec.Egress).To(Equal([]v3.Rule{
+					{
+						Action:   v3.Allow,
+						Protocol: &networkpolicy.UDPProtocol,
+						Destination: v3.EntityRule{
+							NamespaceSelector: "projectcalico.org/name == 'kube-system'",
+							Selector:          "k8s-app in { 'kube-dns', 'coredns' }",
+							Ports:             networkpolicy.Ports(53),
+						},
+					},
+					{
+						Action:      v3.Allow,
+						Protocol:    &networkpolicy.TCPProtocol,
+						Destination: networkpolicy.KubeAPIServerEntityRule,
+					},
+					{
+						Action:      v3.Allow,
+						Protocol:    &networkpolicy.TCPProtocol,
+						Destination: render.GoldmaneEntityRule,
+					},
+					{
+						Action:   v3.Allow,
+						Protocol: &networkpolicy.TCPProtocol,
+						Destination: v3.EntityRule{
+							Nets:  []string{"127.0.0.1/32"},
+							Ports: networkpolicy.Ports(1234),
+						},
+					},
+					{Action: v3.Pass},
+				}))
 			})
 
 			It("should render Enterprise network policy without domain-based egress when IncludeEgressNetworkPolicy is false", func() {

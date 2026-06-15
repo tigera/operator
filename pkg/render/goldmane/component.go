@@ -384,14 +384,33 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			},
 		})
 	}
+	// Goldmane runs in calico-system, where the calico-system.default-deny policy blocks any
+	// egress that lacks an explicit allow. It needs DNS, the Kubernetes API server (to read the
+	// flow-emitter-state ConfigMap) and, when connected to a management cluster, Guardian (to POST
+	// flows). See https://github.com/tigera/operator/issues/4804.
+	egressRules := networkpolicy.AppendDNSEgressRules([]v3.Rule{}, c.cfg.OpenShift)
+	egressRules = append(egressRules, []v3.Rule{
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.KubeAPIServerEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		},
+	}...)
+
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: GoldmanePolicyName, Namespace: GoldmaneNamespace},
 		Spec: v3.NetworkPolicySpec{
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

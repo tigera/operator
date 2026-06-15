@@ -26,7 +26,6 @@ HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
 
-
 # The directory into which we download binaries we need to run certain
 # processes, e.g. generating bundles
 HACK_BIN ?= hack/bin
@@ -244,10 +243,15 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 	@echo "Downloading Istio chart $* version $(ISTIO_VERSION)..."
 	@curl -fsSL -o $@ $(ISTIO_HELM_REPO)/$*-$(ISTIO_VERSION).tgz
 
-# To update the Envoy Gateway version, see "Updating the bundled version of
-# Envoy Gateway" in docs/common_tasks.md.
+# The Envoy Gateway version is owned by projectcalico/calico
+# (third_party/envoy-gateway/Makefile) and bumped there by Renovate. `make
+# gen-versions` (target: update-envoy-gateway-version) pins it into go.mod's
+# github.com/envoyproxy/gateway; we derive ENVOY_GATEWAY_VERSION from that pin so
+# there is a single source of truth and the embedded chart can never drift from
+# the decoder types. See "Updating the bundled version of Envoy Gateway" in
+# docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.2
+ENVOY_GATEWAY_VERSION ?= $(shell awk '/^[[:space:]]*github\.com\/envoyproxy\/gateway[[:space:]]+v/ {print $$2}' go.mod)
 ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
 $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
@@ -265,7 +269,6 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 	@rm -f $(HELM_BUILDARCH_VERSIONED_BINARY)
 	@curl -fsSL --retry 5 $(HELM3_URL) | tar --extract --gzip -C $(HACK_BIN) --strip-components=1 $(NATIVE_OS)-$(BUILDARCH)/helm -O > $(HELM_BUILDARCH_VERSIONED_BINARY)
 	@chmod a+x $(HELM_BUILDARCH_VERSIONED_BINARY)
-
 
 build: $(BINDIR)/operator-$(ARCH)
 $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
@@ -613,7 +616,7 @@ EE_VERSIONS?=config/enterprise_versions.yml
 
 gen-versions: gen-versions-calico gen-versions-enterprise
 
-gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
+gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds update-envoy-gateway-version
 	$(BINDIR)/gen-versions -os-versions=$(OS_VERSIONS) > pkg/components/calico.go
 
 gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
@@ -675,7 +678,7 @@ define copy_admission_policies
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version
-.PHONY: update-calico-crds update-enterprise-crds
+.PHONY: update-calico-crds update-enterprise-crds update-envoy-gateway-version
 .PHONY: fetch-calico-crds fetch-enterprise-crds
 .PHONY: prepare-for-calico-crds prepare-for-enterprise-crds
 
@@ -693,6 +696,24 @@ update-calico-crds: fetch-calico-crds
 	$(call copy_v3_crds, $(CALICO_CRDS_DIR),"calico")
 	$(call copy_k8s_policy_crds,"calico")
 	$(call copy_admission_policies, $(CALICO_CRDS_DIR),"calico")
+
+# The Envoy Gateway version is owned by projectcalico/calico's
+# third_party/envoy-gateway/Makefile (bumped there by Renovate). We pin
+# go.mod's github.com/envoyproxy/gateway to that version; the operator's own
+# Makefile derives ENVOY_GATEWAY_VERSION from this go.mod pin and pulls/embeds
+# the matching gateway-helm chart at build time, so the chart and the Go decoder
+# types are always at the same version. ENVOY_GATEWAY_VERSION lives in the calico
+# clone that fetch-calico-crds prepares.
+update-envoy-gateway-version: fetch-calico-crds
+	@new=$$(grep -E '^ENVOY_GATEWAY_VERSION=' $(CALICO_CRDS_DIR)/third_party/envoy-gateway/Makefile | cut -d= -f2 | tr -d ' '); \
+	cur=$$(awk '/^[[:space:]]*github\.com\/envoyproxy\/gateway[[:space:]]+v/ {print $$2}' go.mod); \
+	if [ -z "$$new" ]; then echo "Failed to parse ENVOY_GATEWAY_VERSION from calico Makefile" >&2; exit 1; fi; \
+	if [ "$$new" != "$$cur" ]; then \
+		echo "Bumping envoyproxy/gateway in go.mod: $$cur -> $$new"; \
+		$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) go mod edit -require=github.com/envoyproxy/gateway@'"$$new"' && go mod tidy'; \
+	else \
+		echo "envoyproxy/gateway already pinned at $$new in go.mod"; \
+	fi
 
 prepare-for-calico-crds:
 	$(call prep_local_crds,"calico")

@@ -102,6 +102,25 @@ func getEnterpriseCRDSource(v3 bool) map[string][]byte {
 	}
 	files["01-crd-eck-bundle.yaml"] = "enterprise/01-crd-eck-bundle.yaml"
 
+	// The applicationlayer.projectcalico.org WAF CRDs are a distinct API group with a
+	// single v3 schema (unlike the crd.projectcalico.org <-> projectcalico.org rename) and
+	// are not served by the aggregated apiserver, so they must be installed in both v1-CRD
+	// and v3-CRD modes - otherwise gateway WAF is unusable on standard apiserver-backed
+	// installs. They ship only in the v3 source dir, so pull them in explicitly when
+	// serving the v1-CRD set.
+	if !v3 {
+		const wafDir = "enterprise/v3.projectcalico.org"
+		wafEntries, err := enterpriseCRDFiles.ReadDir(wafDir)
+		if err != nil {
+			panic(fmt.Sprintf("Failed to read Enterprise WAF CRDs: %v", err))
+		}
+		for _, entry := range wafEntries {
+			if strings.HasPrefix(entry.Name(), "applicationlayer.projectcalico.org_") {
+				files[entry.Name()] = path.Join(wafDir, entry.Name())
+			}
+		}
+	}
+
 	for name, path := range files {
 		b, err := enterpriseCRDFiles.ReadFile(path)
 		if err != nil {

@@ -88,10 +88,12 @@ func (e *EnvoyFilter) DeepCopyInto(out *EnvoyFilter) {
 
 // AddEnvoyFilterToScheme registers the EnvoyFilter type with the given
 // runtime.Scheme so the operator's client can create, update, and delete it.
-// Callers (controller setup and tests) must invoke this before using the
-// waypoint L7 render output.
-func AddEnvoyFilterToScheme(s *runtime.Scheme) {
+// It is wired into pkg/apis' AddToSchemes alongside the other third-party
+// types, so the manager scheme learns the type centrally; it returns error to
+// satisfy runtime.SchemeBuilder.
+func AddEnvoyFilterToScheme(s *runtime.Scheme) error {
 	s.AddKnownTypeWithName(envoyFilterGV.WithKind("EnvoyFilter"), &EnvoyFilter{})
 	s.AddKnownTypeWithName(envoyFilterGV.WithKind("EnvoyFilterList"), &EnvoyFilterList{})
 	metav1.AddToGroupVersion(s, envoyFilterGV)
+	return nil
 }

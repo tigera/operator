@@ -61,10 +61,6 @@ var (
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	// Register the typed EnvoyFilter so the L7 waypoint resources rendered by
-	// pkg/render/istio can be created/updated via the controller-runtime client.
-	istio.AddEnvoyFilterToScheme(mgr.GetScheme())
-
 	// The Istio helm charts we render include a HorizontalPodAutoscaler, so
 	// the scheme must know about autoscaling/v2 for resources.go's universal
 	// deserializer to decode those manifests.

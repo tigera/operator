@@ -16,6 +16,7 @@ package istio
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -330,7 +331,10 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		if c.waypointLoggingEnabled() {
 			objs = append(objs, L7WaypointObjects(c.cfg.IstioNamespace, c.L7CollectorImage)...)
 		} else {
-			toDelete = append(toDelete, L7WaypointObjects(c.cfg.IstioNamespace, "")...)
+			// Delete in the reverse of the create order so the EnvoyFilters can be deleted.
+			del := L7WaypointObjects(c.cfg.IstioNamespace, "")
+			slices.Reverse(del)
+			toDelete = append(toDelete, del...)
 		}
 	}
 

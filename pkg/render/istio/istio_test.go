@@ -961,6 +961,32 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(deleteNames).To(HaveKey(istio.L7WaypointDefaultsConfigMapName))
 			Expect(deleteNames).To(HaveKey(istio.L7WaypointALSFilterName))
 			Expect(deleteNames).To(HaveKey(istio.L7WaypointSrcPortFilterName))
+
+			// Delete the EnvoyFilters BEFORE the Role/RoleBinding otherwise the grant is
+			// removed first and the EnvoyFilter deletes fail with Forbidden,
+			// orphaning them.
+			idxOf := func(kind, name string) int {
+				for i, o := range objsToDelete {
+					if o.GetObjectKind().GroupVersionKind().Kind == kind &&
+						o.GetName() == name && o.GetNamespace() == istio.IstioNamespace {
+						return i
+					}
+				}
+				return -1
+			}
+			alsIdx := idxOf("EnvoyFilter", istio.L7WaypointALSFilterName)
+			srcIdx := idxOf("EnvoyFilter", istio.L7WaypointSrcPortFilterName)
+			roleIdx := idxOf("Role", istio.L7WaypointEnvoyFilterRoleName)
+			bindingIdx := idxOf("RoleBinding", istio.L7WaypointEnvoyFilterRoleName)
+			Expect(alsIdx).To(BeNumerically(">=", 0))
+			Expect(srcIdx).To(BeNumerically(">=", 0))
+			Expect(roleIdx).To(BeNumerically(">=", 0))
+			Expect(bindingIdx).To(BeNumerically(">=", 0))
+			// Both EnvoyFilters precede both the writer Role and RoleBinding.
+			Expect(alsIdx).To(BeNumerically("<", roleIdx))
+			Expect(alsIdx).To(BeNumerically("<", bindingIdx))
+			Expect(srcIdx).To(BeNumerically("<", roleIdx))
+			Expect(srcIdx).To(BeNumerically("<", bindingIdx))
 		})
 	})
 

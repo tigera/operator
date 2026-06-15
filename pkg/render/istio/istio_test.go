@@ -950,7 +950,7 @@ var _ = Describe("Istio Component Rendering", func() {
 				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointSrcPortFilterName))
 			}
 
-			// The three L7 resources must be enqueued for deletion so that
+			// The five L7 resources must be enqueued for deletion so that
 			// flipping Enabled→Disabled removes any previously-created copies.
 			deleteNames := map[string]string{}
 			for _, o := range objsToDelete {

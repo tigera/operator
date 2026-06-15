@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/render/istio"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	batchv1 "k8s.io/api/batch/v1"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -79,6 +80,9 @@ func init() {
 	AddToSchemes = append(AddToSchemes, corev1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, rbacv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, appsv1.AddToScheme)
+	// Istio's rendered Helm charts include a HorizontalPodAutoscaler, so the
+	// scheme needs autoscaling/v2 for the universal deserializer to decode them.
+	AddToSchemes = append(AddToSchemes, autoscalingv2.AddToScheme)
 	AddToSchemes = append(AddToSchemes, batchv1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, storagev1.AddToScheme)
 	AddToSchemes = append(AddToSchemes, certificatesv1.AddToScheme)

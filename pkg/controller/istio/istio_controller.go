@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strconv"
 
-	autoscalingv2 "k8s.io/api/autoscaling/v2"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -61,13 +60,6 @@ var (
 // Start Watches within the Add function for any resources that this controller creates or monitors. This will trigger
 // calls to Reconcile() when an instance of one of the watched resources is modified.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	// The Istio helm charts we render include a HorizontalPodAutoscaler, so
-	// the scheme must know about autoscaling/v2 for resources.go's universal
-	// deserializer to decode those manifests.
-	if err := autoscalingv2.AddToScheme(mgr.GetScheme()); err != nil {
-		return fmt.Errorf("failed to register autoscaling/v2 with scheme: %w", err)
-	}
-
 	r := newReconciler(mgr, opts)
 
 	c, err := ctrlruntime.NewController("istio-controller", mgr, controller.Options{Reconciler: r})

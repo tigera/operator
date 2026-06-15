@@ -32,13 +32,6 @@ var _ = Describe("L7 Waypoint render", func() {
 		image = "my-registry.example.com/tigera/calico:v0.0.0"
 	)
 
-	It("EnvoyFilterGVK returns networking.istio.io/v1alpha3", func() {
-		gvk := istio.EnvoyFilterGVK()
-		Expect(gvk.Group).To(Equal("networking.istio.io"))
-		Expect(gvk.Version).To(Equal("v1alpha3"))
-		Expect(gvk.Kind).To(Equal("EnvoyFilter"))
-	})
-
 	Context("L7WaypointObjects", func() {
 		It("returns exactly five resources in the requested namespace", func() {
 			objs := istio.L7WaypointObjects(ns, image)

@@ -52,10 +52,9 @@ const (
 	OTelCollectorPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + OTelCollectorName
 	OTelCollectorClusterRoleName    = OTelCollectorName
 
-	FluentForwardPort = 8006
-	OTLPGRPCPort      = 4317
-	OTLPHTTPPort      = 4318
-	HealthCheckPort   = 13133
+	OTLPGRPCPort    = 4317
+	OTLPHTTPPort    = 4318
+	HealthCheckPort = 13133
 
 	MetricsTLSServerName = "calico-node-metrics"
 
@@ -65,22 +64,11 @@ const (
 	DefaultMemorySpikeLimitMiB = 100 // ~25% of limit_mib
 )
 
-// LogForwarderProtocol determines which receiver the collector uses for log ingestion.
-type LogForwarderProtocol int
-
-const (
-	// LogForwarderFluentdHTTP uses the custom fluentdhttp receiver (Fluentd out_http → HTTP JSON).
-	LogForwarderFluentdHTTP LogForwarderProtocol = iota
-	// LogForwarderOTLP uses the OTLP receiver (native OTLP output).
-	LogForwarderOTLP
-)
-
 type Configuration struct {
-	PullSecrets          []*corev1.Secret
-	OpenShift            bool
-	Installation         *operatorv1.InstallationSpec
-	OTelCollector        *operatorv1.OTelCollectorSpec
-	LogForwarderProtocol LogForwarderProtocol
+	PullSecrets   []*corev1.Secret
+	OpenShift     bool
+	Installation  *operatorv1.InstallationSpec
+	OTelCollector *operatorv1.OTelCollectorSpec
 	ClientTLSSecret      certificatemanagement.KeyPairInterface
 	TrustedCertBundle    certificatemanagement.TrustedBundleRO
 }
@@ -198,11 +186,8 @@ func (c *component) hasLogs() bool {
 }
 
 type configTemplateData struct {
-	HasLogs           bool
-	LogReceiverName   string
-	LogReceiverPort   int32
-	UseOTLP           bool
-	MetricsEnabled    bool
+	HasLogs        bool
+	MetricsEnabled bool
 	MetricsCAFile     string
 	MetricsCertFile   string
 	MetricsKeyFile    string
@@ -224,15 +209,10 @@ type exporterEntry struct {
 
 var collectorConfigTmpl = template.Must(template.New("config").Parse(`receivers:
 {{- if .HasLogs}}
-{{- if .UseOTLP}}
   otlp:
     protocols:
       http:
-        endpoint: 0.0.0.0:{{.LogReceiverPort}}
-{{- else}}
-  fluentdhttp:
-    endpoint: 0.0.0.0:{{.LogReceiverPort}}
-{{- end}}
+        endpoint: 0.0.0.0:4318
 {{- end}}
 {{- if .MetricsEnabled}}
   prometheus:
@@ -284,7 +264,7 @@ service:
   pipelines:
 {{- if .HasLogs}}
     logs:
-      receivers: [{{.LogReceiverName}}]
+      receivers: [otlp]
       processors: [memory_limiter]
       exporters: [{{.ExporterNames}}]
 {{- end}}
@@ -316,12 +296,9 @@ func (c *component) collectorConfig() string {
 	}
 
 	data := configTemplateData{
-		HasLogs:         c.hasLogs(),
-		LogReceiverName: c.logReceiverName(),
-		LogReceiverPort: c.logReceiverPort(),
-		UseOTLP:         c.cfg.LogForwarderProtocol == LogForwarderOTLP,
-		MetricsEnabled:  c.metricsEnabled(),
-		Exporters:       exporters,
+		HasLogs:             c.hasLogs(),
+		MetricsEnabled:      c.metricsEnabled(),
+		Exporters:           exporters,
 		ExporterNames:       strings.Join(exporterNames, ", "),
 		HealthCheckPort:     HealthCheckPort,
 		MemoryLimitMiB:      DefaultMemoryLimitMiB,
@@ -343,27 +320,12 @@ func (c *component) collectorConfig() string {
 	return buf.String()
 }
 
-func (c *component) logReceiverName() string {
-	if c.cfg.LogForwarderProtocol == LogForwarderOTLP {
-		return "otlp"
-	}
-	return "fluentdhttp"
-}
-
-func (c *component) logReceiverPort() int32 {
-	if c.cfg.LogForwarderProtocol == LogForwarderOTLP {
-		return OTLPHTTPPort
-	}
-	return FluentForwardPort
-}
-
 func (c *component) service() *corev1.Service {
-	port := c.logReceiverPort()
 	ports := []corev1.ServicePort{
 		{
-			Name:       c.logReceiverName(),
-			Port:       port,
-			TargetPort: intstr.FromInt32(port),
+			Name:       "otlp-http",
+			Port:       OTLPHTTPPort,
+			TargetPort: intstr.FromInt32(OTLPHTTPPort),
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}
@@ -405,7 +367,7 @@ func (c *component) container() corev1.Container {
 		Image:   c.image,
 		Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 		Ports: []corev1.ContainerPort{
-			{Name: "fluentdhttp", ContainerPort: FluentForwardPort, Protocol: corev1.ProtocolTCP},
+			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-http", ContainerPort: OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 			{Name: "health", ContainerPort: HealthCheckPort, Protocol: corev1.ProtocolTCP},
@@ -501,7 +463,7 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(uint16(c.logReceiverPort())),
+				Ports: networkpolicy.Ports(OTLPHTTPPort),
 			},
 		},
 	}

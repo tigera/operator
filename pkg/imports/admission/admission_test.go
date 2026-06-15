@@ -120,7 +120,15 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 	})
 
 	Describe("GetValidatingAdmissionPolicies", func() {
+		// projectcalico/calico#12824 (the protect-builtin-tiers VAP) is a Calico v3.33
+		// feature; the calico v3.32.x bundled by release-v1.43 doesn't ship it, so
+		// GetValidatingAdmissionPolicies returns an empty set for the Calico variant here.
+		// Skip the Calico-variant assertions, mirroring projectcalico/calico#12962.
+		// (Enterprise below still runs — Calient v3.24 ships the VAP.)
+		const skipNoCalicoVAP = "Calico tier-protection VAP (projectcalico/calico#12824) is v3.33-only; absent from the calico v3.32 bundled by release-v1.43 — see projectcalico/calico#12962"
+
 		It("returns Calico v1 VAPs when discovered version is v1", func() {
+			Skip(skipNoCalicoVAP)
 			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1)
 			Expect(objs).To(HaveLen(2))
 
@@ -142,6 +150,7 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 		})
 
 		It("returns Calico v1beta1 VAPs when discovered version is v1beta1", func() {
+			Skip(skipNoCalicoVAP)
 			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1Beta1)
 			Expect(objs).To(HaveLen(2))
 
@@ -160,6 +169,7 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 		})
 
 		It("returns Calico v1alpha1 VAPs when discovered version is v1alpha1", func() {
+			Skip(skipNoCalicoVAP)
 			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1Alpha1)
 			Expect(objs).To(HaveLen(2))
 

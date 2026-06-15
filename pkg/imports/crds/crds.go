@@ -147,6 +147,34 @@ func getK8sPolicyCRDSource(variant opv1.ProductVariant) map[string][]byte {
 	return ret
 }
 
+// getApplicationLayerCRDSource returns the applicationlayer.projectcalico.org CRDs
+// (the gateway WAF kinds). This is a distinct, CRD-only API group that is not served
+// by the aggregated apiserver and has a single v3 schema, so - unlike the
+// projectcalico.org datastore CRDs - it is installed in both v1-CRD and v3-CRD modes.
+// Enterprise only.
+func getApplicationLayerCRDSource() map[string][]byte {
+	ret := map[string][]byte{}
+	dir := "enterprise/applicationlayer.projectcalico.org"
+	entries, err := enterpriseCRDFiles.ReadDir(dir)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to read ApplicationLayer CRDs: %v", err))
+	}
+
+	for _, entry := range entries {
+		b, err := enterpriseCRDFiles.ReadFile(path.Join(dir, entry.Name()))
+		if err != nil {
+			panic(fmt.Sprintf("Failed to read ApplicationLayer CRD %s: %v", entry.Name(), err))
+		}
+
+		crds := bytes.Split(b, []byte("\n---"))
+		for i, crd := range crds {
+			ret[fmt.Sprintf("%s_%d", entry.Name(), i)] = crd
+		}
+	}
+
+	return ret
+}
+
 func getOperatorCRDSource(variant opv1.ProductVariant) map[string][]byte {
 	ret := map[string][]byte{}
 	entries, err := operatorCRDFiles.ReadDir("operator")
@@ -204,7 +232,7 @@ func GetCRDs(variant opv1.ProductVariant, v3 bool) []*apiextenv1.CustomResourceD
 		crds = calicoCRDs
 	} else {
 		if len(enterpriseCRDs) == 0 {
-			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(v3), getK8sPolicyCRDSource(variant), getOperatorCRDSource(variant))
+			enterpriseCRDs = convertYamlsToCRDs(getEnterpriseCRDSource(v3), getK8sPolicyCRDSource(variant), getOperatorCRDSource(variant), getApplicationLayerCRDSource())
 		}
 		crds = enterpriseCRDs
 	}

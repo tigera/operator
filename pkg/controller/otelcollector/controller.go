@@ -30,12 +30,15 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
 	otelvalidation "github.com/tigera/operator/pkg/common/validation/otelcollector"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/otelcollector"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -161,11 +164,36 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	var clientTLSSecret certificatemanagement.KeyPairInterface
+	var trustedBundle certificatemanagement.TrustedBundleRO
+	metricsEnabled := logCollector.Spec.OTelCollector.Metrics != nil &&
+		logCollector.Spec.OTelCollector.Metrics.Enabled != nil &&
+		*logCollector.Spec.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
+
+	if metricsEnabled {
+		certMgr, err := certificatemanager.Create(r.cli, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		clientTLSSecret, err = certMgr.GetOrCreateKeyPair(r.cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		trustedBundle = certMgr.CreateTrustedBundle()
+		certMgr.AddToStatusManager(r.status, otelcollector.OTelCollectorNamespace)
+	}
+
 	cfg := &otelcollector.Configuration{
-		PullSecrets:   pullSecrets,
-		OpenShift:     r.opts.DetectedProvider.IsOpenShift(),
-		Installation:  installationSpec,
-		OTelCollector: logCollector.Spec.OTelCollector,
+		PullSecrets:       pullSecrets,
+		OpenShift:         r.opts.DetectedProvider.IsOpenShift(),
+		Installation:      installationSpec,
+		OTelCollector:     logCollector.Spec.OTelCollector,
+		ClientTLSSecret:   clientTLSSecret,
+		TrustedCertBundle: trustedBundle,
 	}
 
 	component := otelcollector.OTelCollector(cfg)

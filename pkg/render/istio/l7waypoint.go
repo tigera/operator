@@ -21,7 +21,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/yaml"
@@ -75,11 +74,6 @@ const (
 	socketVolumeName = "l7-collector-socket"
 	felixVolumeName  = "felix-sync"
 )
-
-// EnvoyFilterGVK returns the GroupVersionKind for Istio EnvoyFilter resources.
-func EnvoyFilterGVK() schema.GroupVersionKind {
-	return envoyFilterGV.WithKind("EnvoyFilter")
-}
 
 // L7WaypointObjects returns the resources the operator manages to enable
 // L7 logging on every Gateway using the istio-waypoint GatewayClass:

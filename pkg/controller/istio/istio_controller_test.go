@@ -67,7 +67,7 @@ var _ = Describe("Istio controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(autoscalingv2.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		istio.AddEnvoyFilterToScheme(scheme)
+		// EnvoyFilter is registered via apis.AddToScheme above.
 
 		ctx = context.Background()
 		objTrackerWithCalls = test.NewObjectTrackerWithCalls(scheme)

@@ -26,6 +26,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -170,6 +171,29 @@ var _ = Describe("ComponentRendering", func() {
 			},
 		),
 	)
+
+	It("should render a network policy that passes ingress to subsequent tiers", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, whisker.WhiskerPolicyName, whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Whisker's ingress source (an ingress controller or load balancer) is not knowable by the
+		// operator, so ingress is passed to subsequent tiers rather than hard-denied by
+		// calico-system.default-deny. See https://github.com/tigera/operator/issues/4804.
+		Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+		Expect(np.Spec.Ingress).To(Equal([]v3.Rule{{Action: v3.Pass}}))
+	})
 
 	It("should generate an IPv4-only NGINX configuration", func() {
 		cfg := &whisker.Configuration{

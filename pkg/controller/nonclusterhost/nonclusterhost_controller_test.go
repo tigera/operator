@@ -116,7 +116,6 @@ var _ = Describe("NonClusterHost controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: operatorv1.InstallationSpec{
 					Variant: operatorv1.CalicoEnterprise,
-					CNI:     &operatorv1.CNISpec{Type: operatorv1.PluginNone},
 					CalicoNetwork: &operatorv1.CalicoNetworkSpec{
 						LinuxDataplane: &dpNone,
 					},

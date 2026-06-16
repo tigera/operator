@@ -170,7 +170,6 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 	Context("headless installation", func() {
 		It("should degrade when the installation is headless", Label("headless"), func() {
 			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 			Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
 

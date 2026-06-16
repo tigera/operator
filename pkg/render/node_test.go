@@ -1181,46 +1181,6 @@ var _ = Describe("Node rendering tests", func() {
 				}),
 			)
 
-			It("should properly render a policy-only configuration using the None CNI plugin", Label("headless"), func() {
-				// The None CNI plugin has no IPAM and renders no CNI plugin or config.
-				installation := &operatorv1.InstallationSpec{
-					CNI:            &operatorv1.CNISpec{Type: operatorv1.PluginNone},
-					FlexVolumePath: "/usr/libexec/kubernetes/kubelet-plugins/volume/exec/",
-				}
-				cfg.Installation = installation
-
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-				resources, _ := component.Objects()
-
-				// calico-node is still rendered for policy enforcement.
-				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
-				Expect(dsResource).ToNot(BeNil())
-
-				// Should not render CNI configuration.
-				Expect(rtest.GetResource(resources, "cni-config", "calico-system", "", "v1", "ConfigMap")).To(BeNil())
-
-				ds := dsResource.(*appsv1.DaemonSet)
-				verifyInitContainers(ds, installation)
-
-				// No CNI install container.
-				for _, c := range ds.Spec.Template.Spec.InitContainers {
-					Expect(c.Name).NotTo(Equal("install-cni"))
-				}
-
-				env := ds.Spec.Template.Spec.Containers[0].Env
-				Expect(env).To(ContainElement(corev1.EnvVar{Name: "CALICO_NETWORKING_BACKEND", Value: "none"}))
-				Expect(env).To(ContainElement(corev1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "false"}))
-				Expect(env).To(ContainElement(corev1.EnvVar{Name: "FELIX_ROUTESOURCE", Value: "WorkloadIPs"}))
-				// No interface prefix is rendered for an unknown third-party CNI; users configure
-				// it via FelixConfiguration to match their CNI.
-				for _, e := range env {
-					Expect(e.Name).NotTo(Equal("FELIX_INTERFACEPREFIX"))
-				}
-
-				// Verify readiness and liveness probes.
-				verifyProbesAndLifecycle(ds, false, false)
-			})
 			It("should render all resources when using Calico CNI on EKS", func() {
 				expectedResources := []struct {
 					name    string

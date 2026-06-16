@@ -243,7 +243,6 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 
 			// Switch the install to headless and remove the LogStorage created in the BeforeEach.
 			dpNone := operatorv1.LinuxDataplaneNone
-			install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 			Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
 			Expect(cli.Delete(ctx, &operatorv1.LogStorage{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).ShouldNot(HaveOccurred())
@@ -261,7 +260,6 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 		It("should report unsupported and not install in a headless installation when LogStorage exists", func() {
 			// Switch the install to headless; the LogStorage from the BeforeEach remains.
 			dpNone := operatorv1.LinuxDataplaneNone
-			install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 			Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
 

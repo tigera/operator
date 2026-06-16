@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -43,5 +43,6 @@ func HasWindowsNodes(c client.Client) (bool, error) {
 func WindowsEnabled(installation operatorv1.InstallationSpec) bool {
 	return installation.CalicoNetwork != nil &&
 		installation.CalicoNetwork.WindowsDataplane != nil &&
-		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneDisabled
+		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneDisabled &&
+		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneNone
 }

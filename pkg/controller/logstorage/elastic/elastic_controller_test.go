@@ -436,7 +436,6 @@ var _ = Describe("LogStorage controller", func() {
 			It("degrades in a headless installation", Label("headless"), func() {
 				// Make the Installation headless (no Linux dataplane / no Calico API server).
 				dpNone := operatorv1.LinuxDataplaneNone
-				install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 				install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 				Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
 

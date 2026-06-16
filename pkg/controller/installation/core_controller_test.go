@@ -1404,10 +1404,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
-		Context("headless mode (cni None, linuxDataplane None)", Label("headless"), func() {
+		Context("headless mode (cni omitted, linuxDataplane None)", Label("headless"), func() {
 			BeforeEach(func() {
 				dpNone := operator.LinuxDataplaneNone
-				cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginNone}
+				cr.Spec.CNI = nil
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 					LinuxDataplane: &dpNone,
 				}
@@ -1489,8 +1489,13 @@ var _ = Describe("Testing core-controller installation", func() {
 		DescribeTable("dataplane mode suppression matrix", Label("headless"),
 			func(variant operator.ProductVariant, cniType operator.CNIPluginType, dataplane operator.LinuxDataplaneOption, expectDataplane bool, expectCNIConfig bool) {
 				cr.Spec.Variant = variant
-				cr.Spec.CNI = &operator.CNISpec{Type: cniType}
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+				// A headless install (linuxDataplane None) omits spec.cni; otherwise set it.
+				if dataplane == operator.LinuxDataplaneNone {
+					cr.Spec.CNI = nil
+				} else {
+					cr.Spec.CNI = &operator.CNISpec{Type: cniType}
+				}
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 				result, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1537,21 +1542,21 @@ var _ = Describe("Testing core-controller installation", func() {
 			Entry("Full / Enterprise / Iptables", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneIptables, true, true),
 			Entry("Full / Enterprise / BPF", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneBPF, true, true),
 
-			// Policy-only: None CNI, dataplane still runs; no Calico CNI config.
-			Entry("Policy-only / Calico / Iptables", operator.Calico, operator.PluginNone, operator.LinuxDataplaneIptables, true, false),
-			Entry("Policy-only / Calico / BPF", operator.Calico, operator.PluginNone, operator.LinuxDataplaneBPF, true, false),
-			Entry("Policy-only / Calico / Nftables", operator.Calico, operator.PluginNone, operator.LinuxDataplaneNftables, true, false),
-			Entry("Policy-only / Enterprise / Iptables", operator.CalicoEnterprise, operator.PluginNone, operator.LinuxDataplaneIptables, true, false),
-			Entry("Policy-only / Enterprise / BPF", operator.CalicoEnterprise, operator.PluginNone, operator.LinuxDataplaneBPF, true, false),
+			// Policy-only: a recognized third-party CNI, dataplane still runs; no Calico CNI config.
+			Entry("Policy-only / Calico / Iptables", operator.Calico, operator.PluginAmazonVPC, operator.LinuxDataplaneIptables, true, false),
+			Entry("Policy-only / Calico / BPF", operator.Calico, operator.PluginAmazonVPC, operator.LinuxDataplaneBPF, true, false),
+			Entry("Policy-only / Calico / Nftables", operator.Calico, operator.PluginAmazonVPC, operator.LinuxDataplaneNftables, true, false),
+			Entry("Policy-only / Enterprise / Iptables", operator.CalicoEnterprise, operator.PluginAmazonVPC, operator.LinuxDataplaneIptables, true, false),
+			Entry("Policy-only / Enterprise / BPF", operator.CalicoEnterprise, operator.PluginAmazonVPC, operator.LinuxDataplaneBPF, true, false),
 
-			// Headless: nothing dataplane-related is rendered.
-			Entry("Headless / Calico", operator.Calico, operator.PluginNone, operator.LinuxDataplaneNone, false, false),
-			Entry("Headless / Enterprise", operator.CalicoEnterprise, operator.PluginNone, operator.LinuxDataplaneNone, false, false),
+			// Headless: spec.cni is omitted (cniType arg is ignored); nothing dataplane-related is rendered.
+			Entry("Headless / Calico", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
+			Entry("Headless / Enterprise", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
 		)
 
-		Context("policy-only mode (cni None, default dataplane)", Label("headless"), func() {
+		Context("policy-only mode (recognized third-party CNI, default dataplane)", Label("headless"), func() {
 			BeforeEach(func() {
-				cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginNone}
+				cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
 			})
 
 			It("should render the dataplane components but no Calico CNI config", func() {

@@ -516,25 +516,29 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 	}
 
-	// Default the CNI plugin based on the Kubernetes provider.
-	if instance.Spec.CNI == nil {
-		instance.Spec.CNI = &operatorv1.CNISpec{}
-	}
-	if instance.Spec.CNI.Type == "" {
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderAKS:
-			instance.Spec.CNI.Type = operatorv1.PluginAzureVNET
-		case operatorv1.ProviderEKS:
-			instance.Spec.CNI.Type = operatorv1.PluginAmazonVPC
-		case operatorv1.ProviderGKE:
-			instance.Spec.CNI.Type = operatorv1.PluginGKE
-		default:
-			instance.Spec.CNI.Type = operatorv1.PluginCalico
+	// Default the CNI plugin based on the Kubernetes provider. A headless install
+	// (spec.calicoNetwork.linuxDataplane: None) runs no Calico dataplane and omits spec.cni,
+	// so skip CNI defaulting entirely and leave it nil.
+	if instance.Spec.LinuxDataplaneEnabled() {
+		if instance.Spec.CNI == nil {
+			instance.Spec.CNI = &operatorv1.CNISpec{}
+		}
+		if instance.Spec.CNI.Type == "" {
+			switch instance.Spec.KubernetesProvider {
+			case operatorv1.ProviderAKS:
+				instance.Spec.CNI.Type = operatorv1.PluginAzureVNET
+			case operatorv1.ProviderEKS:
+				instance.Spec.CNI.Type = operatorv1.PluginAmazonVPC
+			case operatorv1.ProviderGKE:
+				instance.Spec.CNI.Type = operatorv1.PluginGKE
+			default:
+				instance.Spec.CNI.Type = operatorv1.PluginCalico
+			}
 		}
 	}
 
-	// Default IPAM based on CNI. The None CNI plugin has no IPAM; leave it unset.
-	if instance.Spec.CNI.Type != operatorv1.PluginNone {
+	// Default IPAM based on CNI.
+	if instance.Spec.CNI != nil {
 		if instance.Spec.CNI.IPAM == nil {
 			instance.Spec.CNI.IPAM = &operatorv1.IPAMSpec{}
 		}
@@ -593,8 +597,11 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	if instance.Spec.CalicoNetwork.BGP == nil {
 		enabled := operatorv1.BGPEnabled
 		disabled := operatorv1.BGPDisabled
-		switch instance.Spec.CNI.Type {
-		case operatorv1.PluginCalico:
+		switch {
+		case instance.Spec.CNI == nil:
+			// Headless (no CNI / no Calico dataplane): BGP is off.
+			instance.Spec.CalicoNetwork.BGP = &disabled
+		case instance.Spec.CNI.Type == operatorv1.PluginCalico:
 			switch instance.Spec.KubernetesProvider {
 			case operatorv1.ProviderEKS:
 				// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
@@ -659,15 +666,16 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 	}
 
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico &&
+	if instance.Spec.CNI != nil && instance.Spec.CNI.Type == operatorv1.PluginCalico &&
 		*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneIptables &&
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds == nil {
 		var delay int32 = 0
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 
-	// The None CNI plugin installs no CNI binaries or config; leave the directories unset.
-	if instance.Spec.CNI.Type != operatorv1.PluginNone {
+	// Default the CNI binary/config directories (not applicable to a headless install, which
+	// has no spec.cni).
+	if instance.Spec.CNI != nil {
 		defaultCNINetDir, defaultCNIBinDir := render.DefaultCNIDirectories(instance.Spec.KubernetesProvider)
 		if instance.Spec.CNI.ConfDir == nil || *instance.Spec.CNI.ConfDir == "" {
 			instance.Spec.CNI.ConfDir = &defaultCNINetDir
@@ -675,16 +683,16 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
 			instance.Spec.CNI.BinDir = &defaultCNIBinDir
 		}
-	}
-	if instance.Spec.CNI.InstallMode == nil {
-		mode := operatorv1.CNIInstallModeAll
-		instance.Spec.CNI.InstallMode = &mode
+		if instance.Spec.CNI.InstallMode == nil {
+			mode := operatorv1.CNIInstallModeAll
+			instance.Spec.CNI.InstallMode = &mode
+		}
 	}
 
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
 	// Handle those here.
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+	if instance.Spec.CNI != nil && instance.Spec.CNI.Type == operatorv1.PluginCalico {
 		if instance.Spec.CalicoNetwork.HostPorts == nil {
 			hp := operatorv1.HostPortsEnabled
 			instance.Spec.CalicoNetwork.HostPorts = &hp
@@ -992,8 +1000,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Make sure CNI is configured before continuing. The None CNI plugin has no IPAM.
-	if instance.Spec.CNI == nil || (instance.Spec.CNI.Type != operatorv1.PluginNone && instance.Spec.CNI.IPAM == nil) {
+	// Headless mode: the Linux dataplane is disabled, so calico-node, Typha,
+	// calico-kube-controllers, and csi-node-driver are not rendered, spec.cni is omitted, and
+	// the FelixConfiguration/BGPConfiguration defaults are not seeded.
+	headless := !instance.Spec.LinuxDataplaneEnabled()
+
+	// Make sure CNI is configured before continuing. In a headless install spec.cni is omitted
+	// (validation rejects it being set), so this check only applies when a dataplane runs.
+	if !headless && (instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil) {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "waiting for spec.cni to be filled in", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -1001,20 +1015,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Determine if this cluster needs IP pools in order to operate.
 	// - If the installation has IP pools specified, then the cluster wants IP pools.
 	// - If the installation has no IP pools specified, it may still need them if it's using Calico IPAM or networking.
+	// A headless install has no CNI/dataplane and never needs IP pools.
 	needsIPPools := instance.Spec.CalicoNetwork != nil && len(instance.Spec.CalicoNetwork.IPPools) != 0
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico ||
-		(instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico) {
+	if !headless && (instance.Spec.CNI.Type == operatorv1.PluginCalico ||
+		(instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico)) {
 		needsIPPools = true
 	}
 	if needsIPPools && len(currentPools.Items) == 0 {
 		r.status.SetDegraded(operatorv1.ResourceNotFound, "waiting for enabled IP pools to be created", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-
-	// Headless mode: the Linux dataplane is disabled, so calico-node, Typha,
-	// calico-kube-controllers, and csi-node-driver are not rendered and the
-	// FelixConfiguration/BGPConfiguration defaults are not seeded.
-	headless := !instance.Spec.LinuxDataplaneEnabled()
 
 	if !installationMarkedForDeletion && !headless {
 		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the

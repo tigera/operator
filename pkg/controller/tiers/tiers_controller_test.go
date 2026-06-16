@@ -138,7 +138,6 @@ var _ = Describe("tier controller tests", func() {
 		install := &operatorv1.Installation{}
 		Expect(c.Get(ctx, client.ObjectKey{Name: "default"}, install)).NotTo(HaveOccurred())
 		dpNone := operatorv1.LinuxDataplaneNone
-		install.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 		install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 		Expect(c.Update(ctx, install)).NotTo(HaveOccurred())
 

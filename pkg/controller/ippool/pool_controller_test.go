@@ -670,11 +670,12 @@ var _ = Describe("fillDefaults()", func() {
 		ctx = context.Background()
 	})
 
-	It("should not default any pools and not error for the None CNI plugin (headless / policy-only)", Label("headless"), func() {
-		// The None CNI plugin intentionally has no IPAM configuration.
+	It("should not default any pools and not error in headless mode (linuxDataplane None)", Label("headless"), func() {
+		// A headless install has no Calico dataplane and no spec.cni, so no pools are defaulted.
+		dpNone := operator.LinuxDataplaneNone
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{
-				CNI: &operator.CNISpec{Type: operator.PluginNone},
+				CalicoNetwork: &operator.CalicoNetworkSpec{LinuxDataplane: &dpNone},
 			},
 		}
 		Expect(fillDefaults(ctx, cli, instance, currentPools)).NotTo(HaveOccurred())

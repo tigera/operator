@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -133,6 +134,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -153,6 +155,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -170,6 +173,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -190,6 +194,7 @@ var _ = Describe("Istio controller tests", func() {
 					provider:       operatorv1.ProviderNone,
 					status:         mockStatus,
 					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -221,6 +226,7 @@ var _ = Describe("Istio controller tests", func() {
 					provider:       operatorv1.ProviderNone,
 					status:         mockStatus,
 					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -248,6 +254,7 @@ var _ = Describe("Istio controller tests", func() {
 					provider:       operatorv1.ProviderNone,
 					status:         mockStatus,
 					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -269,6 +276,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -285,6 +293,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -304,6 +313,7 @@ var _ = Describe("Istio controller tests", func() {
 					provider:       provider,
 					status:         mockStatus,
 					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -338,6 +348,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			// First reconcile to add finalizer
@@ -382,6 +393,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -426,6 +438,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -477,6 +490,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -506,6 +520,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -528,6 +543,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			// First reconcile to add finalizer and set FelixConfiguration values
@@ -570,7 +586,6 @@ var _ = Describe("Istio controller tests", func() {
 	Context("Headless mode tests (linuxDataplane: None)", Label("headless"), func() {
 		BeforeEach(func() {
 			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 			createResources()
 		})
@@ -588,6 +603,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -616,6 +632,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			// First reconcile adds the finalizer.
@@ -660,6 +677,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -692,6 +710,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: IstioName}})
@@ -731,6 +750,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -765,6 +785,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -809,6 +830,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -847,6 +869,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -895,6 +918,7 @@ var _ = Describe("Istio controller tests", func() {
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
 				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})

@@ -19,10 +19,12 @@ import (
 	"fmt"
 	"strconv"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -112,6 +114,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *Reconci
 		status:         status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
 		provider:       opts.DetectedProvider,
 		tierWatchReady: &utils.ReadyFlag{},
+		recorder:       mgr.GetEventRecorderFor("istio-controller"),
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -125,6 +128,7 @@ type ReconcileIstio struct {
 	status         status.StatusManager
 	provider       operatorv1.Provider
 	tierWatchReady *utils.ReadyFlag
+	recorder       record.EventRecorder
 }
 
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -290,7 +294,12 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			return reconcile.Result{}, err
 		}
 	} else {
+		// Running headless without the Calico dataplane integration is an expected
+		// configuration, not an error: do not set TigeraStatus Degraded. Surface it via a log
+		// line and a Normal Event on the Istio resource so it is visible in `kubectl describe`.
 		reqLogger.Info("Linux dataplane is disabled; Istio is installed without the Calico dataplane integration (IstioAmbientMode, DSCP)")
+		r.recorder.Event(instance, corev1.EventTypeNormal, "CalicoDataplaneIntegrationDisabled",
+			"Linux dataplane is disabled (spec.calicoNetwork.linuxDataplane: None); Istio is installed without the Calico dataplane integration (IstioAmbientMode, DSCP)")
 	}
 
 	// Clear the degraded bit if we've reached this far.

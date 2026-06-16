@@ -182,7 +182,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
-	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
+	// A headless install (spec.calicoNetwork.linuxDataplane: None) omits spec.cni and has no
+	// IP pools to manage, so the CNI type is not required.
+	if installation.Spec.LinuxDataplaneEnabled() && (installation.Spec.CNI == nil || installation.Spec.CNI.Type == "") {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}

@@ -595,9 +595,9 @@ const (
 // One of: Iptables, BPF, VPP, Nftables, None
 //
 // The value None disables the Linux dataplane entirely: calico-node, Typha, and
-// calico-kube-controllers are not rendered. It requires spec.cni.type to be None,
-// and is intended for "headless" clusters that install only standalone components
-// (such as Gateway API support or Istio) on top of a third-party CNI.
+// calico-kube-controllers are not rendered. It is the trigger for a "headless" install,
+// intended for clusters that run only standalone components (such as Gateway API support
+// or Istio) on top of a third-party CNI. When None, spec.cni must be omitted.
 // +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;None;
 type LinuxDataplaneOption string
 
@@ -609,12 +609,16 @@ const (
 	LinuxDataplaneNone     LinuxDataplaneOption = "None"
 )
 
-// +kubebuilder:validation:Enum=HNS;Disabled
+// +kubebuilder:validation:Enum=HNS;Disabled;None
 type WindowsDataplaneOption string
 
 const (
 	WindowsDataplaneDisabled WindowsDataplaneOption = "Disabled"
 	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
+	// WindowsDataplaneNone is a synonym for WindowsDataplaneDisabled: the Windows nodes
+	// daemonset is not rendered. It is provided for symmetry with LinuxDataplaneNone so that
+	// a headless install can set both axes to None consistently.
+	WindowsDataplaneNone WindowsDataplaneOption = "None"
 )
 
 type Sysctl struct {
@@ -630,10 +634,11 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	//
 	// The value None disables the Linux dataplane entirely: calico-node, Typha, and
-	// calico-kube-controllers are not deployed. It requires spec.cni.type to be None, and is
-	// intended for "headless" clusters that install only standalone components (such as Gateway
-	// API support or Istio) on top of a third-party CNI. Note that switching an existing
-	// cluster to None does not remove previously deployed dataplane components.
+	// calico-kube-controllers are not deployed. It is the trigger for a "headless" install,
+	// intended for clusters that run only standalone components (such as Gateway API support
+	// or Istio) on top of a third-party CNI. When None, spec.cni must be omitted. Note that
+	// switching an existing cluster to None does not remove previously deployed dataplane
+	// components.
 	// Default: Iptables
 	// +optional
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
@@ -641,6 +646,7 @@ type CalicoNetworkSpec struct {
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
 	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
+	// The values Disabled and None are equivalent and both suppress the Windows nodes daemonset.
 	// Default: Disabled
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
@@ -926,7 +932,7 @@ const (
 
 // CNIPluginType describes the type of CNI plugin used.
 //
-// One of: Calico, GKE, AmazonVPC, AzureVNET, None
+// One of: Calico, GKE, AmazonVPC, AzureVNET
 type CNIPluginType string
 
 const (
@@ -934,7 +940,6 @@ const (
 	PluginGKE       CNIPluginType = "GKE"
 	PluginAmazonVPC CNIPluginType = "AmazonVPC"
 	PluginAzureVNET CNIPluginType = "AzureVNET"
-	PluginNone      CNIPluginType = "None"
 )
 
 var CNIPluginTypes []CNIPluginType = []CNIPluginType{
@@ -942,7 +947,6 @@ var CNIPluginTypes []CNIPluginType = []CNIPluginType{
 	PluginGKE,
 	PluginAmazonVPC,
 	PluginAzureVNET,
-	PluginNone,
 }
 
 var CNIPluginTypesString []string = []string{
@@ -950,7 +954,6 @@ var CNIPluginTypesString []string = []string{
 	PluginGKE.String(),
 	PluginAmazonVPC.String(),
 	PluginAzureVNET.String(),
-	PluginNone.String(),
 }
 
 func (cp CNIPluginType) String() string {
@@ -1016,14 +1019,12 @@ type CNISpec struct {
 	// for all other values the CNI plugin binaries and CNI config is a dependency that is expected
 	// to be installed separately.
 	//
-	// The value None indicates that no Calico CNI plugin or config will be rendered, and that
-	// the operator makes no assumptions about the CNI in use. If calico-node is running
-	// (spec.calicoNetwork.linuxDataplane is not None), policy is still enforced; set
-	// interfacePrefix in FelixConfiguration to match the third-party CNI's interface prefix.
-	// spec.cni.ipam must not be set when the CNI plugin is None.
+	// Note: spec.cni describes the CNI plugin the cluster is using; it is not a request to install
+	// one. A "headless" install (spec.calicoNetwork.linuxDataplane: None, with no Calico dataplane)
+	// must omit spec.cni entirely.
 	//
 	// Default: Calico
-	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET;None
+	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
 	Type CNIPluginType `json:"type"`
 
 	// IPAM specifies the pod IP address management that will be used in the Calico or

@@ -691,33 +691,30 @@ var _ = Describe("Defaulting logic tests", func() {
 		}),
 	)
 
-	Describe("None CNI plugin and headless mode", Label("headless"), func() {
-		It("should not default IPAM or CNI directories for the None CNI plugin", func() {
+	Describe("headless mode", Label("headless"), func() {
+		It("should leave spec.cni unset in headless mode", func() {
+			// Headless is triggered by linuxDataplane None; spec.cni is omitted.
+			dpNone := operator.LinuxDataplaneNone
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
-					CNI: &operator.CNISpec{Type: operator.PluginNone},
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						LinuxDataplane: &dpNone,
+					},
 				},
 			}
 			Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 
-			Expect(instance.Spec.CNI.IPAM).To(BeNil())
-			Expect(instance.Spec.CNI.ConfDir).To(BeNil())
-			Expect(instance.Spec.CNI.BinDir).To(BeNil())
+			// CNI defaulting is skipped entirely; spec.cni stays nil.
+			Expect(instance.Spec.CNI).To(BeNil())
 
-			// Policy-only: the Linux dataplane still defaults to iptables.
-			Expect(instance.Spec.CalicoNetwork.LinuxDataplane).NotTo(BeNil())
-			Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
-
-			// BGP should default to disabled for a non-Calico CNI.
-			Expect(*instance.Spec.CalicoNetwork.BGP).To(Equal(operator.BGPDisabled))
+			Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneNone))
 		})
 
 		It("should preserve an explicit linuxDataplane None and skip dataplane-related defaults", func() {
 			dpNone := operator.LinuxDataplaneNone
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
-					CNI: &operator.CNISpec{Type: operator.PluginNone},
 					CalicoNetwork: &operator.CalicoNetworkSpec{
 						LinuxDataplane: &dpNone,
 					},
@@ -738,7 +735,7 @@ var _ = Describe("Defaulting logic tests", func() {
 			Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
 			Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4).To(BeNil())
 			Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6).To(BeNil())
-			Expect(instance.Spec.CNI.IPAM).To(BeNil())
+			Expect(instance.Spec.CNI).To(BeNil())
 		})
 	})
 })

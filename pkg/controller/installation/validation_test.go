@@ -1280,40 +1280,14 @@ var _ = Describe("Installation validation tests", func() {
 		)
 	})
 
-	Describe("validate None CNI plugin (policy-only mode)", Label("headless"), func() {
-		BeforeEach(func() {
-			instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginNone}
-		})
-
-		It("should allow None CNI with the default dataplane", func() {
-			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
-		})
-
-		It("should allow None CNI with an explicit Iptables dataplane", func() {
-			instance.Spec.CalicoNetwork.LinuxDataplane = ptr.To(operator.LinuxDataplaneIptables)
-			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
-		})
-
-		It("should reject IPAM with None CNI", func() {
-			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: operator.IPAMPluginCalico}
-			err := validateCustomResource(instance)
-			Expect(err).To(MatchError(ContainSubstring("spec.cni.ipam must not be set")))
-		})
-
-		It("should reject the Windows dataplane with None CNI", func() {
-			instance.Spec.CalicoNetwork.WindowsDataplane = ptr.To(operator.WindowsDataplaneHNS)
-			err := validateCustomResource(instance)
-			Expect(err).To(MatchError(ContainSubstring("spec.calicoNetwork.windowsDataplane must be Disabled")))
-		})
-	})
-
 	Describe("validate headless mode (linuxDataplane: None)", Label("headless"), func() {
 		BeforeEach(func() {
-			instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginNone}
+			// Headless: the Linux dataplane is disabled and spec.cni is omitted.
+			instance.Spec.CNI = nil
 			instance.Spec.CalicoNetwork.LinuxDataplane = ptr.To(operator.LinuxDataplaneNone)
 		})
 
-		It("should allow a valid headless configuration", func() {
+		It("should allow a valid headless configuration (cni omitted)", func() {
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 
@@ -1322,13 +1296,13 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 		})
 
-		It("should reject linuxDataplane None without cni.type None", func() {
+		It("should reject spec.cni being set in headless mode", func() {
 			instance.Spec.CNI = &operator.CNISpec{
 				Type: operator.PluginCalico,
 				IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
 			}
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError(ContainSubstring("requires spec.cni.type None")))
+			Expect(err).To(MatchError(ContainSubstring("spec.cni must not be set when spec.calicoNetwork.linuxDataplane is None")))
 		})
 
 		It("should reject the Windows dataplane in headless mode", func() {

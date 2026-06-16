@@ -61,7 +61,7 @@ components:
   # coreos-alertmanager holds the version of alertmanager built for tigera/alertmanager,
   # which prometheus operator uses to validate.
   coreos-alertmanager:
-    version: v0.31.1
+    version: v0.32.1
   alertmanager:
     image: alertmanager
     version: master

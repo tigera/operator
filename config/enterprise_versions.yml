@@ -74,7 +74,7 @@ components:
   # eck-elasticsearch-operator holds the version of the ECK operator used to manage
   # Elasticsearch
   eck-elasticsearch-operator:
-    version: 2.16.0
+    version: 3.3.2
   gateway-l7-collector:
     image: gateway-l7-collector
     version: master

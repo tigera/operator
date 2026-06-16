@@ -72,6 +72,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		certificatemanagement.CASecretName,
 		whisker.WhiskerBackendKeyPairSecret,
 		render.VoltronLinseedPublicCert,
+		render.LegacyVoltronLinseedPublicCert,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -208,11 +209,38 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(goldmane.GoldmaneDeploymentName, r.cli,
 		common.OperatorNamespace(), false,
-		whisker.WhiskerBackendKeyPairSecret, render.VoltronLinseedPublicCert)
+		whisker.WhiskerBackendKeyPairSecret)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 	trustedBundle.AddCertificates(keyPair, nodeCA)
+
+	// When connected to a management cluster (e.g. Calico Cloud), Goldmane emits flows to Guardian over the
+	// management-cluster tunnel. The TLS leaf presented on that path is signed by the management cluster's
+	// operator signer, which is delivered to this cluster via the Voltron Linseed public certificate secret.
+	// Depending on the management cluster's operator version that secret is named either
+	// calico-voltron-linseed-certs-public (current) or tigera-voltron-linseed-certs-public (legacy), so trust
+	// whichever is present. Degrade if neither exists - without it the flow emitter cannot verify Guardian and
+	// flow uploads fail with "certificate signed by unknown authority".
+	if mgmtClusterConnectionCR != nil {
+		var linseedCerts []certificatemanagement.CertificateInterface
+		for _, secretName := range []string{render.VoltronLinseedPublicCert, render.LegacyVoltronLinseedPublicCert} {
+			cert, err := certificateManager.GetCertificate(r.cli, secretName, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to retrieve %s", secretName), err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if cert != nil {
+				linseedCerts = append(linseedCerts, cert)
+			}
+		}
+		if len(linseedCerts) == 0 {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for the Linseed public certificate (%s or %s) required to verify flow uploads to the management cluster", render.VoltronLinseedPublicCert, render.LegacyVoltronLinseedPublicCert), nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+		trustedBundle.AddCertificates(linseedCerts...)
+	}
 
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       goldmane.GoldmaneNamespace,

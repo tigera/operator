@@ -54,6 +54,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(instance.Spec.Variant).To(Equal(operator.Calico))
 		Expect(instance.Spec.Registry).To(BeEmpty())
 		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
+		Expect(*instance.Spec.CNI.InstallMode).To(Equal(operator.CNIInstallModeAll))
 		Expect(instance.Spec.CalicoNetwork).NotTo(BeNil())
 		Expect(instance.Spec.CalicoNetwork.LinuxDataplane).ToNot(BeNil())
 		Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneIptables))
@@ -454,6 +455,30 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
 		Expect(instance.Spec.CNI.Type).To(Equal(operator.PluginCalico))
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should default CNI InstallMode to CalicoOnly on the Kind provider", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				KubernetesProvider: operator.ProviderKind,
+				CNI:                &operator.CNISpec{},
+			},
+		}
+		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+		Expect(*instance.Spec.CNI.InstallMode).To(Equal(operator.CNIInstallModeCalicoOnly))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should not override an explicit CNI InstallMode on the Kind provider", func() {
+		all := operator.CNIInstallModeAll
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				KubernetesProvider: operator.ProviderKind,
+				CNI:                &operator.CNISpec{InstallMode: &all},
+			},
+		}
+		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+		Expect(*instance.Spec.CNI.InstallMode).To(Equal(operator.CNIInstallModeAll))
 	})
 
 	It("should set default values for CNILogging if CNI is set to Calico", func() {

@@ -254,6 +254,16 @@ processors:
     check_interval: 1s
     limit_mib: {{.MemoryLimitMiB}}
     spike_limit_mib: {{.MemorySpikeLimitMiB}}
+{{- if .HasLogs}}
+  transform/service_name:
+    log_statements:
+      - context: log
+        statements:
+          - set(resource.attributes["service.name"], "audit.tsee") where body["auditID"] != nil and body["objectRef"] != nil
+          - set(resource.attributes["service.name"], "dns") where body["qname"] != nil
+          - set(resource.attributes["service.name"], "flows") where body["bytes_in"] != nil
+          - set(resource.attributes["service.name"], "unknown") where resource.attributes["service.name"] == nil or resource.attributes["service.name"] == "unknown_service"
+{{- end}}
 
 extensions:
   health_check:
@@ -265,7 +275,7 @@ service:
 {{- if .HasLogs}}
     logs:
       receivers: [otlp]
-      processors: [memory_limiter]
+      processors: [memory_limiter, transform/service_name]
       exporters: [{{.ExporterNames}}]
 {{- end}}
 {{- if .MetricsEnabled}}
@@ -367,7 +377,6 @@ func (c *component) container() corev1.Container {
 		Image:   c.image,
 		Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 		Ports: []corev1.ContainerPort{
-			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-http", ContainerPort: OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 			{Name: "health", ContainerPort: HealthCheckPort, Protocol: corev1.ProtocolTCP},

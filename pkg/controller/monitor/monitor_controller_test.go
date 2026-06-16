@@ -735,7 +735,6 @@ var _ = Describe("Monitor controller tests", func() {
 
 	It("should degrade in a headless installation", Label("headless"), func() {
 		dpNone := operatorv1.LinuxDataplaneNone
-		installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 		Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
 

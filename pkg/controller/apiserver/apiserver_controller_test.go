@@ -163,7 +163,6 @@ var _ = Describe("apiserver controller tests", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "The Calico API server is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
 
 			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 

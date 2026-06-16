@@ -60,7 +60,6 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		dpNone := operator.LinuxDataplaneNone
 		return &operator.InstallationSpec{
 			Variant: variant,
-			CNI:     &operator.CNISpec{Type: operator.PluginNone},
 			CalicoNetwork: &operator.CalicoNetworkSpec{
 				LinuxDataplane: &dpNone,
 			},

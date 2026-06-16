@@ -809,7 +809,6 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 		installation := &operatorv1.Installation{}
 		Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, installation)).NotTo(HaveOccurred())
 		dpNone := operatorv1.LinuxDataplaneNone
-		installation.Spec.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginNone}
 		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 		Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
 

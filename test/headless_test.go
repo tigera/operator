@@ -40,10 +40,9 @@ import (
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// These tests exercise headless installations (spec.cni.type: None plus
-// spec.calicoNetwork.linuxDataplane: None): the operator deploys no Calico dataplane and
-// standalone components (Calico Ingress Gateway, Calico Istio service mesh) install on top
-// of a third-party CNI.
+// These tests exercise headless installations (spec.calicoNetwork.linuxDataplane: None with
+// spec.cni omitted): the operator deploys no Calico dataplane and standalone components
+// (Calico Ingress Gateway, Calico Istio service mesh) install on top of a third-party CNI.
 //
 // They require a kind cluster with the default CNI (kindnet) enabled, which the regular FV
 // cluster does not have — run them with `make fv-headless`, which provisions a suitable

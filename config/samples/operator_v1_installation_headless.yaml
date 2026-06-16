@@ -7,7 +7,7 @@ spec:
   # Typha, or kube-controllers) and only manages standalone product options (Calico
   # Ingress Gateway, Calico Istio service mesh) on top of the cluster's default CNI.
   variant: Calico
-  cni:
-    type: None
+  # spec.cni is intentionally omitted: a headless install runs no Calico dataplane, so the
+  # operator makes no CNI configuration. Setting linuxDataplane: None is the trigger.
   calicoNetwork:
     linuxDataplane: None

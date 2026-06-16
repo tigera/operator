@@ -13,6 +13,8 @@ components:
     version: v3.32.0
   cni-windows:
     version: v3.32.0
+  third-party-cni-plugins:
+    version: v3.32.0
   kube-controllers:
     version: v3.32.0
   goldmane:

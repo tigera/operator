@@ -1184,8 +1184,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			// Validate that we have a single egress rule added for the fluentd service.
 			Expect(policyWithoutNonClusterHosts.Spec.Ingress).To(Equal(policyWithNonClusterHosts.Spec.Ingress))
 			Expect(len(policyWithoutNonClusterHosts.Spec.Egress)).To(Equal(len(policyWithNonClusterHosts.Spec.Egress) - 1))
-			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(11))
-			Expect(policyWithNonClusterHosts.Spec.Egress[8]).To(Equal(v3.Rule{
+			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(10))
+			Expect(policyWithNonClusterHosts.Spec.Egress[7]).To(Equal(v3.Rule{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
 				Destination: v3.EntityRule{

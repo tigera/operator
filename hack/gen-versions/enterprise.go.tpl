@@ -28,15 +28,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "compliance-benchmarker" }}
-	ComponentComplianceBenchmarker = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   enterpriseVariant,
-	}
-{{- end }}
 {{ with index .Components "deep-packet-inspection" }}
 	ComponentDeepPacketInspection = Component{
 		Version:   "{{ .Version }}",
@@ -301,7 +292,6 @@ var (
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
 		ComponentTigeraCalico,
-		ComponentComplianceBenchmarker,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,

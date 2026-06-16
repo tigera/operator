@@ -30,6 +30,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -42,6 +43,12 @@ var (
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	metricsPort              = int32(9081)
+
+	// calicoImageRef resolves the combined calico/calico image exactly as the
+	// renderer does, so the expected image tracks the pinned ComponentCalico
+	// version on any branch (:master on master, :v3.32.x on release-v1.43)
+	// rather than a hardcoded tag.
+	calicoImageRef, _ = components.GetReference(components.CombinedCalicoImage(&operatorv1.InstallationSpec{Variant: operatorv1.Calico}), "", "", "", nil)
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -140,7 +147,7 @@ var _ = Describe("ComponentRendering", func() {
 							Containers: []corev1.Container{
 								{
 									Name:    goldmane.GoldmaneContainerName,
-									Image:   "quay.io/calico/calico:master",
+									Image:   calicoImageRef,
 									Command: []string{"/usr/bin/calico", "component", "goldmane"},
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},

@@ -138,6 +138,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: "calico-system"}},
 		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-config", Namespace: "calico-system"}},
 		&admissionregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway-topology-injector.calico-system"}},
+		&admissionregv1.ValidatingAdmissionPolicy{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
+		&admissionregv1.ValidatingAdmissionPolicyBinding{ObjectMeta: metav1.ObjectMeta{Name: "safe-upgrades.gateway.networking.k8s.io"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-envoy-gateway-role"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-cluster-infra-manager"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-gateway-api-gateway-helm-certgen:calico-system"}},

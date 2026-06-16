@@ -669,6 +669,12 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	}
 	if instance.Spec.CNI.InstallMode == nil {
 		mode := operatorv1.CNIInstallModeAll
+		if instance.Spec.KubernetesProvider == operatorv1.ProviderKind {
+			// kind node images already ship the upstream CNI plugins, so skip
+			// the cni-plugins init container. Other providers default to All
+			// for backward compatibility.
+			mode = operatorv1.CNIInstallModeCalicoOnly
+		}
 		instance.Spec.CNI.InstallMode = &mode
 	}
 

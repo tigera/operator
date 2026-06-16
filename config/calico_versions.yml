@@ -1,51 +1,51 @@
 # Components defined here are required to be kept in sync with hack/gen-versions/calico.go.tpl
-title: v3.32.0
+title: v3.33.0-0.dev-825-gb3a9845bdf4d
 components:
   libcalico-go:
     version: v3.32.0
   typha:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   node:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   cni:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   node-windows:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   cni-windows:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   kube-controllers:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   goldmane:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   flexvol:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   apiserver:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   csi:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   key-cert-provisioner:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   whisker:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   whisker-backend:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   envoy-gateway:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   envoy-proxy:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   envoy-ratelimit:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   guardian:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   istio-pilot:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   istio-install-cni:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   istio-ztunnel:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   istio-proxyv2:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   webhooks:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d
   calico:
-    version: v3.32.0
+    version: v3.33.0-0.dev-825-gb3a9845bdf4d

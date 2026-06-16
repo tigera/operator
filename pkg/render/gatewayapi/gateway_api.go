@@ -80,24 +80,26 @@ const (
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount      *corev1.ServiceAccount
-	envoyGatewayConfigMap         *corev1.ConfigMap
-	envoyGatewayConfig            *envoyapi.EnvoyGateway
-	clusterRoles                  []*rbacv1.ClusterRole
-	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
-	role                          *rbacv1.Role
-	roleBinding                   *rbacv1.RoleBinding
-	leaderElectionRole            *rbacv1.Role
-	leaderElectionRoleBinding     *rbacv1.RoleBinding
-	controllerService             *corev1.Service
-	controllerDeployment          *appsv1.Deployment
-	certgenServiceAccount         *corev1.ServiceAccount
-	certgenRole                   *rbacv1.Role
-	certgenRoleBinding            *rbacv1.RoleBinding
-	certgenJob                    *batchv1.Job
-	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
+	k8sCRDs                           []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                         []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount          *corev1.ServiceAccount
+	envoyGatewayConfigMap             *corev1.ConfigMap
+	envoyGatewayConfig                *envoyapi.EnvoyGateway
+	clusterRoles                      []*rbacv1.ClusterRole
+	clusterRoleBindings               []*rbacv1.ClusterRoleBinding
+	role                              *rbacv1.Role
+	roleBinding                       *rbacv1.RoleBinding
+	leaderElectionRole                *rbacv1.Role
+	leaderElectionRoleBinding         *rbacv1.RoleBinding
+	controllerService                 *corev1.Service
+	controllerDeployment              *appsv1.Deployment
+	certgenServiceAccount             *corev1.ServiceAccount
+	certgenRole                       *rbacv1.Role
+	certgenRoleBinding                *rbacv1.RoleBinding
+	certgenJob                        *batchv1.Job
+	mutatingWebhookConfigurations     []*admissionregv1.MutatingWebhookConfiguration
+	validatingAdmissionPolicies       []*admissionregv1.ValidatingAdmissionPolicy
+	validatingAdmissionPolicyBindings []*admissionregv1.ValidatingAdmissionPolicyBinding
 }
 
 const (
@@ -314,6 +316,10 @@ func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResource
 			resources.certgenJob = typedObj
 		case *admissionregv1.MutatingWebhookConfiguration:
 			resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, typedObj)
+		case *admissionregv1.ValidatingAdmissionPolicy:
+			resources.validatingAdmissionPolicies = append(resources.validatingAdmissionPolicies, typedObj)
+		case *admissionregv1.ValidatingAdmissionPolicyBinding:
+			resources.validatingAdmissionPolicyBindings = append(resources.validatingAdmissionPolicyBindings, typedObj)
 		case *corev1.Namespace:
 			// The chart may render a namespace; we create our own in Objects(), so skip it.
 		default:
@@ -677,6 +683,12 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	}
 	for _, mwc := range resources.mutatingWebhookConfigurations {
 		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, vap := range resources.validatingAdmissionPolicies {
+		objs = append(objs, vap.DeepCopyObject().(client.Object))
+	}
+	for _, vapb := range resources.validatingAdmissionPolicyBindings {
+		objs = append(objs, vapb.DeepCopyObject().(client.Object))
 	}
 	for _, resource := range []client.Object{
 		resources.role,

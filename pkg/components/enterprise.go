@@ -176,7 +176,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version: "v0.31.1",
+		Version: "v0.32.1",
 		variant: enterpriseVariant,
 	}
 

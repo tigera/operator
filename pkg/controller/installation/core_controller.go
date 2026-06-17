@@ -1226,13 +1226,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	// Run the variant setup to build the render context handed to registered
-	// modifiers. The core operator has no setup, so it gets just the base
-	// context; an extension's setup additionally does controller-side work for
-	// its variant - validating config and creating the node-prometheus
-	// certificate, adding it (and the prometheus/esgw certs) to the trusted
-	// bundle - and may abort the reconcile by returning an error.
-	renderCtx, err := extensions.RunSetup(extensions.Inputs{
+	renderCtx, err := extensions.BuildContext(extensions.Inputs{
 		Ctx:                ctx,
 		Client:             r.client,
 		Installation:       &instance.Spec,
@@ -1245,7 +1239,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	nodePrometheusTLS := renderCtx.NodePrometheusTLS
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
 	if err != nil {
@@ -1284,7 +1277,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance, utils.WithRenderContext(renderCtx))
+	handler := r.newComponentHandler(
+		log,
+		r.client,
+		r.scheme,
+		instance,
+		utils.WithRenderContext(renderCtx),
+	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{
@@ -1377,7 +1376,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-		rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+		rcertificatemanagement.NewKeyPairOption(renderCtx.NodePrometheusTLS, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
@@ -1808,7 +1807,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
 		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
 		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
-		render.NodePrometheusTLSServerSecret:                         nodePrometheusTLS,
+		render.NodePrometheusTLSServerSecret:                         renderCtx.NodePrometheusTLS,
 		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
 	}, r.status)
 

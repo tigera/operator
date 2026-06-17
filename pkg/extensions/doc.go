@@ -25,7 +25,7 @@
 // does the side-effecting work a pure render hook can't: creating certificates,
 // extending the trusted bundle, validating config. It returns the RenderContext
 // - the read-only baton passed to the render phase. Register one per variant
-// with RegisterSetup; the controller runs it with RunSetup.
+// with RegisterSetup; the controller runs it with BuildContext.
 //
 // Extension is the render phase: pure, per-component hooks that run after a
 // component builds its objects. Its Image field overrides the component's image

@@ -52,7 +52,11 @@ func registerGuardian() {
 // fail (proxy URL parsing); on failure we drop the policy entirely, matching the
 // core behavior of omitting it rather than installing a partial policy.
 func modifyGuardianPolicy(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	gpc, _ := ctx.Component.(render.GuardianPolicyExtensionContext)
+	gpc, ok := ctx.Component.(render.GuardianPolicyExtensionContext)
+	if !ok {
+		logrus.Errorf("BUG: guardian policy modifier got %T, want render.GuardianPolicyExtensionContext; leaving objects unchanged", ctx.Component)
+		return objs, del
+	}
 
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
 	if !ok {
@@ -212,7 +216,11 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3
 // elasticsearch/kibana service ports, the management-cluster-request cluster
 // role rules (which replace the OSS rules), and the CA bundle env vars.
 func modifyGuardian(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	gc, _ := ctx.Component.(render.GuardianExtensionContext)
+	gc, ok := ctx.Component.(render.GuardianExtensionContext)
+	if !ok {
+		logrus.Errorf("BUG: guardian modifier got %T, want render.GuardianExtensionContext; leaving objects unchanged", ctx.Component)
+		return objs, del
+	}
 
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
 		role.Rules = guardianEnterpriseRules(gc)

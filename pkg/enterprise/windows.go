@@ -17,6 +17,7 @@ package enterprise
 import (
 	"fmt"
 
+	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -52,7 +53,11 @@ func registerWindows() {
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
 func modifyWindows(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	wc, _ := ctx.Component.(render.WindowsExtensionContext)
+	wc, ok := ctx.Component.(render.WindowsExtensionContext)
+	if !ok {
+		logrus.Errorf("BUG: windows modifier got %T, want render.WindowsExtensionContext; leaving objects unchanged", ctx.Component)
+		return objs, del
+	}
 
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
 		modifyWindowsDaemonSet(ctx, wc, ds)

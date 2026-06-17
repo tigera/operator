@@ -29,7 +29,7 @@ var _ = Describe("variant setup", func() {
 
 	It("returns the base render context when the variant has no setup", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, err := extensions.RunSetup(extensions.Inputs{
+		rc, err := extensions.BuildContext(extensions.Inputs{
 			Installation:  install,
 			ClusterDomain: "cluster.local",
 		})
@@ -41,14 +41,14 @@ var _ = Describe("variant setup", func() {
 
 	It("uses the setup registered for the installation variant", func() {
 		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
-		rc, err := extensions.RunSetup(enterpriseInputs())
+		rc, err := extensions.BuildContext(enterpriseInputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores a setup registered for a different variant", func() {
 		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
-		rc, err := extensions.RunSetup(extensions.Inputs{
+		rc, err := extensions.BuildContext(extensions.Inputs{
 			Installation:  &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
 			ClusterDomain: "real",
 		})
@@ -58,7 +58,7 @@ var _ = Describe("variant setup", func() {
 
 	It("surfaces the setup error", func() {
 		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(errors.New("boom")))
-		_, err := extensions.RunSetup(enterpriseInputs())
+		_, err := extensions.BuildContext(enterpriseInputs())
 		Expect(err).To(MatchError("boom"))
 	})
 
@@ -67,7 +67,7 @@ var _ = Describe("variant setup", func() {
 		extensions.ResetForTest()
 		in := enterpriseInputs()
 		in.ClusterDomain = "real"
-		rc, err := extensions.RunSetup(in)
+		rc, err := extensions.BuildContext(in)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})

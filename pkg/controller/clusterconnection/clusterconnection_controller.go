@@ -444,10 +444,13 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// The render context carries the installation so registered modifiers gate on
-	// variant; the guardian component supplies its own per-component context (the
-	// impersonation config, OpenShift, and CA bundle path) via ExtensionContext.
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection, utils.WithRenderContext(extensions.RenderContext{Installation: installationSpec}))
+	ch := utils.NewComponentHandler(
+		log,
+		r.cli,
+		r.scheme,
+		managementClusterConnection,
+		utils.WithRenderContext(extensions.RenderContext{Installation: installationSpec}),
+	)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
 		PodProxies:                  r.resolvedPodProxies,

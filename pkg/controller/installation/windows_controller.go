@@ -407,10 +407,13 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to create or update the rendered components.
-	// The render context carries the installation so registered modifiers gate on
-	// variant; the windows component supplies its own per-component context (the
-	// reporter port and prometheus keypair) via ExtensionContext.
-	handler := utils.NewComponentHandler(logw, r.client, r.scheme, instance, utils.WithRenderContext(extensions.RenderContext{Installation: &instance.Spec}))
+	handler := utils.NewComponentHandler(
+		logw,
+		r.client,
+		r.scheme,
+		instance,
+		utils.WithRenderContext(extensions.RenderContext{Installation: &instance.Spec}),
+	)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err

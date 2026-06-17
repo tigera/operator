@@ -73,9 +73,10 @@ func RegisterSetup(variant operatorv1.ProductVariant, s Setup) {
 	setups[variant] = s
 }
 
-// RunSetup runs the setup registered for the installation variant and returns
-// its RenderContext, or the base render context when the variant has no setup.
-func RunSetup(in Inputs) (RenderContext, error) {
+// BuildContext runs the setup registered for the installation variant and
+// returns its RenderContext, or the base render context when the variant has no
+// setup.
+func BuildContext(in Inputs) (RenderContext, error) {
 	if in.Installation != nil {
 		if s, ok := setups[in.Installation.Variant]; ok {
 			return s(in)

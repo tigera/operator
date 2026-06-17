@@ -56,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -190,6 +191,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
+				opts:                 options.ControllerOptions{Extensions: testExtensions},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
@@ -819,6 +821,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
+				opts:                 options.ControllerOptions{Extensions: testExtensions},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
@@ -1041,6 +1044,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
+				opts:                 options.ControllerOptions{Extensions: testExtensions},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
@@ -2329,6 +2333,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
+				opts:                 options.ControllerOptions{Extensions: testExtensions},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
@@ -2466,6 +2471,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			componentHandler = newFakeComponentHandler()
 			r = ReconcileInstallation{
+				opts:                 options.ControllerOptions{Extensions: testExtensions},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
@@ -2477,7 +2483,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				tierWatchReady:       ready,
 				migrationWatchReady:  &utils.ReadyFlag{},
-				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 					return componentHandler
 				},
 			}
@@ -2629,13 +2635,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should create v1 MAPs when v1 is served", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2660,13 +2667,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should create v1beta1 MAPs when only v1beta1 is served", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2689,13 +2697,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should create v1alpha1 MAPs when only v1alpha1 is served", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2718,13 +2727,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should not create MAPs when no served version exists and should set degraded", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(""),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2736,13 +2746,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should not create MAPs when v3CRDs=false", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       false,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2753,13 +2764,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should not create MAPs when manageCRDs=false", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   false,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2783,13 +2795,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		}
 
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(staleMAP, staleMAPB),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2825,13 +2838,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 		}
 
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(initial...),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2843,13 +2857,14 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 
 	It("should work with Enterprise variant", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2914,13 +2929,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 
 	It("should create v1 VAPs when v1 is served", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2945,13 +2961,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 
 	It("should create v1beta1 VAPs when only v1beta1 is served", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2974,13 +2991,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 
 	It("should create v1alpha1 VAPs when only v1alpha1 is served", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2991,13 +3009,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 
 	It("should skip without degrading when no served version exists", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(""),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -3009,13 +3028,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 
 	It("should not create VAPs when v3CRDs=false", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       false,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -3039,13 +3059,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 		}
 
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(staleVAP, staleVAPB),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -3063,13 +3084,14 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 
 	It("should work with Enterprise variant", func() {
 		r = ReconcileInstallation{
+			opts:         options.ControllerOptions{Extensions: testExtensions},
 			client:       clientFor(),
 			scheme:       scheme,
 			status:       mockStatus,
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}

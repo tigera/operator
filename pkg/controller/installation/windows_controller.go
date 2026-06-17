@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -181,6 +182,7 @@ type ReconcileWindows struct {
 	enterpriseCRDsExist  bool
 	clusterDomain        string
 	ipamConfigWatchReady *utils.ReadyFlag
+	opts                 options.ControllerOptions
 }
 
 // newWindowsReconciler returns a new reconcile.Reconciler
@@ -197,6 +199,7 @@ func newWindowsReconciler(mgr manager.Manager, opts options.ControllerOptions) (
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
 		clusterDomain:        opts.ClusterDomain,
 		ipamConfigWatchReady: &utils.ReadyFlag{},
+		opts:                 opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -386,6 +389,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		PrometheusServerTLS:     nodePrometheusTLS,
 		NodeReporterMetricsPort: nodeReporterMetricsPort,
 		VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
+		ImageOverrides:          r.opts.Extensions.Images(),
 	}
 	component = render.Windows(&windowsCfg)
 
@@ -406,7 +410,14 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := utils.NewComponentHandler(logw, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(
+		logw,
+		r.client,
+		r.scheme,
+		instance,
+		utils.WithRenderContext(extensions.RenderContext{Installation: &instance.Spec}),
+		utils.WithExtensions(r.opts.Extensions),
+	)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 		return reconcile.Result{}, err

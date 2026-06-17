@@ -170,6 +170,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -229,6 +230,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -282,6 +284,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 					ClusterDomain:       dns.DefaultClusterDomain,
@@ -307,6 +310,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -329,6 +333,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -353,6 +358,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -375,6 +381,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      notReady,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -400,6 +407,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -427,6 +435,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -452,6 +461,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      notReady,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -478,6 +488,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: false,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -520,6 +531,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -552,6 +564,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -604,6 +617,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -673,6 +687,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 				},
@@ -777,6 +792,7 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
+						Extensions:          testExtensions,
 						EnterpriseCRDExists: true,
 						DetectedProvider:    operatorv1.ProviderNone,
 					},
@@ -806,6 +822,7 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
+						Extensions:          testExtensions,
 						EnterpriseCRDExists: true,
 						DetectedProvider:    operatorv1.ProviderNone,
 					},
@@ -836,6 +853,7 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
+						Extensions:          testExtensions,
 						EnterpriseCRDExists: true,
 						DetectedProvider:    operatorv1.ProviderNone,
 						MultiTenant:         true,
@@ -883,6 +901,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 					UseV3CRDs:           true,
@@ -927,6 +946,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: false,
 					DetectedProvider:    operatorv1.ProviderNone,
 					UseV3CRDs:           true,
@@ -955,6 +975,7 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
+					Extensions:          testExtensions,
 					EnterpriseCRDExists: true,
 					DetectedProvider:    operatorv1.ProviderNone,
 					UseV3CRDs:           false,

@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -176,6 +177,7 @@ func newReconciler(
 		clusterDomain:         opts.ClusterDomain,
 		tierWatchReady:        tierWatchReady,
 		clusterInfoWatchReady: clusterInfoWatchReady,
+		opts:                  opts,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -195,6 +197,7 @@ type ReconcileConnection struct {
 	clusterInfoWatchReady      *utils.ReadyFlag
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
+	opts                       options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -443,7 +446,14 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
+	ch := utils.NewComponentHandler(
+		log,
+		r.cli,
+		r.scheme,
+		managementClusterConnection,
+		utils.WithRenderContext(extensions.RenderContext{Installation: installationSpec}),
+		utils.WithExtensions(r.opts.Extensions),
+	)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
 		PodProxies:                  r.resolvedPodProxies,

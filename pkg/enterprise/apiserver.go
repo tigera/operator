@@ -566,6 +566,12 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		// Allow the user to view Networks.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 		// Additional "list" requests required to view flows.
 		{
 			APIGroups: []string{""},
@@ -758,6 +764,12 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
+		},
+		// Allow the user to CRUD Networks.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		// Additional "list" requests that the Tigera Secure manager needs
 		{

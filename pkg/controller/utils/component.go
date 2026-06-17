@@ -1102,6 +1102,12 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 		if podTemplate.Labels["k8s-app"] == "" {
 			podTemplate.Labels["k8s-app"] = name
 		}
+		if podTemplate.Spec.HostNetwork {
+			// The podiprecovery controller uses this label to find
+			// operator-managed hostNetwork pods that need their IPs
+			// re-checked after a node IP change.
+			podTemplate.Labels[common.HostNetworkedPodLabel] = "true"
+		}
 		if customResource != nil {
 			// We do not want to set these labels on objects without a CR. They are usually deliberately not getting an
 			// owner ref and are not controlled by our operator.

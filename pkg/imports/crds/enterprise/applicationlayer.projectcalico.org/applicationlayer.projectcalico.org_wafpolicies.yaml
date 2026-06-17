@@ -127,6 +127,7 @@ spec:
                     required:
                       - name
                     type: object
+                  maxItems: 64
                   type: array
                 targetRefs:
                   description:
@@ -151,12 +152,26 @@ spec:
                         description: Name is the name of the target resource
                         maxLength: 253
                         type: string
+                      sectionName:
+                        description: |-
+                          SectionName scopes the WAF to a single named section within the target
+                          (GEP-713): an HTTPRoute rule name (spec.rules[].name) or a Gateway listener
+                          name (spec.listeners[].name). When unset, the policy attaches to the entire
+                          target. The named rule/listener must exist, or the policy reports
+                          Programmed=False/TargetNotFound. A rule-scoped policy takes precedence over
+                          a whole-route one for that rule (Envoy Gateway GEP-713 precedence). See
+                          designs#25 §01.
+                        maxLength: 253
+                        type: string
                     required:
                       - kind
                       - name
                     type: object
                   maxItems: 16
+                  minItems: 1
                   type: array
+              required:
+                - targetRefs
               type: object
               x-kubernetes-validations:
                 - message: only group gateway.networking.k8s.io is supported for targetRefs

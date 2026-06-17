@@ -1029,7 +1029,35 @@ type CNISpec struct {
 	// +optional
 	// +kubebuilder:validation:Type=string
 	ConfDir *string `json:"confDir,omitempty"`
+
+	// InstallMode controls which CNI plugin binaries the operator installs onto each node
+	// when CNI.Type is Calico.
+	// * All (default): the operator runs a cni-plugins init container that stages upstream
+	//   CNI plugin binaries (host-local, portmap, loopback, tuning, flannel) into a shared
+	//   volume, and the install-cni init container copies them onto the host alongside
+	//   Calico's own binaries.
+	// * CalicoOnly: skip the cni-plugins init container. Only Calico's own binaries are
+	//   installed. Use this when the host already provides the upstream plugins (e.g. kind,
+	//   certain managed node images).
+	//
+	// Default: All
+	// +optional
+	// +kubebuilder:validation:Enum=All;CalicoOnly
+	InstallMode *CNIInstallMode `json:"installMode,omitempty"`
 }
+
+// CNIInstallMode controls which CNI plugin binaries the operator installs onto the host.
+type CNIInstallMode string
+
+const (
+	// CNIInstallModeAll installs Calico's own CNI binaries plus the upstream plugin set
+	// (host-local, portmap, loopback, tuning, flannel) via a dedicated init container.
+	CNIInstallModeAll CNIInstallMode = "All"
+
+	// CNIInstallModeCalicoOnly installs only Calico's own CNI binaries; the host is
+	// expected to provide any required upstream plugins.
+	CNIInstallModeCalicoOnly CNIInstallMode = "CalicoOnly"
+)
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {

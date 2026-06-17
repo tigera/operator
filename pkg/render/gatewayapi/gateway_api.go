@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
@@ -79,24 +80,26 @@ const (
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount      *corev1.ServiceAccount
-	envoyGatewayConfigMap         *corev1.ConfigMap
-	envoyGatewayConfig            *envoyapi.EnvoyGateway
-	clusterRoles                  []*rbacv1.ClusterRole
-	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
-	role                          *rbacv1.Role
-	roleBinding                   *rbacv1.RoleBinding
-	leaderElectionRole            *rbacv1.Role
-	leaderElectionRoleBinding     *rbacv1.RoleBinding
-	controllerService             *corev1.Service
-	controllerDeployment          *appsv1.Deployment
-	certgenServiceAccount         *corev1.ServiceAccount
-	certgenRole                   *rbacv1.Role
-	certgenRoleBinding            *rbacv1.RoleBinding
-	certgenJob                    *batchv1.Job
-	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
+	k8sCRDs                           []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                         []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount          *corev1.ServiceAccount
+	envoyGatewayConfigMap             *corev1.ConfigMap
+	envoyGatewayConfig                *envoyapi.EnvoyGateway
+	clusterRoles                      []*rbacv1.ClusterRole
+	clusterRoleBindings               []*rbacv1.ClusterRoleBinding
+	role                              *rbacv1.Role
+	roleBinding                       *rbacv1.RoleBinding
+	leaderElectionRole                *rbacv1.Role
+	leaderElectionRoleBinding         *rbacv1.RoleBinding
+	controllerService                 *corev1.Service
+	controllerDeployment              *appsv1.Deployment
+	certgenServiceAccount             *corev1.ServiceAccount
+	certgenRole                       *rbacv1.Role
+	certgenRoleBinding                *rbacv1.RoleBinding
+	certgenJob                        *batchv1.Job
+	mutatingWebhookConfigurations     []*admissionregv1.MutatingWebhookConfiguration
+	validatingAdmissionPolicies       []*admissionregv1.ValidatingAdmissionPolicy
+	validatingAdmissionPolicyBindings []*admissionregv1.ValidatingAdmissionPolicyBinding
 }
 
 const (
@@ -111,24 +114,6 @@ const (
 )
 
 var (
-	// logger gateway name and namespace are set from the k8s downward api pod metadata.
-	GatewayNameEnvVar = corev1.EnvVar{
-		Name: "LOGGER_GATEWAY_NAME",
-		ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{
-				FieldPath: "metadata.name",
-			},
-		},
-	}
-	GatewayNamespaceEnvVar = corev1.EnvVar{
-		Name: "LOGGER_GATEWAY_NAMESPACE",
-		ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{
-				FieldPath: "metadata.namespace",
-			},
-		},
-	}
-
 	// Owning Gateway name and namespace are exposed via pod labels set by EnvoyProxy.
 	// These allow the l7-log-collector to know which Gateway it is collecting logs for
 	// without needing to query the Kubernetes API.
@@ -185,12 +170,6 @@ func toMap(v any) (map[string]any, error) {
 		return nil, err
 	}
 	return out, nil
-}
-
-// isReservedOperatorNamespace reports whether core Installation already owns
-// tigera-operator-secrets / tigera-pull-secret in ns (deleting ours would wipe them).
-func isReservedOperatorNamespace(ns string) bool {
-	return ns == common.CalicoNamespace || ns == common.OperatorNamespace()
 }
 
 // Chart output is deterministic for our single render, so it's cached by
@@ -337,6 +316,10 @@ func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResource
 			resources.certgenJob = typedObj
 		case *admissionregv1.MutatingWebhookConfiguration:
 			resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, typedObj)
+		case *admissionregv1.ValidatingAdmissionPolicy:
+			resources.validatingAdmissionPolicies = append(resources.validatingAdmissionPolicies, typedObj)
+		case *admissionregv1.ValidatingAdmissionPolicyBinding:
+			resources.validatingAdmissionPolicyBindings = append(resources.validatingAdmissionPolicyBindings, typedObj)
 		case *corev1.Namespace:
 			// The chart may render a namespace; we create our own in Objects(), so skip it.
 		default:
@@ -402,11 +385,8 @@ type GatewayAPIImplementationConfig struct {
 	IncludeV3NetworkPolicy bool
 
 	// GatewayNamespaces is the list of namespaces containing a Gateway managed by
-	// this operator (Enterprise only).
+	// this operator, used to keep the shared WAF CRB's subjects in sync (Enterprise only).
 	GatewayNamespaces []string
-	// CurrentGatewayNamespaces tracks previously provisioned namespaces for cleanup
-	// when Gateways are removed.
-	CurrentGatewayNamespaces set.Set[string]
 
 	// TrustedBundle carries the public CA bundle (extracted from the operator's UBI
 	// base image) plus Calico's internal CA. Mounted on the envoy-gateway controller
@@ -420,7 +400,6 @@ type gatewayAPIImplementationComponent struct {
 	envoyGatewayImage   string
 	envoyProxyImage     string
 	envoyRatelimitImage string
-	calicoImage         string
 	L7LogCollectorImage string
 
 	// Pre-rendered helm chart resources.
@@ -451,10 +430,6 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 			return err
 		}
 		pr.envoyRatelimitImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyRatelimit, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		pr.calicoImage, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -510,59 +485,20 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 		pr.cfg.CurrentGatewayClasses.Delete(className)
 	}
 
+	// Per-namespace resources (trust bundle + Enterprise WAF SA/RoleBindings/pull-secret) are
+	// controller-managed and Gateway-owned, so the GC cleans them up — not rendered here.
+
 	if pr.cfg.Installation.Variant.IsEnterprise() {
-		// Shared WAF ClusterRoles bound by per-namespace SAs.
+		// Shared WAF ClusterRoles bound per-namespace by the controller-managed SAs.
 		objs = append(objs,
 			pr.wafHttpFilterClusterScopedRole(),
 			pr.wafHttpFilterGatewayResourcesRole(),
 		)
-
-		// Per-namespace resources for namespaces containing a Gateway managed by
-		// this operator (populated by the GatewayAPI controller).
-		for _, ns := range pr.cfg.GatewayNamespaces {
-			objs = append(objs,
-				pr.gatewayNamespaceSA(ns),
-				pr.gatewayNamespaceRoleBinding(ns),
-			)
-			// Skip shared resources in reserved namespaces — core Installation owns them.
-			if !isReservedOperatorNamespace(ns) {
-				objs = append(objs, render.CreateOperatorSecretsRoleBinding(ns))
-				objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-				// envoy-proxy pods mount the bundle from their own namespace.
-				if pr.cfg.TrustedBundle != nil {
-					objs = append(objs, pr.cfg.TrustedBundle.ConfigMap(ns))
-				}
-			}
-		}
+		// Shared CRB: subjects recomputed each reconcile, removed when no Gateway namespaces remain.
 		if len(pr.cfg.GatewayNamespaces) > 0 {
 			objs = append(objs, pr.gatewayNamespacesCRB(pr.cfg.GatewayNamespaces))
-		}
-
-		// Clean up resources for namespaces that no longer host a Gateway.
-		if pr.cfg.CurrentGatewayNamespaces != nil {
-			currentNS := set.New(pr.cfg.GatewayNamespaces...)
-			for _, ns := range pr.cfg.CurrentGatewayNamespaces.UnsortedList() {
-				if !currentNS.Has(ns) {
-					// Secret must go before the RoleBinding that grants us delete perms; skip shared
-					// resources in reserved namespaces (core-owned).
-					if !isReservedOperatorNamespace(ns) {
-						objsToDelete = append(objsToDelete, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pr.cfg.PullSecrets...)...)...)
-						if pr.cfg.TrustedBundle != nil {
-							objsToDelete = append(objsToDelete, pr.cfg.TrustedBundle.ConfigMap(ns))
-						}
-					}
-					objsToDelete = append(objsToDelete,
-						pr.gatewayNamespaceSA(ns),
-						pr.gatewayNamespaceRoleBinding(ns),
-					)
-					if !isReservedOperatorNamespace(ns) {
-						objsToDelete = append(objsToDelete, render.CreateOperatorSecretsRoleBinding(ns))
-					}
-				}
-			}
-			if len(pr.cfg.GatewayNamespaces) == 0 {
-				objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
-			}
+		} else {
+			objsToDelete = append(objsToDelete, pr.gatewayNamespacesCRB(nil))
 		}
 	}
 
@@ -600,6 +536,15 @@ func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []cl
 	for _, o := range creating {
 		if o.GetNamespace() == legacyNS {
 			skip.Insert(key(o))
+		}
+	}
+	// If a Gateway lives in tigera-gateway, the controller manages its per-namespace resources
+	// (Gateway-owned) — don't queue those for legacy delete or we'd fight it every reconcile.
+	if slices.Contains(pr.cfg.GatewayNamespaces, legacyNS) {
+		skip.Insert(key(GatewayNamespaceServiceAccount(legacyNS)))
+		skip.Insert(key(render.CreateOperatorSecretsRoleBinding(legacyNS)))
+		for _, s := range secret.ToRuntimeObjects(secret.CopyToNamespace(legacyNS, pr.cfg.PullSecrets...)...) {
+			skip.Insert(key(s))
 		}
 	}
 
@@ -659,6 +604,14 @@ func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []cl
 			ObjectMeta: metav1.ObjectMeta{Name: helmPrefix + "-certgen", Namespace: legacyNS},
 		},
 	)
+
+	// envoy-gateway certgen TLS Secrets — unowned, so nothing else GCs them.
+	for _, name := range []string{"envoy", "envoy-gateway", "envoy-oidc-hmac", "envoy-rate-limit"} {
+		objs = append(objs, &corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: legacyNS},
+		})
+	}
 
 	// Enterprise-only WAF SA in tigera-gateway, plus the orphaned legacy CRBs
 	// that bound it (the new install uses waf-http-filter-gateway-namespaces
@@ -730,6 +683,12 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	}
 	for _, mwc := range resources.mutatingWebhookConfigurations {
 		objs = append(objs, mwc.DeepCopyObject().(client.Object))
+	}
+	for _, vap := range resources.validatingAdmissionPolicies {
+		objs = append(objs, vap.DeepCopyObject().(client.Object))
+	}
+	for _, vapb := range resources.validatingAdmissionPolicyBindings {
+		objs = append(objs, vapb.DeepCopyObject().(client.Object))
 	}
 	for _, resource := range []client.Object{
 		resources.role,
@@ -952,37 +911,6 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
-			// Add or update the Init Container to the deployment
-			wafHTTPFilter := corev1.Container{
-				Name:    wafFilterName,
-				Image:   pr.calicoImage,
-				Command: []string{components.CalicoBinaryPath, "component", "waf-http-filter"},
-				Args: []string{
-					"--logFileDirectory",
-					"/var/log/calico/waf",
-					"--logFileName",
-					"waf.log",
-					"--socketPath",
-					"/var/run/waf-http-filter/extproc.sock",
-				},
-				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      wafFilterName,
-						MountPath: "/var/run/waf-http-filter",
-					},
-					{
-						Name:      "var-log-calico",
-						MountPath: "/var/log/calico",
-					},
-				},
-				Env: []corev1.EnvVar{
-					GatewayNameEnvVar,
-					GatewayNamespaceEnvVar,
-				},
-				SecurityContext: securitycontext.NewRootContext(true),
-			}
-			// need to make changes to the envoy container to mount the socket
 			l7LogCollector := corev1.Container{
 				Name:  "l7-log-collector",
 				Image: pr.L7LogCollectorImage,
@@ -1017,16 +945,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
 
-			hasWAFHTTPFilter := false
 			hasL7LogCollector := false
 			for i, initContainer := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
-				if initContainer.Name == wafHTTPFilter.Name {
-					hasWAFHTTPFilter = true
-					// Handle update
-					if initContainer.Image != wafHTTPFilter.Image {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = wafHTTPFilter
-					}
-				}
 				if initContainer.Name == l7LogCollector.Name {
 					hasL7LogCollector = true
 					// Handle update
@@ -1039,68 +959,31 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					}
 				}
 			}
-			if !hasWAFHTTPFilter {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, wafHTTPFilter)
-			}
-
 			if !hasL7LogCollector {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollector)
 			}
 
 			accessLogsName := "access-logs"
 			// Add or update Container volume mount
-			wafSocketVolumeMount := corev1.VolumeMount{
-				Name:      wafFilterName,
-				MountPath: "/var/run/waf-http-filter",
-			}
-
 			l7SocketVolumeMount := corev1.VolumeMount{
 				Name:      accessLogsName,
 				MountPath: "/access_logs",
 			}
 
-			hasWAFFilterSocketVolumeMount := false
 			hasAccessLogsVolumeMount := false
-
 			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
-				switch volumeMount.Name {
-				case wafSocketVolumeMount.Name:
-					hasWAFFilterSocketVolumeMount = true
-					if volumeMount.MountPath != wafSocketVolumeMount.MountPath {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = wafSocketVolumeMount
-					}
-				case l7SocketVolumeMount.Name:
+				if volumeMount.Name == l7SocketVolumeMount.Name {
 					hasAccessLogsVolumeMount = true
 					if volumeMount.MountPath != l7SocketVolumeMount.MountPath {
 						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = l7SocketVolumeMount
 					}
-
 				}
 			}
-			if !hasWAFFilterSocketVolumeMount {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, wafSocketVolumeMount)
-			}
-
 			if !hasAccessLogsVolumeMount {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, l7SocketVolumeMount)
 			}
 
 			// Add or update Pod volumes
-			logsVolume := corev1.Volume{
-				VolumeSource: corev1.VolumeSource{
-					HostPath: &corev1.HostPathVolumeSource{
-						Path: "/var/log/calico",
-						Type: ptr.To(corev1.HostPathDirectoryOrCreate),
-					},
-				},
-				Name: "var-log-calico",
-			}
-			WAFHttpFilterSocketVolume := corev1.Volume{
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-				Name: wafFilterName,
-			}
 			AccessLogsVolume := []corev1.Volume{
 				{
 					VolumeSource: corev1.VolumeSource{
@@ -1117,23 +1000,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					Name: "felix-sync",
 				},
 			}
-			hasLogsVolume := false
-			hasSocketVolume := false
 			hasAccessLogsVolume := false
 			for i, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
-				if volume.Name == logsVolume.Name {
-					hasLogsVolume = true
-					// Handle update
-					if volume.HostPath.Path != logsVolume.HostPath.Path || volume.HostPath.Type != logsVolume.HostPath.Type {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = logsVolume
-					}
-				}
-				if volume.Name == WAFHttpFilterSocketVolume.Name {
-					hasSocketVolume = true
-					if volume.EmptyDir != WAFHttpFilterSocketVolume.EmptyDir {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = WAFHttpFilterSocketVolume
-					}
-				}
 				for _, acVolume := range AccessLogsVolume {
 					if volume.Name == acVolume.Name {
 						hasAccessLogsVolume = true
@@ -1142,19 +1010,13 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 						}
 					}
 				}
-
-			}
-			if !hasLogsVolume {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, logsVolume)
-			}
-			if !hasSocketVolume {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, WAFHttpFilterSocketVolume)
 			}
 			if !hasAccessLogsVolume {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume...)
 			}
 
-			// Configure service account for WAF HTTP Filter license client
+			// Configure the envoy-proxy pod's service account, used by the l7-log-collector
+			// for license verification and Gateway-API reads.
 			// Use EnvoyProxy patch mechanism to set serviceAccountName and automountServiceAccountToken
 			serviceAccountPatch := map[string]interface{}{
 				"spec": map[string]interface{}{
@@ -1345,8 +1207,8 @@ func (pr *gatewayAPIImplementationComponent) wafHttpFilterGatewayResourcesRole()
 	}
 }
 
-// gatewayNamespaceSA creates a waf-http-filter ServiceAccount in a Gateway namespace.
-func (pr *gatewayAPIImplementationComponent) gatewayNamespaceSA(namespace string) *corev1.ServiceAccount {
+// GatewayNamespaceServiceAccount returns the waf-http-filter ServiceAccount for a Gateway namespace.
+func GatewayNamespaceServiceAccount(namespace string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1388,7 +1250,8 @@ func (pr *gatewayAPIImplementationComponent) gatewayNamespacesCRB(namespaces []s
 
 // gatewayNamespaceRoleBinding scopes the WAF SA's Gateway API read access
 // to its own namespace (least privilege for proxies in user namespaces).
-func (pr *gatewayAPIImplementationComponent) gatewayNamespaceRoleBinding(namespace string) *rbacv1.RoleBinding {
+// GatewayNamespaceRoleBinding returns the waf-http-filter-gateway-resources RoleBinding for a Gateway namespace.
+func GatewayNamespaceRoleBinding(namespace string) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1438,8 +1301,15 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 				{
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.TCPProtocol,
-					// Dual-stack and IPv6-only need ::/0 in addition to 0.0.0.0/0.
-					Source: v3.EntityRule{Nets: []string{"0.0.0.0/0", "::/0"}},
+					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"::/0"}},
 					Destination: v3.EntityRule{
 						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
 					},

@@ -21,7 +21,7 @@ OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/d
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.20.2
+HELM3_VERSION = v3.21.1
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.2-llvm20.1.8-k8s1.35.4
-CALICO_BASE_VER ?= ubi9-1776708455
+GO_BUILD_VER?=1.26.4-llvm21.1.8-k8s1.36.2
+CALICO_BASE_VER ?= ubi9-1781568165
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -247,7 +247,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.2
+ENVOY_GATEWAY_VERSION ?= v1.8.0
 ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
 $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
@@ -412,6 +412,7 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/calico/policy.networking.k8s.io/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/v1.crd.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/policy.networking.k8s.io/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/applicationlayer.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
@@ -634,6 +635,7 @@ define prep_local_crds
 	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/policy.networking.k8s.io/
+	mkdir -p pkg/imports/crds/$(product)/applicationlayer.projectcalico.org/
 	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
@@ -662,6 +664,11 @@ define copy_k8s_policy_crds
     $(eval product := $(1))
 	@mv pkg/imports/crds/$(product)/v1.crd.projectcalico.org/policy.networking.k8s.io_* pkg/imports/crds/$(product)/policy.networking.k8s.io/ 2>/dev/null; true
 	@echo "Moved $(product) K8s policy CRDs to dedicated directory"
+endef
+define copy_applicationlayer_crds
+    $(eval product := $(1))
+	@mv pkg/imports/crds/$(product)/v3.projectcalico.org/applicationlayer.projectcalico.org_* pkg/imports/crds/$(product)/applicationlayer.projectcalico.org/ 2>/dev/null; true
+	@echo "Moved $(product) ApplicationLayer CRDs to dedicated directory"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
@@ -713,6 +720,7 @@ update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_k8s_policy_crds,"enterprise")
+	$(call copy_applicationlayer_crds,"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 

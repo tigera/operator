@@ -2645,10 +2645,11 @@ var _ = Describe("Windows rendering tests", func() {
 
 			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-			// At runtime, the operator will also add some standard labels to the
-			// daemonset such as "k8s-app=calico-node". But the calico-node daemonset object
-			// produced by the render will have no labels so we expect just the one
-			// provided.
+			// At runtime, the operator's setStandardSelectorAndLabels helper
+			// adds standard labels such as "k8s-app=calico-node-windows" and
+			// the host-networked marker. The daemonset object produced by the
+			// render itself only carries the override-supplied template-level
+			// label; the rest are layered on during apply.
 			Expect(ds.Spec.Template.Labels).To(HaveLen(1))
 			Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
@@ -2728,9 +2729,9 @@ var _ = Describe("Windows rendering tests", func() {
 // The unused argument is kept temporarily so existing call sites compile while the OSS/Enterprise distinction
 // is being phased out.
 func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, _ bool) {
-	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "node", "health", "--felix-live"}
-	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "node", "health", "--felix-ready"}
-	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "component", "node", "shutdown"}
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}
 
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

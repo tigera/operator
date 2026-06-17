@@ -994,7 +994,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs: []string{"list"},
 			},
 			{
-				// ui-apis needs broad read access to UISettings and UISettingsGroups to serve
+				// ui-apis needs read access to UISettings and UISettingsGroups to serve
 				// requests on behalf of users. It performs SubjectAccessReviews to enforce
 				// per-group RBAC before returning results.
 				APIGroups: []string{"projectcalico.org"},
@@ -1004,6 +1004,24 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"uisettingsgroups/data",
 				},
 				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// Delete is granted on the leaf UISettings resource (the ui-apis DELETE
+				// handler issues this call with its own SA token after the cloud security
+				// fix moved writes off user impersonation). The aggregated apiserver
+				// gates leaf writes on the uisettingsgroups/data subresource RBAC, so
+				// delete is granted there too. The bare uisettingsgroups resource is
+				// intentionally omitted — ui-apis never deletes groups themselves.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettings", "uisettingsgroups/data"},
+				Verbs:     []string{"delete"},
+			},
+			{
+				// ClusterInformation read: surfaces the management-cluster version in the UI.
+				// Served by the ui-apis ClusterInformation handler using its own SA token.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -1027,11 +1045,14 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"list"},
 			},
-			// Allow Enterprise Custom Dashboards to access managed clusters
+			// Allow Enterprise Custom Dashboards to access managed clusters. Create/delete
+			// were added when the ui-apis ManagedCluster handler took over CRUD with its
+			// own SA token (replacing the impersonated /apis/.../managedclusters proxy).
+			// Update is granted separately via managedClustersUpdateRBAC().
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},

@@ -65,6 +65,11 @@ const (
 	ComponentNameTypha = "typha"
 	ComponentNameNode  = "node"
 
+	// ComponentNameCNIPlugins keys the upstream CNI plugins image. The node
+	// component renders the cni-plugins init container, so the image resolves
+	// through its own override key.
+	ComponentNameCNIPlugins = "cni-plugins"
+
 	// ComponentNameWindows keys the windows daemonset modifier. The two windows
 	// images resolve through their own override keys, since one component renders
 	// both.

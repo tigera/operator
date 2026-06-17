@@ -121,6 +121,7 @@ spec:
                     required:
                       - name
                     type: object
+                  maxItems: 64
                   type: array
               type: object
             status:

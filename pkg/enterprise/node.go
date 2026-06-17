@@ -53,6 +53,14 @@ func registerNode() {
 		},
 		Modify: modifyNode,
 	})
+
+	// The node component renders the cni-plugins init container; its image
+	// resolves through its own override key.
+	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameCNIPlugins, extensions.Extension{
+		Image: func(in *operatorv1.InstallationSpec) components.Component {
+			return components.ComponentTigeraCNIPlugins
+		},
+	})
 }
 
 // modifyNode layers Calico Enterprise behavior onto the rendered calico/node

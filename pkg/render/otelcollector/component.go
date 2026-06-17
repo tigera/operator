@@ -259,9 +259,9 @@ processors:
     log_statements:
       - context: log
         statements:
-          - set(resource.attributes["service.name"], "audit.tsee") where body["auditID"] != nil and body["objectRef"] != nil
-          - set(resource.attributes["service.name"], "dns") where body["qname"] != nil
-          - set(resource.attributes["service.name"], "flows") where body["bytes_in"] != nil
+          - set(resource.attributes["service.name"], "audit") where IsMap(body) and body["auditID"] != nil
+          - set(resource.attributes["service.name"], "dns") where IsMap(body) and body["qname"] != nil
+          - set(resource.attributes["service.name"], "flows") where IsMap(body) and body["bytes_in"] != nil
           - set(resource.attributes["service.name"], "unknown") where resource.attributes["service.name"] == nil or resource.attributes["service.name"] == "unknown_service"
 {{- end}}
 

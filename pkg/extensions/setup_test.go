@@ -25,11 +25,14 @@ import (
 )
 
 var _ = Describe("variant setup", func() {
-	AfterEach(func() { extensions.ResetForTest() })
+	var s *extensions.Set
+	BeforeEach(func() {
+		s = extensions.NewSet()
+	})
 
 	It("returns the base render context when the variant has no setup", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, err := extensions.BuildContext(extensions.Inputs{
+		rc, err := s.BuildContext(extensions.Inputs{
 			Installation:  install,
 			ClusterDomain: "cluster.local",
 		})
@@ -40,15 +43,15 @@ var _ = Describe("variant setup", func() {
 	})
 
 	It("uses the setup registered for the installation variant", func() {
-		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
-		rc, err := extensions.BuildContext(enterpriseInputs())
+		s.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
+		rc, err := s.BuildContext(enterpriseInputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores a setup registered for a different variant", func() {
-		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
-		rc, err := extensions.BuildContext(extensions.Inputs{
+		s.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
+		rc, err := s.BuildContext(extensions.Inputs{
 			Installation:  &operatorv1.InstallationSpec{Variant: operatorv1.Calico},
 			ClusterDomain: "real",
 		})
@@ -57,17 +60,16 @@ var _ = Describe("variant setup", func() {
 	})
 
 	It("surfaces the setup error", func() {
-		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(errors.New("boom")))
-		_, err := extensions.BuildContext(enterpriseInputs())
+		s.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(errors.New("boom")))
+		_, err := s.BuildContext(enterpriseInputs())
 		Expect(err).To(MatchError("boom"))
 	})
 
-	It("restores the base context on reset", func() {
-		extensions.RegisterSetup(operatorv1.CalicoEnterprise, fakeSetup(nil))
-		extensions.ResetForTest()
+	It("returns the base context for a nil Set", func() {
+		var nilSet *extensions.Set
 		in := enterpriseInputs()
 		in.ClusterDomain = "real"
-		rc, err := extensions.BuildContext(in)
+		rc, err := nilSet.BuildContext(in)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})

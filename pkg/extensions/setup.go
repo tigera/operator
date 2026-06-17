@@ -64,22 +64,14 @@ func BaseRenderContext(in Inputs) RenderContext {
 	}
 }
 
-var setups = map[operatorv1.ProductVariant]Setup{}
-
-// RegisterSetup installs s as the setup for the given variant. Registration
-// replaces any prior setup, so it is safe to call more than once. Variants
-// without a registered setup get the base render context.
-func RegisterSetup(variant operatorv1.ProductVariant, s Setup) {
-	setups[variant] = s
-}
-
 // BuildContext runs the setup registered for the installation variant and
 // returns its RenderContext, or the base render context when the variant has no
-// setup.
-func BuildContext(in Inputs) (RenderContext, error) {
-	if in.Installation != nil {
-		if s, ok := setups[in.Installation.Variant]; ok {
-			return s(in)
+// setup. Safe to call on a nil Set, which always returns the base context - the
+// core operator registers no setups.
+func (s *Set) BuildContext(in Inputs) (RenderContext, error) {
+	if s != nil && in.Installation != nil {
+		if setup, ok := s.setups[in.Installation.Variant]; ok {
+			return setup(in)
 		}
 	}
 	return BaseRenderContext(in), nil

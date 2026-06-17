@@ -28,29 +28,24 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("node enterprise image override", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() { extensions.ResetForTest() })
 
 	It("selects the enterprise node image for the enterprise variant", func() {
 		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
-		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
+		Expect(ext.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 
 	It("leaves the default in place for the Calico variant", func() {
 		calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
+		Expect(ext.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
 	})
 })
 
 var _ = Describe("node enterprise modifier", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() { extensions.ResetForTest() })
 
 	// newObjs returns the subset of rendered node objects the modifier touches.
 	newObjs := func() []client.Object {
@@ -86,7 +81,7 @@ var _ = Describe("node enterprise modifier", func() {
 	}
 
 	It("adds the enterprise cluster role rules", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
 
 		nodeRole, ok := extensions.FindObject[*rbacv1.ClusterRole](out, render.CalicoNodeObjectName)
 		Expect(ok).To(BeTrue())
@@ -98,7 +93,7 @@ var _ = Describe("node enterprise modifier", func() {
 	})
 
 	It("adds the enterprise felix env to the node container", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
 		ds, _ := extensions.FindObject[*appsv1.DaemonSet](out, common.NodeDaemonSetName)
 		c := nodeContainer(ds)
 
@@ -115,13 +110,13 @@ var _ = Describe("node enterprise modifier", func() {
 		ctx := entCtx()
 		ctx.FelixConfiguration = &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &reporter}}
 
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
 		ds, _ := extensions.FindObject[*appsv1.DaemonSet](out, common.NodeDaemonSetName)
 		Expect(nodeContainer(ds).Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: "7081"}))
 	})
 
 	It("appends the BGP metrics readiness check when the bird check is present", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
 		ds, _ := extensions.FindObject[*appsv1.DaemonSet](out, common.NodeDaemonSetName)
 		Expect(nodeContainer(ds).ReadinessProbe.Exec.Command).To(ContainElement("--bgp-metrics-ready"))
 	})
@@ -131,7 +126,7 @@ var _ = Describe("node enterprise modifier", func() {
 		ds := objs[2].(*appsv1.DaemonSet)
 		ds.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command = []string{"/bin/calico-node", "--felix-ready"}
 
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, entCtx(), objs, nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, entCtx(), objs, nil)
 		got, _ := extensions.FindObject[*appsv1.DaemonSet](out, common.NodeDaemonSetName)
 		Expect(nodeContainer(got).ReadinessProbe.Exec.Command).NotTo(ContainElement("--bgp-metrics-ready"))
 	})
@@ -141,7 +136,7 @@ var _ = Describe("node enterprise modifier", func() {
 		ctx := entCtx()
 		ctx.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &mode}
 
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
 		ds, _ := extensions.FindObject[*appsv1.DaemonSet](out, common.NodeDaemonSetName)
 
 		want := corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: mode.Value()}
@@ -150,7 +145,7 @@ var _ = Describe("node enterprise modifier", func() {
 	})
 
 	It("appends the node metrics service", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, entCtx(), newObjs(), nil)
 		svc, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Spec.Ports).To(HaveLen(2))
@@ -169,7 +164,7 @@ var _ = Describe("node enterprise modifier", func() {
 			PrometheusMetricsEnabled: &enabled,
 		}}
 
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
 		svc, _ := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(svc.Spec.Ports).To(HaveLen(3))
 		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(7081)))
@@ -179,7 +174,7 @@ var _ = Describe("node enterprise modifier", func() {
 
 	It("is a no-op for the Calico variant", func() {
 		ctx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, ctx, newObjs(), nil)
 
 		_, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeFalse())
@@ -188,7 +183,7 @@ var _ = Describe("node enterprise modifier", func() {
 	})
 
 	It("does not panic on a zero RenderContext", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameNode, extensions.RenderContext{}, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameNode, extensions.RenderContext{}, newObjs(), nil)
 		_, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeFalse())
 	})

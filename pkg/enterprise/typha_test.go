@@ -24,16 +24,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("typha enterprise modifier", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() {
-		extensions.ResetForTest()
-	})
 
 	multiMode := operatorv1.MultiInterfaceModeMultus
 
@@ -54,7 +49,7 @@ var _ = Describe("typha enterprise modifier", func() {
 			Variant:       operatorv1.CalicoEnterprise,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
-		out, _ := extensions.ApplyModifiers(render.ComponentNameTypha, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameTypha, ctx, newObjs(), nil)
 
 		role := out[0].(*rbacv1.ClusterRole)
 		Expect(role.Rules).To(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
@@ -74,14 +69,14 @@ var _ = Describe("typha enterprise modifier", func() {
 			Variant:       operatorv1.Calico,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
-		out, _ := extensions.ApplyModifiers(render.ComponentNameTypha, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameTypha, ctx, newObjs(), nil)
 		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
 		dep := out[1].(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(BeEmpty())
 	})
 
 	It("does not panic on a zero Context (nil Installation)", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameTypha, extensions.RenderContext{}, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameTypha, extensions.RenderContext{}, newObjs(), nil)
 		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
 	})
 })

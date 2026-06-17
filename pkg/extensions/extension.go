@@ -18,7 +18,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/imageoverride"
 )
 
 // Extension is everything a variant layers onto one render component. Every
@@ -48,30 +47,16 @@ type modifierKey struct {
 	component string
 }
 
-var modifiers = map[modifierKey]Modifier{}
-
-// Register installs e as the extension for the named component under the given
-// variant. A (variant, component) pair has at most one extension; registration
-// replaces any prior one, so it is idempotent and safe to call more than once.
-// The image override lives in the imageoverride leaf (so the render package can
-// resolve it without an import cycle); the modifier lives here.
-func Register(variant operatorv1.ProductVariant, component string, e Extension) {
-	if e.Image != nil {
-		imageoverride.Register(variant, component, e.Image)
-	}
-	if e.Modify != nil {
-		modifiers[modifierKey{variant, component}] = e.Modify
-	}
-}
-
 // ApplyModifiers runs the modifier registered for the named component and the
 // installation's variant over the create and delete lists, returning them
-// unchanged when none is registered (or when no installation is set).
-func ApplyModifiers(component string, ctx RenderContext, create, delete []client.Object) ([]client.Object, []client.Object) {
-	if ctx.Installation == nil {
+// unchanged when none is registered (or when no installation is set). Safe to
+// call on a nil Set, which is a no-op - the core operator registers no
+// modifiers.
+func (s *Set) ApplyModifiers(component string, ctx RenderContext, create, delete []client.Object) ([]client.Object, []client.Object) {
+	if s == nil || ctx.Installation == nil {
 		return create, delete
 	}
-	if fn, ok := modifiers[modifierKey{ctx.Installation.Variant, component}]; ok {
+	if fn, ok := s.modifiers[modifierKey{ctx.Installation.Variant, component}]; ok {
 		create, delete = fn(ctx, create, delete)
 	}
 	return create, delete
@@ -86,12 +71,4 @@ func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {
 		}
 	}
 	return zero, false
-}
-
-// ResetForTest clears every registry: modifiers, image overrides, and variant
-// setups. Test-only.
-func ResetForTest() {
-	modifiers = map[modifierKey]Modifier{}
-	setups = map[operatorv1.ProductVariant]Setup{}
-	imageoverride.ResetForTest()
 }

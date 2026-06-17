@@ -522,6 +522,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
 		APIDiscovery:        apiDiscovery,
+		// Hand the operator the in-repo Calico Enterprise extensions (modifiers,
+		// image overrides, and the installation setup). After the monorepo split
+		// the core operator's main passes none and calico-private's main passes
+		// its own.
+		Extensions: enterprise.New(),
 	}
 
 	// Before we start any controllers, make sure our options are valid.
@@ -529,11 +534,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		setupLog.Error(err, "Invalid configuration")
 		os.Exit(1)
 	}
-
-	// Wire the in-repo Calico Enterprise extensions (the render context factory,
-	// modifiers, and image overrides) into the operator registries. After the
-	// monorepo split this call moves to calico-private's main.
-	enterprise.Register()
 
 	// Register a field-selector index on Pod spec.nodeName. The podiprecovery
 	// controller uses this to list operator-managed pods on a specific node

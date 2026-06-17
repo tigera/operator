@@ -13,8 +13,8 @@
 // limitations under the License.
 
 // Package imageoverride is a leaf package (no render/operator dependencies)
-// that holds the image override registry. Both pkg/operator and pkg/render
-// import it to avoid the render→operator→render import cycle.
+// that holds the image override table. The render package imports it to resolve
+// a component's image without depending on pkg/extensions, which would cycle.
 package imageoverride
 
 import (
@@ -30,27 +30,33 @@ type overrideKey struct {
 	key     string
 }
 
-var registry = map[overrideKey]Override{}
+// Overrides maps a component (keyed by variant) to the image it should resolve
+// to, letting a variant swap a component's image without the render package
+// branching on variant. The render component holds one and resolves through it.
+type Overrides struct {
+	m map[overrideKey]Override
+}
+
+// New returns an empty Overrides.
+func New() *Overrides {
+	return &Overrides{m: map[overrideKey]Override{}}
+}
 
 // Register stores fn under key for the given variant. The key is the render
 // component's image identifier (e.g. "node").
-func Register(variant operatorv1.ProductVariant, key string, fn Override) {
-	registry[overrideKey{variant, key}] = fn
+func (o *Overrides) Register(variant operatorv1.ProductVariant, key string, fn Override) {
+	o.m[overrideKey{variant, key}] = fn
 }
 
 // Resolve returns the override registered for key under the installation's
-// variant, otherwise def.
-func Resolve(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
-	if in == nil {
+// variant, otherwise def. It is safe to call on a nil *Overrides (the core
+// operator hands render no overrides), which always returns def.
+func (o *Overrides) Resolve(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
+	if o == nil || in == nil {
 		return def
 	}
-	if fn, ok := registry[overrideKey{in.Variant, key}]; ok {
+	if fn, ok := o.m[overrideKey{in.Variant, key}]; ok {
 		return fn(in)
 	}
 	return def
-}
-
-// ResetForTest clears the registry. Test-only.
-func ResetForTest() {
-	registry = map[overrideKey]Override{}
 }

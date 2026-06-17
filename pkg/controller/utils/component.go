@@ -84,6 +84,13 @@ func WithRenderContext(ctx extensions.RenderContext) ComponentHandlerOption {
 	return func(c *componentHandler) { c.renderCtx = ctx }
 }
 
+// WithExtensions supplies the operator's extension Set, whose modifiers the
+// handler applies to extensible components. A handler that renders an
+// extensible component must be given the Set; one that doesn't can omit it.
+func WithExtensions(e *extensions.Set) ComponentHandlerOption {
+	return func(c *componentHandler) { c.extensions = e }
+}
+
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
 func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...ComponentHandlerOption) ComponentHandler {
@@ -108,6 +115,7 @@ type componentHandler struct {
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
 	renderCtx    extensions.RenderContext
+	extensions   *extensions.Set
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -469,11 +477,18 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 
 	objsToCreate, objsToDelete := component.Objects()
 	if ext, ok := component.(render.Extensible); ok {
-		rc := c.renderCtx
-		if p, ok := component.(render.ExtensionContextProvider); ok {
-			rc.Component = p.ExtensionContext()
+		if c.extensions == nil {
+			// The component can be extended but this handler was built without an
+			// extension Set, so any registered modifier silently won't run. That is
+			// a wiring bug in the controller, not a normal state.
+			c.log.Info("BUG: extensible component rendered by a handler with no extension Set; modifiers will not be applied", "component", ext.ModifierKey())
+		} else {
+			rc := c.renderCtx
+			if p, ok := component.(render.ExtensionContextProvider); ok {
+				rc.Component = p.ExtensionContext()
+			}
+			objsToCreate, objsToDelete = c.extensions.ApplyModifiers(ext.ModifierKey(), rc, objsToCreate, objsToDelete)
 		}
-		objsToCreate, objsToDelete = extensions.ApplyModifiers(ext.ModifierKey(), rc, objsToCreate, objsToDelete)
 	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it

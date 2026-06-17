@@ -140,6 +140,7 @@ var _ = Describe("Node rendering tests", func() {
 					ClusterDomain:   defaultClusterDomain,
 					FelixHealthPort: 9099,
 					IPPools:         defaultInstance.CalicoNetwork.IPPools,
+					ImageOverrides:  ext.Images(),
 				}
 			})
 

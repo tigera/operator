@@ -38,11 +38,11 @@ import (
 	operatorurl "github.com/tigera/operator/pkg/url"
 )
 
-func registerGuardian() {
-	extensions.Register(operatorv1.CalicoEnterprise, render.GuardianName, extensions.Extension{
+func registerGuardian(s *extensions.Set) {
+	s.Register(operatorv1.CalicoEnterprise, render.GuardianName, extensions.Extension{
 		Modify: modifyGuardian,
 	})
-	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameGuardianPolicy, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameGuardianPolicy, extensions.Extension{
 		Modify: modifyGuardianPolicy,
 	})
 }

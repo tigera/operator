@@ -73,7 +73,7 @@ func apiServerObjects(c render.Component) ([]client.Object, []client.Object) {
 		rc.Installation = ec.Config.Installation
 		rc.Component = ec
 	}
-	return extensions.ApplyModifiers(render.ComponentNameAPIServer, rc, create, del)
+	return ext.ApplyModifiers(render.ComponentNameAPIServer, rc, create, del)
 }
 
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {

@@ -355,6 +355,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
 		apiDiscovery:         opts.APIDiscovery,
+		opts:                 opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -414,6 +415,7 @@ type ReconcileInstallation struct {
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
 	apiDiscovery                  *discovery.APIDiscovery
+	opts                          options.ControllerOptions
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
@@ -1226,7 +1228,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	renderCtx, err := extensions.BuildContext(extensions.Inputs{
+	renderCtx, err := r.opts.Extensions.BuildContext(extensions.Inputs{
 		Ctx:                ctx,
 		Client:             r.client,
 		Installation:       &instance.Spec,
@@ -1283,6 +1285,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.scheme,
 		instance,
 		utils.WithRenderContext(renderCtx),
+		utils.WithExtensions(r.opts.Extensions),
 	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
@@ -1576,6 +1579,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
 		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
 		V3CRDs:                r.v3CRDs,
+		ImageOverrides:        r.opts.Extensions.Images(),
 	}
 
 	if bgpConfiguration.Spec.BindMode != nil {

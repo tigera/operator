@@ -30,33 +30,28 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("windows enterprise image override", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() { extensions.ResetForTest() })
 
 	ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 	calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
 
 	It("selects the enterprise windows images for the enterprise variant", func() {
-		Expect(extensions.ResolveImage(render.ComponentNameWindowsNodeImg, components.ComponentCalicoNodeWindows, ent)).To(Equal(components.ComponentTigeraNodeWindows))
-		Expect(extensions.ResolveImage(render.ComponentNameWindowsCNIImg, components.ComponentCalicoCNIWindows, ent)).To(Equal(components.ComponentTigeraCNIWindows))
+		Expect(ext.ResolveImage(render.ComponentNameWindowsNodeImg, components.ComponentCalicoNodeWindows, ent)).To(Equal(components.ComponentTigeraNodeWindows))
+		Expect(ext.ResolveImage(render.ComponentNameWindowsCNIImg, components.ComponentCalicoCNIWindows, ent)).To(Equal(components.ComponentTigeraCNIWindows))
 	})
 
 	It("leaves the defaults in place for the Calico variant", func() {
-		Expect(extensions.ResolveImage(render.ComponentNameWindowsNodeImg, components.ComponentCalicoNodeWindows, calico)).To(Equal(components.ComponentCalicoNodeWindows))
-		Expect(extensions.ResolveImage(render.ComponentNameWindowsCNIImg, components.ComponentCalicoCNIWindows, calico)).To(Equal(components.ComponentCalicoCNIWindows))
+		Expect(ext.ResolveImage(render.ComponentNameWindowsNodeImg, components.ComponentCalicoNodeWindows, calico)).To(Equal(components.ComponentCalicoNodeWindows))
+		Expect(ext.ResolveImage(render.ComponentNameWindowsCNIImg, components.ComponentCalicoCNIWindows, calico)).To(Equal(components.ComponentCalicoCNIWindows))
 	})
 })
 
 var _ = Describe("windows enterprise modifier", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() { extensions.ResetForTest() })
 
 	// newObjs returns a windows daemonset with the node containers and the OSS
 	// cni-log-dir mount the modifier swaps out.
@@ -102,7 +97,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	}
 
 	It("appends the node-metrics service", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, nil, nil), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, nil, nil), newObjs(), nil)
 		svc, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
@@ -110,7 +105,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("swaps the cni log mount for the calico log volume and adds enterprise env", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, nil, nil), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, nil, nil), newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(HaveField("Name", "var-log-calico")))
@@ -127,7 +122,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("sets the trusted DNS server on openshift", func() {
-		out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderOpenShift, nil, nil), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderOpenShift, nil, nil), newObjs(), nil)
 		Expect(container(ds(out), "node").Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"}))
 	})
 
@@ -141,7 +136,7 @@ var _ = Describe("windows enterprise modifier", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bundle := cm.CreateTrustedBundle()
 
-		out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, tls, bundle), newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, tls, bundle), newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(tls.Volume()))
@@ -152,7 +147,7 @@ var _ = Describe("windows enterprise modifier", func() {
 
 	It("does nothing for the Calico variant", func() {
 		ctx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
-		out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, ctx, newObjs(), nil)
+		out, _ := ext.ApplyModifiers(render.ComponentNameWindows, ctx, newObjs(), nil)
 		_, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeFalse())
 		Expect(ds(out).Spec.Template.Spec.Volumes).To(BeEmpty())

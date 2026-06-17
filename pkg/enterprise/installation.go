@@ -27,8 +27,8 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-func registerInstallation() {
-	extensions.RegisterSetup(operatorv1.CalicoEnterprise, setup)
+func registerInstallation(s *extensions.Set) {
+	s.RegisterSetup(operatorv1.CalicoEnterprise, setup)
 }
 
 // setup is the Calico Enterprise setup phase. It builds the base render context

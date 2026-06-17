@@ -57,6 +57,11 @@ type WindowsConfiguration struct {
 	PrometheusServerTLS     certificatemanagement.KeyPairInterface
 	NodeReporterMetricsPort int
 	VXLANVNI                int
+
+	// ImageOverrides lets a variant swap the windows node and CNI images. The
+	// controller wires in the operator's image overrides; nil resolves to the
+	// core images.
+	ImageOverrides *imageoverride.Overrides
 }
 
 type windowsComponent struct {
@@ -77,8 +82,8 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	cniImage := imageoverride.Resolve(ComponentNameWindowsCNIImg, components.ComponentCalicoCNIWindows, c.cfg.Installation)
-	nodeImage := imageoverride.Resolve(ComponentNameWindowsNodeImg, components.ComponentCalicoNodeWindows, c.cfg.Installation)
+	cniImage := c.cfg.ImageOverrides.Resolve(ComponentNameWindowsCNIImg, components.ComponentCalicoCNIWindows, c.cfg.Installation)
+	nodeImage := c.cfg.ImageOverrides.Resolve(ComponentNameWindowsNodeImg, components.ComponentCalicoNodeWindows, c.cfg.Installation)
 	c.cniImage = appendIfErr(components.GetReference(cniImage, reg, path, prefix, is))
 	c.nodeImage = appendIfErr(components.GetReference(nodeImage, reg, path, prefix, is))
 

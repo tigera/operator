@@ -28,13 +28,10 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
 var _ = Describe("installation setup", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() { extensions.ResetForTest() })
 
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
@@ -42,18 +39,18 @@ var _ = Describe("installation setup", func() {
 		in.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		_, err := extensions.BuildContext(in)
+		_, err := ext.BuildContext(in)
 		Expect(err).To(HaveOccurred())
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		rc, err := extensions.BuildContext(newInputs(operatorv1.CalicoEnterprise))
+		rc, err := ext.BuildContext(newInputs(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).NotTo(BeNil())
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		rc, err := extensions.BuildContext(newInputs(operatorv1.Calico))
+		rc, err := ext.BuildContext(newInputs(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})

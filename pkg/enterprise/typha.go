@@ -25,8 +25,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-func registerTypha() {
-	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameTypha, extensions.Extension{
+func registerTypha(s *extensions.Set) {
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameTypha, extensions.Extension{
 		Modify: modifyTypha,
 	})
 }

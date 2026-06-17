@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -119,6 +120,7 @@ var _ = Describe("windows-controller installation tests", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileWindows{
+				opts:                 options.ControllerOptions{Extensions: testExtensions},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
@@ -609,6 +611,7 @@ var _ = Describe("windows-controller installation tests", func() {
 
 					// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 					r = ReconcileWindows{
+						opts:                 options.ControllerOptions{Extensions: testExtensions},
 						config:               nil, // there is no fake for config
 						client:               c,
 						scheme:               scheme,

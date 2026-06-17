@@ -43,9 +43,6 @@ import (
 // registered modifier must match the real render output by name. If render ever
 // renames the typha ClusterRole, the modifier silently no-ops and this fails.
 var _ = Describe("componentHandler enterprise modifier integration", func() {
-	BeforeEach(func() { enterprise.Register() })
-	AfterEach(func() { extensions.ResetForTest() })
-
 	It("applies the enterprise typha modifier to real render output", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
@@ -77,7 +74,7 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 		})
 
 		renderCtx := extensions.RenderContext{Installation: instance}
-		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderContext(renderCtx))
+		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderContext(renderCtx), utils.WithExtensions(enterprise.New()))
 		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
 
 		role := &rbacv1.ClusterRole{}

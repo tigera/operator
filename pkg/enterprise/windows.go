@@ -36,14 +36,14 @@ import (
 // felix env and node volume mounts, so they receive the same enterprise layering.
 var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd": true}
 
-func registerWindows() {
-	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsNodeImg, extensions.Extension{
+func registerWindows(s *extensions.Set) {
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsNodeImg, extensions.Extension{
 		Image: func(*operatorv1.InstallationSpec) components.Component { return components.ComponentTigeraNodeWindows },
 	})
-	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsCNIImg, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsCNIImg, extensions.Extension{
 		Image: func(*operatorv1.InstallationSpec) components.Component { return components.ComponentTigeraCNIWindows },
 	})
-	extensions.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindows, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindows, extensions.Extension{
 		Modify: modifyWindows,
 	})
 }

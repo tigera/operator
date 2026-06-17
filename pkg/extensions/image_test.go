@@ -24,29 +24,23 @@ import (
 )
 
 var _ = Describe("image overrides", func() {
-	AfterEach(func() {
-		extensions.ResetForTest()
+	var s *extensions.Set
+	BeforeEach(func() {
+		s = extensions.NewSet()
+		s.Register(operatorv1.CalicoEnterprise, "node", extensions.Extension{
+			Image: func(in *operatorv1.InstallationSpec) components.Component {
+				return components.ComponentTigeraNode
+			},
+		})
 	})
 
 	It("uses the override registered for the installation variant", func() {
-		extensions.Register(operatorv1.CalicoEnterprise, "node", extensions.Extension{
-			Image: func(in *operatorv1.InstallationSpec) components.Component {
-				return components.ComponentTigeraNode
-			},
-		})
-
 		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
-		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
+		Expect(s.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 
 	It("falls back to the default for a variant with no override", func() {
-		extensions.Register(operatorv1.CalicoEnterprise, "node", extensions.Extension{
-			Image: func(in *operatorv1.InstallationSpec) components.Component {
-				return components.ComponentTigeraNode
-			},
-		})
-
 		calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		Expect(extensions.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
+		Expect(s.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
 	})
 })

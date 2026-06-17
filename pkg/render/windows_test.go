@@ -54,7 +54,7 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	if p, ok := comp.(render.ExtensionContextProvider); ok {
 		rc.Component = p.ExtensionContext()
 	}
-	out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, rc, objs, nil)
+	out, _ := ext.ApplyModifiers(render.ComponentNameWindows, rc, objs, nil)
 	return out
 }
 
@@ -124,12 +124,13 @@ var _ = Describe("Windows rendering tests", func() {
 
 		// Create a default configuration.
 		cfg = render.WindowsConfiguration{
-			K8sServiceEp:  k8sServiceEp,
-			K8sDNSServers: []string{"10.96.0.10"},
-			Installation:  defaultInstance,
-			ClusterDomain: defaultClusterDomain,
-			TLS:           typhaNodeTLS,
-			VXLANVNI:      4096,
+			K8sServiceEp:   k8sServiceEp,
+			K8sDNSServers:  []string{"10.96.0.10"},
+			Installation:   defaultInstance,
+			ClusterDomain:  defaultClusterDomain,
+			TLS:            typhaNodeTLS,
+			VXLANVNI:       4096,
+			ImageOverrides: ext.Images(),
 		}
 	})
 

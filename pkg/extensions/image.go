@@ -15,8 +15,6 @@
 package extensions
 
 import (
-	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/imageoverride"
 )
 
@@ -24,10 +22,3 @@ import (
 // the Image field of an Extension. An override runs only for the variant it was
 // registered under, so it need not re-check the variant.
 type ImageOverride = imageoverride.Override
-
-// ResolveImage returns the override registered for key if it applies to in,
-// otherwise def. The render package resolves images through the imageoverride
-// leaf directly; this is the same lookup for callers already inside extensions.
-func ResolveImage(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
-	return imageoverride.Resolve(key, def, in)
-}

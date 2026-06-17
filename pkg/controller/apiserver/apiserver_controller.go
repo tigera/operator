@@ -481,6 +481,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.scheme,
 		instance,
 		utils.WithRenderContext(extensions.RenderContext{Installation: installationSpec}),
+		utils.WithExtensions(r.opts.Extensions),
 	)
 
 	// Render the desired objects from the CRD and create or update them.

@@ -19,7 +19,14 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/tigera/operator/pkg/enterprise"
+	"github.com/tigera/operator/pkg/extensions"
 )
+
+// ext is the enterprise extension Set under test, shared across the suite. It is
+// immutable once built and the specs only read it, so a single instance is safe.
+var ext *extensions.Set = enterprise.New()
 
 func TestEnterprise(t *testing.T) {
 	RegisterFailHandler(Fail)

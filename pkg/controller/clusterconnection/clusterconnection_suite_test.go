@@ -22,17 +22,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-
-	"github.com/tigera/operator/pkg/enterprise"
 )
 
 func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter)))
 	gomega.RegisterFailHandler(ginkgo.Fail)
-
-	// Wire the enterprise extensions so the guardian modifier runs the way it
-	// does in the operator binary, which is what these controller tests exercise.
-	enterprise.Register()
 
 	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
 	reporterConfig.JUnitReport = "../../../report/ut/clusterconnection_controller_suite.xml"

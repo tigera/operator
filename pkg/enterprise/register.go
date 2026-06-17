@@ -14,14 +14,19 @@
 
 package enterprise
 
-// Register wires all in-repo enterprise modifiers and controller extensions
-// into the operator registries. Called once at process startup. After the
-// monorepo split this is what calico-private's main will do instead.
-func Register() {
-	registerTypha()
-	registerNode()
-	registerWindows()
-	registerGuardian()
-	registerInstallation()
-	registerAPIServer()
+import "github.com/tigera/operator/pkg/extensions"
+
+// New builds the extension Set for the in-repo Calico Enterprise variant: every
+// component modifier, image override, and the installation setup. The operator
+// is handed this Set at startup (the core operator is handed none). After the
+// monorepo split this is what calico-private's main will construct instead.
+func New() *extensions.Set {
+	s := extensions.NewSet()
+	registerTypha(s)
+	registerNode(s)
+	registerWindows(s)
+	registerGuardian(s)
+	registerInstallation(s)
+	registerAPIServer(s)
+	return s
 }

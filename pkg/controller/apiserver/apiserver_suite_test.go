@@ -24,7 +24,16 @@ import (
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/tigera/operator/pkg/enterprise"
+	"github.com/tigera/operator/pkg/extensions"
 )
+
+// testExtensions is the enterprise extension Set the API server controller tests
+// reconcile with, so the componentHandler applies the API server modifier (query
+// server, audit logging, Enterprise RBAC). Reconcilers built in these tests put
+// it on their options, mirroring how main wires it in production.
+var testExtensions *extensions.Set = enterprise.New()
 
 func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))

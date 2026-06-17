@@ -71,7 +71,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.3.2",
 		variant: enterpriseVariant,
 	}
 
@@ -176,7 +176,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version: "v0.31.1",
+		Version: "v0.32.1",
 		variant: enterpriseVariant,
 	}
 

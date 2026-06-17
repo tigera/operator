@@ -174,7 +174,6 @@ func newReconciler(
 		scheme:                schema,
 		provider:              p,
 		status:                statusMgr,
-		clusterDomain:         opts.ClusterDomain,
 		tierWatchReady:        tierWatchReady,
 		clusterInfoWatchReady: clusterInfoWatchReady,
 		opts:                  opts,
@@ -192,7 +191,6 @@ type ReconcileConnection struct {
 	scheme                     *runtime.Scheme
 	provider                   operatorv1.Provider
 	status                     status.StatusManager
-	clusterDomain              string
 	tierWatchReady             *utils.ReadyFlag
 	clusterInfoWatchReady      *utils.ReadyFlag
 	resolvedPodProxies         []*httpproxy.Config
@@ -286,7 +284,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 
-	certificateManager, err := certificatemanager.Create(r.cli, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.cli, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -310,7 +308,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	var guardianKeyPair certificatemanagement.KeyPairInterface
 	if !variant.IsEnterprise() {
-		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.clusterDomain)
+		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.opts.ClusterDomain)
 		guardianCertificateNames = append(guardianCertificateNames, "localhost", "127.0.0.1")
 		guardianKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, render.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
 		if err != nil {

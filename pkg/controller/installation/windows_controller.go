@@ -83,7 +83,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 		return fmt.Errorf("tigera-windows-controller failed to watch calico Tigerastatus: %w", err)
 	}
 
-	if ri.autoDetectedProvider.IsOpenShift() {
+	if ri.opts.DetectedProvider.IsOpenShift() {
 		// Watch for openshift network configuration as well. If we're running in OpenShift, we need to
 		// merge this configuration with our own and the write back the status object.
 		err = c.WatchObject(&configv1.Network{}, &handler.EnqueueRequestForObject{})
@@ -151,7 +151,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 	// Watch for changes to IPAMConfiguration.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
-	if ri.enterpriseCRDsExist {
+	if ri.opts.EnterpriseCRDExists {
 		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
 			if err = utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, ns); err != nil {
 				return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.NodePrometheusTLSServerSecret, ns, err)
@@ -177,10 +177,7 @@ type ReconcileWindows struct {
 	client               client.Client
 	scheme               *runtime.Scheme
 	watches              map[runtime.Object]struct{}
-	autoDetectedProvider operatorv1.Provider
 	status               status.StatusManager
-	enterpriseCRDsExist  bool
-	clusterDomain        string
 	ipamConfigWatchReady *utils.ReadyFlag
 	opts                 options.ControllerOptions
 }
@@ -194,10 +191,7 @@ func newWindowsReconciler(mgr manager.Manager, opts options.ControllerOptions) (
 		client:               mgr.GetClient(),
 		scheme:               mgr.GetScheme(),
 		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: opts.DetectedProvider,
 		status:               statusManager,
-		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		clusterDomain:        opts.ClusterDomain,
 		ipamConfigWatchReady: &utils.ReadyFlag{},
 		opts:                 opts,
 	}
@@ -291,7 +285,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace())
+	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.opts.ClusterDomain, common.OperatorNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -351,7 +345,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		// The key pair is created by the core controller, so if it isn't set, requeue to wait until it is
-		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
+		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error getting TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -360,7 +354,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	var component render.Component
 
-	kubeDNSServiceName := utils.GetDNSServiceName(r.autoDetectedProvider)
+	kubeDNSServiceName := utils.GetDNSServiceName(r.opts.DetectedProvider)
 	kubeDNSService := &corev1.Service{}
 	err = r.client.Get(ctx, kubeDNSServiceName, kubeDNSService)
 	if err != nil {
@@ -384,7 +378,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		K8sServiceEp:            k8sapi.Endpoint,
 		K8sDNSServers:           kubeDNSIPs,
 		Installation:            &instance.Spec,
-		ClusterDomain:           r.clusterDomain,
+		ClusterDomain:           r.opts.ClusterDomain,
 		TLS:                     typhaNodeTLS,
 		PrometheusServerTLS:     nodePrometheusTLS,
 		NodeReporterMetricsPort: nodeReporterMetricsPort,

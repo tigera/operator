@@ -43,7 +43,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
@@ -336,26 +335,17 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
 	r := &ReconcileInstallation{
-		config:               mgr.GetConfig(),
-		client:               mgr.GetClient(),
-		clientset:            opts.K8sClientset,
-		scheme:               mgr.GetScheme(),
-		shutdownContext:      opts.ShutdownContext,
-		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: opts.DetectedProvider,
-		status:               statusManager,
-		typhaAutoscaler:      typhaScaler,
-		namespaceMigration:   nm,
-		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		clusterDomain:        opts.ClusterDomain,
-		manageCRDs:           opts.ManageCRDs,
-		tierWatchReady:       &utils.ReadyFlag{},
-		migrationWatchReady:  &utils.ReadyFlag{},
-		newComponentHandler:  utils.NewComponentHandler,
-		v3CRDs:               opts.UseV3CRDs,
-		kubernetesVersion:    opts.KubernetesVersion,
-		apiDiscovery:         opts.APIDiscovery,
-		opts:                 opts,
+		config:              mgr.GetConfig(),
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		watches:             make(map[runtime.Object]struct{}),
+		status:              statusManager,
+		typhaAutoscaler:     typhaScaler,
+		namespaceMigration:  nm,
+		tierWatchReady:      &utils.ReadyFlag{},
+		migrationWatchReady: &utils.ReadyFlag{},
+		newComponentHandler: utils.NewComponentHandler,
+		opts:                opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -397,24 +387,15 @@ type ReconcileInstallation struct {
 	// that reads objects from the cache and writes to the apiserver
 	config                        *rest.Config
 	client                        client.Client
-	clientset                     *kubernetes.Clientset
 	scheme                        *runtime.Scheme
-	shutdownContext               context.Context
 	watches                       map[runtime.Object]struct{}
-	autoDetectedProvider          operatorv1.Provider
 	status                        status.StatusManager
 	typhaAutoscaler               *typhaAutoscaler
 	typhaAutoscalerNonClusterHost *typhaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
-	enterpriseCRDsExist           bool
 	migrationChecked              bool
-	clusterDomain                 string
-	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	migrationWatchReady           *utils.ReadyFlag
-	v3CRDs                        bool
-	kubernetesVersion             *common.VersionInfo
-	apiDiscovery                  *discovery.APIDiscovery
 	opts                          options.ControllerOptions
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
@@ -859,7 +840,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// update Installation with defaults
-	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider); err != nil {
+	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -1023,10 +1004,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
 	// If we are switching from this mode to one that enables enterprise, we need to restart the operator to enable the other controllers.
-	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
+	if !r.opts.EnterpriseCRDExists && instance.Spec.Variant.IsEnterprise() {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := discovery.RequiresTigeraSecure(r.clientset)
+		b, err := discovery.RequiresTigeraSecure(r.opts.K8sClientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
@@ -1052,7 +1033,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var logCollector *operatorv1.LogCollector
-	if r.enterpriseCRDsExist {
+	if r.opts.EnterpriseCRDExists {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
 			if err != nil {
@@ -1098,7 +1079,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.opts.ClusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1235,7 +1216,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixConfiguration: felixConfiguration,
 		CertificateManager: certificateManager,
 		TrustedBundle:      typhaNodeTLS.TrustedBundle,
-		ClusterDomain:      r.clusterDomain,
+		ClusterDomain:      r.opts.ClusterDomain,
 	})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
@@ -1256,7 +1237,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.client,
 			kubecontrollers.KubeControllerPrometheusTLSSecret,
 			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.clusterDomain))
+			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1370,7 +1351,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.client,
 			applicationlayer.WAFWebhookServerTLSSecretName,
 			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, r.clusterDomain))
+			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating WAF admission webhook TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1429,11 +1410,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
 				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-				go hepIndexInformer.Run(r.shutdownContext.Done())
+				go hepIndexInformer.Run(r.opts.ShutdownContext.Done())
 
-				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-				r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
+				r.typhaAutoscalerNonClusterHost.start(r.opts.ShutdownContext)
 			}
 		}
 	}
@@ -1445,7 +1426,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation:           &instance.Spec,
 		TLS:                    typhaNodeTLS,
 		MigrateNamespaces:      needsNamespaceMigration,
-		ClusterDomain:          r.clusterDomain,
+		ClusterDomain:          r.opts.ClusterDomain,
 		NonClusterHost:         nonclusterhost,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
@@ -1568,7 +1549,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		LogCollector:          logCollector,
 		BirdTemplates:         birdTemplates,
 		TLS:                   typhaNodeTLS,
-		ClusterDomain:         r.clusterDomain,
+		ClusterDomain:         r.opts.ClusterDomain,
 		DefaultDNSPolicy:      defaultDNSPolicy,
 		DefaultDNSConfig:      defaultDNSConfig,
 		GoldmaneIP:            goldmaneIP,
@@ -1578,7 +1559,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		CanRemoveCNIFinalizer: canRemoveCNI,
 		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
 		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
-		V3CRDs:                r.v3CRDs,
+		V3CRDs:                r.opts.UseV3CRDs,
 		ImageOverrides:        r.opts.Extensions.Images(),
 	}
 
@@ -1656,7 +1637,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation:                &instance.Spec,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
-		ClusterDomain:               r.clusterDomain,
+		ClusterDomain:               r.opts.ClusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		Terminating:                 installationMarkedForDeletion,
 		MetricsServerTLS:            kubeControllerTLS,
@@ -2314,10 +2295,10 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 }
 
 func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {
-	if !r.manageCRDs {
+	if !r.opts.ManageCRDs {
 		return nil
 	}
-	crdComponent := render.NewCreationPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
+	crdComponent := render.NewCreationPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.opts.UseV3CRDs)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
@@ -2329,19 +2310,19 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 }
 
 func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
-	if !r.manageCRDs || !r.v3CRDs {
+	if !r.opts.ManageCRDs || !r.opts.UseV3CRDs {
 		return nil
 	}
 
 	// MutatingAdmissionPolicy served version was discovered once at startup (v1 was promoted to GA
 	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37).
-	mapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
+	mapAPIVersion := r.opts.APIDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
 	if mapAPIVersion == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes cluster does not serve MutatingAdmissionPolicy (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.opts.UseV3CRDs, mapAPIVersion)
 	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
@@ -2352,20 +2333,20 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 }
 
 func (r *ReconcileInstallation) updateValidatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
-	if !r.manageCRDs || !r.v3CRDs {
+	if !r.opts.ManageCRDs || !r.opts.UseV3CRDs {
 		return nil
 	}
 
 	// ValidatingAdmissionPolicy reached GA (v1) well before MutatingAdmissionPolicy, so it has its own
 	// served version and is reconciled independently of whether the cluster serves MAPs. If the cluster
 	// doesn't serve it at all there's nothing to do, so skip rather than degrade.
-	vapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
+	vapAPIVersion := r.opts.APIDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
 	if vapAPIVersion == "" {
 		log.Info("Kubernetes cluster does not serve ValidatingAdmissionPolicy, skipping")
 		return nil
 	}
 
-	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, vapAPIVersion)
+	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.opts.UseV3CRDs, vapAPIVersion)
 	existingVAPs, existingVAPBs, err := admission.ListManagedValidating(ctx, r.client, vapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed ValidatingAdmissionPolicy resources", err, log)

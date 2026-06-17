@@ -76,12 +76,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -93,11 +93,11 @@ import (
 const (
 	techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
 
-	// The default port used by calico/node to report Calico Enterprise internal metrics.
-	// This is separate from the calico/node prometheus metrics port, which is user configurable.
+	// defaultNodeReporterPort is the default port calico/node uses to report Calico
+	// Enterprise internal metrics. The Linux node path derives this in the
+	// enterprise node modifier; this copy serves the Windows controller, which
+	// still carries its enterprise logic inline.
 	defaultNodeReporterPort = 9081
-
-	defaultFelixMetricsDefaultPort = 9091
 )
 
 const InstallationName string = "calico"
@@ -416,7 +416,7 @@ type ReconcileInstallation struct {
 	apiDiscovery                  *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
-	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
 }
 
 // GetActivePools returns the full set of enabled IP pools in the cluster.
@@ -1221,63 +1221,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
-	// Operator is responsible for creating a service which maps to that port.
-	// Here, we'll check the default felixconfiguration to see if the user is specifying
-	// a non-default port, and use that value if they are.
-	nodeReporterMetricsPort := defaultNodeReporterPort
-	var nodePrometheusTLS certificatemanagement.KeyPairInterface
 	calicoVersion := components.CalicoRelease
-
-	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
-
 	if instance.Spec.Variant.IsEnterprise() {
-
-		// Determine the port to use for nodeReporter metrics.
-		if felixConfiguration.Spec.PrometheusReporterPort != nil {
-			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
-		}
-		if nodeReporterMetricsPort == 0 {
-			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if felixConfiguration.Spec.PrometheusMetricsPort != nil {
-			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
-		}
-
-		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if nodePrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
-		}
-		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if prometheusClientCert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
-
-		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
-		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
-		// all components within this namespace share a trusted CA bundle. This is necessary because prior to v3.13 secrets were not signed by
-		// a single CA so we need to include each individually.
-		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if esgwCertificate != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
-		}
-
 		calicoVersion = components.EnterpriseRelease
+	}
+
+	renderCtx, err := extensions.BuildContext(extensions.Inputs{
+		Ctx:                ctx,
+		Client:             r.client,
+		Installation:       &instance.Spec,
+		FelixConfiguration: felixConfiguration,
+		CertificateManager: certificateManager,
+		TrustedBundle:      typhaNodeTLS.TrustedBundle,
+		ClusterDomain:      r.clusterDomain,
+	})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
@@ -1317,7 +1277,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(
+		log,
+		r.client,
+		r.scheme,
+		instance,
+		utils.WithRenderContext(renderCtx),
+	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{
@@ -1410,7 +1376,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-		rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+		rcertificatemanagement.NewKeyPairOption(renderCtx.NodePrometheusTLS, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
@@ -1592,28 +1558,24 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		GoldmaneRunning:               goldmaneRunning,
-		K8sServiceEp:                  k8sapi.Endpoint,
-		Installation:                  &instance.Spec,
-		IPPools:                       crdPoolsToOperator(currentPools.Items),
-		LogCollector:                  logCollector,
-		BirdTemplates:                 birdTemplates,
-		TLS:                           typhaNodeTLS,
-		ClusterDomain:                 r.clusterDomain,
-		DefaultDNSPolicy:              defaultDNSPolicy,
-		DefaultDNSConfig:              defaultDNSConfig,
-		GoldmaneIP:                    goldmaneIP,
-		NodeReporterMetricsPort:       nodeReporterMetricsPort,
-		BGPLayouts:                    bgpLayout,
-		NodeAppArmorProfile:           nodeAppArmorProfile,
-		MigrateNamespaces:             needsNamespaceMigration,
-		CanRemoveCNIFinalizer:         canRemoveCNI,
-		PrometheusServerTLS:           nodePrometheusTLS,
-		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
-		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
-		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
-		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
-		V3CRDs:                        r.v3CRDs,
+		GoldmaneRunning:       goldmaneRunning,
+		K8sServiceEp:          k8sapi.Endpoint,
+		Installation:          &instance.Spec,
+		IPPools:               crdPoolsToOperator(currentPools.Items),
+		LogCollector:          logCollector,
+		BirdTemplates:         birdTemplates,
+		TLS:                   typhaNodeTLS,
+		ClusterDomain:         r.clusterDomain,
+		DefaultDNSPolicy:      defaultDNSPolicy,
+		DefaultDNSConfig:      defaultDNSConfig,
+		GoldmaneIP:            goldmaneIP,
+		BGPLayouts:            bgpLayout,
+		NodeAppArmorProfile:   nodeAppArmorProfile,
+		MigrateNamespaces:     needsNamespaceMigration,
+		CanRemoveCNIFinalizer: canRemoveCNI,
+		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
+		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
+		V3CRDs:                r.v3CRDs,
 	}
 
 	if bgpConfiguration.Spec.BindMode != nil {
@@ -1845,7 +1807,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
 		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
 		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
-		render.NodePrometheusTLSServerSecret:                         nodePrometheusTLS,
+		render.NodePrometheusTLSServerSecret:                         renderCtx.NodePrometheusTLS,
 		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
 	}, r.status)
 

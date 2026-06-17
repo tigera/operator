@@ -2477,7 +2477,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationChecked:     true,
 				tierWatchReady:       ready,
 				migrationWatchReady:  &utils.ReadyFlag{},
-				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 					return componentHandler
 				},
 			}
@@ -2635,7 +2635,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2666,7 +2666,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2695,7 +2695,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2724,7 +2724,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(""),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2742,7 +2742,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       false,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2759,7 +2759,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   false,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2789,7 +2789,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2831,7 +2831,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2849,7 +2849,7 @@ var _ = Describe("updateMutatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2920,7 +2920,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2951,7 +2951,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Beta1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2980,7 +2980,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1Alpha1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -2997,7 +2997,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(""),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -3015,7 +3015,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       false,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -3045,7 +3045,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}
@@ -3069,7 +3069,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			manageCRDs:   true,
 			v3CRDs:       true,
 			apiDiscovery: discoveryFor(admission.VersionV1),
-			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object) utils.ComponentHandler {
+			newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 				return componentHandler
 			},
 		}

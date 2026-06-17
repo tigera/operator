@@ -24,9 +24,14 @@ import (
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"github.com/tigera/operator/pkg/enterprise"
 )
 
 func TestStatus(t *testing.T) {
+	// Wire the enterprise extensions so the componentHandler applies the API server
+	// modifier (query server, audit logging, Enterprise RBAC) during reconciliation.
+	enterprise.Register()
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	gomega.RegisterFailHandler(ginkgo.Fail)
 	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()

@@ -35,11 +35,28 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
+
+// renderWindows renders the windows component and applies the registered
+// enterprise modifier the way the componentHandler does, so enterprise tests
+// exercise the integrated output (image overrides come from ResolveImages; the
+// metrics service, env, volumes and mounts come from the modifier).
+func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
+	comp := render.Windows(cfg)
+	ExpectWithOffset(1, comp.ResolveImages(nil)).To(BeNil())
+	objs, _ := comp.Objects()
+	rc := extensions.RenderContext{Installation: cfg.Installation}
+	if p, ok := comp.(render.ExtensionContextProvider); ok {
+		rc.Component = p.ExtensionContext()
+	}
+	out, _ := extensions.ApplyModifiers(render.ComponentNameWindows, rc, objs, nil)
+	return out
+}
 
 var _ = Describe("Windows rendering tests", func() {
 	var defaultInstance *operatorv1.InstallationSpec
@@ -694,16 +711,14 @@ var _ = Describe("Windows rendering tests", func() {
 					version string
 					kind    string
 				}{
-					{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 					{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 					{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+					{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 				}
 				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081
 
-				component := render.Windows(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-				resources, _ := component.Objects()
+				resources := renderWindows(&cfg)
 				Expect(len(resources)).To(Equal(len(expectedResources)))
 
 				// Should render the correct resources.
@@ -1686,18 +1701,16 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 		}
 
 		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.NodeReporterMetricsPort = 9081
 
-		component := render.Windows(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
@@ -1842,18 +1855,16 @@ var _ = Describe("Windows rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 			{name: "cni-config-windows", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
 			{name: common.WindowsDaemonSetName, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "DaemonSet"},
+			{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 		}
 
 		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
 		cfg.NodeReporterMetricsPort = 9081
 
-		component := render.Windows(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(len(expectedResources)), fmt.Sprintf("Actual resources: %#v", resources))
 
 		// Should render the correct resources.
@@ -2138,9 +2149,7 @@ var _ = Describe("Windows rendering tests", func() {
 		defaultInstance.NodeMetricsPort = nil
 		cfg.NodeReporterMetricsPort = 9081
 
-		component := render.Windows(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
 
 		dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")
@@ -2159,9 +2168,7 @@ var _ = Describe("Windows rendering tests", func() {
 		var nodeMetricsPort int32 = 1234
 		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.NodeMetricsPort = &nodeMetricsPort
-		component := render.Windows(&cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))
 
 		dsResource := rtest.GetResource(resources, "calico-node-windows", "calico-system", "apps", "v1", "DaemonSet")

@@ -657,6 +657,41 @@ var _ = Describe("Istio controller tests", func() {
 		})
 	})
 
+	Context("Policy-only mode tests (calico-node over a recognized third-party CNI)", func() {
+		DescribeTable("should patch FelixConfiguration when the Calico dataplane runs for policy only",
+			func(dataplane operatorv1.LinuxDataplaneOption, cniType operatorv1.CNIPluginType) {
+				// Policy-only runs calico-node (and Felix) over a third-party CNI, so the
+				// Calico dataplane integration must be applied exactly as in a full install.
+				installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+				installation.Spec.CNI = &operatorv1.CNISpec{Type: cniType}
+				createResources()
+
+				r := &ReconcileIstio{
+					Client:         cli,
+					scheme:         scheme,
+					provider:       operatorv1.ProviderNone,
+					status:         mockStatus,
+					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				updatedFC := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
+				Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
+				Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal(v3.IstioAmbientModeEnabled))
+				Expect(updatedFC.Spec.IstioDSCPMark).NotTo(BeNil())
+				Expect(updatedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
+				Expect(updatedFC.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationMode, "Enabled"))
+				Expect(updatedFC.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationDSCP, "23"))
+			},
+			Entry("Nftables over AmazonVPC", operatorv1.LinuxDataplaneNftables, operatorv1.PluginAmazonVPC),
+			Entry("BPF over GKE", operatorv1.LinuxDataplaneBPF, operatorv1.PluginGKE),
+		)
+	})
+
 	Context("Error handling tests", func() {
 		It("should handle missing variant gracefully", func() {
 			// Create installation without variant

@@ -779,6 +779,32 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
 	})
 
+	DescribeTable("patches felix configuration for an explicit (non-None) linuxDataplane",
+		func(dataplane operatorv1.LinuxDataplaneOption) {
+			By("configuring an install with the Calico dataplane enabled (counterpart to the headless-skip case)")
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+			felixConfig := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				// PolicySyncPathPrefix is not set.
+			}
+			Expect(c.Create(ctx, felixConfig)).NotTo(HaveOccurred())
+
+			gwapi := &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			actualFelixConfig := &v3.FelixConfiguration{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)).NotTo(HaveOccurred())
+			Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal(DefaultPolicySyncPrefix))
+		},
+		Entry("Nftables dataplane", operatorv1.LinuxDataplaneNftables),
+		Entry("BPF (eBPF) dataplane", operatorv1.LinuxDataplaneBPF),
+	)
+
 	It("does not patch felix configuration in a headless installation", Label("headless"), func() {
 		By("configuring a headless installation (cni None, linuxDataplane None)")
 		dpNone := operatorv1.LinuxDataplaneNone

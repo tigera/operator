@@ -410,6 +410,17 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	        --image kindest/node:$(KINDEST_NODE_VERSION)
 
 	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./deploy/scripts/ipv6_kind_cluster_update.sh
+
+	# Disable strict reverse-path filtering on every node. kind node containers can come up
+	# with net.ipv4.conf.*.rp_filter=1 (observed on OrbStack), which drops Calico's asymmetric
+	# return path for pod-sourced traffic to a remote node IP — notably a worker pod reaching
+	# the kube-apiserver ClusterIP (DNAT'd to the control-plane node). That makes
+	# calico-apiserver/calico-kube-controllers CrashLoop so the projectcalico.org/v3 API never
+	# serves. Setting all+default to 0 (effective rp_filter is max(all,iface)) makes the cali*
+	# and tunl0 interfaces Calico creates later inherit 0. Harmless where RPF is already off.
+	for node in $$($(BINDIR)/kind get nodes --name $(KIND_CLUSTER_NAME)); do \
+		docker exec "$$node" sysctl -w net.ipv4.conf.all.rp_filter=0 net.ipv4.conf.default.rp_filter=0 >/dev/null || true; \
+	done
 	# Deploy resources needed in test env.
 	$(MAKE) deploy-crds
 

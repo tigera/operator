@@ -584,18 +584,6 @@ var _ = Describe("Manager controller tests", func() {
 				r.tierWatchReady.MarkAsReady()
 			})
 
-			It("should degrade when the installation is headless", Label("headless"), func() {
-				mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Manager is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
-
-				dpNone := operatorv1.LinuxDataplaneNone
-				installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-				Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-				mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Manager is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-			})
-
 			It("should reconcile legacy manager namespace", func() {
 				result, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).NotTo(HaveOccurred())

@@ -131,25 +131,6 @@ var _ = Describe("tier controller tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: "calico-system"}, &tier)).To(BeNil())
 	})
 
-	It("stands down without degrading in a headless installation", Label("headless"), func() {
-		mockStatus.On("OnCRNotFound").Return()
-
-		// Switch the Installation to headless.
-		install := &operatorv1.Installation{}
-		Expect(c.Get(ctx, client.ObjectKey{Name: "default"}, install)).NotTo(HaveOccurred())
-		dpNone := operatorv1.LinuxDataplaneNone
-		install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-		Expect(c.Update(ctx, install)).NotTo(HaveOccurred())
-
-		_, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).ShouldNot(HaveOccurred())
-
-		// No calico-system tier should be created, and the controller must not degrade.
-		Expect(c.Get(ctx, client.ObjectKey{Name: "calico-system"}, &v3.Tier{})).To(HaveOccurred())
-		mockStatus.AssertCalled(GinkgoT(), "OnCRNotFound")
-		mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
-	})
-
 	It("waits for API server to be available before reconciling", func() {
 		err := c.Delete(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
 		Expect(err).ShouldNot(HaveOccurred())

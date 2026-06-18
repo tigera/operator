@@ -166,15 +166,6 @@ var _ = Describe("packet capture controller tests", func() {
 	})
 
 	Context("verify reconciliation", func() {
-		It("should degrade when the installation is headless", Label("headless"), func() {
-			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "PacketCapture API is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-		})
 		It("should use builtin images", func() {
 			installation.Spec.CertificateManagement = certificateManagement
 			Expect(cli.Create(ctx, installation)).To(BeNil())

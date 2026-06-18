@@ -43,6 +43,5 @@ func HasWindowsNodes(c client.Client) (bool, error) {
 func WindowsEnabled(installation operatorv1.InstallationSpec) bool {
 	return installation.CalicoNetwork != nil &&
 		installation.CalicoNetwork.WindowsDataplane != nil &&
-		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneDisabled &&
-		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneNone
+		*installation.CalicoNetwork.WindowsDataplane != operatorv1.WindowsDataplaneDisabled
 }

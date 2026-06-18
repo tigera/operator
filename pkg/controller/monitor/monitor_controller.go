@@ -234,15 +234,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, err
 		}
 	}
-	// In a headless installation there is no Calico API server, so the calico-system Tier
-	// (projectcalico.org/v3) is never served and Monitoring cannot be installed. This must be
-	// reported before the LicenseKey wait and fetch below: in a headless cluster a LicenseKey
-	// typically never exists, so a guard placed after them would be masked by "License not
-	// found" retries.
-	if utils.RejectIfHeadless(ctx, r.client, r.status, "Monitoring", reqLogger) {
-		return reconcile.Result{}, nil
-	}
-
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 	fillDefaults(instance)
 	// Patch the monitor resource with defaults added.

@@ -233,20 +233,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	}
 	r.status.OnCRFound()
 
-	// Egress gateways are a dataplane feature: their pods use Calico IPAM and are routed to
-	// by Felix. A headless installation (spec.calicoNetwork.linuxDataplane: None) runs no
-	// dataplane, so the feature cannot work and there is no FelixConfiguration to patch.
-	// This must precede the LicenseKey wait and the FelixConfiguration patch below, which
-	// would otherwise mask this message in a headless cluster.
-	if utils.IsHeadlessInstallation(ctx, r.client) {
-		degradedMsg := utils.HeadlessUnsupportedMessage("EgressGateway")
-		r.status.SetDegraded(operatorv1.ResourceValidationError, degradedMsg, nil, reqLogger)
-		for _, egw := range egwsToReconcile {
-			setDegraded(r.client, ctx, &egw, reconcileErr, degradedMsg)
-		}
-		return reconcile.Result{}, nil
-	}
-
 	// Get the unready EGW.
 	unreadyEGW := getUnreadyEgressGateway(egws)
 

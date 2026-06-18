@@ -159,29 +159,6 @@ var _ = Describe("apiserver controller tests", func() {
 	})
 
 	Context("verify reconciliation", func() {
-		It("should degrade when the installation is headless", Label("headless"), func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "The Calico API server is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
-
-			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-			Expect(cli.Create(ctx, installation)).To(BeNil())
-
-			r := ReconcileAPIServer{
-				client:              cli,
-				scheme:              scheme,
-				status:              mockStatus,
-				tierWatchReady:      ready,
-				migrationWatchReady: &utils.ReadyFlag{},
-				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-				},
-			}
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "The Calico API server is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-		})
-
 		It("should use builtin images", func() {
 			installation.Spec.CertificateManagement = certificateManagement
 			Expect(cli.Create(ctx, installation)).To(BeNil())

@@ -1314,7 +1314,7 @@ var _ = Describe("Installation validation tests", func() {
 		It("should reject IP pools in headless mode", func() {
 			instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{{CIDR: "192.168.0.0/16"}}
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError(ContainSubstring("spec.calicoNetwork.ipPools must not be set")))
+			Expect(err).To(MatchError(ContainSubstring("must not be set when spec.calicoNetwork.linuxDataplane is None: ipPools")))
 		})
 
 		It("should reject BGP Enabled in headless mode", func() {
@@ -1328,7 +1328,54 @@ var _ = Describe("Installation validation tests", func() {
 				CanReach: "8.8.8.8",
 			}
 			err := validateCustomResource(instance)
-			Expect(err).To(MatchError(ContainSubstring("nodeAddressAutodetectionV4/V6 must not be set")))
+			Expect(err).To(MatchError(ContainSubstring("nodeAddressAutodetectionV4")))
+		})
+
+		// Regression: these dataplane-only fields are validated against spec.cni further down
+		// in validateCustomResource. Before headless mode rejected them up front, a headless
+		// install (spec.cni == nil) that set any of them dereferenced a nil spec.cni and
+		// panicked instead of returning a clean validation error.
+		It("should reject hostPorts without panicking in headless mode", func() {
+			instance.Spec.CalicoNetwork.HostPorts = ptr.To(operator.HostPortsEnabled)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("must not be set when spec.calicoNetwork.linuxDataplane is None: hostPorts")))
+		})
+
+		It("should reject multiInterfaceMode without panicking in headless mode", func() {
+			instance.Spec.CalicoNetwork.MultiInterfaceMode = ptr.To(operator.MultiInterfaceModeMultus)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("multiInterfaceMode")))
+		})
+
+		It("should reject containerIPForwarding without panicking in headless mode", func() {
+			instance.Spec.CalicoNetwork.ContainerIPForwarding = ptr.To(operator.ContainerIPForwardingEnabled)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("containerIPForwarding")))
+		})
+
+		It("should reject linuxPodInterfaceType without panicking in headless mode", func() {
+			instance.Spec.CalicoNetwork.LinuxPodInterfaceType = ptr.To(operator.LinuxPodInterfaceVeth)
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("linuxPodInterfaceType")))
+		})
+
+		// mtu has no spec.cni dependency, so it did not panic, but it was silently accepted and
+		// then ignored because no dataplane is rendered. Headless mode now rejects it so the
+		// user gets feedback instead of a no-op setting.
+		It("should reject mtu in headless mode", func() {
+			instance.Spec.CalicoNetwork.MTU = ptr.To(int32(1400))
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("mtu")))
+		})
+
+		It("should report every disallowed field at once", func() {
+			instance.Spec.CalicoNetwork.MTU = ptr.To(int32(1400))
+			instance.Spec.CalicoNetwork.HostPorts = ptr.To(operator.HostPortsEnabled)
+			instance.Spec.CalicoNetwork.Sysctl = []operator.Sysctl{{Key: "net.ipv4.tcp_keepalive_time", Value: "600"}}
+			err := validateCustomResource(instance)
+			Expect(err).To(MatchError(ContainSubstring("mtu")))
+			Expect(err).To(MatchError(ContainSubstring("hostPorts")))
+			Expect(err).To(MatchError(ContainSubstring("sysctl")))
 		})
 	})
 })

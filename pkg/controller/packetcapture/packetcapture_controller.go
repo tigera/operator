@@ -191,13 +191,6 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// In a headless installation there is no Calico API server, so the calico-system Tier
-	// (projectcalico.org/v3) is never served and PacketCapture API cannot be installed. Report this
-	// clearly instead of blocking forever on the Tier watch.
-	if utils.RejectIfHeadless(ctx, r.client, r.status, "PacketCapture API", reqLogger) {
-		return reconcile.Result{}, nil
-	}
-
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", err, reqLogger)

@@ -609,16 +609,12 @@ const (
 	LinuxDataplaneNone     LinuxDataplaneOption = "None"
 )
 
-// +kubebuilder:validation:Enum=HNS;Disabled;None
+// +kubebuilder:validation:Enum=HNS;Disabled
 type WindowsDataplaneOption string
 
 const (
 	WindowsDataplaneDisabled WindowsDataplaneOption = "Disabled"
 	WindowsDataplaneHNS      WindowsDataplaneOption = "HNS"
-	// WindowsDataplaneNone is a synonym for WindowsDataplaneDisabled: the Windows nodes
-	// daemonset is not rendered. It is provided for symmetry with LinuxDataplaneNone so that
-	// a headless install can set both axes to None consistently.
-	WindowsDataplaneNone WindowsDataplaneOption = "None"
 )
 
 type Sysctl struct {
@@ -646,7 +642,7 @@ type CalicoNetworkSpec struct {
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
 	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
-	// The values Disabled and None are equivalent and both suppress the Windows nodes daemonset.
+	// A headless install (spec.calicoNetwork.linuxDataplane: None) must leave this disabled.
 	// Default: Disabled
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
@@ -1130,6 +1126,15 @@ func (s *InstallationSpec) LinuxDataplaneEnabled() bool {
 	return s.CalicoNetwork == nil ||
 		s.CalicoNetwork.LinuxDataplane == nil ||
 		*s.CalicoNetwork.LinuxDataplane != LinuxDataplaneNone
+}
+
+// IsHeadless is an extension method that returns true when the Installation disables the
+// Linux dataplane (spec.calicoNetwork.linuxDataplane: None) — a "headless" installation in
+// which calico-node, Typha, and calico-kube-controllers are not deployed, spec.cni is
+// omitted, and the projectcalico.org/v3 API is not served. It is the inverse of
+// LinuxDataplaneEnabled, named positively so call sites read without a double negative.
+func (s *InstallationSpec) IsHeadless() bool {
+	return !s.LinuxDataplaneEnabled()
 }
 
 // IsNftables is an extension method that returns true if the Installation resource

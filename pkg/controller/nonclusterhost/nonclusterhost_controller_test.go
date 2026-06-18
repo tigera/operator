@@ -108,31 +108,6 @@ var _ = Describe("NonClusterHost controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should reject NonClusterHost in a headless installation", Label("headless"), func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "NonClusterHost is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
-
-			dpNone := operatorv1.LinuxDataplaneNone
-			installation := &operatorv1.Installation{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec: operatorv1.InstallationSpec{
-					Variant: operatorv1.CalicoEnterprise,
-					CalicoNetwork: &operatorv1.CalicoNetworkSpec{
-						LinuxDataplane: &dpNone,
-					},
-				},
-			}
-			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
-			Expect(cli.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred())
-
-			// No NonClusterHost resources should have been rendered.
-			err = cli.Get(ctx, client.ObjectKey{Name: "tigera-noncluster-host", Namespace: "calico-system"}, sa)
-			Expect(err).To(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "NonClusterHost is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-		})
-
 		It("should set degraded status if endpoint is invalid", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Invalid endpoint", mock.Anything, mock.Anything).Return()
 

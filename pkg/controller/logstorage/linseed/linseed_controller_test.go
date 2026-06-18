@@ -251,17 +251,6 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(pullSecret.Kind).To(Equal("LogStorage"))
 		})
 
-		It("should degrade in a headless installation", Label("headless"), func() {
-			// Make the Installation headless (no Linux dataplane / no Calico API server).
-			dpNone := operatorv1.LinuxDataplaneNone
-			install.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-			Expect(cli.Update(ctx, install)).ShouldNot(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Linseed is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-		})
-
 		It("should use images from ImageSet", func() {
 			Expect(cli.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},

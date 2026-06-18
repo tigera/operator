@@ -4,12 +4,7 @@ Code architecture and design principles for the tigera/operator repository. For 
 
 ## API Design
 
-- **APIs are declarative.** The final state of the system should depend only on the current desired state, not on the order of transitions that got there. Going A -> B -> C should leave you in the same state as B -> A -> C, or C -> B -> C.
-- **Minimal API surface.** Prefer auto-detection over configuration. Every new field is a maintenance burden and a potential source of user confusion — only add fields when there's a clear, concrete need.
-- **Prefer `projectcalico.org/v3` over `crd.projectcalico.org/v1`.** The v3 API group is the standard going forward.
-- **Every container needs overrides.** Resource requirements/requests, scheduling, topology, and similar configuration must be overridable for every container. Use the overrides mechanism, and model the API after the upstream Kubernetes API being configured.
-- **Prefer kubebuilder defaulting and validation.** Use kubebuilder markers and CEL expressions for defaulting and validation wherever possible. Fall back to reconcile-loop defaulting and validation only when kubebuilder can't express the logic (e.g., cross-resource validation, dynamic defaults based on cluster state).
-- **CEL validation rules require bounds.** Always set `MaxLength` / `MaxItems` on fields used in CEL `XValidation` expressions. Use `size(self.field) == 0` instead of `self.field == ''` (goimports corrupts single quotes in CEL).
+API design principles and the Go/kubebuilder coding conventions for `api/v1` CRD types have their own guide: see [api_design.md](api_design.md).
 
 ## Respect User Input
 

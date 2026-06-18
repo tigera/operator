@@ -35,9 +35,7 @@ var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
 	CSRImage string
-	// UseCombinedImage reports whether CSRImage is the combined calico/calico image
-	// (Enterprise), which drives the CSR init container via the calico binary. Calico
-	// OSS uses the standalone calico/key-cert-provisioner image and its default entrypoint.
+	// UseCombinedImage indicates CSRImage is the combined image, which needs an explicit CSR entrypoint.
 	UseCombinedImage bool
 
 	Name      string

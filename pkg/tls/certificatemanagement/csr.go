@@ -50,9 +50,6 @@ func CreateCSRInitContainer(
 	securityContext *corev1.SecurityContext,
 	useCombinedImage bool,
 ) corev1.Container {
-	// The combined calico/calico image dispatches into the key-cert-provisioner via
-	// the calico binary; the standalone calico/key-cert-provisioner image (Calico OSS)
-	// uses its default entrypoint.
 	var command []string
 	if useCombinedImage {
 		command = []string{components.CalicoBinaryPath, "component", "key-cert-provisioner"}
@@ -101,10 +98,8 @@ func CreateCSRInitContainer(
 	}
 }
 
-// ResolveCSRInitImage resolves the image needed for the CSR init container, taking into account the
-// specified ImageSet. Enterprise reuses the combined calico/calico image (dispatching into the
-// key-cert-provisioner Cobra subcommand); Calico OSS uses the standalone
-// calico/key-cert-provisioner image.
+// ResolveCSRInitImage resolves the CSR init container image for the installation's variant,
+// honoring the given ImageSet.
 func ResolveCSRInitImage(inst *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
 	if inst.Variant.IsEnterprise() {
 		return components.GetReference(components.CombinedCalicoImage(inst), inst.Registry, inst.ImagePath, inst.ImagePrefix, is)

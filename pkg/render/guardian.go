@@ -143,8 +143,6 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	// Enterprise deploys guardian from the combined calico/calico image; Calico OSS
-	// uses the standalone calico/guardian image.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
@@ -501,8 +499,6 @@ func (c *GuardianComponent) container() []corev1.Container {
 		)
 	}
 
-	// The combined calico/calico image runs guardian via the calico binary; the
-	// standalone calico/guardian image uses its default entrypoint.
 	var command []string
 	if c.useCombinedImage {
 		command = []string{components.CalicoBinaryPath, "component", "guardian"}

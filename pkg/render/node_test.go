@@ -3295,7 +3295,6 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 
 	var expectedReadinessCmd []string
 	if isEnterprise {
-		// Enterprise drives calico-node health via the combined calico binary.
 		switch {
 		case !bgp:
 			expectedReadinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--felix-ready"}
@@ -3303,7 +3302,6 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 			expectedReadinessCmd = []string{"/usr/bin/calico", "component", "node", "health", "--bird-ready", "--felix-ready", "--bgp-metrics-ready"}
 		}
 	} else {
-		// Calico OSS uses the standalone calico-node entrypoint.
 		switch {
 		case !bgp:
 			expectedReadinessCmd = []string{"/bin/calico-node", "-felix-ready"}
@@ -3492,7 +3490,6 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			Expect(flexvolContainer.Command).To(Equal([]string{"/usr/bin/calico", "component", "flexvol", "install", "--target", "/host/driver/uds"}))
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFlexVolume.Image, components.ComponentCalicoFlexVolume.Version)))
-			// Calico OSS runs the flexvol installer via the image's default entrypoint.
 			Expect(flexvolContainer.Command).To(BeEmpty())
 		}
 

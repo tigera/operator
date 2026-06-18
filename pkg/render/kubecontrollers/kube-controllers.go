@@ -293,8 +293,6 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	// Enterprise deploys kube-controllers from the combined calico/calico image;
-	// Calico OSS uses the standalone calico/kube-controllers image.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
@@ -813,8 +811,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	var readinessProbe, livenessProbe *corev1.Probe
 	var containerCommand []string
 	if c.useCombinedImage {
-		// The combined calico/calico image runs kube-controllers via the calico binary
-		// and reports health through the shared "calico health" subcommand.
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
@@ -840,8 +836,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			fmt.Sprintf("--health-port=%d", KubeControllersHealthPort),
 		}
 	} else {
-		// The standalone calico/kube-controllers image ships its own check-status binary
-		// and default entrypoint.
 		readinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{

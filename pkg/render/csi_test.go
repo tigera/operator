@@ -309,7 +309,6 @@ var _ = Describe("CSI rendering tests", func() {
 		Expect(comp.ResolveImages(nil)).To(BeNil())
 		createObjs, _ := comp.Objects()
 		dsResource := rtest.GetResource(createObjs, "csi-node-driver", common.CalicoNamespace, "apps", "v1", "DaemonSet")
-		// Calico OSS uses the standalone calico/csi and calico/node-driver-registrar images.
 		expectedCSIImage := fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalicoCSI.Image, components.ComponentCalicoCSI.Version)
 		expectedRegistrarImage := fmt.Sprintf("%s%s%s:%s", components.CalicoRegistry, components.CalicoImagePath, components.ComponentCalicoCSIRegistrar.Image, components.ComponentCalicoCSIRegistrar.Version)
 		Expect(dsResource.(*appsv1.DaemonSet).Spec.Template.Spec.Containers[0].Image).To(Equal(expectedCSIImage))

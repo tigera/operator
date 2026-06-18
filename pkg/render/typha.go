@@ -106,8 +106,6 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	// Enterprise deploys typha from the combined calico/calico image; Calico OSS
-	// uses the standalone calico/typha image.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)

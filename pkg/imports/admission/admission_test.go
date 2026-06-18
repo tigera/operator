@@ -120,8 +120,8 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 	})
 
 	Describe("GetValidatingAdmissionPolicies", func() {
-		It("returns Calico v1 VAPs when discovered version is v1", func() {
-			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1)
+		It("returns Enterprise v1 VAPs when discovered version is v1", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.CalicoEnterprise, true, VersionV1)
 			Expect(objs).To(HaveLen(2))
 
 			var vapCount, vapbCount int
@@ -141,8 +141,8 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			Expect(vapbCount).To(Equal(1))
 		})
 
-		It("returns Calico v1beta1 VAPs when discovered version is v1beta1", func() {
-			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1Beta1)
+		It("returns Enterprise v1beta1 VAPs when discovered version is v1beta1", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.CalicoEnterprise, true, VersionV1Beta1)
 			Expect(objs).To(HaveLen(2))
 
 			var vapCount, vapbCount int
@@ -159,8 +159,8 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			Expect(vapbCount).To(Equal(1))
 		})
 
-		It("returns Calico v1alpha1 VAPs when discovered version is v1alpha1", func() {
-			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1Alpha1)
+		It("returns Enterprise v1alpha1 VAPs when discovered version is v1alpha1", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.CalicoEnterprise, true, VersionV1Alpha1)
 			Expect(objs).To(HaveLen(2))
 
 			var vapCount, vapbCount int
@@ -177,9 +177,8 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			Expect(vapbCount).To(Equal(1))
 		})
 
-		It("returns Enterprise VAPs at the chosen version", func() {
-			objs := GetValidatingAdmissionPolicies(opv1.CalicoEnterprise, true, VersionV1)
-			Expect(objs).To(HaveLen(2))
+		It("returns no VAPs for Calico (none shipped for this release)", func() {
+			Expect(GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1)).To(BeEmpty())
 		})
 
 		It("returns empty when v3=false", func() {

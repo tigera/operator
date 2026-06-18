@@ -170,8 +170,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 
 	enterprise := c.cfg.Installation.Variant.IsEnterprise()
 	if enterprise {
-		// Enterprise deploys the apiserver (along with the query server and L7
-		// admission controller) from the combined calico/calico image.
 		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
@@ -179,7 +177,6 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		}
 		c.apiServerImage = c.calicoImage
 	} else if c.cfg.RequiresAggregationServer {
-		// Calico OSS uses the standalone calico/apiserver image.
 		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())

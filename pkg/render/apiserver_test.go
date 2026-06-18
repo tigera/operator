@@ -1984,7 +1984,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("testregistry.com/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoAPIServer.Image, components.ComponentCalicoAPIServer.Version),
 		))
-		// Calico OSS runs the apiserver via the image's default entrypoint (no Command override).
 		Expect(d.Spec.Template.Spec.Containers[0].Command).To(BeEmpty())
 
 		expectedArgs := []string{

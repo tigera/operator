@@ -197,8 +197,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			fmt.Sprintf("test-reg/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoKubeControllers.Image, components.ComponentCalicoKubeControllers.Version),
 		))
 
-		// Calico OSS uses the standalone kube-controllers image with its default
-		// entrypoint and the check-status health binary.
 		Expect(ds.Spec.Template.Spec.Containers[0].Command).To(BeEmpty())
 		Expect(ds.Spec.Template.Spec.Containers[0].ReadinessProbe.Exec.Command).To(Equal([]string{"/usr/bin/check-status", "-r"}))
 		Expect(ds.Spec.Template.Spec.Containers[0].LivenessProbe.Exec.Command).To(Equal([]string{"/usr/bin/check-status", "-l"}))

@@ -79,8 +79,6 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.Variant.IsEnterprise() {
-		// The Enterprise Windows images ship the combined calico.exe binary, which the
-		// container commands below drive via "component" subcommands.
 		c.useCombinedImage = true
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIWindows, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNodeWindows, reg, path, prefix, is))
@@ -457,10 +455,6 @@ func (c *windowsComponent) cniContainer() corev1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	// The Enterprise cni image ships the combined binary at /opt/cni/bin/calico.exe
-	// and installs CNI via its "component cni install" subcommand. The Calico OSS
-	// cni image ships the standalone install.exe. The node containers below run the
-	// node image; keep each command's path in sync with the image it runs in.
 	cniCommand := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/install.exe"}
 	if c.useCombinedImage {
 		cniCommand = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/calico.exe", "component", "cni", "install"}
@@ -760,8 +754,6 @@ func (c *windowsComponent) windowsVolumeMounts() []corev1.VolumeMount {
 
 // windowsLivenessReadinessProbes creates the node's liveness and readiness probes.
 func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
-	// The Enterprise node image drives health checks through the combined calico.exe
-	// binary; the Calico OSS node image uses the standalone calico-node.exe.
 	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
 	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
 	if c.useCombinedImage {
@@ -786,8 +778,6 @@ func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *cor
 
 // windowsLifecycle creates the node's postStart and preStop hooks.
 func (c *windowsComponent) windowsLifecycle() *corev1.Lifecycle {
-	// The Enterprise node image shuts down via the combined calico.exe binary; the
-	// Calico OSS node image uses the standalone calico-node.exe.
 	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
 	if c.useCombinedImage {
 		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}

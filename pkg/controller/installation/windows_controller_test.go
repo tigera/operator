@@ -728,8 +728,6 @@ var _ = Describe("windows-controller installation tests", func() {
 					imageSet := &operator.ImageSet{
 						ObjectMeta: metav1.ObjectMeta{Name: "calico-" + components.CalicoRelease},
 						Spec: operator.ImageSetSpec{
-							// Calico OSS deploys the individual per-component images rather than
-							// the combined calico/calico image.
 							Images: []operator.Image{
 								{Image: "calico/" + components.ComponentCalicoNode.Image, Digest: "sha256:tigeranodehash"},
 								{Image: "calico/" + components.ComponentCalicoCNI.Image, Digest: "sha256:cnihash"},

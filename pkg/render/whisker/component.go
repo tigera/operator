@@ -109,8 +109,6 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-	// Enterprise deploys the whisker backend from the combined calico/calico image;
-	// Calico OSS uses the standalone calico/whisker-backend image.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)

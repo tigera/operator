@@ -41,9 +41,7 @@ var (
 	numExpectedObjects       = 5
 	numDeprecatedObjects     = 1
 
-	// Resolve the standalone calico/whisker and calico/whisker-backend images
-	// (Calico OSS) exactly as the renderer does, so the expected images track the
-	// pinned component versions on any branch.
+	// These track the pinned component versions on any branch.
 	whiskerImageRef, _        = components.GetReference(components.ComponentCalicoWhisker, "", "", "", nil)
 	whiskerBackendImageRef, _ = components.GetReference(components.ComponentCalicoWhiskerBackend, "", "", "", nil)
 )

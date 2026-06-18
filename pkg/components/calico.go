@@ -212,11 +212,8 @@ var (
 		variant:   calicoVariant,
 	}
 
-	// CalicoImages enumerates the images shipped for the Calico OSS variant.
-	// The combined ComponentCalico image is intentionally omitted: OSS deploys
-	// the individual per-component images and does not ship the combined
-	// calico/calico image (see CombinedCalicoImage, which selects the combined
-	// image for Enterprise only).
+	// CalicoImages omits ComponentCalico: Calico OSS ships the individual
+	// per-component images, not the combined calico/calico image.
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIWindows,

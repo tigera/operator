@@ -115,8 +115,6 @@ var _ = Describe("ClusterCA controller", func() {
 			Spec: operatorv1.ImageSetSpec{
 				Images: []operatorv1.Image{
 					{
-						// Calico OSS resolves the CSR init container from the standalone
-						// key-cert-provisioner image.
 						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalicoCSRInitContainer.Image),
 						Digest: "sha256:xxxxxxxxx",
 					}, {
@@ -158,8 +156,6 @@ var _ = Describe("ClusterCA controller", func() {
 			Spec: operatorv1.ImageSetSpec{
 				Images: []operatorv1.Image{
 					{
-						// Calico OSS resolves the CSR init container from the standalone
-						// key-cert-provisioner image.
 						Image:  fmt.Sprintf("%s%s", components.CalicoImagePath, components.ComponentCalicoCSRInitContainer.Image),
 						Digest: "sha256:xxxxxxxxx",
 					}, {

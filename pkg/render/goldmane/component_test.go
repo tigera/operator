@@ -42,9 +42,7 @@ var (
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	metricsPort              = int32(9081)
 
-	// goldmaneImageRef resolves the standalone calico/goldmane image (Calico OSS)
-	// exactly as the renderer does, so the expected image tracks the pinned
-	// ComponentCalicoGoldmane version on any branch.
+	// goldmaneImageRef tracks the pinned ComponentCalicoGoldmane version on any branch.
 	goldmaneImageRef, _ = components.GetReference(components.ComponentCalicoGoldmane, "", "", "", nil)
 )
 

@@ -80,8 +80,6 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	// Enterprise deploys the webhooks controller from the combined calico/calico
-	// image; Calico OSS uses the standalone calico/webhooks image.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
@@ -112,8 +110,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		securtyContext = securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
 	}
 
-	// The combined calico/calico image runs the webhooks controller via the calico
-	// binary; the standalone calico/webhooks image uses its default entrypoint.
 	var command []string
 	if c.useCombinedImage {
 		command = []string{components.CalicoBinaryPath, "component", "webhooks"}

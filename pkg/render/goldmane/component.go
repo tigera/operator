@@ -93,8 +93,6 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	// Enterprise deploys goldmane from the combined calico/calico image; Calico OSS
-	// uses the standalone calico/goldmane image.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
@@ -248,8 +246,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		VolumeMounts:    volumeMounts,
 	}
 	if c.useCombinedImage {
-		// The combined calico/calico image runs goldmane via the calico binary and
-		// exposes health through the shared "calico health" subcommand.
 		container.Command = []string{components.CalicoBinaryPath, "component", "goldmane"}
 		container.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
@@ -264,7 +260,6 @@ func (c *Component) goldmaneContainer() corev1.Container {
 			PeriodSeconds: 10,
 		}
 	} else {
-		// The standalone calico/goldmane image ships its own /health binary.
 		container.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 				Command: []string{"/health", "-ready"},

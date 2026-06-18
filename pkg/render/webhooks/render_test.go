@@ -93,8 +93,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		rtest.ExpectResources(resources, expectedResources)
 
-		// Verify the Calico (non-enterprise) variant uses the standalone calico/webhooks
-		// image and runs it via the image's default entrypoint (no Command override).
+		// Calico uses the standalone webhooks image with no Command override.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(

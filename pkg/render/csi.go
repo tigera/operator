@@ -221,9 +221,6 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 	}
 
 	if c.useCombinedImage {
-		// The combined calico/calico image runs the CSI driver via the calico binary
-		// and bundles the node-driver-registrar binary at a fixed path. The standalone
-		// OSS images run via their own default entrypoints.
 		csiContainer.Command = []string{components.CalicoBinaryPath, "component", "csi"}
 		registrarContainer.Command = []string{"/usr/bin/csi-node-driver-registrar"}
 	}
@@ -384,9 +381,6 @@ func (c *csiComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	// Enterprise deploys the CSI driver and node-driver-registrar from the combined
-	// calico/calico image; Calico OSS uses the standalone calico/csi and
-	// calico/node-driver-registrar images.
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		c.useCombinedImage = true
 		var combined string

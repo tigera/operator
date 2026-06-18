@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -521,6 +522,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
 		APIDiscovery:        apiDiscovery,
+		Extensions:          enterprise.New(),
 	}
 
 	// Before we start any controllers, make sure our options are valid.

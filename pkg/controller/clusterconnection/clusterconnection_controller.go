@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -173,9 +174,9 @@ func newReconciler(
 		scheme:                schema,
 		provider:              p,
 		status:                statusMgr,
-		clusterDomain:         opts.ClusterDomain,
 		tierWatchReady:        tierWatchReady,
 		clusterInfoWatchReady: clusterInfoWatchReady,
+		opts:                  opts,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -190,11 +191,11 @@ type ReconcileConnection struct {
 	scheme                     *runtime.Scheme
 	provider                   operatorv1.Provider
 	status                     status.StatusManager
-	clusterDomain              string
 	tierWatchReady             *utils.ReadyFlag
 	clusterInfoWatchReady      *utils.ReadyFlag
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
+	opts                       options.ControllerOptions
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -283,7 +284,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	log.V(2).Info("Loaded ManagementClusterConnection config", "config", managementClusterConnection)
 
-	certificateManager, err := certificatemanager.Create(r.cli, installationSpec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.cli, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -307,7 +308,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	var guardianKeyPair certificatemanagement.KeyPairInterface
 	if !variant.IsEnterprise() {
-		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.clusterDomain)
+		guardianCertificateNames := dns.GetServiceDNSNames("guardian", render.GuardianNamespace, r.opts.ClusterDomain)
 		guardianCertificateNames = append(guardianCertificateNames, "localhost", "127.0.0.1")
 		guardianKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, render.GuardianKeyPairSecret, whisker.WhiskerNamespace, guardianCertificateNames)
 		if err != nil {
@@ -443,7 +444,14 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, managementClusterConnection)
+	ch := utils.NewComponentHandler(
+		log,
+		r.cli,
+		r.scheme,
+		managementClusterConnection,
+		utils.WithRenderContext(extensions.RenderContext{Installation: installationSpec}),
+		utils.WithExtensions(r.opts.Extensions),
+	)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,
 		PodProxies:                  r.resolvedPodProxies,

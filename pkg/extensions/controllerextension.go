@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -48,6 +49,14 @@ type ControllerExtension interface {
 	// certificate management and BYO-expiry warnings), or an error that aborts the
 	// reconcile.
 	ExtendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error)
+}
+
+// Watcher is an optional companion to ControllerExtension. A controller's Add()
+// calls Set.SetupWatches, which invokes Watches on any registered extension that
+// implements this, so the extension registers the watches it needs (its CRs, its
+// secrets) instead of the controller naming them.
+type Watcher interface {
+	Watches(c ctrlruntime.Controller) error
 }
 
 // ControllerContext is the controller-phase context, the corollary to the

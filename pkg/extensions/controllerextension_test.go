@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -71,6 +72,13 @@ var _ = Describe("controller extension", func() {
 		Expect(s.Validate(enterpriseContext())).To(MatchError("invalid"))
 	})
 
+	It("runs the watch hook of an extension that implements Watcher", func() {
+		called := false
+		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, watchingController{called: &called})
+		Expect(s.SetupWatches(extensions.InstallationController, nil)).NotTo(HaveOccurred())
+		Expect(called).To(BeTrue())
+	})
+
 	It("returns the base context and no validation error for a nil Set", func() {
 		var nilSet *extensions.Set
 		cc := enterpriseContext()
@@ -105,4 +113,16 @@ func (f fakeController) ExtendContext(_ extensions.ControllerContext) (extension
 		return extensions.RenderContext{}, nil, f.err
 	}
 	return extensions.RenderContext{ClusterDomain: "from-fake"}, nil, nil
+}
+
+// watchingController is a fakeController that also implements the Watcher
+// companion, recording that its watch hook ran.
+type watchingController struct {
+	fakeController
+	called *bool
+}
+
+func (w watchingController) Watches(ctrlruntime.Controller) error {
+	*w.called = true
+	return nil
 }

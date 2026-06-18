@@ -233,27 +233,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.EnterpriseCRDExists {
-		// Watch for changes to primary resource ManagementCluster
-		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch for changes to primary resource ManagementClusterConnection
-		err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		// watch for change to primary resource LogCollector
-		err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch the internal manager TLS secret in the operator namespace, which included in the bundle for es-kube-controllers.
-		if err = utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch secret: %v", err)
+		if err = opts.Extensions.SetupWatches(extensions.InstallationController, c); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
 		}
 
 		if opts.ManageCRDs {

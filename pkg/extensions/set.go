@@ -17,6 +17,7 @@ package extensions
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -98,6 +99,26 @@ func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, []certificatem
 		return cc.RenderContext, nil, nil
 	}
 	return s.variant(cc.Installation.Variant).extendContext(cc)
+}
+
+// SetupWatches registers the watches every variant's extension declares for the
+// named controller. It runs at controller startup, which is variant-agnostic, so
+// it registers the union across variants (in practice the one active extension
+// build's). Nil-safe.
+func (s *Set) SetupWatches(controller ControllerName, c ctrlruntime.Controller) error {
+	if s == nil {
+		return nil
+	}
+	for _, v := range s.variants {
+		w, ok := v.controllers[controller].(Watcher)
+		if !ok {
+			continue
+		}
+		if err := w.Watches(c); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Images returns the shared image override table. The render package resolves a

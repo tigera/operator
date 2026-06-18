@@ -51,7 +51,6 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/monitor"
 )
 
 var logw = logf.Log.WithName("controller_windows")
@@ -149,13 +148,8 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
 	if ri.opts.EnterpriseCRDExists {
-		for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
-			if err = utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, ns); err != nil {
-				return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", render.NodePrometheusTLSServerSecret, ns, err)
-			}
-			if err = utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, ns); err != nil {
-				return fmt.Errorf("tigera-windows-controller failed to watch secret '%s' in '%s' namespace: %w", monitor.PrometheusClientTLSSecretName, ns, err)
-			}
+		if err = ri.opts.Extensions.SetupWatches(extensions.WindowsController, c); err != nil {
+			return fmt.Errorf("tigera-windows-controller failed to set up extension watches: %w", err)
 		}
 	}
 

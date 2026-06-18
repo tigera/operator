@@ -26,10 +26,13 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -63,6 +66,19 @@ func windowsData(rc extensions.RenderContext) windowsRenderData {
 // Validate rejects windows installation config Calico Enterprise does not support.
 func (windowsControllerExtension) Validate(cc extensions.ControllerContext) error {
 	return validateReporterPort(cc.FelixConfiguration)
+}
+
+// Watches registers the enterprise secrets the windows controller reconciles on.
+func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
+	for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
+		if err := utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, ns); err != nil {
+			return err
+		}
+		if err := utils.AddSecretsWatch(c, monitor.PrometheusClientTLSSecretName, ns); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ExtendContext fetches the node prometheus keypair the installation controller

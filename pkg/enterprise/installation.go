@@ -17,7 +17,13 @@ package enterprise
 import (
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
@@ -47,6 +53,22 @@ func installationData(rc extensions.RenderContext) installationRenderData {
 // Validate rejects installation config Calico Enterprise does not support.
 func (coreControllerExtension) Validate(cc extensions.ControllerContext) error {
 	return validateReporterPort(cc.FelixConfiguration)
+}
+
+// Watches registers the enterprise resources the installation controller
+// reconciles on.
+func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
+	for _, obj := range []client.Object{
+		&operatorv1.ManagementCluster{},
+		&operatorv1.ManagementClusterConnection{},
+		&operatorv1.LogCollector{},
+	} {
+		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
+			return err
+		}
+	}
+	// es-kube-controllers includes the manager internal TLS secret in its bundle.
+	return utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 }
 
 // ExtendContext does the controller-side work the modifiers can't: creating and

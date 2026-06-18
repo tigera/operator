@@ -20,15 +20,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
-func registerTypha(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameTypha, extensions.ComponentExtension{
-		Modify: modifyTypha,
-	})
+func registerTypha(v *extensions.Variant) {
+	v.Modify(render.ComponentNameTypha, modifyTypha)
 }
 
 func modifyTypha(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {

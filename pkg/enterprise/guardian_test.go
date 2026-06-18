@@ -49,15 +49,10 @@ var _ = Describe("guardian enterprise modifier", func() {
 		}
 	}
 
-	ctxWith := func(c render.GuardianExtensionContext) extensions.RenderContext {
-		return extensions.RenderContext{
-			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
-			Component:    c,
-		}
-	}
+	entCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 
 	It("appends the secrets RBAC and UI settings", func() {
-		out, _ := applyExtensions(ext, render.GuardianName, ctxWith(render.GuardianExtensionContext{}), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.GuardianName, entCtx, render.GuardianExtensionContext{}, newObjs(), nil)
 		_, ok := extensions.FindObject[*rbacv1.Role](out, render.GuardianSecretsRole)
 		Expect(ok).To(BeTrue())
 		_, ok = extensions.FindObject[*rbacv1.RoleBinding](out, render.GuardianSecretsRoleBindingName)
@@ -67,7 +62,7 @@ var _ = Describe("guardian enterprise modifier", func() {
 	})
 
 	It("adds the elasticsearch and kibana service ports", func() {
-		out, _ := applyExtensions(ext, render.GuardianName, ctxWith(render.GuardianExtensionContext{}), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.GuardianName, entCtx, render.GuardianExtensionContext{}, newObjs(), nil)
 		svc, _ := extensions.FindObject[*corev1.Service](out, render.GuardianServiceName)
 		names := []string{}
 		for _, p := range svc.Spec.Ports {
@@ -80,7 +75,7 @@ var _ = Describe("guardian enterprise modifier", func() {
 		gc := render.GuardianExtensionContext{
 			Impersonation: &operatorv1.Impersonation{Users: []string{"foo"}, Groups: []string{"bar"}},
 		}
-		out, _ := applyExtensions(ext, render.GuardianName, ctxWith(gc), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.GuardianName, entCtx, gc, newObjs(), nil)
 		role, _ := extensions.FindObject[*rbacv1.ClusterRole](out, render.GuardianClusterRoleName)
 
 		// The single OSS placeholder rule is gone, replaced by the enterprise set.
@@ -91,7 +86,7 @@ var _ = Describe("guardian enterprise modifier", func() {
 
 	It("adds the CA bundle env to the guardian container", func() {
 		gc := render.GuardianExtensionContext{TrustedBundleMountPath: "/ca/bundle"}
-		out, _ := applyExtensions(ext, render.GuardianName, ctxWith(gc), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.GuardianName, entCtx, gc, newObjs(), nil)
 		dep, _ := extensions.FindObject[*appsv1.Deployment](out, render.GuardianDeploymentName)
 		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: "/ca/bundle"}))
 	})

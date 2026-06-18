@@ -16,23 +16,29 @@
 // Enterprise) use to layer variant-specific behavior onto the core operator's
 // render output, so core code never branches on variant.
 //
-// Everything keys off the installation Variant, and registration is per
-// variant, so a registered hook only ever runs for its own variant and never
-// re-checks it. There are two phases:
+// A Set holds the extensions for every variant. Per reconcile the controller
+// selects one Variant from the installation's variant, so a registered hook only
+// ever runs for its own variant and never re-checks it. A Variant bundles two
+// kinds of extension:
 //
-// Setup is the controller-side phase. It runs once per reconcile in the
-// installation controller, has cluster access (Client, CertificateManager), and
-// does the side-effecting work a pure render hook can't: creating certificates,
-// extending the trusted bundle, validating config. It returns the RenderContext
-// - the read-only baton passed to the render phase. Register one per variant
-// with RegisterSetup; the controller runs it with BuildContext.
+// A ControllerExtension is the controller-side hook. It runs once per reconcile
+// in the installation controller, has cluster access (Client,
+// CertificateManager) via the ControllerContext, and does the side-effecting
+// work a pure render hook can't: rejecting unsupported config (Validate) and
+// creating certificates / extending the trusted bundle (ExtendContext). It
+// returns the RenderContext, the read-only baton passed to the render phase.
 //
-// Extension is the render phase: pure, per-component hooks that run after a
-// component builds its objects. Its Image field overrides the component's image
-// (resolved during ResolveImages), and its Modify field post-processes the
-// rendered objects (run at the componentHandler). Register one per component
-// with Register.
+// Per-component modifiers are the render phase: pure hooks that run after a
+// component builds its objects. An image override swaps the component's image
+// (resolved during ResolveImages); a Modifier post-processes the rendered
+// objects (run at the componentHandler, which renders the decorated component).
+// Register a modifier with Variant.Modify, or with RegisterModifier when it
+// needs the component's own typed config.
 //
-// A variant wires up its setup and extensions in one place at startup - see
-// pkg/enterprise.
+// ControllerContext (controller phase) and RenderContext (render phase) are a
+// pair: ControllerContext embeds RenderContext and adds the cluster-access deps,
+// which is why modifiers, given only a RenderContext, can't do I/O.
+//
+// A variant wires up its controller extension and modifiers in one place at
+// startup - see pkg/enterprise.
 package extensions

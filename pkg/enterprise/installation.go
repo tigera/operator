@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
@@ -27,50 +26,54 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 )
 
-func registerInstallation(s *extensions.Set) {
-	s.RegisterSetup(operatorv1.CalicoEnterprise, setup)
-}
+// controllerExtension is the Calico Enterprise controller-side hook for the
+// installation controller.
+type controllerExtension struct{}
 
-// setup is the Calico Enterprise setup phase. It builds the base render context
-// and then does the controller-side work the modifiers can't: validating config
-// and creating/fetching the certificates that feed the trusted bundle.
-func setup(in extensions.Inputs) (extensions.RenderContext, error) {
-	rc := extensions.BaseRenderContext(in)
-
+// Validate rejects installation config Calico Enterprise does not support.
+func (controllerExtension) Validate(cc extensions.ControllerContext) error {
 	// Reject the unsupported zero reporter port. The port value itself is derived
 	// in the node modifier; only this validation lives here.
-	if in.FelixConfiguration.Spec.PrometheusReporterPort != nil && *in.FelixConfiguration.Spec.PrometheusReporterPort == 0 {
-		return rc, errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+	if cc.FelixConfiguration.Spec.PrometheusReporterPort != nil && *cc.FelixConfiguration.Spec.PrometheusReporterPort == 0 {
+		return errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 	}
+	return nil
+}
 
-	nodePrometheusTLS, err := in.CertificateManager.GetOrCreateKeyPair(
-		in.Client,
+// ExtendContext does the controller-side work the modifiers can't: creating and
+// fetching the certificates that feed the trusted bundle, returning the render
+// context with the produced node prometheus keypair layered on.
+func (controllerExtension) ExtendContext(cc extensions.ControllerContext) (extensions.RenderContext, error) {
+	rc := cc.RenderContext
+
+	nodePrometheusTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
+		cc.Client,
 		render.NodePrometheusTLSServerSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, in.ClusterDomain),
+		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, cc.ClusterDomain),
 	)
 	if err != nil {
 		return rc, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
 	}
 	if nodePrometheusTLS != nil {
-		in.TrustedBundle.AddCertificates(nodePrometheusTLS)
+		cc.TrustedBundle.AddCertificates(nodePrometheusTLS)
 	}
 	rc.NodePrometheusTLS = nodePrometheusTLS
 
-	prometheusClientCert, err := in.CertificateManager.GetCertificate(in.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	prometheusClientCert, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
 		return rc, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
 	}
 	if prometheusClientCert != nil {
-		in.TrustedBundle.AddCertificates(prometheusClientCert)
+		cc.TrustedBundle.AddCertificates(prometheusClientCert)
 	}
 
-	esgwCertificate, err := in.CertificateManager.GetCertificate(in.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	esgwCertificate, err := cc.CertificateManager.GetCertificate(cc.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
 		return rc, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
 	}
 	if esgwCertificate != nil {
-		in.TrustedBundle.AddCertificates(esgwCertificate)
+		cc.TrustedBundle.AddCertificates(esgwCertificate)
 	}
 
 	return rc, nil

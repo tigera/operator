@@ -51,10 +51,11 @@ func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 	ExpectWithOffset(1, g.ResolveImages(nil)).To(BeNil())
 	objs, _ := g.Objects()
 	rc := extensions.RenderContext{Installation: cfg.Installation}
+	var extCtx any
 	if p, ok := g.(render.ExtensionContextProvider); ok {
-		rc.Component = p.ExtensionContext()
+		extCtx = p.ExtensionContext()
 	}
-	out, _ := applyExtensions(ext, render.GuardianName, rc, objs, nil)
+	out, _ := applyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, objs, nil)
 	return out
 }
 
@@ -113,10 +114,11 @@ var _ = Describe("Rendering tests", func() {
 			// Apply the registered enterprise modifier the way the componentHandler
 			// does, so these enterprise tests exercise the integrated output.
 			rc := extensions.RenderContext{Installation: cfg.Installation}
+			var extCtx any
 			if p, ok := g.(render.ExtensionContextProvider); ok {
-				rc.Component = p.ExtensionContext()
+				extCtx = p.ExtensionContext()
 			}
-			resources, _ = applyExtensions(ext, render.GuardianName, rc, resources, nil)
+			resources, _ = applyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, resources, nil)
 		}
 
 		BeforeEach(func() {
@@ -349,10 +351,11 @@ var _ = Describe("Rendering tests", func() {
 			// does, so the enterprise policy is exercised. For the Calico variant the
 			// modifier is a no-op and the OSS policy is returned.
 			rc := extensions.RenderContext{Installation: cfg.Installation}
+			var extCtx any
 			if p, ok := g.(render.ExtensionContextProvider); ok {
-				rc.Component = p.ExtensionContext()
+				extCtx = p.ExtensionContext()
 			}
-			resources, _ = applyExtensions(ext, render.ComponentNameGuardianPolicy, rc, objs, nil)
+			resources, _ = applyExtensionsWithContext(ext, render.ComponentNameGuardianPolicy, rc, extCtx, objs, nil)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

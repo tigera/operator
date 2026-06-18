@@ -51,10 +51,11 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	ExpectWithOffset(1, comp.ResolveImages(nil)).To(BeNil())
 	objs, _ := comp.Objects()
 	rc := extensions.RenderContext{Installation: cfg.Installation}
+	var extCtx any
 	if p, ok := comp.(render.ExtensionContextProvider); ok {
-		rc.Component = p.ExtensionContext()
+		extCtx = p.ExtensionContext()
 	}
-	out, _ := applyExtensions(ext, render.ComponentNameWindows, rc, objs, nil)
+	out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, rc, extCtx, objs, nil)
 	return out
 }
 

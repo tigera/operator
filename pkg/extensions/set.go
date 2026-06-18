@@ -18,56 +18,89 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/render"
 )
 
-// Set is the collection of variant extensions the operator runs with: the
-// per-variant setups, the per-component modifiers, and the image overrides. The
-// core operator runs with a nil/empty Set; an extension build (Calico
-// Enterprise) constructs a populated one and hands it in through
+// Set is all the variant extensions the operator runs with, indexed by product
+// variant. The core operator runs with a nil Set; an extension build (e.g.
+// Calico Enterprise) constructs a populated one and hands it in through
 // options.ControllerOptions. This replaces what used to be package-level
 // registries, so nothing is wired by import side effect.
 //
-// The zero value is not usable; build one with NewSet. The methods that read it
-// (BuildContext, Decorate, ResolveImage, Images) are nil-safe so the core
-// operator can pass a nil Set and get base behavior.
+// Per reconcile the controller selects one Variant from the installation's
+// variant. The methods the controller calls (Decorate, Validate, ExtendContext,
+// Images, ResolveImage) are nil-safe, so the core operator's nil Set yields base
+// behavior.
 type Set struct {
-	setups    map[operatorv1.ProductVariant]Setup
-	modifiers map[modifierKey]Modifier
-	images    *imageoverride.Overrides
+	variants map[operatorv1.ProductVariant]*Variant
+	images   *imageoverride.Overrides
 }
 
-// NewSet returns an empty Set ready to register extensions into.
+// NewSet returns an empty Set ready to register variant extensions into.
 func NewSet() *Set {
 	return &Set{
-		setups:    map[operatorv1.ProductVariant]Setup{},
-		modifiers: map[modifierKey]Modifier{},
-		images:    imageoverride.New(),
+		variants: map[operatorv1.ProductVariant]*Variant{},
+		images:   imageoverride.New(),
 	}
 }
 
-// Register installs e as the extension for the named component under the given
-// variant. A (variant, component) pair has at most one extension; registration
-// replaces any prior one. The image override and the modifier are stored
-// separately, so a component can set either field or both.
-func (s *Set) Register(variant operatorv1.ProductVariant, component string, e ComponentExtension) {
-	if e.Image != nil {
-		s.images.Register(variant, component, e.Image)
+// Variant returns the extension bundle for v, creating an empty one if needed.
+// Used at registration time to build up a variant's extensions.
+func (s *Set) Variant(v operatorv1.ProductVariant) *Variant {
+	if s.variants[v] == nil {
+		s.variants[v] = &Variant{
+			variant:   v,
+			modifiers: map[string]decorator{},
+			images:    s.images,
+		}
 	}
-	if e.Modify != nil {
-		s.modifiers[modifierKey{variant, component}] = e.Modify
-	}
+	return s.variants[v]
 }
 
-// RegisterSetup installs setup as the controller-side setup phase for the given
-// variant. Registration replaces any prior setup for that variant.
-func (s *Set) RegisterSetup(variant operatorv1.ProductVariant, setup Setup) {
-	s.setups[variant] = setup
+// variant looks up the bundle for v, returning nil when none is registered.
+// Nil-safe.
+func (s *Set) variant(v operatorv1.ProductVariant) *Variant {
+	if s == nil {
+		return nil
+	}
+	return s.variants[v]
 }
 
-// Images returns the image overrides. The render package resolves a component's
-// image through these directly (the imageoverride leaf, so render need not
-// import extensions). Safe to call on a nil Set, which returns nil overrides
-// that resolve to the default image.
+// Decorate wraps component with the extension registered for it under the
+// installation's variant, so that when the handler renders the component its
+// objects are post-processed by that modifier. A decorated component is itself a
+// render.Component, so it flows through the component handler like any other.
+// Returns component unchanged when no extension applies. Nil-safe.
+func (s *Set) Decorate(component render.Component, ctx RenderContext) render.Component {
+	if ctx.Installation == nil {
+		return component
+	}
+	return s.variant(ctx.Installation.Variant).decorate(component, ctx)
+}
+
+// Validate runs the controller extension's validation for the installation's
+// variant, or returns nil when no extension is registered. Nil-safe.
+func (s *Set) Validate(cc ControllerContext) error {
+	if cc.Installation == nil {
+		return nil
+	}
+	return s.variant(cc.Installation.Variant).validate(cc)
+}
+
+// ExtendContext runs the controller extension for the installation's variant and
+// returns the resulting RenderContext, or the base render context when no
+// extension is registered. Nil-safe.
+func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, error) {
+	if cc.Installation == nil {
+		return cc.RenderContext, nil
+	}
+	return s.variant(cc.Installation.Variant).extendContext(cc)
+}
+
+// Images returns the shared image override table. The render package resolves a
+// component's image through it directly (the imageoverride leaf, so render need
+// not import extensions). Nil-safe, returning nil overrides that resolve to the
+// default image.
 func (s *Set) Images() *imageoverride.Overrides {
 	if s == nil {
 		return nil
@@ -76,7 +109,7 @@ func (s *Set) Images() *imageoverride.Overrides {
 }
 
 // ResolveImage resolves key for the installation through the image overrides,
-// returning def when no override applies. Safe to call on a nil Set.
+// returning def when no override applies. Nil-safe.
 func (s *Set) ResolveImage(key string, def components.Component, in *operatorv1.InstallationSpec) components.Component {
 	return s.Images().Resolve(key, def, in)
 }

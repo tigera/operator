@@ -27,10 +27,8 @@ var _ = Describe("image overrides", func() {
 	var s *extensions.Set
 	BeforeEach(func() {
 		s = extensions.NewSet()
-		s.Register(operatorv1.CalicoEnterprise, "node", extensions.ComponentExtension{
-			Image: func(in *operatorv1.InstallationSpec) components.Component {
-				return components.ComponentTigeraNode
-			},
+		s.Variant(operatorv1.CalicoEnterprise).Image("node", func(in *operatorv1.InstallationSpec) components.Component {
+			return components.ComponentTigeraNode
 		})
 	})
 

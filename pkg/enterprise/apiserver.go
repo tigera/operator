@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -27,7 +26,6 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/extensions"
@@ -52,26 +50,21 @@ type apiServer struct {
 	calicoImage string
 }
 
-func registerAPIServer(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameAPIServer, extensions.ComponentExtension{
-		Modify: modifyAPIServer,
-	})
-	// When running Calico, clean up any Enterprise objects left behind by a prior
-	// Enterprise installation.
-	s.Register(operatorv1.Calico, render.ComponentNameAPIServer, extensions.ComponentExtension{
-		Modify: cleanupAPIServer,
-	})
+func registerAPIServer(v *extensions.Variant) {
+	extensions.RegisterModifier(v, render.ComponentNameAPIServer, modifyAPIServer)
+}
+
+// registerAPIServerCleanup registers, for the Calico variant, the cleanup that
+// deletes the Enterprise API server objects left behind by a prior Enterprise
+// installation.
+func registerAPIServerCleanup(v *extensions.Variant) {
+	extensions.RegisterModifier(v, render.ComponentNameAPIServer, cleanupAPIServer)
 }
 
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:
 // the query server container and its volumes, audit logging on the aggregation API server
 // container, the Enterprise RBAC objects, and the query server port on the Service.
-func modifyAPIServer(ctx extensions.RenderContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	ec, ok := ctx.Component.(render.APIServerExtensionContext)
-	if !ok {
-		logrus.Errorf("BUG: apiserver modifier got %T, want render.APIServerExtensionContext; leaving objects unchanged", ctx.Component)
-		return create, del
-	}
+func modifyAPIServer(ctx extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage}
 
 	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
@@ -150,12 +143,7 @@ func modifyAPIServer(ctx extensions.RenderContext, create, del []client.Object) 
 
 // cleanupAPIServer deletes the Enterprise API server objects when running Calico, so a
 // cluster switched from Enterprise to Calico does not leave them behind.
-func cleanupAPIServer(ctx extensions.RenderContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	ec, ok := ctx.Component.(render.APIServerExtensionContext)
-	if !ok {
-		logrus.Errorf("BUG: apiserver cleanup got %T, want render.APIServerExtensionContext; leaving objects unchanged", ctx.Component)
-		return create, del
-	}
+func cleanupAPIServer(ctx extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config}
 
 	del = append(del, c.tigeraAPIServerClusterRole(), c.tigeraAPIServerClusterRoleBinding())

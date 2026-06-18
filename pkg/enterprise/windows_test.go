@@ -85,19 +85,22 @@ var _ = Describe("windows enterprise modifier", func() {
 		return nil
 	}
 
-	ctxFor := func(provider operatorv1.Provider, tls certificatemanagement.KeyPairInterface, bundle certificatemanagement.TrustedBundleRO) extensions.RenderContext {
+	ctxFor := func(provider operatorv1.Provider) extensions.RenderContext {
 		return extensions.RenderContext{
 			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider},
-			Component: render.WindowsExtensionContext{
-				NodeReporterMetricsPort: 9081,
-				PrometheusServerTLS:     tls,
-				TrustedBundle:           bundle,
-			},
+		}
+	}
+
+	wcFor := func(tls certificatemanagement.KeyPairInterface, bundle certificatemanagement.TrustedBundleRO) render.WindowsExtensionContext {
+		return render.WindowsExtensionContext{
+			NodeReporterMetricsPort: 9081,
+			PrometheusServerTLS:     tls,
+			TrustedBundle:           bundle,
 		}
 	}
 
 	It("appends the node-metrics service", func() {
-		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, nil, nil), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), wcFor(nil, nil), newObjs(), nil)
 		svc, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
@@ -105,7 +108,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("swaps the cni log mount for the calico log volume and adds enterprise env", func() {
-		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, nil, nil), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), wcFor(nil, nil), newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(HaveField("Name", "var-log-calico")))
@@ -122,7 +125,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("sets the trusted DNS server on openshift", func() {
-		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderOpenShift, nil, nil), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderOpenShift), wcFor(nil, nil), newObjs(), nil)
 		Expect(container(ds(out), "node").Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"}))
 	})
 
@@ -136,7 +139,7 @@ var _ = Describe("windows enterprise modifier", func() {
 		Expect(err).NotTo(HaveOccurred())
 		bundle := cm.CreateTrustedBundle()
 
-		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone, tls, bundle), newObjs(), nil)
+		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), wcFor(tls, bundle), newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(tls.Volume()))

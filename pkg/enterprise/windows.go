@@ -17,7 +17,6 @@ package enterprise
 import (
 	"fmt"
 
-	"github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,29 +35,21 @@ import (
 // felix env and node volume mounts, so they receive the same enterprise layering.
 var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd": true}
 
-func registerWindows(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsNodeImg, extensions.ComponentExtension{
-		Image: func(*operatorv1.InstallationSpec) components.Component { return components.ComponentTigeraNodeWindows },
+func registerWindows(v *extensions.Variant) {
+	v.Image(render.ComponentNameWindowsNodeImg, func(*operatorv1.InstallationSpec) components.Component {
+		return components.ComponentTigeraNodeWindows
 	})
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsCNIImg, extensions.ComponentExtension{
-		Image: func(*operatorv1.InstallationSpec) components.Component { return components.ComponentTigeraCNIWindows },
+	v.Image(render.ComponentNameWindowsCNIImg, func(*operatorv1.InstallationSpec) components.Component {
+		return components.ComponentTigeraCNIWindows
 	})
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindows, extensions.ComponentExtension{
-		Modify: modifyWindows,
-	})
+	extensions.RegisterModifier(v, render.ComponentNameWindows, modifyWindows)
 }
 
 // modifyWindows layers Calico Enterprise behavior onto the rendered
 // calico-node-windows objects: the node-metrics Service and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
-func modifyWindows(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	wc, ok := ctx.Component.(render.WindowsExtensionContext)
-	if !ok {
-		logrus.Errorf("BUG: windows modifier got %T, want render.WindowsExtensionContext; leaving objects unchanged", ctx.Component)
-		return objs, del
-	}
-
+func modifyWindows(ctx extensions.RenderContext, wc render.WindowsExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
 		modifyWindowsDaemonSet(ctx, wc, ds)
 	}

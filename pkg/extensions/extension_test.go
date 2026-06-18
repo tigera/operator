@@ -34,13 +34,11 @@ var _ = Describe("extension registry", func() {
 	entCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 
 	It("applies a registered modifier to the matching component and variant", func() {
-		s.Register(operatorv1.CalicoEnterprise, "test", extensions.ComponentExtension{
-			Modify: func(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-				cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
-				Expect(ok).To(BeTrue())
-				cm.Data = map[string]string{"k": "v"}
-				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}}), del
-			},
+		s.Variant(operatorv1.CalicoEnterprise).Modify("test", func(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+			cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
+			Expect(ok).To(BeTrue())
+			cm.Data = map[string]string{"k": "v"}
+			return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}}), del
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
@@ -53,10 +51,8 @@ var _ = Describe("extension registry", func() {
 	})
 
 	It("lets a modifier append to the delete list", func() {
-		s.Register(operatorv1.CalicoEnterprise, "test", extensions.ComponentExtension{
-			Modify: func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-				return objs, append(del, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "stale"}})
-			},
+		s.Variant(operatorv1.CalicoEnterprise).Modify("test", func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+			return objs, append(del, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "stale"}})
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
@@ -73,10 +69,8 @@ var _ = Describe("extension registry", func() {
 	})
 
 	It("does not apply a modifier registered for a different variant", func() {
-		s.Register(operatorv1.CalicoEnterprise, "test", extensions.ComponentExtension{
-			Modify: func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}}), del
-			},
+		s.Variant(operatorv1.CalicoEnterprise).Modify("test", func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+			return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "extra"}}), del
 		})
 
 		calicoCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
@@ -91,16 +85,14 @@ var _ = Describe("extension registry", func() {
 		Expect(out).To(Equal(in))
 	})
 
-	It("replaces rather than stacks when a (variant, component) is registered twice", func() {
-		add := func(name string) extensions.ComponentExtension {
-			return extensions.ComponentExtension{
-				Modify: func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-					return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}}), del
-				},
-			}
+	It("replaces rather than stacks when a component modifier is registered twice", func() {
+		add := func(name string) {
+			s.Variant(operatorv1.CalicoEnterprise).Modify("test", func(_ extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+				return append(objs, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: name}}), del
+			})
 		}
-		s.Register(operatorv1.CalicoEnterprise, "test", add("first"))
-		s.Register(operatorv1.CalicoEnterprise, "test", add("second"))
+		add("first")
+		add("second")
 
 		out, _ := applyExtensions(s, "test", entCtx, nil, nil)
 		Expect(out).To(HaveLen(1))

@@ -68,12 +68,13 @@ import (
 func apiServerObjects(c render.Component) ([]client.Object, []client.Object) {
 	create, del := c.Objects()
 	rc := extensions.RenderContext{}
+	var extCtx any
 	if p, ok := c.(render.ExtensionContextProvider); ok {
 		ec := p.ExtensionContext().(render.APIServerExtensionContext)
 		rc.Installation = ec.Config.Installation
-		rc.Component = ec
+		extCtx = ec
 	}
-	return applyExtensions(ext, render.ComponentNameAPIServer, rc, create, del)
+	return applyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, extCtx, create, del)
 }
 
 var _ = Describe("API server rendering tests (Calico Enterprise)", func() {

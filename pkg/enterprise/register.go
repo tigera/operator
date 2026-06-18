@@ -14,19 +14,31 @@
 
 package enterprise
 
-import "github.com/tigera/operator/pkg/extensions"
+import (
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/extensions"
+)
 
-// New builds the extension Set for the in-repo Calico Enterprise variant: every
-// component modifier, image override, and the installation setup. The operator
-// is handed this Set at startup (the core operator is handed none). After the
-// monorepo split this is what calico-private's main will construct instead.
+// New builds the extension Set for the in-repo Calico Enterprise variant: the
+// controller extension, every component modifier, and the image overrides. The
+// operator is handed this Set at startup (the core operator is handed none).
+// After the monorepo split this is what calico-private's main will construct
+// instead.
 func New() *extensions.Set {
 	s := extensions.NewSet()
-	registerTypha(s)
-	registerNode(s)
-	registerWindows(s)
-	registerGuardian(s)
-	registerInstallation(s)
-	registerAPIServer(s)
+
+	ent := s.Variant(operatorv1.CalicoEnterprise)
+	ent.Controller(controllerExtension{})
+	registerTypha(ent)
+	registerNode(ent)
+	registerWindows(ent)
+	registerGuardian(ent)
+	registerAPIServer(ent)
+
+	// When the enterprise operator manages a Calico installation, clean up the
+	// Enterprise objects left behind by a prior Enterprise installation.
+	cal := s.Variant(operatorv1.Calico)
+	registerAPIServerCleanup(cal)
+
 	return s
 }

@@ -24,8 +24,8 @@ import (
 
 // stubExtComponent adapts raw object lists to a render.Component so a registered
 // extension can be exercised through Set.Decorate, the same seam the component
-// handler uses. key selects the extension; extCtx is delivered as the per-component
-// ExtensionContext.
+// handler uses. key selects the extension; extCtx is delivered as the component's
+// ExtensionContext (the typed config a RegisterModifier modifier reads).
 type stubExtComponent struct {
 	key            string
 	extCtx         any
@@ -57,9 +57,15 @@ func (s stubExtComponent) ExtensionContext() any {
 }
 
 // applyExtensions decorates a stub component holding the given objects with the
-// extension registered under key in s, then renders it - returning the decorated
-// create and delete lists.
+// extension registered under key, then renders it. For a modifier that needs the
+// component's typed config, use applyExtensionsWithContext.
 func applyExtensions(s *extensions.Set, key string, ctx extensions.RenderContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	stub := stubExtComponent{key: key, extCtx: ctx.Component, create: create, delete: del}
+	return applyExtensionsWithContext(s, key, ctx, nil, create, del)
+}
+
+// applyExtensionsWithContext is applyExtensions for a modifier that reads the
+// component's typed config: extCtx is delivered as the stub's ExtensionContext.
+func applyExtensionsWithContext(s *extensions.Set, key string, ctx extensions.RenderContext, extCtx any, create, del []client.Object) ([]client.Object, []client.Object) {
+	stub := stubExtComponent{key: key, extCtx: extCtx, create: create, delete: del}
 	return s.Decorate(stub, ctx).Objects()
 }

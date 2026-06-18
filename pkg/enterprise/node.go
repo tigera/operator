@@ -46,20 +46,16 @@ const (
 	installCNIContainerName = "install-cni"
 )
 
-func registerNode(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameNode, extensions.ComponentExtension{
-		Image: func(in *operatorv1.InstallationSpec) components.Component {
-			return components.ComponentTigeraNode
-		},
-		Modify: modifyNode,
+func registerNode(v *extensions.Variant) {
+	v.Image(render.ComponentNameNode, func(in *operatorv1.InstallationSpec) components.Component {
+		return components.ComponentTigeraNode
 	})
+	v.Modify(render.ComponentNameNode, modifyNode)
 
 	// The node component renders the cni-plugins init container; its image
 	// resolves through its own override key.
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameCNIPlugins, extensions.ComponentExtension{
-		Image: func(in *operatorv1.InstallationSpec) components.Component {
-			return components.ComponentTigeraCNIPlugins
-		},
+	v.Image(render.ComponentNameCNIPlugins, func(in *operatorv1.InstallationSpec) components.Component {
+		return components.ComponentTigeraCNIPlugins
 	})
 }
 

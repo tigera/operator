@@ -31,32 +31,31 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-var _ = Describe("installation setup", func() {
+var _ = Describe("installation controller extension", func() {
 
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
-		in := newInputs(operatorv1.CalicoEnterprise)
-		in.FelixConfiguration = &v3.FelixConfiguration{
+		cc := newControllerContext(operatorv1.CalicoEnterprise)
+		cc.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		_, err := ext.BuildContext(in)
-		Expect(err).To(HaveOccurred())
+		Expect(ext.Validate(cc)).To(HaveOccurred())
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		rc, err := ext.BuildContext(newInputs(operatorv1.CalicoEnterprise))
+		rc, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).NotTo(BeNil())
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		rc, err := ext.BuildContext(newInputs(operatorv1.Calico))
+		rc, err := ext.ExtendContext(newControllerContext(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.NodePrometheusTLS).To(BeNil())
 	})
 })
 
-func newInputs(variant operatorv1.ProductVariant) extensions.Inputs {
+func newControllerContext(variant operatorv1.ProductVariant) extensions.ControllerContext {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -65,13 +64,15 @@ func newInputs(variant operatorv1.ProductVariant) extensions.Inputs {
 	Expect(err).NotTo(HaveOccurred())
 	trustedBundle := certManager.CreateTrustedBundle()
 
-	return extensions.Inputs{
+	return extensions.ControllerContext{
+		RenderContext: extensions.RenderContext{
+			Installation:       &operatorv1.InstallationSpec{Variant: variant},
+			FelixConfiguration: &v3.FelixConfiguration{},
+			TrustedBundle:      trustedBundle,
+			ClusterDomain:      "cluster.local",
+		},
 		Ctx:                context.Background(),
 		Client:             c,
-		Installation:       &operatorv1.InstallationSpec{Variant: variant},
-		FelixConfiguration: &v3.FelixConfiguration{},
 		CertificateManager: certManager,
-		TrustedBundle:      trustedBundle,
-		ClusterDomain:      "cluster.local",
 	}
 }

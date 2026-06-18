@@ -29,7 +29,6 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
@@ -38,26 +37,16 @@ import (
 	operatorurl "github.com/tigera/operator/pkg/url"
 )
 
-func registerGuardian(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.GuardianName, extensions.ComponentExtension{
-		Modify: modifyGuardian,
-	})
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameGuardianPolicy, extensions.ComponentExtension{
-		Modify: modifyGuardianPolicy,
-	})
+func registerGuardian(v *extensions.Variant) {
+	extensions.RegisterModifier(v, render.GuardianName, modifyGuardian)
+	extensions.RegisterModifier(v, render.ComponentNameGuardianPolicy, modifyGuardianPolicy)
 }
 
 // modifyGuardianPolicy replaces the core OSS guardian network policy with the
 // enterprise management-cluster policy. Building the enterprise egress rules can
 // fail (proxy URL parsing); on failure we drop the policy entirely, matching the
 // core behavior of omitting it rather than installing a partial policy.
-func modifyGuardianPolicy(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	gpc, ok := ctx.Component.(render.GuardianPolicyExtensionContext)
-	if !ok {
-		logrus.Errorf("BUG: guardian policy modifier got %T, want render.GuardianPolicyExtensionContext; leaving objects unchanged", ctx.Component)
-		return objs, del
-	}
-
+func modifyGuardianPolicy(ctx extensions.RenderContext, gpc render.GuardianPolicyExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
 	if !ok {
 		return objs, del
@@ -215,13 +204,7 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3
 // objects: the secrets Role/RoleBinding and default UI settings, the
 // elasticsearch/kibana service ports, the management-cluster-request cluster
 // role rules (which replace the OSS rules), and the CA bundle env vars.
-func modifyGuardian(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	gc, ok := ctx.Component.(render.GuardianExtensionContext)
-	if !ok {
-		logrus.Errorf("BUG: guardian modifier got %T, want render.GuardianExtensionContext; leaving objects unchanged", ctx.Component)
-		return objs, del
-	}
-
+func modifyGuardian(ctx extensions.RenderContext, gc render.GuardianExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
 		role.Rules = guardianEnterpriseRules(gc)
 	}

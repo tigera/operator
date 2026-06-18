@@ -1209,15 +1209,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	renderCtx, err := r.opts.Extensions.BuildContext(extensions.Inputs{
+	cc := extensions.ControllerContext{
+		RenderContext: extensions.RenderContext{
+			Installation:       &instance.Spec,
+			FelixConfiguration: felixConfiguration,
+			ClusterDomain:      r.opts.ClusterDomain,
+			TrustedBundle:      typhaNodeTLS.TrustedBundle,
+		},
 		Ctx:                ctx,
 		Client:             r.client,
-		Installation:       &instance.Spec,
-		FelixConfiguration: felixConfiguration,
 		CertificateManager: certificateManager,
-		TrustedBundle:      typhaNodeTLS.TrustedBundle,
-		ClusterDomain:      r.opts.ClusterDomain,
-	})
+	}
+	if err := r.opts.Extensions.Validate(cc); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration for variant", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	renderCtx, err := r.opts.Extensions.ExtendContext(cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err

@@ -625,6 +625,40 @@ var _ = Describe("Istio controller tests", func() {
 			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
 		})
 
+		It("should surface the disabled Calico dataplane integration via a Normal event (not Degraded)", func() {
+			// The disabled integration is an expected configuration, not an error, so the
+			// controller must announce it with a Normal Kubernetes Event on the Istio resource
+			// (reason CalicoDataplaneIntegrationDisabled) rather than setting TigeraStatus Degraded.
+			recorder := record.NewFakeRecorder(100)
+			r := &ReconcileIstio{
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       recorder,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Drain the recorder and look for the integration-disabled event.
+			var events []string
+			close(recorder.Events)
+			for e := range recorder.Events {
+				events = append(events, e)
+			}
+			Expect(events).To(ContainElement(SatisfyAll(
+				ContainSubstring("Normal"),
+				ContainSubstring("CalicoDataplaneIntegrationDisabled"),
+				ContainSubstring("Linux dataplane is disabled"),
+			)), "expected a Normal CalicoDataplaneIntegrationDisabled event in headless mode")
+
+			// The integration being off is expected, so the controller must not degrade.
+			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
+			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		})
+
 		It("should remove the finalizer on deletion without patching FelixConfiguration", func() {
 			r := &ReconcileIstio{
 				Client:         cli,

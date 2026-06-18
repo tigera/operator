@@ -143,6 +143,10 @@ type APIServerConfiguration struct {
 	KubernetesVersion            *common.VersionInfo
 	ClusterDomain                string
 
+	// RBACManagementEnabled gates the RBAC management UI permissions on
+	// tigera-network-admin.
+	RBACManagementEnabled bool
+
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool
@@ -2054,6 +2058,17 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			},
 			Verbs: []string{"patch"},
 		},
+	}
+
+	// Grant network-admin the role/binding access the RBAC management UI needs.
+	// bind+escalate let it assign managed roles without holding their rules, so
+	// gate on the feature to keep these verbs off non-RBAC-UI clusters.
+	if c.cfg.RBACManagementEnabled {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "roles", "clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"},
+		})
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.

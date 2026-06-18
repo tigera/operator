@@ -719,6 +719,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		BindingNamespaces:          namespaces,
 		OSSTenantNamespaces:        ossTenantNamespaces,
 		Manager:                    instance,
+		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
 		CACertCommonName:           certificateManager.CACertCommonName(),
 	}

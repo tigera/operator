@@ -150,6 +150,10 @@ type KubeControllersConfiguration struct {
 	// caBundle so the apiserver can verify the in-process webhook endpoint.
 	// Only consulted when WAFGatewayExtensionEnabled is true.
 	WAFWebhookCABundle []byte
+
+	// RBACManagementEnabled mirrors Manager.spec.rbac.ui == Enabled and gates
+	// the rbacsync controller in calico-kube-controllers.
+	RBACManagementEnabled bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -199,6 +203,13 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
 		if cfg.WAFGatewayExtensionEnabled {
 			enabledControllers = append(enabledControllers, "applicationlayer")
+		}
+
+		// Runs the rbacsync controller to reconcile managed ClusterRoles and
+		// bindings against the tigera-idp-groups ConfigMap.
+		if cfg.RBACManagementEnabled {
+			enabledControllers = append(enabledControllers, "rbacsync")
+			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)
 		}
 	}
 
@@ -330,6 +341,9 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersClusterRoleBinding(),
 	)
 	objectsToCreate = append(objectsToCreate, c.managedClusterRoleBindings()...)
+	if c.cfg.RBACManagementEnabled {
+		objectsToCreate = append(objectsToCreate, c.rbacSyncIDPGroupsRole()...)
+	}
 
 	if len(c.enabledControllers) > 0 {
 		// There's something to run, so create the deployment.
@@ -656,6 +670,76 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	}
 
 	return rules
+}
+
+// rbacSyncIDPGroupsRole returns the Role + RoleBinding that grants rbacsync
+// read on the tigera-idp-groups ConfigMap in calico-system.
+func (c *kubeControllersComponent) rbacSyncIDPGroupsRole() []client.Object {
+	name := "calico-kube-controllers-rbac-sync"
+	return []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: common.CalicoNamespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{"tigera-idp-groups"},
+					Verbs:         []string{"get", "list", "watch"},
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: common.CalicoNamespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     name,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      c.kubeControllerServiceAccountName,
+					Namespace: c.cfg.Namespace,
+				},
+			},
+		},
+	}
+}
+
+// rbacSyncControllerRules returns the extra rules the rbacsync controller
+// needs on top of render.RBACManagementEscalationRules.
+func rbacSyncControllerRules() []rbacv1.PolicyRule {
+	rules := render.RBACManagementEscalationRules()
+	return append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "clusterrolebindings"},
+			Verbs:     []string{"escalate", "bind"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{"tigera-known-oidc-users"},
+			Verbs:         []string{"get", "list", "watch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get", "list"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"get", "create", "patch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+	)
 }
 
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {

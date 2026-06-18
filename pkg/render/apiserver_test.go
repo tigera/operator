@@ -384,6 +384,25 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
+	It("should gate the RBAC management UI rule on RBACManagementEnabled", func() {
+		// Disabled (default): tigera-network-admin must not carry the
+		// escalation-capable RBAC management rule.
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).NotTo(ContainElement(rbacManagementNetworkAdminRule))
+
+		// Enabled: the rule is appended.
+		cfg.RBACManagementEnabled = true
+		component, err = render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ = component.Objects()
+		clusterRole = rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacManagementNetworkAdminRule))
+		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRule)))
+	})
+
 	It("should render resources without an aggregation server", func() {
 		cfg.RequiresAggregationServer = false
 
@@ -1889,6 +1908,14 @@ var (
 			ResourceNames: []string{"webhooks-secret"},
 			Verbs:         []string{"patch"},
 		},
+	}
+
+	// rbacManagementNetworkAdminRule is the extra tigera-network-admin rule
+	// rendered only when Manager.spec.rbac.ui is Enabled.
+	rbacManagementNetworkAdminRule = rbacv1.PolicyRule{
+		APIGroups: []string{"rbac.authorization.k8s.io"},
+		Resources: []string{"clusterroles", "roles", "clusterrolebindings", "rolebindings"},
+		Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"},
 	}
 )
 

@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -436,23 +437,22 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: enterprise.EsKubeControllerNetworkPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "calico-kube-controllers", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: kubecontrollers.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
+			{name: enterprise.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: enterprise.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: enterprise.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: enterprise.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: enterprise.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
 		instance.Variant = operatorv1.CalicoEnterprise
-		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
 
-		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+		component := enterprise.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -465,7 +465,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// The Deployment should have the correct configuration.
-		dp := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		dp := rtest.GetResource(resources, enterprise.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
@@ -482,7 +482,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].Name).To(Equal("tigera-ca-bundle"))
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
-		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtest.GetResource(resources, enterprise.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(HaveLen(36), "cluster role should have 36 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
@@ -693,26 +693,25 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			version string
 			kind    string
 		}{
-			{name: kubecontrollers.EsKubeControllerNetworkPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
+			{name: enterprise.EsKubeControllerNetworkPolicyName, ns: common.CalicoNamespace, group: "projectcalico.org", version: "v3", kind: "NetworkPolicy"},
 			{name: "calico-kube-controllers", ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
-			{name: kubecontrollers.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
-			{name: kubecontrollers.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: enterprise.EsKubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
+			{name: enterprise.EsKubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.ManagedClustersWatchRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
-			{name: kubecontrollers.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
-			{name: kubecontrollers.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
-			{name: kubecontrollers.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
+			{name: enterprise.EsKubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
+			{name: enterprise.ElasticsearchKubeControllersUserSecret, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
+			{name: enterprise.EsKubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
 		// Override configuration to match expected Enterprise config.
 		instance.Variant = operatorv1.CalicoEnterprise
-		cfg.LogStorageExists = true
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
 
-		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+		component := enterprise.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -725,7 +724,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 
 		// The Deployment should have the correct configuration.
-		dp := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		dp := rtest.GetResource(resources, enterprise.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
@@ -743,7 +742,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 
-		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		clusterRole := rtest.GetResource(resources, enterprise.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(HaveLen(36), "cluster role should have 36 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
@@ -865,7 +864,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	It("should add the OIDC prefix env variables", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
-		cfg.LogStorageExists = true
 		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
@@ -875,17 +873,17 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Openshift:      &operatorv1.AuthenticationOpenshift{IssuerURL: "https://api.example.com"},
 		}}
 
-		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+		component := enterprise.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
-		depResource := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+		depResource := rtest.GetResource(resources, enterprise.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
 		Expect(depResource).ToNot(BeNil())
 		deployment := depResource.(*appsv1.Deployment)
 
 		var usernamePrefix, groupPrefix string
 		for _, container := range deployment.Spec.Template.Spec.Containers {
-			if container.Name == kubecontrollers.EsKubeController {
+			if container.Name == enterprise.EsKubeController {
 				for _, env := range container.Env {
 					switch env.Name {
 					case "OIDC_AUTH_USERNAME_PREFIX":
@@ -1132,20 +1130,19 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	When("enableESOIDCWorkaround is true", func() {
 		It("should set the ENABLE_ELASTICSEARCH_OIDC_WORKAROUND env variable to true", func() {
 			instance.Variant = operatorv1.CalicoEnterprise
-			cfg.LogStorageExists = true
 			cfg.ManagementCluster = &operatorv1.ManagementCluster{}
 			cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 			cfg.MetricsPort = 9094
-			component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+			component := enterprise.NewElasticsearchKubeControllers(&cfg)
 			resources, _ := component.Objects()
 
-			depResource := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
+			depResource := rtest.GetResource(resources, enterprise.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment")
 			Expect(depResource).ToNot(BeNil())
 			deployment := depResource.(*appsv1.Deployment)
 
 			var esLicenseType string
 			for _, container := range deployment.Spec.Template.Spec.Containers {
-				if container.Name == kubecontrollers.EsKubeController {
+				if container.Name == enterprise.EsKubeController {
 					for _, env := range container.Env {
 						if env.Name == "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND" {
 							esLicenseType = env.Value
@@ -1289,10 +1286,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					cfg.ManagementClusterConnection = nil
 				}
 				instance.Variant = operatorv1.CalicoEnterprise
-				cfg.LogStorageExists = true
 				cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 
-				component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+				component := enterprise.NewElasticsearchKubeControllers(&cfg)
 				resources, _ := component.Objects()
 
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)

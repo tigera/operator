@@ -47,7 +47,7 @@ const (
 )
 
 func registerNode(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameNode, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameNode, extensions.ComponentExtension{
 		Image: func(in *operatorv1.InstallationSpec) components.Component {
 			return components.ComponentTigeraNode
 		},
@@ -56,7 +56,7 @@ func registerNode(s *extensions.Set) {
 
 	// The node component renders the cni-plugins init container; its image
 	// resolves through its own override key.
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameCNIPlugins, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameCNIPlugins, extensions.ComponentExtension{
 		Image: func(in *operatorv1.InstallationSpec) components.Component {
 			return components.ComponentTigeraCNIPlugins
 		},

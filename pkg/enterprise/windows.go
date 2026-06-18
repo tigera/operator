@@ -37,13 +37,13 @@ import (
 var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd": true}
 
 func registerWindows(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsNodeImg, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsNodeImg, extensions.ComponentExtension{
 		Image: func(*operatorv1.InstallationSpec) components.Component { return components.ComponentTigeraNodeWindows },
 	})
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsCNIImg, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindowsCNIImg, extensions.ComponentExtension{
 		Image: func(*operatorv1.InstallationSpec) components.Component { return components.ComponentTigeraCNIWindows },
 	})
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindows, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameWindows, extensions.ComponentExtension{
 		Modify: modifyWindows,
 	})
 }

@@ -53,12 +53,12 @@ type apiServer struct {
 }
 
 func registerAPIServer(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameAPIServer, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameAPIServer, extensions.ComponentExtension{
 		Modify: modifyAPIServer,
 	})
 	// When running Calico, clean up any Enterprise objects left behind by a prior
 	// Enterprise installation.
-	s.Register(operatorv1.Calico, render.ComponentNameAPIServer, extensions.Extension{
+	s.Register(operatorv1.Calico, render.ComponentNameAPIServer, extensions.ComponentExtension{
 		Modify: cleanupAPIServer,
 	})
 }

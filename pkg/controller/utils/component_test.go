@@ -2580,7 +2580,7 @@ func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 var _ = Describe("componentHandler modifier application", func() {
 	It("applies registered modifiers to a named component before create", func() {
 		ext := extensions.NewSet()
-		ext.Register(operatorv1.CalicoEnterprise, "fake", extensions.Extension{
+		ext.Register(operatorv1.CalicoEnterprise, "fake", extensions.ComponentExtension{
 			Modify: func(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 				cm := objs[0].(*corev1.ConfigMap)
 				cm.Data = map[string]string{"patched": "yes"}

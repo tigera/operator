@@ -28,7 +28,7 @@ import (
 // registries, so nothing is wired by import side effect.
 //
 // The zero value is not usable; build one with NewSet. The methods that read it
-// (BuildContext, ApplyModifiers, ResolveImage, Images) are nil-safe so the core
+// (BuildContext, Decorate, ResolveImage, Images) are nil-safe so the core
 // operator can pass a nil Set and get base behavior.
 type Set struct {
 	setups    map[operatorv1.ProductVariant]Setup
@@ -49,7 +49,7 @@ func NewSet() *Set {
 // variant. A (variant, component) pair has at most one extension; registration
 // replaces any prior one. The image override and the modifier are stored
 // separately, so a component can set either field or both.
-func (s *Set) Register(variant operatorv1.ProductVariant, component string, e Extension) {
+func (s *Set) Register(variant operatorv1.ProductVariant, component string, e ComponentExtension) {
 	if e.Image != nil {
 		s.images.Register(variant, component, e.Image)
 	}

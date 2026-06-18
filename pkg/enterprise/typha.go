@@ -26,7 +26,7 @@ import (
 )
 
 func registerTypha(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameTypha, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameTypha, extensions.ComponentExtension{
 		Modify: modifyTypha,
 	})
 }

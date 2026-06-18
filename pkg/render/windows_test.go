@@ -54,7 +54,7 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	if p, ok := comp.(render.ExtensionContextProvider); ok {
 		rc.Component = p.ExtensionContext()
 	}
-	out, _ := ext.ApplyModifiers(render.ComponentNameWindows, rc, objs, nil)
+	out, _ := applyExtensions(ext, render.ComponentNameWindows, rc, objs, nil)
 	return out
 }
 

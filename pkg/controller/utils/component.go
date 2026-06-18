@@ -458,6 +458,18 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+	// Decorate the component with any registered variant extension before doing
+	// anything with it, so Ready, SupportedOSType, and Objects all reflect the
+	// extended component. Decorate is a no-op for components with no registered
+	// extension.
+	if ext, ok := component.(render.Extensible); ok && c.extensions == nil {
+		// The component can be extended but this handler was built without an
+		// extension Set, so any registered extension silently won't run. That is
+		// a wiring bug in the controller, not a normal state.
+		c.log.Info("BUG: extensible component rendered by a handler with no extension Set; extensions will not be applied", "component", ext.ModifierKey())
+	}
+	component = c.extensions.Decorate(component, c.renderCtx)
+
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -476,20 +488,6 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	var cronJobs []types.NamespacedName
 
 	objsToCreate, objsToDelete := component.Objects()
-	if ext, ok := component.(render.Extensible); ok {
-		if c.extensions == nil {
-			// The component can be extended but this handler was built without an
-			// extension Set, so any registered modifier silently won't run. That is
-			// a wiring bug in the controller, not a normal state.
-			c.log.Info("BUG: extensible component rendered by a handler with no extension Set; modifiers will not be applied", "component", ext.ModifierKey())
-		} else {
-			rc := c.renderCtx
-			if p, ok := component.(render.ExtensionContextProvider); ok {
-				rc.Component = p.ExtensionContext()
-			}
-			objsToCreate, objsToDelete = c.extensions.ApplyModifiers(ext.ModifierKey(), rc, objsToCreate, objsToDelete)
-		}
-	}
 
 	// Load the InstallationSpec once and reuse it for every object: createOrUpdateObject needs it
 	// for image pull policy and TLS ciphers, and we use it here to decide whether the user has

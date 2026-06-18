@@ -18,14 +18,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
 )
 
-// Extension is everything a variant layers onto one render component. Every
-// field is optional: a component that only needs a different image sets Image
-// and leaves Modify nil, and vice versa. This is the single registration a
+// ComponentExtension is everything a variant layers onto one render component.
+// Every field is optional: a component that only needs a different image sets
+// Image and leaves Modify nil, and vice versa. This is the single registration a
 // variant makes per component, so all of that component's variance lives in one
 // place.
-type Extension struct {
+type ComponentExtension struct {
 	// Image overrides the component's image. Resolved during ResolveImages, in
 	// the render package, via the imageoverride leaf.
 	Image ImageOverride
@@ -47,19 +48,45 @@ type modifierKey struct {
 	component string
 }
 
-// ApplyModifiers runs the modifier registered for the named component and the
-// installation's variant over the create and delete lists, returning them
-// unchanged when none is registered (or when no installation is set). Safe to
-// call on a nil Set, which is a no-op - the core operator registers no
-// modifiers.
-func (s *Set) ApplyModifiers(component string, ctx RenderContext, create, delete []client.Object) ([]client.Object, []client.Object) {
+// Decorate wraps component with the variant extension registered for it, so
+// that when the handler renders the component its objects are post-processed by
+// the modifier registered for the component and the installation's variant. A
+// decorated component is itself a render.Component, so it flows through the
+// component handler exactly like any other. Returns component unchanged when it
+// exposes no extension point, when no modifier is registered for it, when no
+// installation is set, or on a nil Set (the core operator registers no
+// extensions).
+func (s *Set) Decorate(component render.Component, ctx RenderContext) render.Component {
 	if s == nil || ctx.Installation == nil {
-		return create, delete
+		return component
 	}
-	if fn, ok := s.modifiers[modifierKey{ctx.Installation.Variant, component}]; ok {
-		create, delete = fn(ctx, create, delete)
+	ext, ok := component.(render.Extensible)
+	if !ok {
+		return component
 	}
-	return create, delete
+	modify, ok := s.modifiers[modifierKey{ctx.Installation.Variant, ext.ModifierKey()}]
+	if !ok {
+		return component
+	}
+	if p, ok := component.(render.ExtensionContextProvider); ok {
+		ctx.Component = p.ExtensionContext()
+	}
+	return &decoratedComponent{Component: component, ctx: ctx, modify: modify}
+}
+
+// decoratedComponent is the render.Component produced by Decorate: it renders
+// its embedded base component and then runs the variant modifier over the
+// result. It embeds the base render.Component, so ResolveImages, SupportedOSType,
+// and Ready delegate to the base; only Objects is augmented.
+type decoratedComponent struct {
+	render.Component
+	ctx    RenderContext
+	modify Modifier
+}
+
+func (d *decoratedComponent) Objects() ([]client.Object, []client.Object) {
+	create, del := d.Component.Objects()
+	return d.modify(d.ctx, create, del)
 }
 
 // FindObject returns the first object of type T with the given name.

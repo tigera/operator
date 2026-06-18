@@ -39,10 +39,10 @@ import (
 )
 
 func registerGuardian(s *extensions.Set) {
-	s.Register(operatorv1.CalicoEnterprise, render.GuardianName, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.GuardianName, extensions.ComponentExtension{
 		Modify: modifyGuardian,
 	})
-	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameGuardianPolicy, extensions.Extension{
+	s.Register(operatorv1.CalicoEnterprise, render.ComponentNameGuardianPolicy, extensions.ComponentExtension{
 		Modify: modifyGuardianPolicy,
 	})
 }

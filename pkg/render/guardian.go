@@ -547,14 +547,11 @@ func (c *GuardianComponent) annotations() map[string]string {
 func ossNetworkPolicy(cfg *GuardianConfiguration) *v3.NetworkPolicy {
 	egressRules := networkpolicy.AppendDNSEgressRules([]v3.Rule{}, cfg.OpenShift)
 
-	// Allow egress to the Kubernetes API server. Match on port only, since OSS
-	// policy can't rely on the service-based selectors the enterprise path uses.
+	// Allow egress to the Kubernetes API server.
 	egressRules = append(egressRules, v3.Rule{
-		Action:   v3.Allow,
-		Protocol: &networkpolicy.TCPProtocol,
-		Destination: v3.EntityRule{
-			Ports: networkpolicy.Ports(443, 6443, 12388),
-		},
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
 	})
 
 	// Guardian's tunnel destination is the management cluster, whose address is

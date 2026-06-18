@@ -388,14 +388,11 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 	egressRules := networkpolicy.AppendDNSEgressRules([]v3.Rule{}, c.cfg.OpenShift)
 
 	// Allow egress to the Kubernetes API server. Goldmane reads the
-	// flow-emitter-state ConfigMap. Match on port only, since OSS policy can't
-	// rely on service-based selectors.
+	// flow-emitter-state ConfigMap.
 	egressRules = append(egressRules, v3.Rule{
-		Action:   v3.Allow,
-		Protocol: &networkpolicy.TCPProtocol,
-		Destination: v3.EntityRule{
-			Ports: networkpolicy.Ports(443, 6443, 12388),
-		},
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
 	})
 
 	// In a managed cluster Goldmane posts flows to Guardian, which tunnels them

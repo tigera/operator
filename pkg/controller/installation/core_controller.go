@@ -43,7 +43,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
@@ -76,12 +75,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -93,11 +92,11 @@ import (
 const (
 	techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
 
-	// The default port used by calico/node to report Calico Enterprise internal metrics.
-	// This is separate from the calico/node prometheus metrics port, which is user configurable.
+	// defaultNodeReporterPort is the default port calico/node uses to report Calico
+	// Enterprise internal metrics. The Linux node path derives this in the
+	// enterprise node modifier; this copy serves the Windows controller, which
+	// still carries its enterprise logic inline.
 	defaultNodeReporterPort = 9081
-
-	defaultFelixMetricsDefaultPort = 9091
 )
 
 const InstallationName string = "calico"
@@ -336,25 +335,17 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
 
 	r := &ReconcileInstallation{
-		config:               mgr.GetConfig(),
-		client:               mgr.GetClient(),
-		clientset:            opts.K8sClientset,
-		scheme:               mgr.GetScheme(),
-		shutdownContext:      opts.ShutdownContext,
-		watches:              make(map[runtime.Object]struct{}),
-		autoDetectedProvider: opts.DetectedProvider,
-		status:               statusManager,
-		typhaAutoscaler:      typhaScaler,
-		namespaceMigration:   nm,
-		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		clusterDomain:        opts.ClusterDomain,
-		manageCRDs:           opts.ManageCRDs,
-		tierWatchReady:       &utils.ReadyFlag{},
-		migrationWatchReady:  &utils.ReadyFlag{},
-		newComponentHandler:  utils.NewComponentHandler,
-		v3CRDs:               opts.UseV3CRDs,
-		kubernetesVersion:    opts.KubernetesVersion,
-		apiDiscovery:         opts.APIDiscovery,
+		config:              mgr.GetConfig(),
+		client:              mgr.GetClient(),
+		scheme:              mgr.GetScheme(),
+		watches:             make(map[runtime.Object]struct{}),
+		status:              statusManager,
+		typhaAutoscaler:     typhaScaler,
+		namespaceMigration:  nm,
+		tierWatchReady:      &utils.ReadyFlag{},
+		migrationWatchReady: &utils.ReadyFlag{},
+		newComponentHandler: utils.NewComponentHandler,
+		opts:                opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -396,27 +387,19 @@ type ReconcileInstallation struct {
 	// that reads objects from the cache and writes to the apiserver
 	config                        *rest.Config
 	client                        client.Client
-	clientset                     *kubernetes.Clientset
 	scheme                        *runtime.Scheme
-	shutdownContext               context.Context
 	watches                       map[runtime.Object]struct{}
-	autoDetectedProvider          operatorv1.Provider
 	status                        status.StatusManager
 	typhaAutoscaler               *typhaAutoscaler
 	typhaAutoscalerNonClusterHost *typhaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
-	enterpriseCRDsExist           bool
 	migrationChecked              bool
-	clusterDomain                 string
-	manageCRDs                    bool
 	tierWatchReady                *utils.ReadyFlag
 	migrationWatchReady           *utils.ReadyFlag
-	v3CRDs                        bool
-	kubernetesVersion             *common.VersionInfo
-	apiDiscovery                  *discovery.APIDiscovery
+	opts                          options.ControllerOptions
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
-	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
+	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
 }
 
 // GetActivePools returns the full set of enabled IP pools in the cluster.
@@ -857,7 +840,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// update Installation with defaults
-	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider); err != nil {
+	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -1021,10 +1004,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
 	// If we are switching from this mode to one that enables enterprise, we need to restart the operator to enable the other controllers.
-	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
+	if !r.opts.EnterpriseCRDExists && instance.Spec.Variant.IsEnterprise() {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := discovery.RequiresTigeraSecure(r.clientset)
+		b, err := discovery.RequiresTigeraSecure(r.opts.K8sClientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
@@ -1050,7 +1033,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var logCollector *operatorv1.LogCollector
-	if r.enterpriseCRDsExist {
+	if r.opts.EnterpriseCRDExists {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
 		if logCollector != nil {
 			if err != nil {
@@ -1096,7 +1079,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.clusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.opts.ClusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1221,63 +1204,30 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
-	// Operator is responsible for creating a service which maps to that port.
-	// Here, we'll check the default felixconfiguration to see if the user is specifying
-	// a non-default port, and use that value if they are.
-	nodeReporterMetricsPort := defaultNodeReporterPort
-	var nodePrometheusTLS certificatemanagement.KeyPairInterface
 	calicoVersion := components.CalicoRelease
-
-	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
-
 	if instance.Spec.Variant.IsEnterprise() {
-
-		// Determine the port to use for nodeReporter metrics.
-		if felixConfiguration.Spec.PrometheusReporterPort != nil {
-			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
-		}
-		if nodeReporterMetricsPort == 0 {
-			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if felixConfiguration.Spec.PrometheusMetricsPort != nil {
-			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
-		}
-
-		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if nodePrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
-		}
-		prometheusClientCert, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, "Unable to fetch prometheus certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if prometheusClientCert != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(prometheusClientCert)
-		}
-
-		// es-kube-controllers needs to trust the ESGW certificate. We'll fetch it here and add it to the trusted bundle.
-		// Note that although we're adding this to the typhaNodeTLS trusted bundle, it will be used by es-kube-controllers. This is because
-		// all components within this namespace share a trusted CA bundle. This is necessary because prior to v3.13 secrets were not signed by
-		// a single CA so we need to include each individually.
-		esgwCertificate, err := certificateManager.GetCertificate(r.client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve / validate  %s", relasticsearch.PublicCertSecret), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		if esgwCertificate != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(esgwCertificate)
-		}
-
 		calicoVersion = components.EnterpriseRelease
+	}
+
+	cc := extensions.ControllerContext{
+		RenderContext: extensions.RenderContext{
+			Installation:       &instance.Spec,
+			FelixConfiguration: felixConfiguration,
+			ClusterDomain:      r.opts.ClusterDomain,
+			TrustedBundle:      typhaNodeTLS.TrustedBundle,
+		},
+		Ctx:                ctx,
+		Client:             r.client,
+		CertificateManager: certificateManager,
+	}
+	if err := r.opts.Extensions.Validate(cc); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	renderCtx, managedKeyPairs, err := r.opts.Extensions.ExtendContext(cc)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
@@ -1294,7 +1244,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.client,
 			kubecontrollers.KubeControllerPrometheusTLSSecret,
 			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.clusterDomain))
+			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1317,7 +1267,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Create a component handler to create or update the rendered components.
-	handler := r.newComponentHandler(log, r.client, r.scheme, instance)
+	handler := r.newComponentHandler(
+		log,
+		r.client,
+		r.scheme,
+		instance,
+		utils.WithRenderContext(renderCtx),
+		utils.WithExtensions(r.opts.Extensions),
+	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{
@@ -1401,7 +1358,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			r.client,
 			applicationlayer.WAFWebhookServerTLSSecretName,
 			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, r.clusterDomain))
+			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, r.opts.ClusterDomain))
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating WAF admission webhook TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1410,13 +1367,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-		rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 		// Nil when the WAF v3 surface is disabled; the certificate-management
 		// render skips nil key pairs.
 		rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true),
+	}
+	// Manage any key pairs the variant extension created controller-side.
+	for _, kp := range managedKeyPairs {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(kp, true, true))
 	}
 
 	components = append(components,
@@ -1460,11 +1420,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
 				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-				go hepIndexInformer.Run(r.shutdownContext.Done())
+				go hepIndexInformer.Run(r.opts.ShutdownContext.Done())
 
-				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-				r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
+				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
+				r.typhaAutoscalerNonClusterHost.start(r.opts.ShutdownContext)
 			}
 		}
 	}
@@ -1476,7 +1436,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation:           &instance.Spec,
 		TLS:                    typhaNodeTLS,
 		MigrateNamespaces:      needsNamespaceMigration,
-		ClusterDomain:          r.clusterDomain,
+		ClusterDomain:          r.opts.ClusterDomain,
 		NonClusterHost:         nonclusterhost,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
@@ -1592,28 +1552,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
-		GoldmaneRunning:               goldmaneRunning,
-		K8sServiceEp:                  k8sapi.Endpoint,
-		Installation:                  &instance.Spec,
-		IPPools:                       crdPoolsToOperator(currentPools.Items),
-		LogCollector:                  logCollector,
-		BirdTemplates:                 birdTemplates,
-		TLS:                           typhaNodeTLS,
-		ClusterDomain:                 r.clusterDomain,
-		DefaultDNSPolicy:              defaultDNSPolicy,
-		DefaultDNSConfig:              defaultDNSConfig,
-		GoldmaneIP:                    goldmaneIP,
-		NodeReporterMetricsPort:       nodeReporterMetricsPort,
-		BGPLayouts:                    bgpLayout,
-		NodeAppArmorProfile:           nodeAppArmorProfile,
-		MigrateNamespaces:             needsNamespaceMigration,
-		CanRemoveCNIFinalizer:         canRemoveCNI,
-		PrometheusServerTLS:           nodePrometheusTLS,
-		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
-		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
-		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
-		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
-		V3CRDs:                        r.v3CRDs,
+		GoldmaneRunning:       goldmaneRunning,
+		K8sServiceEp:          k8sapi.Endpoint,
+		Installation:          &instance.Spec,
+		IPPools:               crdPoolsToOperator(currentPools.Items),
+		LogCollector:          logCollector,
+		BirdTemplates:         birdTemplates,
+		TLS:                   typhaNodeTLS,
+		ClusterDomain:         r.opts.ClusterDomain,
+		DefaultDNSPolicy:      defaultDNSPolicy,
+		DefaultDNSConfig:      defaultDNSConfig,
+		GoldmaneIP:            goldmaneIP,
+		BGPLayouts:            bgpLayout,
+		NodeAppArmorProfile:   nodeAppArmorProfile,
+		MigrateNamespaces:     needsNamespaceMigration,
+		CanRemoveCNIFinalizer: canRemoveCNI,
+		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
+		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
+		V3CRDs:                r.opts.UseV3CRDs,
+		ImageOverrides:        r.opts.Extensions.Images(),
 	}
 
 	if bgpConfiguration.Spec.BindMode != nil {
@@ -1690,7 +1647,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Installation:                &instance.Spec,
 		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
-		ClusterDomain:               r.clusterDomain,
+		ClusterDomain:               r.opts.ClusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		Terminating:                 installationMarkedForDeletion,
 		MetricsServerTLS:            kubeControllerTLS,
@@ -1841,13 +1798,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// Check BYO certificate expiry warnings and propagate them to the status manager.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+	keyPairWarnings := map[string]certificatemanagement.KeyPairInterface{
 		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
 		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
 		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
-		render.NodePrometheusTLSServerSecret:                         nodePrometheusTLS,
 		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
-	}, r.status)
+	}
+	for _, kp := range managedKeyPairs {
+		keyPairWarnings[kp.GetName()] = kp
+	}
+	certificatemanagement.CheckKeyPairWarnings(keyPairWarnings, r.status)
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()
@@ -2348,10 +2308,10 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 }
 
 func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {
-	if !r.manageCRDs {
+	if !r.opts.ManageCRDs {
 		return nil
 	}
-	crdComponent := render.NewCreationPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.v3CRDs)...)...)
+	crdComponent := render.NewCreationPassthrough(crds.ToRuntimeObjects(crds.GetCRDs(variant, r.opts.UseV3CRDs)...)...)
 	// Specify nil for the CR so no ownership is put on the CRDs. We do this so removing the
 	// Installation CR will not remove the CRDs.
 	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
@@ -2363,19 +2323,19 @@ func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operator
 }
 
 func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
-	if !r.manageCRDs || !r.v3CRDs {
+	if !r.opts.ManageCRDs || !r.opts.UseV3CRDs {
 		return nil
 	}
 
 	// MutatingAdmissionPolicy served version was discovered once at startup (v1 was promoted to GA
 	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37).
-	mapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
+	mapAPIVersion := r.opts.APIDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
 	if mapAPIVersion == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes cluster does not serve MutatingAdmissionPolicy (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.opts.UseV3CRDs, mapAPIVersion)
 	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
@@ -2386,20 +2346,20 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 }
 
 func (r *ReconcileInstallation) updateValidatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
-	if !r.manageCRDs || !r.v3CRDs {
+	if !r.opts.ManageCRDs || !r.opts.UseV3CRDs {
 		return nil
 	}
 
 	// ValidatingAdmissionPolicy reached GA (v1) well before MutatingAdmissionPolicy, so it has its own
 	// served version and is reconciled independently of whether the cluster serves MAPs. If the cluster
 	// doesn't serve it at all there's nothing to do, so skip rather than degrade.
-	vapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
+	vapAPIVersion := r.opts.APIDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
 	if vapAPIVersion == "" {
 		log.Info("Kubernetes cluster does not serve ValidatingAdmissionPolicy, skipping")
 		return nil
 	}
 
-	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, vapAPIVersion)
+	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.opts.UseV3CRDs, vapAPIVersion)
 	existingVAPs, existingVAPBs, err := admission.ListManagedValidating(ctx, r.client, vapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed ValidatingAdmissionPolicy resources", err, log)

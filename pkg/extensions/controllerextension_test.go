@@ -35,6 +35,7 @@ var _ = Describe("controller extension", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
 		rc, _, err := s.ExtendContext(extensions.ControllerContext{
 			RenderContext: extensions.RenderContext{Installation: install, ClusterDomain: "cluster.local"},
+			Controller:    extensions.InstallationController,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.Installation).To(BeIdenticalTo(install))
@@ -43,29 +44,30 @@ var _ = Describe("controller extension", func() {
 	})
 
 	It("runs the extension registered for the installation variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{})
 		rc, _, err := s.ExtendContext(enterpriseContext())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores an extension registered for a different variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{})
 		rc, _, err := s.ExtendContext(extensions.ControllerContext{
 			RenderContext: extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
+			Controller:    extensions.InstallationController,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})
 
 	It("surfaces the extension error", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{err: errors.New("boom")})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{err: errors.New("boom")})
 		_, _, err := s.ExtendContext(enterpriseContext())
 		Expect(err).To(MatchError("boom"))
 	})
 
 	It("runs the extension's validation", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{validateErr: errors.New("invalid")})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{validateErr: errors.New("invalid")})
 		Expect(s.Validate(enterpriseContext())).To(MatchError("invalid"))
 	})
 
@@ -83,6 +85,7 @@ var _ = Describe("controller extension", func() {
 func enterpriseContext() extensions.ControllerContext {
 	return extensions.ControllerContext{
 		RenderContext: extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}},
+		Controller:    extensions.InstallationController,
 	}
 }
 

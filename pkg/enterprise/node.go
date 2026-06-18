@@ -15,6 +15,7 @@
 package enterprise
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -261,6 +262,15 @@ func nodeMetricsService(rc extensions.RenderContext) *corev1.Service {
 			Ports:     ports,
 		},
 	}
+}
+
+// validateReporterPort rejects the unsupported zero prometheus reporter port.
+// The node and windows controller extensions share it.
+func validateReporterPort(fc *v3.FelixConfiguration) error {
+	if fc != nil && fc.Spec.PrometheusReporterPort != nil && *fc.Spec.PrometheusReporterPort == 0 {
+		return errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+	}
+	return nil
 }
 
 // nodeReporterPort returns the reporter metrics port from the FelixConfiguration,

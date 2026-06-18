@@ -34,7 +34,6 @@ import (
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 const (
@@ -49,14 +48,12 @@ func Windows(
 }
 
 type WindowsConfiguration struct {
-	K8sServiceEp            k8sapi.ServiceEndpoint
-	K8sDNSServers           []string
-	Installation            *operatorv1.InstallationSpec
-	ClusterDomain           string
-	TLS                     *TyphaNodeTLS
-	PrometheusServerTLS     certificatemanagement.KeyPairInterface
-	NodeReporterMetricsPort int
-	VXLANVNI                int
+	K8sServiceEp  k8sapi.ServiceEndpoint
+	K8sDNSServers []string
+	Installation  *operatorv1.InstallationSpec
+	ClusterDomain string
+	TLS           *TyphaNodeTLS
+	VXLANVNI      int
 
 	// ImageOverrides lets a variant swap the windows node and CNI images. The
 	// controller wires in the operator's image overrides; nil resolves to the
@@ -98,25 +95,6 @@ func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *windowsComponent) ModifierKey() string { return ComponentNameWindows }
-
-// WindowsExtensionContext is the per-component context the windows modifier
-// reads (via RenderContext.Component). It carries the enterprise inputs the
-// windows controller has but a modifier can't derive from the installation: the
-// reporter metrics port, the node prometheus keypair, and the trusted bundle
-// the cert env vars reference.
-type WindowsExtensionContext struct {
-	NodeReporterMetricsPort int
-	PrometheusServerTLS     certificatemanagement.KeyPairInterface
-	TrustedBundle           certificatemanagement.TrustedBundleRO
-}
-
-func (c *windowsComponent) ExtensionContext() any {
-	return WindowsExtensionContext{
-		NodeReporterMetricsPort: c.cfg.NodeReporterMetricsPort,
-		PrometheusServerTLS:     c.cfg.PrometheusServerTLS,
-		TrustedBundle:           c.cfg.TLS.TrustedBundle,
-	}
-}
 
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	// Clean up old windows upgrader daemonset if present

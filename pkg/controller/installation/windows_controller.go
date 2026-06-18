@@ -16,7 +16,6 @@ package installation
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 
@@ -50,11 +49,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var logw = logf.Log.WithName("controller_windows")
@@ -325,33 +322,6 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
-	// Operator is responsible for creating a service which maps to that port.
-	// Here, we'll check the default felixconfiguration to see if the user is specifying
-	// a non-default port, and use that value if they are.
-	nodeReporterMetricsPort := defaultNodeReporterPort
-	var nodePrometheusTLS certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant.IsEnterprise() {
-
-		// Determine the port to use for nodeReporter metrics.
-		if felixConfiguration.Spec.PrometheusReporterPort != nil {
-			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
-		}
-
-		if nodeReporterMetricsPort == 0 {
-			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// The key pair is created by the core controller, so if it isn't set, requeue to wait until it is
-		nodePrometheusTLS, err = certificateManager.GetKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, r.opts.ClusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error getting TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	var component render.Component
 
 	kubeDNSServiceName := utils.GetDNSServiceName(r.opts.DetectedProvider)
@@ -374,16 +344,38 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Run the variant's windows controller extension to build the render context
+	// (creating no enterprise artifacts in core).
+	cc := extensions.ControllerContext{
+		RenderContext: extensions.RenderContext{
+			Installation:       &instance.Spec,
+			FelixConfiguration: felixConfiguration,
+			ClusterDomain:      r.opts.ClusterDomain,
+			TrustedBundle:      typhaNodeTLS.TrustedBundle,
+		},
+		Controller:         extensions.WindowsController,
+		Ctx:                ctx,
+		Client:             r.client,
+		CertificateManager: certificateManager,
+	}
+	if err := r.opts.Extensions.Validate(cc); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	renderCtx, _, err := r.opts.Extensions.ExtendContext(cc)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing windows extension", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	windowsCfg := render.WindowsConfiguration{
-		K8sServiceEp:            k8sapi.Endpoint,
-		K8sDNSServers:           kubeDNSIPs,
-		Installation:            &instance.Spec,
-		ClusterDomain:           r.opts.ClusterDomain,
-		TLS:                     typhaNodeTLS,
-		PrometheusServerTLS:     nodePrometheusTLS,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		VXLANVNI:                *felixConfiguration.Spec.VXLANVNI,
-		ImageOverrides:          r.opts.Extensions.Images(),
+		K8sServiceEp:   k8sapi.Endpoint,
+		K8sDNSServers:  kubeDNSIPs,
+		Installation:   &instance.Spec,
+		ClusterDomain:  r.opts.ClusterDomain,
+		TLS:            typhaNodeTLS,
+		VXLANVNI:       *felixConfiguration.Spec.VXLANVNI,
+		ImageOverrides: r.opts.Extensions.Images(),
 	}
 	component = render.Windows(&windowsCfg)
 
@@ -409,7 +401,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderContext(extensions.RenderContext{Installation: &instance.Spec}),
+		utils.WithRenderContext(renderCtx),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {

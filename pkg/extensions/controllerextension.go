@@ -23,10 +23,20 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
+// ControllerName identifies the controller a ControllerExtension extends, so a
+// variant can register a different hook per controller. Use the constants below
+// rather than bare strings so registration and lookup stay in sync.
+type ControllerName string
+
+const (
+	InstallationController ControllerName = "installation"
+	WindowsController      ControllerName = "windows"
+)
+
 // ControllerExtension extends a controller's reconcile: it validates the
 // configuration and builds the RenderContext the render phase consumes. The core
 // operator registers none and runs with the base behavior; an extension build
-// registers one.
+// registers one per controller it extends.
 type ControllerExtension interface {
 	// Validate rejects configuration the extension does not support, before any
 	// rendering happens.
@@ -47,11 +57,15 @@ type ControllerExtension interface {
 // deps live here, not on RenderContext, so the modifiers that read RenderContext
 // can't do I/O - they only transform objects.
 //
-// The controller fills the embedded RenderContext's data fields and the deps;
-// ExtendContext does its work, sets the produced artifacts (e.g.
-// NodePrometheusTLS) on the embedded context, and returns it.
+// Controller names which controller is reconciling, selecting that controller's
+// extension hook. The controller fills the embedded RenderContext's data fields,
+// the deps, and Controller; ExtendContext does its work, sets the produced
+// artifacts on the embedded context, and returns it.
 type ControllerContext struct {
 	RenderContext
+
+	// Controller identifies the reconciling controller, selecting its hook.
+	Controller ControllerName
 
 	Ctx                context.Context
 	Client             client.Client

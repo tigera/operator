@@ -66,7 +66,6 @@ func allCalicoComponents(
 	nodeAppArmorProfile string,
 	clusterDomain string,
 	kubeControllersMetricsPort int,
-	nodeReporterMetricsPort int,
 	bgpLayout *corev1.ConfigMap,
 	logCollector *operatorv1.LogCollector,
 ) ([]render.Component, error) {
@@ -110,13 +109,12 @@ func allCalicoComponents(
 	}
 
 	winCfg := &render.WindowsConfiguration{
-		K8sServiceEp:            k8sServiceEp,
-		K8sDNSServers:           []string{},
-		Installation:            cr,
-		ClusterDomain:           clusterDomain,
-		TLS:                     typhaNodeTLS,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		VXLANVNI:                4096,
+		K8sServiceEp:  k8sServiceEp,
+		K8sDNSServers: []string{},
+		Installation:  cr,
+		ClusterDomain: clusterDomain,
+		TLS:           typhaNodeTLS,
+		VXLANVNI:      4096,
 	}
 
 	nodeCertComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -218,7 +216,7 @@ var _ = Describe("Rendering tests", func() {
 		// - 6 kube-controllers resources (ServiceAccount, ClusterRole, Binding, Deployment, Service, Secret,RoleBinding)
 		// - 1 namespace
 		// - 2 Windows node resources (ConfigMap, DaemonSet)
-		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c)).To(Equal(5 + 3 + 4 + 1 + 6 + 6 + 1 + 2))
 	})
@@ -231,7 +229,7 @@ var _ = Describe("Rendering tests", func() {
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operatorv1.CalicoEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
-		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		Expect(componentCount(c)).To(Equal(5 + 3 + 4 + 1 + 6 + 6 + 1 + 2))
 	})
@@ -244,7 +242,7 @@ var _ = Describe("Rendering tests", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 
-		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
+		c, err := allCalicoComponents(k8sServiceEp, instance, &operatorv1.ManagementCluster{}, nil, nil, typhaNodeTLS, internalManagerKeyPair, nil, false, "", dns.DefaultClusterDomain, 9094, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 
 		expectedResources := []client.Object{
@@ -305,7 +303,7 @@ var _ = Describe("Rendering tests", func() {
 
 	It("should render calico with a apparmor profile if annotation is present in installation", func() {
 		apparmorProf := "foobar"
-		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, apparmorProf, dns.DefaultClusterDomain, 0, 0, nil, nil)
+		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, apparmorProf, dns.DefaultClusterDomain, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cn *appsv1.DaemonSet
 		for _, comp := range comps {
@@ -329,7 +327,7 @@ var _ = Describe("Rendering tests", func() {
 		}
 		bgpLayout.Name = "bgp-layout"
 		bgpLayout.Namespace = common.OperatorNamespace()
-		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, 0, bgpLayout, nil)
+		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, bgpLayout, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cm *corev1.ConfigMap
 		var ds *appsv1.DaemonSet
@@ -354,7 +352,7 @@ var _ = Describe("Rendering tests", func() {
 		testNode := func(processPath operatorv1.CollectProcessPathOption, expectedHostPID bool) {
 			var logCollector operatorv1.LogCollector
 			logCollector.Spec.CollectProcessPath = &processPath
-			comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, 0, nil, &logCollector)
+			comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, nil, &logCollector)
 			Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 			var ds *appsv1.DaemonSet
 			for _, comp := range comps {
@@ -385,7 +383,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should set node priority class to system-node-critical", func() {
-		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, 0, nil, nil)
+		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cn *appsv1.DaemonSet
 		for _, comp := range comps {
@@ -401,7 +399,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should set typha priority class to system-cluster-critical", func() {
-		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, 0, nil, nil)
+		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cn *appsv1.Deployment
 		for _, comp := range comps {
@@ -417,7 +415,7 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should set kube controllers priority class to system-cluster-critical", func() {
-		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, 0, nil, nil)
+		comps, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
 		var cn *appsv1.Deployment
 		for _, comp := range comps {

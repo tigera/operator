@@ -91,12 +91,6 @@ import (
 
 const (
 	techPreviewFeatureSeccompApparmor = "tech-preview.operator.tigera.io/node-apparmor-profile"
-
-	// defaultNodeReporterPort is the default port calico/node uses to report Calico
-	// Enterprise internal metrics. The Linux node path derives this in the
-	// enterprise node modifier; this copy serves the Windows controller, which
-	// still carries its enterprise logic inline.
-	defaultNodeReporterPort = 9081
 )
 
 const InstallationName string = "calico"
@@ -1216,6 +1210,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
+		Controller:         extensions.InstallationController,
 		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,

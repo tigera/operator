@@ -73,6 +73,7 @@ func newControllerContext(variant operatorv1.ProductVariant) extensions.Controll
 			TrustedBundle:      trustedBundle,
 			ClusterDomain:      "cluster.local",
 		},
+		Controller:         extensions.InstallationController,
 		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,

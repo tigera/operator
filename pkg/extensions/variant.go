@@ -31,20 +31,20 @@ import (
 // variant, so within a Variant there is at most one extension per component and
 // nothing here is itself keyed by variant.
 type Variant struct {
-	variant    operatorv1.ProductVariant
-	controller ControllerExtension
-	modifiers  map[string]decorator
-	images     *imageoverride.Overrides // shared with the owning Set
+	variant     operatorv1.ProductVariant
+	controllers map[ControllerName]ControllerExtension
+	modifiers   map[string]decorator
+	images      *imageoverride.Overrides // shared with the owning Set
 }
 
 // decorator wraps a base component, returning one whose Objects() are augmented
 // by a registered modifier.
 type decorator func(base render.Component, rc RenderContext) render.Component
 
-// Controller registers the variant's controller-side extension. A variant has
-// at most one; registering replaces any prior one.
-func (v *Variant) Controller(c ControllerExtension) {
-	v.controller = c
+// Controller registers the variant's controller-side extension for the named
+// controller. A controller has at most one; registering replaces any prior one.
+func (v *Variant) Controller(name ControllerName, c ControllerExtension) {
+	v.controllers[name] = c
 }
 
 // Image registers an image override for the named component.
@@ -108,22 +108,22 @@ func (v *Variant) decorate(component render.Component, rc RenderContext) render.
 	return build(component, rc)
 }
 
-// validate runs the controller extension's validation, or nil when the variant
-// has none. Nil-safe.
+// validate runs the cc.Controller extension's validation, or nil when the
+// variant has none for it. Nil-safe.
 func (v *Variant) validate(cc ControllerContext) error {
-	if v == nil || v.controller == nil {
+	if v == nil || v.controllers[cc.Controller] == nil {
 		return nil
 	}
-	return v.controller.Validate(cc)
+	return v.controllers[cc.Controller].Validate(cc)
 }
 
-// extendContext runs the controller extension, or returns the base render
-// context and no managed keypairs when the variant has none. Nil-safe.
+// extendContext runs the cc.Controller extension, or returns the base render
+// context and no managed keypairs when the variant has none for it. Nil-safe.
 func (v *Variant) extendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error) {
-	if v == nil || v.controller == nil {
+	if v == nil || v.controllers[cc.Controller] == nil {
 		return cc.RenderContext, nil, nil
 	}
-	return v.controller.ExtendContext(cc)
+	return v.controllers[cc.Controller].ExtendContext(cc)
 }
 
 // decoratedComponent is the render.Component produced by decorate: it renders

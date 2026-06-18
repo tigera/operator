@@ -15,7 +15,6 @@
 package enterprise
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/tigera/operator/pkg/common"
@@ -27,9 +26,9 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// controllerExtension is the Calico Enterprise controller-side hook for the
+// coreControllerExtension is the Calico Enterprise controller-side hook for the
 // installation controller.
-type controllerExtension struct{}
+type coreControllerExtension struct{}
 
 // installationRenderData is the controller-produced data the installation
 // extension hands to its modifiers through RenderContext.Extension. The node
@@ -46,20 +45,15 @@ func installationData(rc extensions.RenderContext) installationRenderData {
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
-func (controllerExtension) Validate(cc extensions.ControllerContext) error {
-	// Reject the unsupported zero reporter port. The port value itself is derived
-	// in the node modifier; only this validation lives here.
-	if cc.FelixConfiguration.Spec.PrometheusReporterPort != nil && *cc.FelixConfiguration.Spec.PrometheusReporterPort == 0 {
-		return errors.New("felixConfiguration prometheusReporterPort=0 not supported")
-	}
-	return nil
+func (coreControllerExtension) Validate(cc extensions.ControllerContext) error {
+	return validateReporterPort(cc.FelixConfiguration)
 }
 
 // ExtendContext does the controller-side work the modifiers can't: creating and
 // fetching the certificates that feed the trusted bundle. It returns the render
 // context carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
-func (controllerExtension) ExtendContext(cc extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	rc := cc.RenderContext
 
 	nodePrometheusTLS, err := cc.CertificateManager.GetOrCreateKeyPair(

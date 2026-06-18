@@ -50,9 +50,10 @@ func NewSet() *Set {
 func (s *Set) Variant(v operatorv1.ProductVariant) *Variant {
 	if s.variants[v] == nil {
 		s.variants[v] = &Variant{
-			variant:   v,
-			modifiers: map[string]decorator{},
-			images:    s.images,
+			variant:     v,
+			controllers: map[ControllerName]ControllerExtension{},
+			modifiers:   map[string]decorator{},
+			images:      s.images,
 		}
 	}
 	return s.variants[v]
@@ -79,7 +80,7 @@ func (s *Set) Decorate(component render.Component, ctx RenderContext) render.Com
 	return s.variant(ctx.Installation.Variant).decorate(component, ctx)
 }
 
-// Validate runs the controller extension's validation for the installation's
+// Validate runs the cc.Controller extension's validation for the installation's
 // variant, or returns nil when no extension is registered. Nil-safe.
 func (s *Set) Validate(cc ControllerContext) error {
 	if cc.Installation == nil {
@@ -88,9 +89,9 @@ func (s *Set) Validate(cc ControllerContext) error {
 	return s.variant(cc.Installation.Variant).validate(cc)
 }
 
-// ExtendContext runs the controller extension for the installation's variant and
-// returns the resulting RenderContext plus any keypairs the extension wants the
-// controller to manage, or the base render context and no keypairs when no
+// ExtendContext runs the cc.Controller extension for the installation's variant
+// and returns the resulting RenderContext plus any keypairs the extension wants
+// the controller to manage, or the base render context and no keypairs when no
 // extension is registered. Nil-safe.
 func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if cc.Installation == nil {

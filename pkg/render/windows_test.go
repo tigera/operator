@@ -51,11 +51,7 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	ExpectWithOffset(1, comp.ResolveImages(nil)).To(BeNil())
 	objs, _ := comp.Objects()
 	rc := extensions.RenderContext{Installation: cfg.Installation}
-	var extCtx any
-	if p, ok := comp.(render.ExtensionContextProvider); ok {
-		extCtx = p.ExtensionContext()
-	}
-	out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, rc, extCtx, objs, nil)
+	out, _ := applyExtensions(ext, render.ComponentNameWindows, rc, objs, nil)
 	return out
 }
 
@@ -718,7 +714,6 @@ var _ = Describe("Windows rendering tests", func() {
 					{name: "calico-node-metrics-windows", ns: "calico-system", group: "", version: "v1", kind: "Service"},
 				}
 				defaultInstance.Variant = operatorv1.CalicoEnterprise
-				cfg.NodeReporterMetricsPort = 9081
 
 				resources := renderWindows(&cfg)
 				Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -1710,7 +1705,6 @@ var _ = Describe("Windows rendering tests", func() {
 
 		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
-		cfg.NodeReporterMetricsPort = 9081
 
 		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(len(expectedResources)))
@@ -1864,7 +1858,6 @@ var _ = Describe("Windows rendering tests", func() {
 
 		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.KubernetesProvider = operatorv1.ProviderRKE2
-		cfg.NodeReporterMetricsPort = 9081
 
 		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(len(expectedResources)), fmt.Sprintf("Actual resources: %#v", resources))
@@ -2149,7 +2142,6 @@ var _ = Describe("Windows rendering tests", func() {
 	It("should not enable prometheus metrics if NodeMetricsPort is nil", func() {
 		defaultInstance.Variant = operatorv1.CalicoEnterprise
 		defaultInstance.NodeMetricsPort = nil
-		cfg.NodeReporterMetricsPort = 9081
 
 		resources := renderWindows(&cfg)
 		Expect(len(resources)).To(Equal(defaultNumExpectedResources + 1))

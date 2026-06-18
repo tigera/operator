@@ -102,6 +102,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
+			Controller:         extensions.InstallationController,
 			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: certManager,

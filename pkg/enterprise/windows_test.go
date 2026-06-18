@@ -15,6 +15,8 @@
 package enterprise_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -30,9 +32,9 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("windows enterprise image override", func() {
@@ -91,16 +93,8 @@ var _ = Describe("windows enterprise modifier", func() {
 		}
 	}
 
-	wcFor := func(tls certificatemanagement.KeyPairInterface, bundle certificatemanagement.TrustedBundleRO) render.WindowsExtensionContext {
-		return render.WindowsExtensionContext{
-			NodeReporterMetricsPort: 9081,
-			PrometheusServerTLS:     tls,
-			TrustedBundle:           bundle,
-		}
-	}
-
 	It("appends the node-metrics service", func() {
-		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), wcFor(nil, nil), newObjs(), nil)
+		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), newObjs(), nil)
 		svc, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
@@ -108,7 +102,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("swaps the cni log mount for the calico log volume and adds enterprise env", func() {
-		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), wcFor(nil, nil), newObjs(), nil)
+		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(HaveField("Name", "var-log-calico")))
@@ -125,7 +119,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("sets the trusted DNS server on openshift", func() {
-		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderOpenShift), wcFor(nil, nil), newObjs(), nil)
+		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderOpenShift), newObjs(), nil)
 		Expect(container(ds(out), "node").Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"}))
 	})
 
@@ -137,9 +131,28 @@ var _ = Describe("windows enterprise modifier", func() {
 		Expect(err).NotTo(HaveOccurred())
 		tls, err := cm.GetOrCreateKeyPair(cli, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), []string{"calico-node-metrics-windows"})
 		Expect(err).NotTo(HaveOccurred())
+		// The installation controller persists the secret; do the same here so the
+		// windows extension's GetKeyPair finds it.
+		Expect(cli.Create(context.Background(), tls.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		bundle := cm.CreateTrustedBundle()
 
-		out, _ := applyExtensionsWithContext(ext, render.ComponentNameWindows, ctxFor(operatorv1.ProviderNone), wcFor(tls, bundle), newObjs(), nil)
+		// Build the render context the way the windows controller does: run the
+		// windows extension, which fetches the keypair into the context.
+		cc := extensions.ControllerContext{
+			RenderContext: extensions.RenderContext{
+				Installation:  ctxFor(operatorv1.ProviderNone).Installation,
+				TrustedBundle: bundle,
+				ClusterDomain: dns.DefaultClusterDomain,
+			},
+			Controller:         extensions.WindowsController,
+			Ctx:                context.Background(),
+			Client:             cli,
+			CertificateManager: cm,
+		}
+		rc, _, err := ext.ExtendContext(cc)
+		Expect(err).NotTo(HaveOccurred())
+
+		out, _ := applyExtensions(ext, render.ComponentNameWindows, rc, newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(tls.Volume()))

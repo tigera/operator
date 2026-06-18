@@ -36,12 +36,28 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 )
+
+// guardianObjects renders the guardian component and applies the registered
+// enterprise modifier the way the componentHandler does.
+func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
+	g := render.Guardian(cfg)
+	ExpectWithOffset(1, g.ResolveImages(nil)).To(BeNil())
+	objs, _ := g.Objects()
+	rc := extensions.RenderContext{Installation: cfg.Installation}
+	var extCtx any
+	if p, ok := g.(render.ExtensionContextProvider); ok {
+		extCtx = p.ExtensionContext()
+	}
+	out, _ := applyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, objs, nil)
+	return out
+}
 
 var _ = Describe("Rendering tests", func() {
 	var cfg *render.GuardianConfiguration
@@ -95,6 +111,14 @@ var _ = Describe("Rendering tests", func() {
 			g = render.Guardian(cfg)
 			Expect(g.ResolveImages(nil)).To(BeNil())
 			resources, deleteResources = g.Objects()
+			// Apply the registered enterprise modifier the way the componentHandler
+			// does, so these enterprise tests exercise the integrated output.
+			rc := extensions.RenderContext{Installation: cfg.Installation}
+			var extCtx any
+			if p, ok := g.(render.ExtensionContextProvider); ok {
+				extCtx = p.ExtensionContext()
+			}
+			resources, _ = applyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, resources, nil)
 		}
 
 		BeforeEach(func() {
@@ -189,8 +213,7 @@ var _ = Describe("Rendering tests", func() {
 				},
 			}
 
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			clusterRole, ok := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -230,8 +253,7 @@ var _ = Describe("Rendering tests", func() {
 				},
 			}
 
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			clusterRole, ok := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -270,8 +292,7 @@ var _ = Describe("Rendering tests", func() {
 				},
 			}
 
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			clusterRole, ok := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -301,9 +322,7 @@ var _ = Describe("Rendering tests", func() {
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 		cfg.OpenShift = true
-		component := render.Guardian(cfg)
-		Expect(component.ResolveImages(nil)).To(BeNil())
-		resources, _ := component.Objects()
+		resources := guardianObjects(cfg)
 
 		role := rtest.GetResource(resources, render.GuardianClusterRoleName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
@@ -327,7 +346,16 @@ var _ = Describe("Rendering tests", func() {
 			cfg.IncludeEgressNetworkPolicy = includeEgressNetworkPolicy
 			g, err := render.GuardianPolicy(cfg)
 			Expect(err).NotTo(HaveOccurred())
-			resources, _ = g.Objects()
+			objs, _ := g.Objects()
+			// Apply the registered enterprise modifier the way the componentHandler
+			// does, so the enterprise policy is exercised. For the Calico variant the
+			// modifier is a no-op and the OSS policy is returned.
+			rc := extensions.RenderContext{Installation: cfg.Installation}
+			var extCtx any
+			if p, ok := g.(render.ExtensionContextProvider); ok {
+				extCtx = p.ExtensionContext()
+			}
+			resources, _ = applyExtensionsWithContext(ext, render.ComponentNameGuardianPolicy, rc, extCtx, objs, nil)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {
@@ -441,8 +469,7 @@ var _ = Describe("guardian", func() {
 			}
 		})
 		It("should render when disabled", func() {
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -452,8 +479,7 @@ var _ = Describe("guardian", func() {
 
 		It("should render when set to disabled", func() {
 			cfg.TunnelCAType = operatorv1.CATypeTigera
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -464,8 +490,7 @@ var _ = Describe("guardian", func() {
 		It("should render when enabled", func() {
 			cfg.TunnelCAType = operatorv1.CATypePublic
 
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -503,8 +528,7 @@ var _ = Describe("guardian", func() {
 				},
 			}
 
-			g := render.Guardian(cfg)
-			resources, _ := g.Objects()
+			resources := guardianObjects(cfg)
 			Expect(resources).ToNot(BeNil())
 
 			deployment, ok := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)

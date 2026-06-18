@@ -38,7 +38,7 @@ import (
 
 // These tests exercise the *dataplane-on* path: a full Calico install (calico-node + Felix
 // running) with the Calico Ingress Gateway and the Calico Istio service mesh installed on
-// top. They are the positive counterpart to the headless specs (headless_test.go), which
+// top. They are the positive counterpart to the dataplane-disabled specs (no_dataplane_test.go), which
 // verify the same components install with the Calico dataplane integration switched OFF.
 //
 // The distinct thing proven here is that the integration actually *functions* when Felix is
@@ -47,7 +47,7 @@ import (
 // NetworkPolicy enforces on real ambient-mesh (HBONE) traffic.
 //
 // They run on the regular FV cluster (deploy/kind-config.yaml, no default CNI — the operator
-// installs Calico CNI), so they carry NO "headless" label and run under `make fv`.
+// installs Calico CNI), so they carry NO "no-dataplane" label and run under `make fv`.
 //
 // Dataplane modes: iptables is deprecated, so we exercise Nftables (primary) and BPF/eBPF.
 // Whether Felix's DSCP-marking of HBONE works per mode is a Felix-runtime concern only
@@ -366,7 +366,7 @@ var _ = Describe("Dataplane-on integration FV tests", func() {
 			return assertAvailable(ts)
 		}, 120*time.Second).Should(BeNil())
 
-		// The dataplane-on signal that the headless Gateway spec asserts is *absent*: with
+		// The dataplane-on signal that the dataplane-disabled Gateway spec asserts is *absent*: with
 		// Felix running, the controller patches PolicySyncPathPrefix so the L7 log collector
 		// can reach the Felix policy-sync socket. (The l7-log-collector container itself is
 		// Enterprise-only and its images are not publicly pullable in this FV environment,

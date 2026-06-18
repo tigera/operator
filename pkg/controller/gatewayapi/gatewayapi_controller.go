@@ -302,7 +302,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// patch felix config for l7-collector socket path. In headless installations
+	// patch felix config for l7-collector socket path. When the Linux dataplane is disabled
 	// (spec.calicoNetwork.linuxDataplane: None) there is no Felix to consume it, so skip.
 	if installationSpec.LinuxDataplaneEnabled() {
 		if err = r.patchFelixConfiguration(ctx); err != nil {

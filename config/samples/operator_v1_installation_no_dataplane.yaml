@@ -3,11 +3,11 @@ kind: Installation
 metadata:
   name: default
 spec:
-  # Headless installation: the operator deploys no Calico dataplane (no calico-node,
+  # Dataplane disabled: the operator deploys no Calico dataplane (no calico-node,
   # Typha, or kube-controllers) and only manages standalone product options (Calico
   # Ingress Gateway, Calico Istio service mesh) on top of the cluster's default CNI.
   variant: Calico
-  # spec.cni is intentionally omitted: a headless install runs no Calico dataplane, so the
+  # spec.cni is intentionally omitted: an install with the dataplane disabled runs no Calico dataplane, so the
   # operator makes no CNI configuration. Setting linuxDataplane: None is the trigger.
   calicoNetwork:
     linuxDataplane: None

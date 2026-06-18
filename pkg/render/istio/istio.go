@@ -46,7 +46,7 @@ type Configuration struct {
 	// IncludeV3NetworkPolicy is true when the projectcalico.org/v3 API is available (the
 	// calico-system Tier exists), in which case the Calico NetworkPolicies protecting the
 	// Istio components are rendered. When the v3 API is not served (e.g. before the Calico
-	// API server is up, or in a headless installation), they are omitted so that the rest
+	// API server is up, or when the Linux dataplane is disabled), they are omitted so that the rest
 	// of the Istio components can still be applied.
 	IncludeV3NetworkPolicy bool
 }
@@ -280,7 +280,7 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	// running. With TRANSPARENT_NETWORK_POLICIES, ztunnel sends HBONE to the original
 	// destination port and relies on Felix to DSCP-mark those packets so that the
 	// istio-cni in-pod rule (matching MAGIC_DSCP_MARK) can steer them to the HBONE
-	// listener. In a headless installation there is no Felix to apply the mark, which
+	// listener. When the Linux dataplane is disabled there is no Felix to apply the mark, which
 	// would leave HBONE traffic misclassified as plaintext and break all in-mesh
 	// traffic, so ztunnel is left in its default (port 15008) mode instead.
 	if c.cfg.Installation.LinuxDataplaneEnabled() {

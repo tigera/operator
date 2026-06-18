@@ -583,7 +583,7 @@ var _ = Describe("Istio controller tests", func() {
 		})
 	})
 
-	Context("Headless mode tests (linuxDataplane: None)", Label("headless"), func() {
+	Context("Dataplane-disabled mode tests (linuxDataplane: None)", Label("no-dataplane"), func() {
 		BeforeEach(func() {
 			dpNone := operatorv1.LinuxDataplaneNone
 			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
@@ -652,7 +652,7 @@ var _ = Describe("Istio controller tests", func() {
 				ContainSubstring("Normal"),
 				ContainSubstring("CalicoDataplaneIntegrationDisabled"),
 				ContainSubstring("Linux dataplane is disabled"),
-			)), "expected a Normal CalicoDataplaneIntegrationDisabled event in headless mode")
+			)), "expected a Normal CalicoDataplaneIntegrationDisabled event when the dataplane is disabled")
 
 			// The integration being off is expected, so the controller must not degrade.
 			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")

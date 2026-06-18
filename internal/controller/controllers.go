@@ -24,13 +24,13 @@ import (
 )
 
 func AddToManager(mgr ctrl.Manager, options options.ControllerOptions) error {
-	// Controllers that run regardless of the dataplane mode. These are needed even for a
-	// "headless" installation (spec.calicoNetwork.linuxDataplane: None, where no Calico
+	// Controllers that run regardless of the dataplane mode. These are needed even when the
+	// dataplane is disabled (spec.calicoNetwork.linuxDataplane: None, where no Calico
 	// dataplane runs and the projectcalico.org/v3 API is never served):
 	//   - Installation: the core controller; it renders the dataplane components only when a
 	//     Linux dataplane is enabled, and reboots the operator (os.Exit(0)) if the dataplane
 	//     mode changes so the correct controller set below is registered.
-	//   - Istio, GatewayAPI: the standalone components a headless install exists to support.
+	//   - Istio, GatewayAPI: the standalone components an install with the dataplane disabled exists to support.
 	//   - Secrets, CSR: certificate-management infrastructure other controllers rely on.
 	if err := (&InstallationReconciler{
 		Client: mgr.GetClient(),
@@ -67,13 +67,13 @@ func AddToManager(mgr ctrl.Manager, options options.ControllerOptions) error {
 		return fmt.Errorf("failed to create controller %s: %v", "CSR", err)
 	}
 
-	// Dataplane- and v3-API-dependent controllers. None of these can function in a headless
-	// installation (the calico-system Tier, LicenseKey, and ClusterInformation they read or
-	// wait on are never served, and the features they manage rely on a running Calico
-	// dataplane), so they are not registered when the operator starts headless. If the
-	// dataplane mode changes at runtime, the Installation controller reboots the operator and
-	// this set is (de)registered accordingly.
-	if !options.Headless {
+	// Dataplane- and v3-API-dependent controllers. None of these can function when the Linux
+	// dataplane is disabled (the calico-system Tier, LicenseKey, and ClusterInformation they
+	// read or wait on are never served, and the features they manage rely on a running Calico
+	// dataplane), so they are not registered when the operator starts with the dataplane
+	// disabled. If the dataplane mode changes at runtime, the Installation controller reboots
+	// the operator and this set is (de)registered accordingly.
+	if !options.DataplaneDisabled {
 		if err := (&IPPoolReconciler{
 			Client: mgr.GetClient(),
 			Log:    ctrl.Log.WithName("controllers").WithName("IPPool"),

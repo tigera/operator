@@ -40,22 +40,22 @@ import (
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 )
 
-// These tests exercise headless installations (spec.calicoNetwork.linuxDataplane: None with
+// These tests exercise installs with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None with
 // spec.cni omitted): the operator deploys no Calico dataplane and standalone components
 // (Calico Ingress Gateway, Calico Istio service mesh) install on top of a third-party CNI.
 //
 // They require a kind cluster with the default CNI (kindnet) enabled, which the regular FV
-// cluster does not have — run them with `make fv-headless`, which provisions a suitable
-// cluster from deploy/kind-config-headless.yaml. The `headless` label keeps them out of the
+// cluster does not have — run them with `make fv-no-dataplane`, which provisions a suitable
+// cluster from deploy/kind-config-no-dataplane.yaml. The `no-dataplane` label keeps them out of the
 // regular `make fv` run.
-var _ = Describe("Headless installation FV tests", Label("headless"), func() {
+var _ = Describe("Dataplane-disabled installation FV tests", Label("no-dataplane"), func() {
 	var c client.Client
 	var mgr manager.Manager
 	var shutdownContext context.Context
 	var cancel context.CancelFunc
 	var operatorDone chan struct{}
 
-	headlessInstallationSpec := func(variant operator.ProductVariant) *operator.InstallationSpec {
+	dataplaneDisabledInstallationSpec := func(variant operator.ProductVariant) *operator.InstallationSpec {
 		dpNone := operator.LinuxDataplaneNone
 		return &operator.InstallationSpec{
 			Variant: variant,
@@ -65,9 +65,9 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		}
 	}
 
-	// verifyHeadlessInstallation waits for the headless Installation to become Available and
+	// verifyDataplaneDisabledInstallation waits for the dataplane-disabled Installation to become Available and
 	// asserts that none of the Calico dataplane workloads have been rendered.
-	verifyHeadlessInstallation := func() {
+	verifyDataplaneDisabledInstallation := func() {
 		By("Waiting for the Installation TigeraStatus to become Available with no dataplane")
 		Eventually(func() error {
 			ts, err := getTigeraStatus(c, "calico")
@@ -90,7 +90,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 
 	expectNoFelixConfiguration := func() {
 		err := c.Get(context.Background(), types.NamespacedName{Name: "default"}, &v3.FelixConfiguration{})
-		Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no default FelixConfiguration in a headless cluster")
+		Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no default FelixConfiguration in a cluster with the dataplane disabled")
 	}
 
 	// cleanupStaleGatewayClasses removes any leftover default GatewayClass. A GatewayClass
@@ -136,7 +136,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 				return err
 			}
 			if d.Status.AvailableReplicas < 1 {
-				return fmt.Errorf("coredns has no available replicas; headless FV needs a cluster with a default CNI (use `make fv-headless`)")
+				return fmt.Errorf("coredns has no available replicas; the dataplane-disabled FV needs a cluster with a default CNI (use `make fv-no-dataplane`)")
 			}
 			return nil
 		}, 120*time.Second).Should(BeNil())
@@ -187,7 +187,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		// relies on the operator processing finalizers.
 		By("Cleaning up resources after the test")
 
-		// Delete any Istio CR; in headless mode its finalizer is removed without touching
+		// Delete any Istio CR; when the dataplane is disabled its finalizer is removed without touching
 		// FelixConfiguration, so deletion must complete.
 		istioCR := &operator.Istio{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 		if err := c.Delete(context.Background(), istioCR); err == nil || !kerror.IsNotFound(err) {
@@ -209,8 +209,8 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 	})
 
 	It("installs the Calico Ingress Gateway with no Calico dataplane", func() {
-		operatorDone = createInstallation(c, mgr, shutdownContext, headlessInstallationSpec(operator.Calico))
-		verifyHeadlessInstallation()
+		operatorDone = createInstallation(c, mgr, shutdownContext, dataplaneDisabledInstallationSpec(operator.Calico))
+		verifyDataplaneDisabledInstallation()
 
 		By("Creating the default GatewayAPI")
 		gatewayAPI := &operator.GatewayAPI{
@@ -249,13 +249,13 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		By("Creating a Gateway as a smoke test")
 		// The Gateway is created in calico-system, where the trusted CA bundle and pull
 		// secrets that envoy proxy pods mount already exist (the core controller renders
-		// them even in headless mode). Per-namespace provisioning of those resources for
+		// them even when the dataplane is disabled). Per-namespace provisioning of those resources for
 		// user Gateway namespaces is currently Enterprise-only, and Enterprise images are
 		// not publicly pullable in this test environment.
 		const testNs = common.CalicoNamespace
 		gw := &gapi.Gateway{
 			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "headless-gw", Namespace: testNs},
+			ObjectMeta: metav1.ObjectMeta{Name: "no-dataplane-gw", Namespace: testNs},
 			Spec: gapi.GatewaySpec{
 				GatewayClassName: "tigera-gateway-class",
 				Listeners: []gapi.Listener{{
@@ -273,7 +273,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		By("Waiting for the Gateway to be Accepted by the envoy-gateway controller")
 		Eventually(func() error {
 			var got gapi.Gateway
-			if err := c.Get(shutdownContext, types.NamespacedName{Name: "headless-gw", Namespace: testNs}, &got); err != nil {
+			if err := c.Get(shutdownContext, types.NamespacedName{Name: "no-dataplane-gw", Namespace: testNs}, &got); err != nil {
 				return err
 			}
 			for _, cond := range got.Status.Conditions {
@@ -288,7 +288,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		Eventually(func() error {
 			deployments := &appsv1.DeploymentList{}
 			if err := c.List(shutdownContext, deployments, client.MatchingLabels{
-				"gateway.envoyproxy.io/owning-gateway-name": "headless-gw",
+				"gateway.envoyproxy.io/owning-gateway-name": "no-dataplane-gw",
 			}); err != nil {
 				return err
 			}
@@ -303,15 +303,15 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 			return fmt.Errorf("envoy proxy Deployment has no available replicas yet")
 		}, 300*time.Second).ShouldNot(HaveOccurred())
 
-		By("Verifying FelixConfiguration was not touched (no PolicySync patch in headless mode)")
+		By("Verifying FelixConfiguration was not touched (no PolicySync patch when the dataplane is disabled)")
 		expectNoFelixConfiguration()
 	})
 
 	It("installs the Calico Istio service mesh with no Calico dataplane", func() {
 		// OSS Calico variant, so that between the two specs both product variants get
-		// headless coverage.
-		operatorDone = createInstallation(c, mgr, shutdownContext, headlessInstallationSpec(operator.Calico))
-		verifyHeadlessInstallation()
+		// dataplane-disabled coverage.
+		operatorDone = createInstallation(c, mgr, shutdownContext, dataplaneDisabledInstallationSpec(operator.Calico))
+		verifyDataplaneDisabledInstallation()
 
 		By("Creating the default Istio CR")
 		istioCR := &operator.Istio{
@@ -366,7 +366,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 	})
 
 	// ----------------------------------------------------------------------------------
-	// Real-life usage specs. The specs above assert that the headless control-plane
+	// Real-life usage specs. The specs above assert that the dataplane-disabled control-plane
 	// components install and report Available. The two below go further and exercise the
 	// data path: they deploy real (publicly-pullable) workloads and drive real HTTP
 	// traffic between in-cluster pods, asserting on the observable behaviour of the
@@ -382,8 +382,8 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		const appNs = "ig-fv-usage"
 		cfg := mgr.GetConfig()
 
-		operatorDone = createInstallation(c, mgr, shutdownContext, headlessInstallationSpec(operator.Calico))
-		verifyHeadlessInstallation()
+		operatorDone = createInstallation(c, mgr, shutdownContext, dataplaneDisabledInstallationSpec(operator.Calico))
+		verifyDataplaneDisabledInstallation()
 
 		By("Creating the default GatewayAPI and waiting for the envoy-gateway controller")
 		Expect(c.Create(shutdownContext, &operator.GatewayAPI{
@@ -527,7 +527,7 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 			return nil
 		}, 60*time.Second).ShouldNot(HaveOccurred())
 
-		By("Verifying FelixConfiguration was not touched (no PolicySync patch in headless mode)")
+		By("Verifying FelixConfiguration was not touched (no PolicySync patch when the dataplane is disabled)")
 		expectNoFelixConfiguration()
 	})
 
@@ -535,8 +535,8 @@ var _ = Describe("Headless installation FV tests", Label("headless"), func() {
 		const meshNs = "istio-fv-usage"
 		cfg := mgr.GetConfig()
 
-		operatorDone = createInstallation(c, mgr, shutdownContext, headlessInstallationSpec(operator.Calico))
-		verifyHeadlessInstallation()
+		operatorDone = createInstallation(c, mgr, shutdownContext, dataplaneDisabledInstallationSpec(operator.Calico))
+		verifyDataplaneDisabledInstallation()
 
 		By("Creating the default Istio CR and waiting for the ambient mesh to be ready")
 		Expect(c.Create(shutdownContext, &operator.Istio{

@@ -781,7 +781,7 @@ var _ = Describe("Gateway API controller tests", func() {
 
 	DescribeTable("patches felix configuration for an explicit (non-None) linuxDataplane",
 		func(dataplane operatorv1.LinuxDataplaneOption) {
-			By("configuring an install with the Calico dataplane enabled (counterpart to the headless-skip case)")
+			By("configuring an install with the Calico dataplane enabled (counterpart to the dataplane-disabled-skip case)")
 			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dataplane}
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
@@ -805,8 +805,8 @@ var _ = Describe("Gateway API controller tests", func() {
 		Entry("BPF (eBPF) dataplane", operatorv1.LinuxDataplaneBPF),
 	)
 
-	It("does not patch felix configuration in a headless installation", Label("headless"), func() {
-		By("configuring a headless installation (no cni, linuxDataplane None)")
+	It("does not patch felix configuration in an install with the dataplane disabled", Label("no-dataplane"), func() {
+		By("configuring an install with the dataplane disabled (no cni, linuxDataplane None)")
 		dpNone := operatorv1.LinuxDataplaneNone
 		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
@@ -836,7 +836,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(BeEmpty())
 	})
 
-	It("degrades gracefully and requeues when the projectcalico.org/v3 API is not served", Label("headless"), func() {
+	It("degrades gracefully and requeues when the projectcalico.org/v3 API is not served", Label("no-dataplane"), func() {
 		By("building a client that returns NoKindMatchError for FelixConfiguration")
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).
 			WithInterceptorFuncs(interceptor.Funcs{

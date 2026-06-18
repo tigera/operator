@@ -30,10 +30,10 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 )
 
 var _ = Describe("installation controller extension", func() {
-
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
 		cc := newControllerContext(operatorv1.CalicoEnterprise)
@@ -43,11 +43,14 @@ var _ = Describe("installation controller extension", func() {
 		Expect(ext.Validate(cc)).To(HaveOccurred())
 	})
 
-	It("creates the node prometheus keypair for the enterprise variant", func() {
+	It("manages the node prometheus and kube-controllers metrics keypairs for the enterprise variant", func() {
 		_, managed, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(managed).To(HaveLen(1), "expected the node prometheus keypair to be managed")
-		Expect(managed[0].GetName()).To(Equal(render.NodePrometheusTLSServerSecret))
+		names := []string{}
+		for _, kp := range managed {
+			names = append(names, kp.GetName())
+		}
+		Expect(names).To(ConsistOf(render.NodePrometheusTLSServerSecret, kubecontrollers.KubeControllerPrometheusTLSSecret))
 	})
 
 	It("is a no-op for the Calico variant", func() {

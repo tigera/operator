@@ -49,7 +49,6 @@ import (
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
-	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -550,8 +549,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 	})
 	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise", func() {
-		var defaultMode int32 = 420
-		var kubeControllerTLS certificatemanagement.KeyPairInterface
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -566,15 +563,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
 
+		// The metrics serving TLS (TLS_KEY_PATH/TLS_CRT_PATH/CLIENT_COMMON_NAME env,
+		// the keypair volume + mount) is layered on by the enterprise modifier, so
+		// the base render here carries only the trusted bundle.
 		expectedEnv := []corev1.EnvVar{
-			{Name: "TLS_KEY_PATH", Value: "/calico-kube-controllers-metrics-tls/tls.key"},
-			{Name: "TLS_CRT_PATH", Value: "/calico-kube-controllers-metrics-tls/tls.crt"},
-			{Name: "CLIENT_COMMON_NAME", Value: "calico-node-prometheus-client-tls"},
 			{Name: "CA_CRT_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 		}
 		expectedVolumeMounts := []corev1.VolumeMount{
 			{Name: "tigera-ca-bundle", MountPath: "/etc/pki/tls/certs", ReadOnly: true},
-			{Name: "calico-kube-controllers-metrics-tls", MountPath: "/calico-kube-controllers-metrics-tls", ReadOnly: true},
 		}
 		expectedVolume := []corev1.Volume{
 			{
@@ -585,34 +581,11 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					},
 				},
 			},
-			{
-				Name: "calico-kube-controllers-metrics-tls",
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName:  "calico-kube-controllers-metrics-tls",
-						DefaultMode: &defaultMode,
-					},
-				},
-			},
 		}
-
-		scheme := runtime.NewScheme()
-		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
-		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-
-		certificateManager, err := certificatemanager.Create(cli, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-		Expect(err).NotTo(HaveOccurred())
-
-		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(cli,
-			kubecontrollers.KubeControllerPrometheusTLSSecret,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, dns.DefaultClusterDomain))
-		Expect(err).NotTo(HaveOccurred())
 
 		// Override configuration to match expected Enterprise config.
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.MetricsPort = 9094
-		cfg.MetricsServerTLS = kubeControllerTLS
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -632,10 +605,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElements(expectedEnv))
 
-		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
 		Expect(dp.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElements(expectedVolumeMounts))
 
-		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(2))
+		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 		Expect(dp.Spec.Template.Spec.Volumes).To(ContainElements(expectedVolume))
 
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
@@ -1300,29 +1273,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
 			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
 		)
-	})
-
-	It("should render init containers when certificate management is enabled", func() {
-		instance.Variant = operatorv1.CalicoEnterprise
-		cfg.MetricsPort = 9094
-		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
-		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
-		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
-
-		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-		Expect(err).NotTo(HaveOccurred())
-
-		tls, err := certificateManager.GetOrCreateKeyPair(cli, kubecontrollers.KubeControllerPrometheusTLSSecret, common.OperatorNamespace(), []string{""})
-		Expect(err).NotTo(HaveOccurred())
-
-		cfg.MetricsServerTLS = tls
-
-		resources, _ := kubecontrollers.NewCalicoKubeControllers(&cfg).Objects()
-
-		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-		Expect(dp.Spec.Template.Spec.InitContainers).To(HaveLen(1))
-		csrInitContainer := dp.Spec.Template.Spec.InitContainers[0]
-		Expect(csrInitContainer.Name).To(Equal(fmt.Sprintf("%v-key-cert-provisioner", kubecontrollers.KubeControllerPrometheusTLSSecret)))
 	})
 
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {

@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -41,6 +42,10 @@ type coreControllerExtension struct{}
 // modifier type-asserts it back out.
 type installationRenderData struct {
 	nodePrometheusTLS certificatemanagement.KeyPairInterface
+
+	// kubeControllerTLS is the calico-kube-controllers metrics serving keypair; the
+	// kube-controllers modifier mounts it onto the deployment.
+	kubeControllerTLS certificatemanagement.KeyPairInterface
 
 	// collectProcessPath mirrors LogCollector.Spec.CollectProcessPath being
 	// enabled; the node modifier uses it to set HostPID and the felix env.
@@ -101,12 +106,29 @@ func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (e
 		cc.TrustedBundle.AddCertificates(nodePrometheusTLS)
 	}
 
+	// The calico-kube-controllers metrics endpoint is served with mTLS in
+	// Enterprise; the keypair is created here (cluster side effect) and mounted by
+	// the kube-controllers modifier.
+	kubeControllerTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
+		cc.Client,
+		kubecontrollers.KubeControllerPrometheusTLSSecret,
+		common.OperatorNamespace(),
+		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, cc.ClusterDomain),
+	)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error creating kube-controllers metrics TLS certificate: %w", err)
+	}
+	if kubeControllerTLS != nil {
+		cc.TrustedBundle.AddCertificates(kubeControllerTLS)
+	}
+
 	logCollector, err := utils.GetLogCollector(cc.Ctx, cc.Client)
 	if err != nil {
 		return rc, nil, fmt.Errorf("error reading LogCollector: %w", err)
 	}
 	rc.Extension = installationRenderData{
 		nodePrometheusTLS:  nodePrometheusTLS,
+		kubeControllerTLS:  kubeControllerTLS,
 		collectProcessPath: collectProcessPathEnabled(logCollector),
 	}
 
@@ -139,6 +161,9 @@ func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (e
 	var managed []certificatemanagement.KeyPairInterface
 	if nodePrometheusTLS != nil {
 		managed = append(managed, nodePrometheusTLS)
+	}
+	if kubeControllerTLS != nil {
+		managed = append(managed, kubeControllerTLS)
 	}
 	return rc, managed, nil
 }

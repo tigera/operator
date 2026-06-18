@@ -458,7 +458,7 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
-	if ext, ok := component.(render.Extensible); ok && c.extensions == nil {
+	if ext, ok := component.(render.Extensible); ok && ext.ModifierKey() != "" && c.extensions == nil {
 		c.log.Info("BUG: extensible component rendered by a handler with no extension Set; extensions will not be applied", "component", ext.ModifierKey())
 	}
 	component = c.extensions.Decorate(component, c.renderCtx)

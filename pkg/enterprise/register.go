@@ -35,6 +35,7 @@ func New() *extensions.Set {
 	registerWindows(ent)
 	registerGuardian(ent)
 	registerAPIServer(ent)
+	registerKubeControllers(ent)
 
 	// When the enterprise operator manages a Calico installation, clean up the
 	// Enterprise objects left behind by a prior Enterprise installation.

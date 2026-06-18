@@ -76,4 +76,9 @@ const (
 	ComponentNameWindows        = "windows"
 	ComponentNameWindowsNodeImg = "windows-node-image"
 	ComponentNameWindowsCNIImg  = "windows-cni-image"
+
+	// ComponentNameKubeControllers keys the calico-kube-controllers modifier. The
+	// es-calico-kube-controllers deployment shares the component type but leaves
+	// its modifier key empty, so it is not decorated.
+	ComponentNameKubeControllers = "kube-controllers"
 )

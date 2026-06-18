@@ -85,7 +85,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -1191,30 +1190,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Secure calico kube controller metrics.
-	var kubeControllerTLS certificatemanagement.KeyPairInterface
-	if instance.Spec.Variant.IsEnterprise() {
-		// Create or Get TLS certificates for kube controller.
-		kubeControllerTLS, err = certificateManager.GetOrCreateKeyPair(
-			r.client,
-			kubecontrollers.KubeControllerPrometheusTLSSecret,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, r.opts.ClusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error finding or creating TLS certificate kube controllers metric", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Add prometheus client certificate to Trusted bundle.
-		kubeControllerPrometheusTLS, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate for kube controllers", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if kubeControllerPrometheusTLS != nil {
-			typhaNodeTLS.TrustedBundle.AddCertificates(kubeControllerTLS, kubeControllerPrometheusTLS)
-		}
-	}
-
 	nodeAppArmorProfile := ""
 	a := instance.GetObjectMeta().GetAnnotations()
 	if val, ok := a[techPreviewFeatureSeccompApparmor]; ok {
@@ -1324,7 +1299,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
-		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 		// Nil when the WAF v3 surface is disabled; the certificate-management
 		// render skips nil key pairs.
 		rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true),
@@ -1604,7 +1578,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:               r.opts.ClusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,
 		Terminating:                 installationMarkedForDeletion,
-		MetricsServerTLS:            kubeControllerTLS,
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
@@ -1756,7 +1729,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
 		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
 		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
-		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
 	}
 	for _, kp := range managedKeyPairs {
 		keyPairWarnings[kp.GetName()] = kp

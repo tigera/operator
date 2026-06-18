@@ -15,19 +15,74 @@
 package enterprise
 
 import (
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/url"
 )
+
+// registerKubeControllers registers the calico-kube-controllers modifier. There is
+// no image override: kube-controllers runs from the combined calico image, which
+// resolves by variant in the base render.
+func registerKubeControllers(v *extensions.Variant) {
+	v.Modify(render.ComponentNameKubeControllers, modifyKubeControllers)
+}
+
+// modifyKubeControllers layers the Calico Enterprise metrics serving TLS onto the
+// rendered calico-kube-controllers deployment: the env pointing at the keypair, the
+// volume + mount, the cert-management init container (when in use), and the pod hash
+// annotation that rolls the pod on cert rotation. The keypair has cluster side
+// effects, so the installation extension creates it and hands it in via rc. In core
+// (calico) it is never created, so the base deployment carries no metrics TLS.
+func modifyKubeControllers(rc extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+	tls := installationData(rc).kubeControllerTLS
+	if tls == nil {
+		return objs, del
+	}
+
+	dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
+	if !ok {
+		return objs, del
+	}
+	spec := &dp.Spec.Template.Spec
+	spec.Volumes = append(spec.Volumes, tls.Volume())
+
+	for i := range spec.Containers {
+		c := &spec.Containers[i]
+		if c.Name != kubecontrollers.KubeController {
+			continue
+		}
+		c.Env = append(c.Env,
+			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: tls.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: tls.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "CLIENT_COMMON_NAME", Value: monitor.PrometheusClientTLSSecretName},
+		)
+		c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeLinux))
+		if tls.UseCertificateManagement() {
+			spec.InitContainers = append(spec.InitContainers, tls.InitContainer(common.CalicoNamespace, c.SecurityContext))
+		}
+	}
+
+	if dp.Spec.Template.Annotations == nil {
+		dp.Spec.Template.Annotations = map[string]string{}
+	}
+	dp.Spec.Template.Annotations[tls.HashAnnotationKey()] = tls.HashAnnotationValue()
+
+	return objs, del
+}
 
 const (
 	EsKubeController                  = "es-calico-kube-controllers"

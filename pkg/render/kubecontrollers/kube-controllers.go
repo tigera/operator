@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -104,8 +103,6 @@ type KubeControllersConfiguration struct {
 	WASMPullSecret               *corev1.Secret
 	WASMCACert                   *corev1.ConfigMap
 	TrustedBundle                certificatemanagement.TrustedBundleRO
-
-	MetricsServerTLS certificatemanagement.KeyPairInterface
 
 	// Namespace to be installed into.
 	Namespace string
@@ -172,6 +169,12 @@ type KubeControllersConfiguration struct {
 	// webhook surface lifecycle (rendered when WAFGatewayExtensionEnabled, deleted
 	// otherwise). Only the calico-kube-controllers component sets this.
 	ManageWAFWebhook bool
+
+	// ModifierKey is the extension modifier key the component reports through
+	// render.Extensible. calico-kube-controllers sets it so the enterprise modifier
+	// can layer on its metrics TLS; es-calico-kube-controllers leaves it empty so it
+	// is never decorated.
+	ModifierKey string
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -206,6 +209,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) render.Componen
 	cfg.RoleBindingName = KubeControllerRoleBinding
 	cfg.MetricsName = KubeControllerMetrics
 	cfg.ManageWAFWebhook = true
+	cfg.ModifierKey = render.ComponentNameKubeControllers
 
 	cfg.Rules = KubeControllersRoleCommonRules(cfg)
 	cfg.EnabledControllers = []string{"node", "loadbalancer"}
@@ -372,6 +376,12 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 func (c *kubeControllersComponent) Ready() bool {
 	return true
+}
+
+// ModifierKey implements render.Extensible. It is empty for es-calico-kube-controllers
+// (never decorated) and set for calico-kube-controllers.
+func (c *kubeControllersComponent) ModifierKey() string {
+	return c.cfg.ModifierKey
 }
 
 func KubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
@@ -739,13 +749,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		}
 	}
 
-	if c.cfg.MetricsServerTLS != nil {
-		env = append(env,
-			corev1.EnvVar{Name: "TLS_KEY_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountKeyFilePath()},
-			corev1.EnvVar{Name: "TLS_CRT_PATH", Value: c.cfg.MetricsServerTLS.VolumeMountCertificateFilePath()},
-			corev1.EnvVar{Name: "CLIENT_COMMON_NAME", Value: monitor.PrometheusClientTLSSecretName},
-		)
-	}
 	if c.cfg.TrustedBundle != nil {
 		env = append(env,
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
@@ -814,9 +817,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	var initContainers []corev1.Container
-	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace, sc))
-	}
 	if c.cfg.WAFWebhookServerTLS != nil && c.cfg.WAFWebhookServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.WAFWebhookServerTLS.InitContainer(c.cfg.Namespace, sc))
 	}
@@ -953,9 +953,6 @@ func (c *kubeControllersComponent) annotations() map[string]string {
 		am = make(map[string]string)
 	}
 
-	if c.cfg.MetricsServerTLS != nil {
-		am[c.cfg.MetricsServerTLS.HashAnnotationKey()] = c.cfg.MetricsServerTLS.HashAnnotationValue()
-	}
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		am[render.ElasticsearchUserHashAnnotation] = rmeta.AnnotationHash(c.cfg.KubeControllersGatewaySecret.Data)
 	}
@@ -967,9 +964,6 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 	if c.cfg.TrustedBundle != nil {
 		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
-	if c.cfg.MetricsServerTLS != nil {
-		mounts = append(mounts, c.cfg.MetricsServerTLS.VolumeMount(c.SupportedOSType()))
-	}
 	if c.cfg.WAFWebhookServerTLS != nil {
 		mounts = append(mounts, c.cfg.WAFWebhookServerTLS.VolumeMount(c.SupportedOSType()))
 	}
@@ -980,9 +974,6 @@ func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	var volumes []corev1.Volume
 	if c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
-	}
-	if c.cfg.MetricsServerTLS != nil {
-		volumes = append(volumes, c.cfg.MetricsServerTLS.Volume())
 	}
 	if c.cfg.WAFWebhookServerTLS != nil {
 		volumes = append(volumes, c.cfg.WAFWebhookServerTLS.Volume())

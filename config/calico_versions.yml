@@ -23,6 +23,8 @@ components:
     version: v3.32.0
   csi:
     version: v3.32.0
+  csi-node-driver-registrar:
+    version: v3.32.0
   key-cert-provisioner:
     version: v3.32.0
   whisker:

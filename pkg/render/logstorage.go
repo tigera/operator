@@ -472,6 +472,7 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.cfg.ClusterDomain),
 			ElasticsearchNamespace,
 			esContainer.SecurityContext,
+			es.cfg.Installation.Variant.IsEnterprise(),
 		)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 

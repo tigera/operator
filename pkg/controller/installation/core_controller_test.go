@@ -2888,7 +2888,8 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 		installation = &operator.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operator.InstallationSpec{
-				Variant: operator.Calico,
+				// Default to Enterprise; only it ships a VAP on this release. Calico covered below.
+				Variant: operator.CalicoEnterprise,
 			},
 		}
 	})
@@ -3046,7 +3047,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 		Expect(deletedNames).To(HaveKey("stale-binding"))
 	})
 
-	It("should work with Enterprise variant", func() {
+	It("should create no VAPs for the Calico variant", func() {
 		r = ReconcileInstallation{
 			client:       clientFor(),
 			scheme:       scheme,
@@ -3059,9 +3060,9 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 			},
 		}
 
-		installation.Spec.Variant = operator.CalicoEnterprise
+		installation.Spec.Variant = operator.Calico
 
 		Expect(r.updateValidatingAdmissionPolicies(ctx, installation, log)).NotTo(HaveOccurred())
-		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
+		Expect(componentHandler.objectsToCreate).To(BeEmpty())
 	})
 })

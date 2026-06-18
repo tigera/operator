@@ -16,7 +16,6 @@ package kubecontrollers
 
 import (
 	"fmt"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -36,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -53,21 +51,6 @@ const (
 	KubeControllerRoleBinding       = "calico-kube-controllers"
 	KubeControllerMetrics           = "calico-kube-controllers-metrics"
 	KubeControllerNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "kube-controller-access"
-
-	// WASMPullSecretName is the dedicated image-pull Secret (a renamed copy of
-	// the install pull secret) that the WAF reconciler replicates into tenant
-	// namespaces for the Coraza wasm OCI pull. A dedicated name avoids clashing
-	// with the operator-managed tigera-pull-secret the GatewayAPI render also
-	// copies into those namespaces (EV-6386).
-	WASMPullSecretName = "tigera-waf-pull-secret"
-
-	// WASMCACertName is the dedicated CA-bundle ConfigMap (in the controller
-	// namespace) the WAF reconciler replicates into tenant namespaces for the
-	// Coraza wasm OCI registry TLS check — a dedicated name avoids clashing with
-	// the operator-managed tigera-ca-bundle ConfigMap the GatewayAPI render also
-	// copies there (EV-6386). The source copy is a renamed copy of the trusted
-	// bundle, provisioned by the core controller and passed in as WASMCACert.
-	WASMCACertName = "tigera-waf-ca-bundle"
 
 	// ManagedClustersWatchRoleBindingName binds kube-controllers to the managed-cluster
 	// watch ClusterRole. Used by both calico-kube-controllers (in a management cluster)
@@ -100,8 +83,6 @@ type KubeControllersConfiguration struct {
 	// namespace to be returned by the rendered. Expected that the calling code
 	// take care to pass the same secret on each reconcile where possible.
 	KubeControllersGatewaySecret *corev1.Secret
-	WASMPullSecret               *corev1.Secret
-	WASMCACert                   *corev1.ConfigMap
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
 	// Namespace to be installed into.
@@ -113,29 +94,6 @@ type KubeControllersConfiguration struct {
 	// Tenant object provides tenant configuration for both single and multi-tenant modes.
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
-
-	// WAFGatewayExtensionEnabled gates the WAF v3 (Gateway API add-on) surface
-	// on calico-kube-controllers: the applicationlayer controller enablement,
-	// the WAF / Gateway-API / EnvoyExtensionPolicy / event / secret-replication
-	// RBAC, the WASM_IMAGE / WASM_PULL_SECRET / WASM_CA_CERT env vars, and the
-	// gateway envoy-proxy wasm image resolution.  Sourced from
-	// `GatewayAPI.spec.extensions.waf.state == Enabled` (default off).
-	// See design `tigera/designs#25` (PMREQ-384).
-	WAFGatewayExtensionEnabled bool
-
-	// WAFWebhookServerTLS is the serving certificate for the in-process WAF
-	// SecLang validating admission webhook hosted by calico-kube-controllers.
-	// When set (WAF enabled), it is mounted into the Pod and the webhook server
-	// reads it from WAF_WEBHOOK_CERT_DIR. Issued for the tigera-waf-webhook
-	// Service DNS name. Nil leaves the Deployment untouched (and the in-process
-	// server self-disables when the cert is absent).
-	WAFWebhookServerTLS certificatemanagement.KeyPairInterface
-
-	// WAFWebhookCABundle is the PEM of the CA that issued WAFWebhookServerTLS
-	// (the operator CA), stamped into the ValidatingWebhookConfiguration's
-	// caBundle so the apiserver can verify the in-process webhook endpoint.
-	// Only consulted when WAFGatewayExtensionEnabled is true.
-	WAFWebhookCABundle []byte
 
 	// The fields below parameterize the generic kube-controllers component. The
 	// variant assemblers (NewCalicoKubeControllers, the enterprise es builder)
@@ -165,16 +123,23 @@ type KubeControllersConfiguration struct {
 	ExtraEnv []corev1.EnvVar
 	// DisableConfigAPI sets DISABLE_KUBE_CONTROLLERS_CONFIG_API.
 	DisableConfigAPI bool
-	// ManageWAFWebhook makes this component own the in-process WAF admission
-	// webhook surface lifecycle (rendered when WAFGatewayExtensionEnabled, deleted
-	// otherwise). Only the calico-kube-controllers component sets this.
-	ManageWAFWebhook bool
 
 	// ModifierKey is the extension modifier key the component reports through
 	// render.Extensible. calico-kube-controllers sets it so the enterprise modifier
-	// can layer on its metrics TLS; es-calico-kube-controllers leaves it empty so it
-	// is never decorated.
+	// can layer on the enterprise surface; es-calico-kube-controllers leaves it empty
+	// so it is never decorated.
 	ModifierKey string
+}
+
+// calicoKubeControllersPolicyComponent wraps the calico-kube-controllers network
+// policy passthrough so it is render.Extensible: the enterprise modifier adds the WAF
+// admission webhook ingress rule. The base policy carries no WAF.
+type calicoKubeControllersPolicyComponent struct {
+	render.Component
+}
+
+func (calicoKubeControllersPolicyComponent) ModifierKey() string {
+	return render.ComponentNameKubeControllersPolicy
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -184,14 +149,14 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDe
 		toCreate = append(toCreate, defaultDeny)
 	}
 
-	return render.NewPassthrough(
+	return calicoKubeControllersPolicyComponent{render.NewPassthrough(
 		toCreate,
 		[]client.Object{
 			// allow-tigera Tier was renamed to calico-system
 			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", cfg.Namespace),
 			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
 		},
-	)
+	)}
 }
 
 // NewKubeControllers builds a kube-controllers component from a fully-populated
@@ -202,66 +167,22 @@ func NewKubeControllers(cfg *KubeControllersConfiguration) render.Component {
 	return &kubeControllersComponent{cfg: cfg}
 }
 
+// NewCalicoKubeControllers builds the calico-kube-controllers component. The base is
+// pure OSS (the common rules plus the node and loadbalancer controllers); the Calico
+// Enterprise additions (extra RBAC, enterprise controllers, metrics TLS, the WAF v3
+// surface) are layered on by the enterprise modifier keyed by ModifierKey.
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) render.Component {
 	cfg.Name = KubeController
 	cfg.ConfigName = "default"
 	cfg.RoleName = KubeControllerRole
 	cfg.RoleBindingName = KubeControllerRoleBinding
 	cfg.MetricsName = KubeControllerMetrics
-	cfg.ManageWAFWebhook = true
 	cfg.ModifierKey = render.ComponentNameKubeControllers
 
 	cfg.Rules = KubeControllersRoleCommonRules(cfg)
 	cfg.EnabledControllers = []string{"node", "loadbalancer"}
-	if cfg.Installation.Variant.IsEnterprise() {
-		cfg.Rules = append(cfg.Rules, KubeControllersRoleEnterpriseCommonRules(cfg)...)
-		cfg.Rules = append(cfg.Rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{"remoteclusterconfigurations"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"endpoints"},
-				Verbs:     []string{"create", "update", "delete"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"usage.tigera.io"},
-				Resources: []string{"licenseusagereports"},
-				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
-			},
-		)
-		cfg.EnabledControllers = append(cfg.EnabledControllers, "service", "federatedservices", "usage")
-		if cfg.WAFGatewayExtensionEnabled {
-			cfg.EnabledControllers = append(cfg.EnabledControllers, "applicationlayer")
-		}
-		cfg.ExtraEnv = calicoEnterpriseEnv(cfg)
-	}
 
 	return NewKubeControllers(cfg)
-}
-
-// calicoEnterpriseEnv builds the enterprise-only static env vars for
-// calico-kube-controllers. The dynamic WASM_* vars depend on resolved images and
-// are added at deployment-render time.
-func calicoEnterpriseEnv(cfg *KubeControllersConfiguration) []corev1.EnvVar {
-	var env []corev1.EnvVar
-	if cfg.Tenant != nil {
-		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID})
-	}
-	if cfg.TrustedBundle != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: cfg.TrustedBundle.MountPath()})
-	}
-	if cfg.Installation.CalicoNetwork != nil && cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
-	}
-	return env
 }
 
 type kubeControllersComponent struct {
@@ -270,12 +191,6 @@ type kubeControllersComponent struct {
 
 	// Internal state generated by the given configuration.
 	calicoImage string
-
-	// wasmImage is the fully-resolved OCI reference for the Coraza WAF wasm
-	// binary (Enterprise only). Surfaced to the kube-controllers binary via
-	// the WASM_IMAGE env var; consumed by the applicationlayer reconcilers
-	// in tigera/calico-private to program WAF policy attachments.
-	wasmImage string
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -286,15 +201,6 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
-	}
-	if c.cfg.WAFGatewayExtensionEnabled {
-		// The Coraza WAF wasm is baked into the gateway envoy-proxy image as its
-		// final layer; Envoy Gateway extracts it from there. Point WASM_IMAGE at
-		// that same image (no standalone coraza-wasm image needed).
-		c.wasmImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyProxy, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
 	}
 	return nil
 }
@@ -338,26 +244,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	if c.cfg.KubeControllersGatewaySecret != nil {
 		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
 			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.KubeControllersGatewaySecret)...)...)
-	}
-	if c.cfg.WASMPullSecret != nil {
-		objectsToCreate = append(objectsToCreate, secret.ToRuntimeObjects(
-			secret.CopyToNamespace(c.cfg.Namespace, c.cfg.WASMPullSecret)...)...)
-	}
-	if c.cfg.WASMCACert != nil {
-		objectsToCreate = append(objectsToCreate, c.cfg.WASMCACert)
-	}
-
-	// The in-process WAF admission webhook surface (Service fronting this Pod +
-	// ValidatingWebhookConfiguration). Rendered here, rather than as a
-	// passthrough in the core controller, so the objects are cleaned up when the
-	// WAF extension is disabled or the GatewayAPI CR is removed.
-	if c.cfg.ManageWAFWebhook {
-		webhookObjs := applicationlayer.WAFAdmissionWebhookComponents(c.cfg.WAFWebhookCABundle)
-		if c.cfg.WAFGatewayExtensionEnabled {
-			objectsToCreate = append(objectsToCreate, webhookObjs...)
-		} else {
-			objectsToDelete = append(objectsToDelete, webhookObjs...)
-		}
 	}
 
 	if c.cfg.MetricsPort != 0 {
@@ -510,153 +396,6 @@ func KubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 	return rules
 }
 
-func KubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{""},
-			Resources: []string{"configmaps"},
-			Verbs:     []string{"watch", "list", "get", "update", "create", "delete"},
-		},
-		{
-			// The Federated Services Controller needs access to the remote kubeconfig secret
-			// in order to create a remote syncer.
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"watch", "list", "get"},
-		},
-		{
-			// Needed to validate the license
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"licensekeys"},
-			Verbs:     []string{"get", "watch", "list"},
-		},
-		{
-			// Needed to update the status of the LicenseKey with the result of license validation.
-			APIGroups: []string{"projectcalico.org"},
-			Resources: []string{"licensekeys/status"},
-			Verbs:     []string{"update"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections"},
-			Verbs:     []string{"get", "watch", "list"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"deeppacketinspections/status"},
-			Verbs:     []string{"update"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"packetcaptures"},
-			Verbs:     []string{"get", "list", "update"},
-		},
-		{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"packetcaptures/status"},
-			Verbs:     []string{"update"},
-		},
-	}
-
-	if cfg.WAFGatewayExtensionEnabled {
-		// WAF v3 (Gateway API add-on) RBAC. Gated by
-		// GatewayAPI.spec.extensions.waf.state == Enabled.
-		rules = append(rules,
-			// Application-layer (gateway-addons) reconcilers reconcile WAF resources
-			// against Gateway API targetRefs and emit events on the policy objects.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"applicationlayer.projectcalico.org"},
-				Resources: []string{
-					"wafpolicies", "globalwafpolicies",
-					"wafplugins", "globalwafplugins",
-					"wafvalidationpolicies", "globalwafvalidationpolicies",
-				},
-				Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"applicationlayer.projectcalico.org"},
-				Resources: []string{
-					"wafpolicies/status", "globalwafpolicies/status",
-					"wafplugins/status", "globalwafplugins/status",
-					"wafvalidationpolicies/status", "globalwafvalidationpolicies/status",
-				},
-				Verbs: []string{"get", "update", "patch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"applicationlayer.projectcalico.org"},
-				Resources: []string{
-					"wafpolicies/finalizers", "globalwafpolicies/finalizers",
-					"wafplugins/finalizers", "globalwafplugins/finalizers",
-					"wafvalidationpolicies/finalizers", "globalwafvalidationpolicies/finalizers",
-				},
-				Verbs: []string{"update"},
-			},
-			rbacv1.PolicyRule{
-				// Validate Gateway API targetRefs and surface attachment status.
-				APIGroups: []string{"gateway.networking.k8s.io"},
-				Resources: []string{"gateways", "httproutes", "tcproutes", "tlsroutes", "grpcroutes"},
-				Verbs:     []string{"get", "list", "watch", "update", "patch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"gateway.networking.k8s.io"},
-				Resources: []string{"gateways/status", "httproutes/status", "tcproutes/status", "tlsroutes/status", "grpcroutes/status"},
-				Verbs:     []string{"get", "update", "patch"},
-			},
-			// controller-runtime Reconcilers (e.g. the applicationlayer manager) record
-			// events on watched objects via Recorder.Eventf; both core and events.k8s.io
-			// API groups are emitted depending on the kubernetes version.
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"events"},
-				Verbs:     []string{"create", "patch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"events.k8s.io"},
-				Resources: []string{"events"},
-				Verbs:     []string{"create", "patch"},
-			},
-			// Application-layer reconciler replicates the WAF wasm pull Secret from
-			// the controller namespace (calico-system) into each WAFPolicy's
-			// namespace so the rendered EnvoyExtensionPolicy can reference it. Also
-			// replicates CA-cert ConfigMaps when WASM_CA_CERT is set.
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"secrets", "configmaps"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			// Application-layer reconciler emits one EnvoyExtensionPolicy per WAF
-			// targetRef to bind the Coraza wasm filter at the gateway / route.
-			rbacv1.PolicyRule{
-				APIGroups: []string{"gateway.envoyproxy.io"},
-				Resources: []string{"envoyextensionpolicies"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
-			},
-			// Application-layer reconciler stamps each namespace with its
-			// allocated WAF rule-id range (applicationlayer.projectcalico.org/waf-id-range
-			// annotation) so application operators can author in-range rules. The
-			// base role already grants namespaces get/list/watch; the annotation
-			// write needs patch/update, gated to the WAF path.
-			rbacv1.PolicyRule{
-				APIGroups: []string{""},
-				Resources: []string{"namespaces"},
-				Verbs:     []string{"get", "patch", "update"},
-			},
-		)
-	}
-
-	if cfg.ManagementClusterConnection != nil {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{"licensekeys"},
-				Verbs:     []string{"get", "create", "update", "list", "watch"},
-			},
-		)
-	}
-
-	return rules
-}
-
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
@@ -715,52 +454,9 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 	env = append(env, c.cfg.ExtraEnv...)
 
-	// Application-layer (gateway-addons / WAF v3) env vars, gated by
-	// GatewayAPI.spec.extensions.waf.state == Enabled. When the gate is off
-	// (default), none of the WASM_* env vars are rendered and the kube-controllers
-	// binary skips the WAF reconcilers entirely (see the applicationlayer entry in
-	// EnabledControllers). The WASM_IMAGE value depends on resolved images, so this
-	// is rendered here rather than in the static ExtraEnv.
-	if c.cfg.WAFGatewayExtensionEnabled {
-		// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
-		// wasm OCI reference from this env var to program WAF policy attachments.
-		// Empty when ResolveImages was not called for the Calico variant; the
-		// reconciler stamps Programmed=False/WASMUnavailable in that case.
-		if c.wasmImage != "" {
-			env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
-		}
-
-		// WASM_PULL_SECRET names the imagePullSecret the reconciler replicates
-		// from the kube-controllers namespace into a WAFPolicy's namespace so
-		// the rendered EnvoyExtensionPolicy can pull the wasm OCI artifact from
-		// a private Tigera registry. Source the name from the first
-		// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
-		// installs reuse whatever pull secret operator already attaches here.
-		if c.cfg.WASMPullSecret != nil {
-			env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.WASMPullSecret.Name})
-		}
-
-		// WASM_CA_CERT names the dedicated CA bundle ConfigMap (provisioned as
-		// WASMCACert) that the reconciler replicates alongside WASM_PULL_SECRET
-		// so the EnvoyExtensionPolicy wasm fetcher trusts the registry's TLS
-		// chain. Only set when the source ConfigMap is actually rendered.
-		if c.cfg.WASMCACert != nil {
-			env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: c.cfg.WASMCACert.Name})
-		}
-	}
-
 	if c.cfg.TrustedBundle != nil {
 		env = append(env,
 			corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.cfg.TrustedBundle.MountPath()},
-		)
-	}
-	if c.cfg.WAFWebhookServerTLS != nil {
-		// The in-process WAF admission webhook server (calico-private
-		// applicationlayer manager) reads its serving cert (tls.crt/tls.key)
-		// from this directory; the controller-runtime webhook server only
-		// registers when the cert is present.
-		env = append(env,
-			corev1.EnvVar{Name: "WAF_WEBHOOK_CERT_DIR", Value: filepath.Dir(c.cfg.WAFWebhookServerTLS.VolumeMountCertificateFilePath())},
 		)
 	}
 
@@ -806,20 +502,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		VolumeMounts:    c.kubeControllersVolumeMounts(),
 	}
 
-	if c.cfg.WAFWebhookServerTLS != nil {
-		// Expose the in-process WAF admission-webhook port that the
-		// tigera-waf-webhook Service forwards to.
-		container.Ports = append(container.Ports, corev1.ContainerPort{
-			Name:          "waf-webhook",
-			ContainerPort: applicationlayer.WAFWebhookContainerPort,
-			Protocol:      corev1.ProtocolTCP,
-		})
-	}
-
 	var initContainers []corev1.Container
-	if c.cfg.WAFWebhookServerTLS != nil && c.cfg.WAFWebhookServerTLS.UseCertificateManagement() {
-		initContainers = append(initContainers, c.cfg.WAFWebhookServerTLS.InitContainer(c.cfg.Namespace, sc))
-	}
 	tolerations := appendUniqueTolerations(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = appendUniqueTolerations(tolerations, rmeta.TolerateGKEARM64NoSchedule)
@@ -964,9 +647,6 @@ func (c *kubeControllersComponent) kubeControllersVolumeMounts() []corev1.Volume
 	if c.cfg.TrustedBundle != nil {
 		mounts = append(mounts, c.cfg.TrustedBundle.VolumeMounts(c.SupportedOSType())...)
 	}
-	if c.cfg.WAFWebhookServerTLS != nil {
-		mounts = append(mounts, c.cfg.WAFWebhookServerTLS.VolumeMount(c.SupportedOSType()))
-	}
 	return mounts
 }
 
@@ -974,9 +654,6 @@ func (c *kubeControllersComponent) kubeControllersVolumes() []corev1.Volume {
 	var volumes []corev1.Volume
 	if c.cfg.TrustedBundle != nil {
 		volumes = append(volumes, c.cfg.TrustedBundle.Volume())
-	}
-	if c.cfg.WAFWebhookServerTLS != nil {
-		volumes = append(volumes, c.cfg.WAFWebhookServerTLS.Volume())
 	}
 	return volumes
 }
@@ -1016,20 +693,6 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 			Source:   networkpolicy.PrometheusSourceEntityRule,
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(uint16(cfg.MetricsPort)),
-			},
-		})
-	}
-
-	// Allow the kube-apiserver to reach the in-process WAF admission webhook on
-	// :9443 (EV-6386). render-v3 wires the webhook Service/config/cert + the
-	// server, but without this ingress rule the calico-system default-deny drops
-	// the apiserver→:9443 call and every WAFPolicy/WAFPlugin admission times out.
-	if cfg.WAFGatewayExtensionEnabled {
-		ingressRules = append(ingressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(uint16(applicationlayer.WAFWebhookContainerPort)),
 			},
 		})
 	}

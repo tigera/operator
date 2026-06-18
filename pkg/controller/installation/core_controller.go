@@ -63,7 +63,6 @@ import (
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -74,12 +73,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
@@ -207,13 +204,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Watch for changes to KubeControllersConfiguration.
-	// Watch GatewayAPI: spec.extensions.waf.state gates the WAF v3 surface on
-	// calico-kube-controllers.  See design tigera/designs#25 (PMREQ-384) §Gating.
-	if err := c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{}); err != nil {
-		log.V(5).Info("Failed to create GatewayAPI watch", "err", err)
-		return fmt.Errorf("core-controller failed to watch operator GatewayAPI resource: %w", err)
-	}
-
 	err = c.WatchObject(&v3.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
@@ -1261,47 +1251,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
-	// Read the GatewayAPI CR (if present) to decide whether to render the WAF
-	// v3 (Gateway API add-on) surface — env vars, RBAC, applicationlayer
-	// reconciler, and the in-process admission webhook — on
-	// calico-kube-controllers. Default-off: if no GatewayAPI CR exists or
-	// spec.extensions.waf.state != Enabled, the WAF surface is not rendered.
-	// See design tigera/designs#25 (PMREQ-384) §Gating.
-	wafGatewayExtensionEnabled := false
-	if gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client); err == nil {
-		wafGatewayExtensionEnabled = gatewayAPI.Spec.IsWAFGatewayExtensionEnabled()
-	} else if !apierrors.IsNotFound(err) {
-		// Mirrors the GatewayAPI controller's handling: a read error or a
-		// duplicate default/tigera-secure pair degrades rather than guessing.
-		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// When the WAF v3 surface is enabled, issue the serving cert for the
-	// in-process WAF admission webhook (hosted by calico-kube-controllers,
-	// fronted by the tigera-waf-webhook Service). It is materialized into
-	// calico-system alongside the other kube-controllers certs below and mounted
-	// into the Pod by the kube-controllers render.
-	var wafWebhookTLS certificatemanagement.KeyPairInterface
-	if wafGatewayExtensionEnabled {
-		wafWebhookTLS, err = certificateManager.GetOrCreateKeyPair(
-			r.client,
-			applicationlayer.WAFWebhookServerTLSSecretName,
-			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, r.opts.ClusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating WAF admission webhook TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
-		// Nil when the WAF v3 surface is disabled; the certificate-management
-		// render skips nil key pairs.
-		rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true),
 	}
 	// Manage any key pairs the variant extension created controller-side.
 	for _, kp := range managedKeyPairs {
@@ -1542,33 +1495,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.CSI(&csiCfg))
 
-	// Build a configuration for rendering calico/kube-controllers.
-	// Provision a dedicated WAF wasm pull secret so the WAF reconciler
-	// replicates it into tenant namespaces without clashing with the
-	// operator-managed tigera-pull-secret the GatewayAPI render also copies
-	// there (EV-6386). The EnvoyExtensionPolicy image source takes a single
-	// pullSecretRef, so the registry auths of all Installation pull secrets
-	// are merged into it rather than picking one.
-	var wasmPullSecret *corev1.Secret
-	if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
-		var skipped []string
-		wasmPullSecret, skipped = kubecontrollers.MergeWAFPullSecret(pullSecrets)
-		if len(skipped) > 0 {
-			reqLogger.Info("Skipped unparseable imagePullSecrets when building the WAF wasm pull secret", "skipped", skipped)
-		}
-	}
-	// Provision the dedicated WAF wasm CA-bundle ConfigMap as a renamed copy of
-	// the trusted CA bundle, so the WAF reconciler replicates it into tenant
-	// namespaces for the Coraza wasm OCI registry TLS check without clashing with
-	// the operator-managed tigera-ca-bundle the GatewayAPI render also copies
-	// there (EV-6386). The dedicated source was previously a TODO; the full
-	// TrustedBundle (not the RO interface the kube-controllers render sees) is
-	// available here, so build it in the core controller.
-	var wasmCACert *corev1.ConfigMap
-	if wafGatewayExtensionEnabled {
-		wasmCACert = typhaNodeTLS.TrustedBundle.ConfigMap(common.CalicoNamespace)
-		wasmCACert.Name = kubecontrollers.WASMCACertName
-	}
+	// Build a configuration for rendering calico/kube-controllers. The Calico
+	// Enterprise surface (extra RBAC, enterprise controllers, metrics TLS, and the
+	// WAF v3 / Gateway API add-on) is layered on by the enterprise extension.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
 		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
@@ -1581,15 +1510,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
-		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
-		WAFWebhookServerTLS:         wafWebhookTLS,
-		WASMPullSecret:              wasmPullSecret,
-		WASMCACert:                  wasmCACert,
-		// The webhook Service + ValidatingWebhookConfiguration are rendered by
-		// the kube-controllers component (and deleted when the WAF extension is
-		// disabled); the caBundle is the operator CA that issued the serving
-		// cert above.
-		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

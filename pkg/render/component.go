@@ -81,4 +81,8 @@ const (
 	// es-calico-kube-controllers deployment shares the component type but leaves
 	// its modifier key empty, so it is not decorated.
 	ComponentNameKubeControllers = "kube-controllers"
+
+	// ComponentNameKubeControllersPolicy keys the calico-kube-controllers network
+	// policy modifier (the WAF admission webhook ingress rule).
+	ComponentNameKubeControllersPolicy = "kube-controllers-policy"
 )

@@ -17,6 +17,7 @@ package enterprise
 import (
 	"fmt"
 
+	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
@@ -50,6 +51,13 @@ type installationRenderData struct {
 	// collectProcessPath mirrors LogCollector.Spec.CollectProcessPath being
 	// enabled; the node modifier uses it to set HostPID and the felix env.
 	collectProcessPath bool
+
+	// calico-kube-controllers enterprise additions the kube-controllers modifier
+	// applies: the enterprise cluster role rules, the enterprise enabled controllers,
+	// and the WAF v3 (Gateway API add-on) surface.
+	kubeControllerRules       []rbacv1.PolicyRule
+	kubeControllerControllers []string
+	waf                       wafRenderData
 }
 
 // installationData pulls the installation extension's render data back out of the
@@ -77,6 +85,8 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
 		&operatorv1.LogCollector{},
+		// GatewayAPI.spec.extensions.waf.state gates the WAF v3 surface on calico-kube-controllers.
+		&operatorv1.GatewayAPI{},
 	} {
 		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
 			return err
@@ -126,10 +136,26 @@ func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (e
 	if err != nil {
 		return rc, nil, fmt.Errorf("error reading LogCollector: %w", err)
 	}
+
+	// calico-kube-controllers enterprise additions: the WAF surface, the enterprise
+	// cluster role rules, and the enterprise enabled controllers. A managed cluster's
+	// kube-controllers needs an extra license-push rule.
+	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+	}
+	waf, wafWebhookTLS, err := buildWAFData(cc)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
+	}
+
 	rc.Extension = installationRenderData{
-		nodePrometheusTLS:  nodePrometheusTLS,
-		kubeControllerTLS:  kubeControllerTLS,
-		collectProcessPath: collectProcessPathEnabled(logCollector),
+		nodePrometheusTLS:         nodePrometheusTLS,
+		kubeControllerTLS:         kubeControllerTLS,
+		collectProcessPath:        collectProcessPathEnabled(logCollector),
+		kubeControllerRules:       calicoKubeControllersEnterpriseRules(waf.enabled, managementClusterConnection != nil),
+		kubeControllerControllers: calicoKubeControllersEnterpriseControllers(waf.enabled),
+		waf:                       waf,
 	}
 
 	prometheusClientCert, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
@@ -164,6 +190,9 @@ func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (e
 	}
 	if kubeControllerTLS != nil {
 		managed = append(managed, kubeControllerTLS)
+	}
+	if wafWebhookTLS != nil {
+		managed = append(managed, wafWebhookTLS)
 	}
 	return rc, managed, nil
 }

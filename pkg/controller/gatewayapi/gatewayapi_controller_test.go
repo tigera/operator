@@ -806,7 +806,7 @@ var _ = Describe("Gateway API controller tests", func() {
 	)
 
 	It("does not patch felix configuration in a headless installation", Label("headless"), func() {
-		By("configuring a headless installation (cni None, linuxDataplane None)")
+		By("configuring a headless installation (no cni, linuxDataplane None)")
 		dpNone := operatorv1.LinuxDataplaneNone
 		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())

@@ -5749,7 +5749,6 @@ spec:
                             The IPAM plugin is installed and configured only if the CNI plugin is set to Calico,
                             for all other values of the CNI plugin the plugin binaries and CNI config is a dependency
                             that is expected to be installed separately.
-                            For CNI Plugin None, this field must not be set.
                             Default: Calico
                           enum:
                             - Calico
@@ -15178,7 +15177,6 @@ spec:
                                 The IPAM plugin is installed and configured only if the CNI plugin is set to Calico,
                                 for all other values of the CNI plugin the plugin binaries and CNI config is a dependency
                                 that is expected to be installed separately.
-                                For CNI Plugin None, this field must not be set.
                                 Default: Calico
                               enum:
                                 - Calico

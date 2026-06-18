@@ -1432,6 +1432,21 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(exited).Should(BeTrue(), "expected the operator to reboot on a dataplane mode change")
 			})
 
+			It("should not reboot the operator when the dataplane mode is unchanged since startup", func() {
+				// The operator started headless and the live Installation is still headless
+				// (r.headless was set to true in the BeforeEach), so no reboot must occur.
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				exited := false
+				origExit := osExitOverride
+				osExitOverride = func(_ int) { exited = true }
+				defer func() { osExitOverride = origExit }()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(exited).Should(BeFalse(), "expected no reboot when the dataplane mode is unchanged")
+			})
+
 			It("should not render the dataplane components and should not seed FelixConfiguration", func() {
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				result, err := r.Reconcile(ctx, reconcile.Request{})

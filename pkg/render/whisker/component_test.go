@@ -27,6 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -39,6 +40,12 @@ var (
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	numExpectedObjects       = 5
 	numDeprecatedObjects     = 1
+
+	// Resolve the standalone calico/whisker and calico/whisker-backend images
+	// (Calico OSS) exactly as the renderer does, so the expected images track the
+	// pinned component versions on any branch.
+	whiskerImageRef, _        = components.GetReference(components.ComponentCalicoWhisker, "", "", "", nil)
+	whiskerBackendImageRef, _ = components.GetReference(components.ComponentCalicoWhiskerBackend, "", "", "", nil)
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -118,7 +125,7 @@ var _ = Describe("ComponentRendering", func() {
 							Containers: []corev1.Container{
 								{
 									Name:  whisker.WhiskerContainerName,
-									Image: "quay.io/calico/whisker:master",
+									Image: whiskerImageRef,
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "CALICO_VERSION", Value: "test-calico-version"},
@@ -136,9 +143,8 @@ var _ = Describe("ComponentRendering", func() {
 									},
 								},
 								{
-									Name:    whisker.WhiskerBackendContainerName,
-									Image:   "quay.io/calico/calico:master",
-									Command: []string{"/usr/bin/calico", "component", "whisker-backend"},
+									Name:  whisker.WhiskerBackendContainerName,
+									Image: whiskerBackendImageRef,
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "3002"},

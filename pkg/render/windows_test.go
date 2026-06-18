@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -2719,12 +2720,19 @@ var _ = Describe("Windows rendering tests", func() {
 })
 
 // verifyWindowsProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
-// The unused argument is kept temporarily so existing call sites compile while the OSS/Enterprise distinction
-// is being phased out.
+// Enterprise Windows images drive health and shutdown through the combined calico.exe binary; Calico OSS Windows
+// images use the standalone calico-node.exe entrypoint. The variant is inferred from the rendered felix image so
+// the assertions track the actual image the renderer selected.
 func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, _ bool) {
-	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
-	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
-	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}
+	isEnterprise := strings.Contains(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Image, "tigera/")
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
+	if isEnterprise {
+		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
+		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
+		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}
+	}
 
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

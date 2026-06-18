@@ -155,6 +155,8 @@ type APIServerConfiguration struct {
 type apiServerComponent struct {
 	cfg                             *APIServerConfiguration
 	calicoImage                     string
+	apiServerImage                  string
+	useCombinedImage                bool
 	l7AdmissionControllerEnvoyImage string
 	dikastesImage                   string
 }
@@ -167,8 +169,18 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	errMsgs := []string{}
 
 	enterprise := c.cfg.Installation.Variant.IsEnterprise()
-	if enterprise || c.cfg.RequiresAggregationServer {
+	if enterprise {
+		// Enterprise deploys the apiserver (along with the query server and L7
+		// admission controller) from the combined calico/calico image.
+		c.useCombinedImage = true
 		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+		if err != nil {
+			errMsgs = append(errMsgs, err.Error())
+		}
+		c.apiServerImage = c.calicoImage
+	} else if c.cfg.RequiresAggregationServer {
+		// Calico OSS uses the standalone calico/apiserver image.
+		c.apiServerImage, err = components.GetReference(components.ComponentCalicoAPIServer, reg, path, prefix, is)
 		if err != nil {
 			errMsgs = append(errMsgs, err.Error())
 		}
@@ -1165,8 +1177,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 
 	apiServer := corev1.Container{
 		Name:         string(APIServerContainerName),
-		Image:        c.calicoImage,
-		Command:      []string{components.CalicoBinaryPath, "component", "apiserver"},
+		Image:        c.apiServerImage,
 		Args:         c.startUpArgs(),
 		Env:          env,
 		VolumeMounts: volumeMounts,
@@ -1182,6 +1193,9 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 			// A longer period is chosen to minimize load.
 			PeriodSeconds: 60,
 		},
+	}
+	if c.useCombinedImage {
+		apiServer.Command = []string{components.CalicoBinaryPath, "component", "apiserver"}
 	}
 	// In case of OpenShift, apiserver needs privileged access to write audit logs to host path volume.
 	// Audit logs are owned by root on hosts so we need to be root user and group. Audit logs are supported only in Enterprise version.

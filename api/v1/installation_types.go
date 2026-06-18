@@ -995,8 +995,6 @@ type IPAMSpec struct {
 	// for all other values of the CNI plugin the plugin binaries and CNI config is a dependency
 	// that is expected to be installed separately.
 	//
-	// For CNI Plugin None, this field must not be set.
-	//
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;HostLocal;AmazonVPC;AzureVNET
 	Type IPAMPluginType `json:"type"`

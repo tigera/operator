@@ -944,6 +944,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	if err = r.updateValidatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
 	r.migrationChecked = true
@@ -2275,41 +2279,76 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 	}
 
 	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
-
-	// Build sets of desired resource names for comparison.
-	desiredMAPs := map[string]bool{}
-	desiredMAPBs := map[string]bool{}
-	for _, obj := range desired {
-		switch {
-		case admission.IsPolicyKind(obj):
-			desiredMAPs[obj.GetName()] = true
-		case admission.IsBindingKind(obj):
-			desiredMAPBs[obj.GetName()] = true
-		}
-	}
-
-	// Find stale managed resources at the discovered API version.
 	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
 		return err
 	}
+
+	return r.syncManagedAdmissionPolicies(ctx, install, log, desired, existingMAPs, existingMAPBs, admission.IsPolicyKind, admission.IsBindingKind, "Error syncing MutatingAdmissionPolicy resources")
+}
+
+func (r *ReconcileInstallation) updateValidatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
+	if !r.manageCRDs || !r.v3CRDs {
+		return nil
+	}
+
+	// ValidatingAdmissionPolicy reached GA (v1) well before MutatingAdmissionPolicy, so it has its own
+	// served version and is reconciled independently of whether the cluster serves MAPs. If the cluster
+	// doesn't serve it at all there's nothing to do, so skip rather than degrade.
+	vapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
+	if vapAPIVersion == "" {
+		log.Info("Kubernetes cluster does not serve ValidatingAdmissionPolicy, skipping")
+		return nil
+	}
+
+	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, vapAPIVersion)
+	existingVAPs, existingVAPBs, err := admission.ListManagedValidating(ctx, r.client, vapAPIVersion)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed ValidatingAdmissionPolicy resources", err, log)
+		return err
+	}
+
+	return r.syncManagedAdmissionPolicies(ctx, install, log, desired, existingVAPs, existingVAPBs, admission.IsValidatingPolicyKind, admission.IsValidatingBindingKind, "Error syncing ValidatingAdmissionPolicy resources")
+}
+
+// syncManagedAdmissionPolicies creates or updates the desired admission policies and bindings and
+// deletes any operator-managed ones that are no longer desired, in a single pass. isPolicy/isBinding
+// bucket the desired objects by kind so stale existing resources can be identified by name.
+func (r *ReconcileInstallation) syncManagedAdmissionPolicies(
+	ctx context.Context,
+	install *operatorv1.Installation,
+	log logr.Logger,
+	desired, existingPolicies, existingBindings []client.Object,
+	isPolicy, isBinding func(client.Object) bool,
+	degradeMsg string,
+) error {
+	desiredPolicies := map[string]bool{}
+	desiredBindings := map[string]bool{}
+	for _, obj := range desired {
+		switch {
+		case isPolicy(obj):
+			desiredPolicies[obj.GetName()] = true
+		case isBinding(obj):
+			desiredBindings[obj.GetName()] = true
+		}
+	}
+
 	var toDelete []client.Object
-	for _, obj := range existingMAPs {
-		if !desiredMAPs[obj.GetName()] {
+	for _, obj := range existingPolicies {
+		if !desiredPolicies[obj.GetName()] {
 			toDelete = append(toDelete, obj)
 		}
 	}
-	for _, obj := range existingMAPBs {
-		if !desiredMAPBs[obj.GetName()] {
+	for _, obj := range existingBindings {
+		if !desiredBindings[obj.GetName()] {
 			toDelete = append(toDelete, obj)
 		}
 	}
 
-	// Create or update desired MAPs/MAPBs and delete any stale ones in a single pass.
 	handler := r.newComponentHandler(log, r.client, r.scheme, install)
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired, toDelete), nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error syncing MutatingAdmissionPolicy resources", err, log)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, degradeMsg, err, log)
 		return err
 	}
 

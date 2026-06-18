@@ -42,7 +42,13 @@ const (
 	// ManagedMAPLabelValue is the label value for operator-managed MAP resources.
 	ManagedMAPLabelValue = "managed"
 
-	// APIGroup is the API group for MutatingAdmissionPolicy resources.
+	// ManagedVAPLabel is the label key applied to operator-managed ValidatingAdmissionPolicy and
+	// ValidatingAdmissionPolicyBinding resources.
+	ManagedVAPLabel = "operator.tigera.io/validating-admission-policy"
+	// ManagedVAPLabelValue is the label value for operator-managed VAP resources.
+	ManagedVAPLabelValue = "managed"
+
+	// APIGroup is the API group for MutatingAdmissionPolicy and ValidatingAdmissionPolicy resources.
 	APIGroup = "admissionregistration.k8s.io"
 	// VersionV1 is the GA API version (k8s 1.36+).
 	VersionV1 = "v1"
@@ -55,11 +61,24 @@ const (
 	KindPolicy = "MutatingAdmissionPolicy"
 	// KindBinding is the MutatingAdmissionPolicyBinding kind.
 	KindBinding = "MutatingAdmissionPolicyBinding"
+
+	// KindValidatingPolicy is the ValidatingAdmissionPolicy kind.
+	KindValidatingPolicy = "ValidatingAdmissionPolicy"
+	// KindValidatingBinding is the ValidatingAdmissionPolicyBinding kind.
+	KindValidatingBinding = "ValidatingAdmissionPolicyBinding"
 )
 
 // PolicyGroupKind is the GroupKind for MutatingAdmissionPolicy. Exposed so the API discovery
 // registry in cmd/main.go can pre-resolve its served version at startup.
 var PolicyGroupKind = schema.GroupKind{Group: APIGroup, Kind: KindPolicy}
+
+// ValidatingPolicyGroupKind is the GroupKind for ValidatingAdmissionPolicy. Exposed so the API
+// discovery registry in cmd/main.go can pre-resolve its served version at startup.
+var ValidatingPolicyGroupKind = schema.GroupKind{Group: APIGroup, Kind: KindValidatingPolicy}
+
+// policyParseFunc parses a single YAML document into a typed admission policy object at the given
+// API version, returning a nil object (and nil error) for kinds it does not handle.
+type policyParseFunc func(doc []byte, filename, apiVersion string) (client.Object, error)
 
 var (
 	//go:embed calico
@@ -70,9 +89,26 @@ var (
 
 // GetMutatingAdmissionPolicies returns MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding
 // objects for the given variant, typed at the requested API version. These are only applicable
-// when v3 CRDs are enabled.
-// Each returned object is labeled with ManagedMAPLabel to enable stale resource cleanup.
+// when v3 CRDs are enabled. Each returned object is labeled with ManagedMAPLabel to enable stale
+// resource cleanup.
 func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersion string) []client.Object {
+	return getAdmissionPolicies(variant, v3, apiVersion, parseMutatingAdmissionPolicyYAML, ManagedMAPLabel, ManagedMAPLabelValue)
+}
+
+// GetValidatingAdmissionPolicies returns ValidatingAdmissionPolicy and ValidatingAdmissionPolicyBinding
+// objects for the given variant, typed at the requested API version. These are only applicable when
+// v3 CRDs are enabled. Each returned object is labeled with ManagedVAPLabel to enable stale resource
+// cleanup.
+func GetValidatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersion string) []client.Object {
+	return getAdmissionPolicies(variant, v3, apiVersion, parseValidatingAdmissionPolicyYAML, ManagedVAPLabel, ManagedVAPLabelValue)
+}
+
+// getAdmissionPolicies reads the embedded admission policy files for the given variant and returns
+// the documents that parseFn recognizes, each labeled with labelKey=labelValue. The mutating and
+// validating policies live in the same embedded files, so parseFn returns a nil object for kinds
+// outside its family and we skip those - this lets each path pick up only its own kinds at its own
+// served API version.
+func getAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersion string, parseFn policyParseFunc, labelKey, labelValue string) []client.Object {
 	if !v3 || apiVersion == "" {
 		return nil
 	}
@@ -106,9 +142,13 @@ func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersi
 				continue
 			}
 
-			obj, err := parseAdmissionPolicyYAML(doc, entry.Name(), apiVersion)
+			obj, err := parseFn(doc, entry.Name(), apiVersion)
 			if err != nil {
 				panic(fmt.Sprintf("Failed to parse admission policy %s: %v", entry.Name(), err))
+			}
+			if obj == nil {
+				// Not a kind this path manages (the files mix mutating and validating policies).
+				continue
 			}
 
 			// Add managed label for stale resource cleanup.
@@ -116,7 +156,7 @@ func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersi
 			if labels == nil {
 				labels = map[string]string{}
 			}
-			labels[ManagedMAPLabel] = ManagedMAPLabelValue
+			labels[labelKey] = labelValue
 			obj.SetLabels(labels)
 
 			objs = append(objs, obj)
@@ -131,19 +171,29 @@ func GetMutatingAdmissionPolicies(variant opv1.ProductVariant, v3 bool, apiVersi
 // version of MutatingAdmissionPolicy on the cluster), a warning is logged and the function returns
 // nil. MAPs are only installed when v3 CRDs are enabled.
 func Ensure(c client.Client, variant string, v3 bool, apiVersion string, log logr.Logger) error {
+	return ensure(c, GetMutatingAdmissionPolicies(opv1.ProductVariant(variant), v3, apiVersion), v3, apiVersion, log)
+}
+
+// EnsureValidating ensures that ValidatingAdmissionPolicies necessary for bootstrapping exist in the
+// cluster, mirroring Ensure. ValidatingAdmissionPolicy has its own served version (it reached GA well
+// before MutatingAdmissionPolicy), so it is bootstrapped independently and is not gated on whether the
+// cluster serves MutatingAdmissionPolicy.
+func EnsureValidating(c client.Client, variant string, v3 bool, apiVersion string, log logr.Logger) error {
+	return ensure(c, GetValidatingAdmissionPolicies(opv1.ProductVariant(variant), v3, apiVersion), v3, apiVersion, log)
+}
+
+func ensure(c client.Client, objs []client.Object, v3 bool, apiVersion string, log logr.Logger) error {
 	if !v3 {
 		return nil
 	}
 
 	if apiVersion == "" {
-		log.Info("MutatingAdmissionPolicy API not available on cluster, skipping bootstrap")
+		log.Info("admission policy API not available on cluster, skipping bootstrap")
 		return nil
 	}
 
-	objs := GetMutatingAdmissionPolicies(opv1.ProductVariant(variant), v3, apiVersion)
-
 	for _, obj := range objs {
-		log.Info("ensuring MutatingAdmissionPolicy resource exists", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+		log.Info("ensuring admission policy resource exists", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 		// Cancel explicitly rather than using defer, since defer only runs at
 		// function return and would leak contexts across loop iterations.
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -155,12 +205,12 @@ func Ensure(c client.Client, variant string, v3 bool, apiVersion string, log log
 
 			// If the API is not available, log a warning and skip.
 			if errors.IsNotFound(err) || errors.IsForbidden(err) {
-				log.Info("MutatingAdmissionPolicy API not available, skipping", "error", err)
+				log.Info("admission policy API not available, skipping", "error", err)
 				return nil
 			}
 
 			// Log an error but continue. We'll handle any persistent issues in the core controller's reconciliation loop.
-			log.Error(err, "Failed to create MutatingAdmissionPolicy resource", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
+			log.Error(err, "Failed to create admission policy resource", "name", obj.GetName(), "kind", obj.GetObjectKind().GroupVersionKind().Kind)
 		} else {
 			cancel()
 		}
@@ -168,11 +218,12 @@ func Ensure(c client.Client, variant string, v3 bool, apiVersion string, log log
 	return nil
 }
 
-// parseAdmissionPolicyYAML parses a YAML document into either a MutatingAdmissionPolicy
+// parseMutatingAdmissionPolicyYAML parses a YAML document into either a MutatingAdmissionPolicy
 // or MutatingAdmissionPolicyBinding at the requested API version. The MAP types are identical
 // in shape across v1alpha1, v1beta1, and v1, so we deserialize the same YAML into the requested
-// target type and overwrite TypeMeta to reflect the chosen GroupVersion.
-func parseAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.Object, error) {
+// target type and overwrite TypeMeta to reflect the chosen GroupVersion. Documents of any other
+// kind return a nil object and nil error so the caller can skip them.
+func parseMutatingAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.Object, error) {
 	var meta struct {
 		Kind string `json:"kind"`
 	}
@@ -237,7 +288,81 @@ func parseAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.O
 	default:
 		return nil, fmt.Errorf("unsupported MutatingAdmissionPolicy API version %q", apiVersion)
 	}
-	return nil, fmt.Errorf("unexpected kind %q in %s", meta.Kind, filename)
+	// Not a MAP kind we manage here.
+	return nil, nil
+}
+
+// parseValidatingAdmissionPolicyYAML parses a YAML document into either a ValidatingAdmissionPolicy
+// or ValidatingAdmissionPolicyBinding at the requested API version, mirroring
+// parseMutatingAdmissionPolicyYAML. Documents of any other kind return a nil object and nil error
+// so the caller can skip them.
+func parseValidatingAdmissionPolicyYAML(doc []byte, filename, apiVersion string) (client.Object, error) {
+	var meta struct {
+		Kind string `json:"kind"`
+	}
+	if err := yaml.Unmarshal(doc, &meta); err != nil {
+		return nil, fmt.Errorf("unable to determine kind from %s: %v", filename, err)
+	}
+
+	gv := APIGroup + "/" + apiVersion
+
+	switch apiVersion {
+	case VersionV1:
+		switch meta.Kind {
+		case KindValidatingPolicy:
+			obj := &admissionregistrationv1.ValidatingAdmissionPolicy{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse ValidatingAdmissionPolicy from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		case KindValidatingBinding:
+			obj := &admissionregistrationv1.ValidatingAdmissionPolicyBinding{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse ValidatingAdmissionPolicyBinding from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		}
+	case VersionV1Beta1:
+		switch meta.Kind {
+		case KindValidatingPolicy:
+			obj := &admissionv1beta1.ValidatingAdmissionPolicy{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse ValidatingAdmissionPolicy from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		case KindValidatingBinding:
+			obj := &admissionv1beta1.ValidatingAdmissionPolicyBinding{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse ValidatingAdmissionPolicyBinding from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		}
+	case VersionV1Alpha1:
+		switch meta.Kind {
+		case KindValidatingPolicy:
+			obj := &admissionregistrationv1alpha1.ValidatingAdmissionPolicy{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse ValidatingAdmissionPolicy from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		case KindValidatingBinding:
+			obj := &admissionregistrationv1alpha1.ValidatingAdmissionPolicyBinding{}
+			if err := yaml.Unmarshal(doc, obj); err != nil {
+				return nil, fmt.Errorf("unable to parse ValidatingAdmissionPolicyBinding from %s: %v", filename, err)
+			}
+			obj.TypeMeta = metav1.TypeMeta{Kind: meta.Kind, APIVersion: gv}
+			return obj, nil
+		}
+	default:
+		return nil, fmt.Errorf("unsupported ValidatingAdmissionPolicy API version %q", apiVersion)
+	}
+	// Not a VAP kind we manage here.
+	return nil, nil
 }
 
 // ListManaged returns the operator-managed MutatingAdmissionPolicy and MutatingAdmissionPolicyBinding
@@ -301,6 +426,68 @@ func ListManaged(ctx context.Context, c client.Client, apiVersion string) (polic
 	return policies, bindings, nil
 }
 
+// ListManagedValidating returns the operator-managed ValidatingAdmissionPolicy and
+// ValidatingAdmissionPolicyBinding objects currently present on the cluster at the given API version,
+// mirroring ListManaged. Returns nil if apiVersion is empty.
+func ListManagedValidating(ctx context.Context, c client.Client, apiVersion string) (policies, bindings []client.Object, err error) {
+	if apiVersion == "" {
+		return nil, nil, nil
+	}
+	switch apiVersion {
+	case VersionV1:
+		vapList := &admissionregistrationv1.ValidatingAdmissionPolicyList{}
+		if err := c.List(ctx, vapList, client.MatchingLabels{ManagedVAPLabel: ManagedVAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing ValidatingAdmissionPolicies: %w", err)
+		}
+		for i := range vapList.Items {
+			policies = append(policies, &vapList.Items[i])
+		}
+
+		bindList := &admissionregistrationv1.ValidatingAdmissionPolicyBindingList{}
+		if err := c.List(ctx, bindList, client.MatchingLabels{ManagedVAPLabel: ManagedVAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing ValidatingAdmissionPolicyBindings: %w", err)
+		}
+		for i := range bindList.Items {
+			bindings = append(bindings, &bindList.Items[i])
+		}
+	case VersionV1Beta1:
+		vapList := &admissionv1beta1.ValidatingAdmissionPolicyList{}
+		if err := c.List(ctx, vapList, client.MatchingLabels{ManagedVAPLabel: ManagedVAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing ValidatingAdmissionPolicies: %w", err)
+		}
+		for i := range vapList.Items {
+			policies = append(policies, &vapList.Items[i])
+		}
+
+		bindList := &admissionv1beta1.ValidatingAdmissionPolicyBindingList{}
+		if err := c.List(ctx, bindList, client.MatchingLabels{ManagedVAPLabel: ManagedVAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing ValidatingAdmissionPolicyBindings: %w", err)
+		}
+		for i := range bindList.Items {
+			bindings = append(bindings, &bindList.Items[i])
+		}
+	case VersionV1Alpha1:
+		vapList := &admissionregistrationv1alpha1.ValidatingAdmissionPolicyList{}
+		if err := c.List(ctx, vapList, client.MatchingLabels{ManagedVAPLabel: ManagedVAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing ValidatingAdmissionPolicies: %w", err)
+		}
+		for i := range vapList.Items {
+			policies = append(policies, &vapList.Items[i])
+		}
+
+		bindList := &admissionregistrationv1alpha1.ValidatingAdmissionPolicyBindingList{}
+		if err := c.List(ctx, bindList, client.MatchingLabels{ManagedVAPLabel: ManagedVAPLabelValue}); err != nil {
+			return nil, nil, fmt.Errorf("listing ValidatingAdmissionPolicyBindings: %w", err)
+		}
+		for i := range bindList.Items {
+			bindings = append(bindings, &bindList.Items[i])
+		}
+	default:
+		return nil, nil, fmt.Errorf("unsupported ValidatingAdmissionPolicy API version %q", apiVersion)
+	}
+	return policies, bindings, nil
+}
+
 // IsPolicyKind returns whether obj is a MutatingAdmissionPolicy (any served version).
 func IsPolicyKind(obj client.Object) bool {
 	switch obj.(type) {
@@ -314,6 +501,24 @@ func IsPolicyKind(obj client.Object) bool {
 func IsBindingKind(obj client.Object) bool {
 	switch obj.(type) {
 	case *admissionregistrationv1.MutatingAdmissionPolicyBinding, *admissionv1beta1.MutatingAdmissionPolicyBinding, *admissionregistrationv1alpha1.MutatingAdmissionPolicyBinding:
+		return true
+	}
+	return false
+}
+
+// IsValidatingPolicyKind returns whether obj is a ValidatingAdmissionPolicy (any served version).
+func IsValidatingPolicyKind(obj client.Object) bool {
+	switch obj.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicy, *admissionv1beta1.ValidatingAdmissionPolicy, *admissionregistrationv1alpha1.ValidatingAdmissionPolicy:
+		return true
+	}
+	return false
+}
+
+// IsValidatingBindingKind returns whether obj is a ValidatingAdmissionPolicyBinding (any served version).
+func IsValidatingBindingKind(obj client.Object) bool {
+	switch obj.(type) {
+	case *admissionregistrationv1.ValidatingAdmissionPolicyBinding, *admissionv1beta1.ValidatingAdmissionPolicyBinding, *admissionregistrationv1alpha1.ValidatingAdmissionPolicyBinding:
 		return true
 	}
 	return false

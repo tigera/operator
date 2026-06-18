@@ -2,7 +2,7 @@
 title: v3.23.0-2.0
 components:
   libcalico-go:
-    version: v3.23.0-2.0
+    version: release-calient-v3.23
   manager:
     image: manager
     version: v3.23.0-2.0

@@ -118,4 +118,77 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			}
 		})
 	})
+
+	Describe("GetValidatingAdmissionPolicies", func() {
+		It("returns Calico v1 VAPs when discovered version is v1", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1)
+			Expect(objs).To(HaveLen(2))
+
+			var vapCount, vapbCount int
+			for _, obj := range objs {
+				switch o := obj.(type) {
+				case *admissionregistrationv1.ValidatingAdmissionPolicy:
+					vapCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1))
+				case *admissionregistrationv1.ValidatingAdmissionPolicyBinding:
+					vapbCount++
+					Expect(o.APIVersion).To(Equal(APIGroup + "/" + VersionV1))
+				}
+				Expect(obj.GetName()).ToNot(BeEmpty())
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedVAPLabel, ManagedVAPLabelValue))
+			}
+			Expect(vapCount).To(Equal(1))
+			Expect(vapbCount).To(Equal(1))
+		})
+
+		It("returns Calico v1beta1 VAPs when discovered version is v1beta1", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1Beta1)
+			Expect(objs).To(HaveLen(2))
+
+			var vapCount, vapbCount int
+			for _, obj := range objs {
+				switch obj.(type) {
+				case *admissionv1beta1.ValidatingAdmissionPolicy:
+					vapCount++
+				case *admissionv1beta1.ValidatingAdmissionPolicyBinding:
+					vapbCount++
+				}
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedVAPLabel, ManagedVAPLabelValue))
+			}
+			Expect(vapCount).To(Equal(1))
+			Expect(vapbCount).To(Equal(1))
+		})
+
+		It("returns Calico v1alpha1 VAPs when discovered version is v1alpha1", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.Calico, true, VersionV1Alpha1)
+			Expect(objs).To(HaveLen(2))
+
+			var vapCount, vapbCount int
+			for _, obj := range objs {
+				switch obj.(type) {
+				case *admissionregistrationv1alpha1.ValidatingAdmissionPolicy:
+					vapCount++
+				case *admissionregistrationv1alpha1.ValidatingAdmissionPolicyBinding:
+					vapbCount++
+				}
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedVAPLabel, ManagedVAPLabelValue))
+			}
+			Expect(vapCount).To(Equal(1))
+			Expect(vapbCount).To(Equal(1))
+		})
+
+		It("returns Enterprise VAPs at the chosen version", func() {
+			objs := GetValidatingAdmissionPolicies(opv1.TigeraSecureEnterprise, true, VersionV1)
+			Expect(objs).To(HaveLen(2))
+		})
+
+		It("returns empty when v3=false", func() {
+			Expect(GetValidatingAdmissionPolicies(opv1.Calico, false, VersionV1)).To(BeEmpty())
+			Expect(GetValidatingAdmissionPolicies(opv1.TigeraSecureEnterprise, false, VersionV1)).To(BeEmpty())
+		})
+
+		It("returns empty when apiVersion is empty", func() {
+			Expect(GetValidatingAdmissionPolicies(opv1.Calico, true, "")).To(BeEmpty())
+		})
+	})
 })

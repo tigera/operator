@@ -347,6 +347,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		typhaAutoscaler:      typhaScaler,
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
+		headless:             opts.Headless,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
@@ -406,14 +407,18 @@ type ReconcileInstallation struct {
 	typhaAutoscalerNonClusterHost *typhaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
 	enterpriseCRDsExist           bool
-	migrationChecked              bool
-	clusterDomain                 string
-	manageCRDs                    bool
-	tierWatchReady                *utils.ReadyFlag
-	migrationWatchReady           *utils.ReadyFlag
-	v3CRDs                        bool
-	kubernetesVersion             *common.VersionInfo
-	apiDiscovery                  *discovery.APIDiscovery
+	// headless is the dataplane mode detected at operator startup
+	// (spec.calicoNetwork.linuxDataplane: None). If the live Installation's mode later differs,
+	// Reconcile reboots the operator so the correct controller set is registered.
+	headless            bool
+	migrationChecked    bool
+	clusterDomain       string
+	manageCRDs          bool
+	tierWatchReady      *utils.ReadyFlag
+	migrationWatchReady *utils.ReadyFlag
+	v3CRDs              bool
+	kubernetesVersion   *common.VersionInfo
+	apiDiscovery        *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -620,7 +625,7 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	// With the Linux dataplane disabled there is no calico-node to perform autodetection,
 	// so skip defaulting these fields (validation rejects them in headless mode).
 	needIPv4Autodetection := *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
-	if !instance.Spec.LinuxDataplaneEnabled() {
+	if instance.Spec.IsHeadless() {
 		needIPv4Autodetection = false
 	} else if currentPools != nil {
 		for _, pool := range currentPools.Items {
@@ -1003,7 +1008,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Headless mode: the Linux dataplane is disabled, so calico-node, Typha,
 	// calico-kube-controllers, and csi-node-driver are not rendered, spec.cni is omitted, and
 	// the FelixConfiguration/BGPConfiguration defaults are not seeded.
-	headless := !instance.Spec.LinuxDataplaneEnabled()
+	headless := instance.Spec.IsHeadless()
 
 	// Make sure CNI is configured before continuing. In a headless install spec.cni is omitted
 	// (validation rejects it being set), so this check only applies when a dataplane runs.
@@ -1042,6 +1047,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 		}
+	}
+
+	// A headless installation (spec.calicoNetwork.linuxDataplane: None) runs a different set of
+	// controllers than a normal install (see internal/controller.AddToManager), and that set is
+	// fixed when the manager starts. If the dataplane mode has changed since the operator
+	// started, reboot so the correct controllers are (de)registered. This mirrors the enterprise
+	// switch below; controller-runtime cannot add or remove controllers from a running manager.
+	if instance.DeletionTimestamp.IsZero() && r.headless != instance.Spec.IsHeadless() {
+		reqLogger.Info("Linux dataplane mode changed since startup; rebooting operator to apply controller set",
+			"startupHeadless", r.headless, "currentHeadless", instance.Spec.IsHeadless())
+		osExitOverride(0)
 	}
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
@@ -1206,46 +1222,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// In headless mode there is no Felix or BIRD to consume them, so skip seeding entirely.
 	var felixConfiguration *v3.FelixConfiguration
 	if !headless {
-		felixConfiguration, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-			// Configure defaults.
-			u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
-			if err != nil {
-				return false, err
-			}
-
-			// Configure nftables mode.
-			u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
-			if err != nil {
-				return false, err
-			}
-
-			// Configure cluster routing mode.
-			u3, err := setClusterRoutingOnFelixConfiguration(instance, fc, reqLogger)
-			if err != nil {
-				return false, err
-			}
-
-			updated := u || u2 || u3
-			return updated, nil
-		})
+		felixConfiguration, err = r.seedFelixAndBGPConfiguration(ctx, instance, needsNamespaceMigration, reqLogger)
 		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		// Set any non-default BGPConfiguration values that we need.
-		_, err = utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
-			// Configure cluster routing mode.
-			u, err := setClusterRoutingOnBGPConfiguration(instance, bgpConfig, reqLogger)
-			if err != nil {
-				return false, err
-			}
-
-			return u, nil
-		})
-		if err != nil {
-			// Since, programClusterRoutes in FelixConfiguration is already updated earlier,
-			// failure in updating programClusterRouting in BGPConfiguration, essentially results in inconsistency
-			// between the configuration of BIRD and Felix in programming cluster routes, until the next reconcile convergence
 			return reconcile.Result{}, err
 		}
 	}
@@ -2030,6 +2008,52 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		NodeCommonName:            nodeCommonName,
 		NodeURISAN:                nodeURISAN,
 	}, nil
+}
+
+// seedFelixAndBGPConfiguration applies the non-default FelixConfiguration and
+// BGPConfiguration values the operator needs (defaults, nftables mode, cluster routing).
+// It is only called when a Linux dataplane is running; a headless installation has no Felix
+// or BIRD to consume these settings, so the caller skips seeding entirely and leaves the
+// returned FelixConfiguration nil.
+func (r *ReconcileInstallation) seedFelixAndBGPConfiguration(ctx context.Context, instance *operatorv1.Installation, needsNamespaceMigration bool, reqLogger logr.Logger) (*v3.FelixConfiguration, error) {
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+		// Configure defaults.
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
+		if err != nil {
+			return false, err
+		}
+
+		// Configure nftables mode.
+		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+
+		// Configure cluster routing mode.
+		u3, err := setClusterRoutingOnFelixConfiguration(instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+
+		return u || u2 || u3, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Set any non-default BGPConfiguration values that we need.
+	if _, err := utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
+		// Configure cluster routing mode.
+		return setClusterRoutingOnBGPConfiguration(instance, bgpConfig, reqLogger)
+	}); err != nil {
+		// Since programClusterRoutes in FelixConfiguration is already updated earlier, failure in
+		// updating programClusterRouting in BGPConfiguration essentially results in inconsistency
+		// between the configuration of BIRD and Felix in programming cluster routes, until the next
+		// reconcile convergence.
+		return nil, err
+	}
+
+	return felixConfiguration, nil
 }
 
 func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {

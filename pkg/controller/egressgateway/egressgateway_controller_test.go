@@ -153,27 +153,6 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			r.licenseAPIReady.MarkAsReady()
 		})
 
-		It("should degrade in a headless installation", Label("headless"), func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "EgressGateway is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
-
-			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-
-			var replicas int32 = 2
-			Expect(c.Create(ctx, &operatorv1.EgressGateway{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},
-				Spec: operatorv1.EgressGatewaySpec{
-					Replicas: &replicas,
-					IPPools:  []operatorv1.EgressGatewayIPPool{{Name: "ippool-1", CIDR: ""}},
-				},
-			})).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "EgressGateway is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-		})
-
 		It("should render accurate resources for egress gateway", func() {
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()

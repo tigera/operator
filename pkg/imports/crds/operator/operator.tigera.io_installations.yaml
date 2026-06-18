@@ -1640,12 +1640,11 @@ spec:
                         WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
                         causes the operator to add required mounts and environment variables for the particular dataplane.
                         If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
-                        The values Disabled and None are equivalent and both suppress the Windows nodes daemonset.
+                        A headless install (spec.calicoNetwork.linuxDataplane: None) must leave this disabled.
                         Default: Disabled
                       enum:
                         - HNS
                         - Disabled
-                        - None
                       type: string
                   type: object
                 calicoNodeDaemonSet:
@@ -10999,12 +10998,11 @@ spec:
                             WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
                             causes the operator to add required mounts and environment variables for the particular dataplane.
                             If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
-                            The values Disabled and None are equivalent and both suppress the Windows nodes daemonset.
+                            A headless install (spec.calicoNetwork.linuxDataplane: None) must leave this disabled.
                             Default: Disabled
                           enum:
                             - HNS
                             - Disabled
-                            - None
                           type: string
                       type: object
                     calicoNodeDaemonSet:

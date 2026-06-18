@@ -509,6 +509,24 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Detect whether this is a "headless" installation (spec.calicoNetwork.linuxDataplane: None).
+	// In a headless install no Calico dataplane runs, spec.cni is omitted, and the
+	// projectcalico.org/v3 API is never served, so the dataplane-dependent controllers are not
+	// registered (see internal/controller.AddToManager). linuxDataplane is user-set and never
+	// defaulted, so the raw spec is authoritative. If the Installation cannot be read we assume
+	// non-headless; the Installation controller reboots the operator (os.Exit(0)) if the
+	// dataplane mode later differs from what was detected here.
+	headless := false
+	headlessInstall := &operatortigeraiov1.Installation{}
+	if err := c.Get(ctx, utils.DefaultInstanceKey, headlessInstall); err != nil {
+		if !errors.IsNotFound(err) {
+			setupLog.Error(err, "Failed to read Installation to determine headless mode; assuming non-headless")
+		}
+	} else {
+		headless = headlessInstall.Spec.IsHeadless()
+	}
+	setupLog.WithValues("headless", headless).Info("Determined whether the operator is running in headless mode")
+
 	options := options.ControllerOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
@@ -521,6 +539,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
 		APIDiscovery:        apiDiscovery,
+		Headless:            headless,
 	}
 
 	// Before we start any controllers, make sure our options are valid.

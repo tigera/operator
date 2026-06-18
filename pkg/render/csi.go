@@ -396,7 +396,7 @@ func (c *csiComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 
 	// The CSI driver exists to support Felix policy sync; without a Linux dataplane
 	// (headless mode) it has no purpose, so it is removed along with the other cases.
-	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" || !c.cfg.Installation.LinuxDataplaneEnabled() {
+	if c.cfg.Terminating || c.cfg.Installation.KubeletVolumePluginPath == "None" || c.cfg.Installation.IsHeadless() {
 		objsToDelete = objs
 	} else {
 		objsToCreate = objs

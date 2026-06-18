@@ -1086,18 +1086,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if instance.Spec.Variant.IsEnterprise() {
-		managerInternalTLSSecret, err := certificateManager.GetCertificate(r.client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching TLS secret %s in namespace %s", render.ManagerInternalTLSSecretName, common.OperatorNamespace()), err, reqLogger)
-			return reconcile.Result{}, nil
-		} else if managerInternalTLSSecret != nil {
-			// It may seem odd to add the manager internal TLS secret to the trusted bundle for Typha / calico-node, but this bundle is also used
-			// for other components in this namespace such as es-kube-controllers, who communicates with Voltron and thus needs to trust this certificate.
-			typhaNodeTLS.TrustedBundle.AddCertificates(managerInternalTLSSecret)
-		}
-	}
-
 	birdTemplates, err := getBirdTemplates(r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving confd templates", err, reqLogger)

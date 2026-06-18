@@ -86,6 +86,16 @@ func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (e
 		cc.TrustedBundle.AddCertificates(esgwCertificate)
 	}
 
+	// es-kube-controllers talks to Voltron, so the shared bundle must trust the
+	// manager internal cert.
+	managerInternalTLS, err := cc.CertificateManager.GetCertificate(cc.Client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		return rc, nil, fmt.Errorf("failed to retrieve %s: %w", render.ManagerInternalTLSSecretName, err)
+	}
+	if managerInternalTLS != nil {
+		cc.TrustedBundle.AddCertificates(managerInternalTLS)
+	}
+
 	var managed []certificatemanagement.KeyPairInterface
 	if nodePrometheusTLS != nil {
 		managed = append(managed, nodePrometheusTLS)

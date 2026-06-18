@@ -73,9 +73,16 @@ make gen-files
 ```
 After `gen-files`, verify the scope of existing resources wasn't changed to "Namespaced".
 
-## Design Principles
+## Design Principles & Documentation Map
 
-See [`docs/principles.md`](../docs/principles.md) for code architecture and design principles, and [`docs/dev_guidelines.md`](../docs/dev_guidelines.md) for developer workflow and procedures.
+Read the relevant doc before working in these areas:
+
+| Task | Read |
+|------|------|
+| Architecture & design rationale (the "why") | [`docs/principles.md`](../docs/principles.md) |
+| Adding/changing CRD types in `api/v1` (Go/kubebuilder conventions, checklist) | [`docs/api_conventions.md`](../docs/api_conventions.md) |
+| Developer workflow, code generation, cherry-picks | [`docs/dev_guidelines.md`](../docs/dev_guidelines.md) |
+| Common dev procedures (run, test, debug) | [`docs/common_tasks.md`](../docs/common_tasks.md) |
 
 ## Build Environment
 - Tests and builds run in a containerized environment (`calico/go-build`) by default

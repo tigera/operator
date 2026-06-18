@@ -244,13 +244,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	// In a headless installation there is no Calico API server, so the calico-system Tier
-	// (projectcalico.org/v3) is never served and Authentication cannot be installed. Report this
-	// clearly instead of blocking forever on the Tier watch.
-	if utils.RejectIfHeadless(ctx, r.client, r.status, "Authentication", reqLogger) {
-		return reconcile.Result{}, nil
-	}
-
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
 	if !r.tierWatchReady.IsReady() {
 		r.status.SetDegraded(oprv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)

@@ -1180,7 +1180,6 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "FELIX_INTERFACEPREFIX", Value: "azv"},
 				}),
 			)
-
 			It("should render all resources when using Calico CNI on EKS", func() {
 				expectedResources := []struct {
 					name    string

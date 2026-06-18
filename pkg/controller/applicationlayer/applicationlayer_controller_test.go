@@ -109,25 +109,6 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(c.Delete(ctx, fc)).NotTo(HaveOccurred())
 		})
 
-		It("should degrade in a headless installation", Label("headless"), func() {
-			mockStatus.On("SetMetaData", mock.Anything).Return()
-			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "ApplicationLayer is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
-
-			dpNone := operatorv1.LinuxDataplaneNone
-			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
-
-			enabled := operatorv1.ApplicationLayerPolicyEnabled
-			Expect(c.Create(ctx, &operatorv1.ApplicationLayer{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Spec:       operatorv1.ApplicationLayerSpec{ApplicationLayerPolicy: &enabled},
-			})).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).ShouldNot(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "ApplicationLayer is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-		})
-
 		It("should set PolicySyncPathPrefix if ALP is enabled", func() {
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()

@@ -147,8 +147,15 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		felixClusterRoutingMode := felixProgramsClusterRoutes(instance)
 
 		// Headless mode: the Linux dataplane is disabled entirely, so reject any
-		// configuration that implies a running dataplane.
-		if !instance.Spec.LinuxDataplaneEnabled() {
+		// configuration that implies a running dataplane. Every spec.calicoNetwork field
+		// rejected here only takes effect through calico-node/Felix/the Calico CNI, none of
+		// which are deployed in a headless install, so accepting them would silently ignore
+		// the user's intent. Several (hostPorts, multiInterfaceMode, containerIPForwarding,
+		// linuxPodInterfaceType) are also validated against spec.cni further below, which is
+		// nil in headless mode and would otherwise cause a nil-pointer panic.
+		if instance.Spec.IsHeadless() {
+			cn := instance.Spec.CalicoNetwork
+
 			// Headless: there is no Calico dataplane, so spec.cni (which describes the CNI the
 			// operator integrates Felix with) must be omitted entirely.
 			if instance.Spec.CNI != nil {
@@ -156,20 +163,59 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					operatorv1.LinuxDataplaneNone)
 			}
 			if common.WindowsEnabled(instance.Spec) {
-				return fmt.Errorf("spec.calicoNetwork.windowsDataplane must be Disabled or None when spec.calicoNetwork.linuxDataplane is %s",
+				return fmt.Errorf("spec.calicoNetwork.windowsDataplane must be Disabled when spec.calicoNetwork.linuxDataplane is %s",
 					operatorv1.LinuxDataplaneNone)
 			}
-			if len(instance.Spec.CalicoNetwork.IPPools) != 0 {
-				return fmt.Errorf("spec.calicoNetwork.ipPools must not be set when spec.calicoNetwork.linuxDataplane is %s",
-					operatorv1.LinuxDataplaneNone)
-			}
-			if instance.Spec.CalicoNetwork.BGP != nil && *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPEnabled {
+			if cn.BGP != nil && *cn.BGP == operatorv1.BGPEnabled {
 				return fmt.Errorf("spec.calicoNetwork.bgp cannot be Enabled when spec.calicoNetwork.linuxDataplane is %s",
 					operatorv1.LinuxDataplaneNone)
 			}
-			if instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4 != nil || instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6 != nil {
-				return fmt.Errorf("spec.calicoNetwork.nodeAddressAutodetectionV4/V6 must not be set when spec.calicoNetwork.linuxDataplane is %s",
-					operatorv1.LinuxDataplaneNone)
+
+			// Reject any remaining dataplane-only field that is explicitly set, reporting them
+			// all at once so the user can fix the spec in a single pass.
+			var disallowed []string
+			if len(cn.IPPools) != 0 {
+				disallowed = append(disallowed, "ipPools")
+			}
+			if cn.NodeAddressAutodetectionV4 != nil {
+				disallowed = append(disallowed, "nodeAddressAutodetectionV4")
+			}
+			if cn.NodeAddressAutodetectionV6 != nil {
+				disallowed = append(disallowed, "nodeAddressAutodetectionV6")
+			}
+			if cn.MTU != nil {
+				disallowed = append(disallowed, "mtu")
+			}
+			if cn.HostPorts != nil {
+				disallowed = append(disallowed, "hostPorts")
+			}
+			if cn.MultiInterfaceMode != nil {
+				disallowed = append(disallowed, "multiInterfaceMode")
+			}
+			if cn.ContainerIPForwarding != nil {
+				disallowed = append(disallowed, "containerIPForwarding")
+			}
+			if cn.LinuxPodInterfaceType != nil {
+				disallowed = append(disallowed, "linuxPodInterfaceType")
+			}
+			if len(cn.Sysctl) != 0 {
+				disallowed = append(disallowed, "sysctl")
+			}
+			if cn.BPFNetworkBootstrap != nil {
+				disallowed = append(disallowed, "bpfNetworkBootstrap")
+			}
+			if cn.KubeProxyManagement != nil {
+				disallowed = append(disallowed, "kubeProxyManagement")
+			}
+			if cn.ClusterRoutingMode != nil {
+				disallowed = append(disallowed, "clusterRoutingMode")
+			}
+			if cn.LinuxPolicySetupTimeoutSeconds != nil {
+				disallowed = append(disallowed, "linuxPolicySetupTimeoutSeconds")
+			}
+			if len(disallowed) != 0 {
+				return fmt.Errorf("the following spec.calicoNetwork fields must not be set when spec.calicoNetwork.linuxDataplane is %s: %s",
+					operatorv1.LinuxDataplaneNone, strings.Join(disallowed, ", "))
 			}
 		}
 

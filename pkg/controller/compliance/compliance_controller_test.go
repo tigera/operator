@@ -1080,18 +1080,6 @@ var _ = Describe("Compliance controller tests", func() {
 			Expect(ownerPullSecrets.Kind).To(Equal("Tenant"))
 		})
 	})
-
-	It("should degrade in a headless installation", Label("headless"), func() {
-		dpNone := operatorv1.LinuxDataplaneNone
-		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
-		Expect(c.Update(ctx, installation)).NotTo(HaveOccurred())
-
-		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Compliance is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything).Return()
-
-		_, err := r.Reconcile(ctx, reconcile.Request{})
-		Expect(err).NotTo(HaveOccurred())
-		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, "Compliance is not supported in a headless installation (spec.calicoNetwork.linuxDataplane is None)", mock.Anything, mock.Anything)
-	})
 })
 
 func assertExpectedCertDNSNames(c client.Client, expectedDNSNames ...string) {

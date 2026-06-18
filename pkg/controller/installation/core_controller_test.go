@@ -1407,10 +1407,29 @@ var _ = Describe("Testing core-controller installation", func() {
 		Context("headless mode (cni omitted, linuxDataplane None)", Label("headless"), func() {
 			BeforeEach(func() {
 				dpNone := operator.LinuxDataplaneNone
+				// The operator was started headless, matching this CR, so the runtime
+				// dataplane-mode-change reboot does not fire.
+				r.headless = true
 				cr.Spec.CNI = nil
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 					LinuxDataplane: &dpNone,
 				}
+			})
+
+			It("should reboot the operator when the dataplane mode changed since startup", func() {
+				// The operator started non-headless but the live Installation is now headless, so
+				// Reconcile must reboot to (de)register the dataplane controllers.
+				r.headless = false
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				exited := false
+				origExit := osExitOverride
+				osExitOverride = func(_ int) { exited = true }
+				defer func() { osExitOverride = origExit }()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(exited).Should(BeTrue(), "expected the operator to reboot on a dataplane mode change")
 			})
 
 			It("should not render the dataplane components and should not seed FelixConfiguration", func() {
@@ -1490,6 +1509,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			func(variant operator.ProductVariant, cniType operator.CNIPluginType, dataplane operator.LinuxDataplaneOption, expectDataplane bool, expectCNIConfig bool) {
 				cr.Spec.Variant = variant
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+				// The operator boots in the mode this row exercises, so the reboot does not fire.
+				r.headless = dataplane == operator.LinuxDataplaneNone
 				// A headless install (linuxDataplane None) omits spec.cni; otherwise set it.
 				if dataplane == operator.LinuxDataplaneNone {
 					cr.Spec.CNI = nil

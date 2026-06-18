@@ -349,54 +349,54 @@ ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	export KUBEBUILDER_ASSETS=$$(setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir /tmp/envtest-bins -p path) && \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(UT_DIR)"'
 
-## Run only the headless-mode unit tests (specs labelled "headless" across all packages).
-.PHONY: ut-headless
-ut-headless: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
+## Run only the no-dataplane unit tests (specs labelled "no-dataplane" across all packages).
+.PHONY: ut-no-dataplane
+ut-no-dataplane: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
 	export KUBEBUILDER_ASSETS=$$(setup-envtest use $(ENVTEST_K8S_VERSION) --bin-dir /tmp/envtest-bins -p path) && \
-	ginkgo --label-filter="headless" $(GINKGO_ARGS) "$(UT_DIR)"'
+	ginkgo --label-filter="no-dataplane" $(GINKGO_ARGS) "$(UT_DIR)"'
 
-## Run all headless-mode tests: unit tests first, then the FV tests on their own cluster.
-.PHONY: test-headless
-test-headless: ut-headless fv-headless
+## Run all no-dataplane tests: unit tests first, then the FV tests on their own cluster.
+.PHONY: test-no-dataplane
+test-no-dataplane: ut-no-dataplane fv-no-dataplane
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
 run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo -focus="$(GINKGO_FOCUS)" --label-filter="!headless" $(GINKGO_ARGS) "$(FV_DIR)"'
+	ginkgo -focus="$(GINKGO_FOCUS)" --label-filter="!no-dataplane" $(GINKGO_ARGS) "$(FV_DIR)"'
 
-## Run the headless-mode functional tests. These need a kind cluster with the default
-## CNI (kindnet) enabled, since headless installations run no Calico dataplane; they are
+## Run the no-dataplane functional tests. These need a kind cluster with the default
+## CNI (kindnet) enabled, since installs with the dataplane disabled run no Calico dataplane; they are
 ## therefore excluded from the regular `fv` run and get their own cluster lifecycle.
 ## Pass KEEP_CLUSTER=true to leave the cluster running afterwards for manual inspection
 ## (note: the specs clean up their own resources in AfterEach, so the cluster is left in a
-## bare state; for a running product install use `make cluster-create-headless-products`).
-fv-headless: cluster-create-headless run-headless-fvs
+## bare state; for a running product install use `make cluster-create-no-dataplane-products`).
+fv-no-dataplane: cluster-create-no-dataplane run-no-dataplane-fvs
 ifeq ($(KEEP_CLUSTER),true)
 	@echo "==> KEEP_CLUSTER=true: leaving kind cluster '$(KIND_CLUSTER_NAME)' running. Tear down with: make cluster-destroy"
 else
 	$(MAKE) cluster-destroy
 endif
-run-headless-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
+run-no-dataplane-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
-	ginkgo --label-filter="headless" $(GINKGO_ARGS) "$(FV_DIR)"'
+	ginkgo --label-filter="no-dataplane" $(GINKGO_ARGS) "$(FV_DIR)"'
 
 ## Create a local kind dual stack cluster.
 KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
 KINDEST_NODE_VERSION?=v1.31.12
 KIND_CONFIG?=./deploy/kind-config.yaml
-# Set KEEP_CLUSTER=true to skip cluster-destroy after an FV run (e.g. fv-headless).
+# Set KEEP_CLUSTER=true to skip cluster-destroy after an FV run (e.g. fv-no-dataplane).
 KEEP_CLUSTER?=false
 
-## Create a kind cluster with the default CNI enabled, for headless-mode FV tests.
-cluster-create-headless: KIND_CONFIG=./deploy/kind-config-headless.yaml
-cluster-create-headless: cluster-create
+## Create a kind cluster with the default CNI enabled, for no-dataplane FV tests.
+cluster-create-no-dataplane: KIND_CONFIG=./deploy/kind-config-no-dataplane.yaml
+cluster-create-no-dataplane: cluster-create
 
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
@@ -441,13 +441,13 @@ apply-product-crs: $(BINDIR)/kubectl
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_gatewayapi.yaml
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_istio.yaml
 
-## Apply the sample CRs for a headless install plus all product options. Uses the
-## headless Installation (no Calico dataplane; products run on the default CNI).
+## Apply the sample CRs for an install with the dataplane disabled plus all product options. Uses the
+## dataplane-disabled Installation (no Calico dataplane; products run on the default CNI).
 ## Idempotent; safe to re-run. The operator must be running for these to reconcile.
-.PHONY: apply-headless-product-crs
-apply-headless-product-crs: $(BINDIR)/kubectl
+.PHONY: apply-no-dataplane-product-crs
+apply-no-dataplane-product-crs: $(BINDIR)/kubectl
 	-KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
-	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_installation_headless.yaml
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_installation_no_dataplane.yaml
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_gatewayapi.yaml
 	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply -f config/samples/operator_v1_istio.yaml
 
@@ -461,14 +461,14 @@ cluster-create-products: cluster-create apply-product-crs
 	@echo "==> Sample CRs applied. Starting the operator locally (Ctrl-C to stop)..."
 	KUBECONFIG=$(KIND_KUBECONFIG) go run ./cmd --enable-leader-election=false
 
-## Create a headless kind cluster (default CNI, no Calico dataplane) with all headless
+## Create a kind cluster with the dataplane disabled (default CNI, no Calico dataplane) with all
 ## product options installed (Calico Ingress Gateway, Calico Istio service mesh), then
 ## run the operator locally in the foreground (Ctrl-C to stop; the cluster keeps
 ## running). Tear down afterwards with `make cluster-destroy`. Watch progress from
 ## another terminal with: KUBECONFIG=./kubeconfig.yaml kubectl get tigerastatus -w
-.PHONY: cluster-create-headless-products
-cluster-create-headless-products: KIND_CONFIG=./deploy/kind-config-headless.yaml
-cluster-create-headless-products: cluster-create apply-headless-product-crs
+.PHONY: cluster-create-no-dataplane-products
+cluster-create-no-dataplane-products: KIND_CONFIG=./deploy/kind-config-no-dataplane.yaml
+cluster-create-no-dataplane-products: cluster-create apply-no-dataplane-product-crs
 	@echo "==> Sample CRs applied. Starting the operator locally (Ctrl-C to stop)..."
 	KUBECONFIG=$(KIND_KUBECONFIG) go run ./cmd --enable-leader-election=false
 

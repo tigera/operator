@@ -152,7 +152,7 @@ blocks:
             - '[[ -f fv.log ]] && artifact push job fv.log'
             - '[[ -d ./report/fv ]] && test-results publish --name "FV" ./report/fv'
 
-  - name: 'FV (headless)'
+  - name: 'FV (no-dataplane)'
     dependencies: [ "Build amd64" ]
     task:
       agent:
@@ -160,21 +160,21 @@ blocks:
           type: f1-standard-2
           os_image: ubuntu2404
       jobs:
-        - name: Run headless FVs
+        - name: Run no-dataplane FVs
           execution_time_limit:
             minutes: 60
           commands:
-            # Headless FVs run on their own kindnet cluster (no Calico dataplane) via the
-            # fv-headless target, which manages its own cluster lifecycle. Cap Ginkgo at 55m
+            # No-dataplane FVs run on their own kindnet cluster (no Calico dataplane) via the
+            # fv-no-dataplane target, which manages its own cluster lifecycle. Cap Ginkgo at 55m
             # (5m under the limit above) so the suite aborts in time for cluster-destroy and
             # the epilogue's artifact push before Semaphore kills the job.
-            - set -o pipefail; make fv-headless GINKGO_ARGS='-v -trace -r --timeout=55m' 2>&1 | tee fv-headless.log
+            - set -o pipefail; make fv-no-dataplane GINKGO_ARGS='-v -trace -r --timeout=55m' 2>&1 | tee fv-no-dataplane.log
             - make dirty-check
       epilogue:
         always:
           commands:
-            - '[[ -f fv-headless.log ]] && artifact push job fv-headless.log'
-            - '[[ -d ./report/fv ]] && test-results publish --name "FV-headless" ./report/fv'
+            - '[[ -f fv-no-dataplane.log ]] && artifact push job fv-no-dataplane.log'
+            - '[[ -d ./report/fv ]] && test-results publish --name "FV-no-dataplane" ./report/fv'
 
   - name: Release tooling
     dependencies:

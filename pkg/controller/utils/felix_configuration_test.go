@@ -31,7 +31,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 )
 
-var _ = Describe("PatchFelixConfiguration", Label("headless"), func() {
+var _ = Describe("PatchFelixConfiguration", Label("no-dataplane"), func() {
 	It("returns an error detectable by meta.IsNoMatchError when the v3 API is not served", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())

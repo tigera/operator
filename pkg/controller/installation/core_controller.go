@@ -347,7 +347,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		typhaAutoscaler:      typhaScaler,
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
-		headless:             opts.Headless,
+		dataplaneDisabled:    opts.DataplaneDisabled,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
@@ -407,10 +407,10 @@ type ReconcileInstallation struct {
 	typhaAutoscalerNonClusterHost *typhaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
 	enterpriseCRDsExist           bool
-	// headless is the dataplane mode detected at operator startup
+	// dataplaneDisabled is the dataplane mode detected at operator startup
 	// (spec.calicoNetwork.linuxDataplane: None). If the live Installation's mode later differs,
 	// Reconcile reboots the operator so the correct controller set is registered.
-	headless            bool
+	dataplaneDisabled   bool
 	migrationChecked    bool
 	clusterDomain       string
 	manageCRDs          bool
@@ -521,7 +521,7 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 	}
 
-	// Default the CNI plugin based on the Kubernetes provider. A headless install
+	// Default the CNI plugin based on the Kubernetes provider. An install with the dataplane disabled
 	// (spec.calicoNetwork.linuxDataplane: None) runs no Calico dataplane and omits spec.cni,
 	// so skip CNI defaulting entirely and leave it nil.
 	if instance.Spec.LinuxDataplaneEnabled() {
@@ -604,7 +604,7 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		disabled := operatorv1.BGPDisabled
 		switch {
 		case instance.Spec.CNI == nil:
-			// Headless (no CNI / no Calico dataplane): BGP is off.
+			// Dataplane disabled (no CNI / no Calico dataplane): BGP is off.
 			instance.Spec.CalicoNetwork.BGP = &disabled
 		case instance.Spec.CNI.Type == operatorv1.PluginCalico:
 			switch instance.Spec.KubernetesProvider {
@@ -623,9 +623,9 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 
 	// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
 	// With the Linux dataplane disabled there is no calico-node to perform autodetection,
-	// so skip defaulting these fields (validation rejects them in headless mode).
+	// so skip defaulting these fields (validation rejects them when the dataplane is disabled).
 	needIPv4Autodetection := *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
-	if instance.Spec.IsHeadless() {
+	if instance.Spec.DataplaneDisabled() {
 		needIPv4Autodetection = false
 	} else if currentPools != nil {
 		for _, pool := range currentPools.Items {
@@ -678,7 +678,7 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 
-	// Default the CNI binary/config directories (not applicable to a headless install, which
+	// Default the CNI binary/config directories (not applicable to an install with the dataplane disabled, which
 	// has no spec.cni).
 	if instance.Spec.CNI != nil {
 		defaultCNINetDir, defaultCNIBinDir := render.DefaultCNIDirectories(instance.Spec.KubernetesProvider)
@@ -1005,14 +1005,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Headless mode: the Linux dataplane is disabled, so calico-node, Typha,
+	// The Linux dataplane is disabled, so calico-node, Typha,
 	// calico-kube-controllers, and csi-node-driver are not rendered, spec.cni is omitted, and
 	// the FelixConfiguration/BGPConfiguration defaults are not seeded.
-	headless := instance.Spec.IsHeadless()
+	dataplaneDisabled := instance.Spec.DataplaneDisabled()
 
-	// Make sure CNI is configured before continuing. In a headless install spec.cni is omitted
+	// Make sure CNI is configured before continuing. In an install with the dataplane disabled spec.cni is omitted
 	// (validation rejects it being set), so this check only applies when a dataplane runs.
-	if !headless && (instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil) {
+	if !dataplaneDisabled && (instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil) {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "waiting for spec.cni to be filled in", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -1020,9 +1020,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Determine if this cluster needs IP pools in order to operate.
 	// - If the installation has IP pools specified, then the cluster wants IP pools.
 	// - If the installation has no IP pools specified, it may still need them if it's using Calico IPAM or networking.
-	// A headless install has no CNI/dataplane and never needs IP pools.
+	// An install with the dataplane disabled has no CNI/dataplane and never needs IP pools.
 	needsIPPools := instance.Spec.CalicoNetwork != nil && len(instance.Spec.CalicoNetwork.IPPools) != 0
-	if !headless && (instance.Spec.CNI.Type == operatorv1.PluginCalico ||
+	if !dataplaneDisabled && (instance.Spec.CNI.Type == operatorv1.PluginCalico ||
 		(instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico)) {
 		needsIPPools = true
 	}
@@ -1031,7 +1031,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if !installationMarkedForDeletion && !headless {
+	if !installationMarkedForDeletion && !dataplaneDisabled {
 		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 		// the run the reset the degraded status and requeue the request.
 		if r.typhaAutoscaler.isDegraded() {
@@ -1049,14 +1049,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// A headless installation (spec.calicoNetwork.linuxDataplane: None) runs a different set of
+	// An install with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None) runs a different set of
 	// controllers than a normal install (see internal/controller.AddToManager), and that set is
 	// fixed when the manager starts. If the dataplane mode has changed since the operator
 	// started, reboot so the correct controllers are (de)registered. This mirrors the enterprise
 	// switch below; controller-runtime cannot add or remove controllers from a running manager.
-	if instance.DeletionTimestamp.IsZero() && r.headless != instance.Spec.IsHeadless() {
+	if instance.DeletionTimestamp.IsZero() && r.dataplaneDisabled != instance.Spec.DataplaneDisabled() {
 		reqLogger.Info("Linux dataplane mode changed since startup; rebooting operator to apply controller set",
-			"startupHeadless", r.headless, "currentHeadless", instance.Spec.IsHeadless())
+			"startupDataplaneDisabled", r.dataplaneDisabled, "currentDataplaneDisabled", instance.Spec.DataplaneDisabled())
 		osExitOverride(0)
 	}
 
@@ -1219,9 +1219,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration and BGPConfiguration values that we need.
-	// In headless mode there is no Felix or BIRD to consume them, so skip seeding entirely.
+	// When the dataplane is disabled there is no Felix or BIRD to consume them, so skip seeding entirely.
 	var felixConfiguration *v3.FelixConfiguration
-	if !headless {
+	if !dataplaneDisabled {
 		felixConfiguration, err = r.seedFelixAndBGPConfiguration(ctx, instance, needsNamespaceMigration, reqLogger)
 		if err != nil {
 			return reconcile.Result{}, err
@@ -1240,7 +1240,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	if instance.Spec.Variant.IsEnterprise() {
 
-		// Determine the port to use for nodeReporter metrics. In headless mode the
+		// Determine the port to use for nodeReporter metrics. When the dataplane is disabled the
 		// FelixConfiguration is not seeded (felixConfiguration is nil), so the defaults are used.
 		if felixConfiguration != nil && felixConfiguration.Spec.PrometheusReporterPort != nil {
 			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
@@ -1437,11 +1437,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Check if non-cluster host feature is enabled. NonClusterHost is a dataplane feature
 	// (it scales Typha to serve out-of-cluster Felix/calico-node instances), so it has no
-	// meaning in a headless installation where no dataplane runs. Skip it entirely so we
+	// meaning in an install with the dataplane disabled where no dataplane runs. Skip it entirely so we
 	// don't start a Typha autoscaler for a Deployment that is never rendered; the
-	// nonclusterhost controller separately rejects the NonClusterHost CR in headless mode.
+	// nonclusterhost controller separately rejects the NonClusterHost CR when the dataplane is disabled.
 	var nonclusterhost *operatorv1.NonClusterHost
-	if instance.Spec.Variant.IsEnterprise() && !headless {
+	if instance.Spec.Variant.IsEnterprise() && !dataplaneDisabled {
 		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
@@ -1481,9 +1481,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Build a configuration for rendering calico/typha. Typha is not rendered in headless mode.
+	// Build a configuration for rendering calico/typha. Typha is not rendered when the dataplane is disabled.
 	var typhaCfg render.TyphaConfiguration
-	if !headless {
+	if !dataplaneDisabled {
 		typhaCfg = render.TyphaConfiguration{
 			K8sServiceEp:           k8sapi.Endpoint,
 			K8sServiceEpPodNetwork: k8sapi.PodNetworkEndpoint,
@@ -1546,10 +1546,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Build and render the calico/node configuration. calico-node is not rendered in
-	// headless mode, so all of the inputs gathered here are only needed when a Linux
-	// dataplane is enabled.
-	if !headless {
+	// Build and render the calico/node configuration. calico-node is not rendered when
+	// the dataplane is disabled, so all of the inputs gathered here are only needed when a
+	// Linux dataplane is enabled.
+	if !dataplaneDisabled {
 		// Fetch any existing default BGPConfiguration object.
 		bgpConfiguration := &v3.BGPConfiguration{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
@@ -1678,9 +1678,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.CSI(&csiCfg))
 
 	// Build a configuration for rendering calico/kube-controllers, which is not rendered
-	// in headless mode.
+	// when the dataplane is disabled.
 	var kubeControllersCfg kubecontrollers.KubeControllersConfiguration
-	if !headless {
+	if !dataplaneDisabled {
 		// Provision a dedicated WAF wasm pull secret so the WAF reconciler
 		// replicates it into tenant namespaces without clashing with the
 		// operator-managed tigera-pull-secret the GatewayAPI render also copies
@@ -1736,8 +1736,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	// In headless mode the components these policies select are not rendered, so neither are the policies.
-	if includeV3NetworkPolicy && !headless {
+	// When the dataplane is disabled the components these policies select are not rendered, so neither are the policies.
+	if includeV3NetworkPolicy && !dataplaneDisabled {
 		if nonclusterhost != nil {
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
@@ -1786,17 +1786,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	// In headless mode these workloads are not rendered, so don't register them with the
+	// When the dataplane is disabled these workloads are not rendered, so don't register them with the
 	// status manager; with nothing to monitor, the TigeraStatus reports Available.
-	if !headless {
+	if !dataplaneDisabled {
 		r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
 		r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
 	}
 	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	// No Felix runs in headless mode, so there is nothing to patch.
-	if !headless {
+	// No Felix runs when the dataplane is disabled, so there is nothing to patch.
+	if !dataplaneDisabled {
 		_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 			return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 		})
@@ -2012,7 +2012,7 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 
 // seedFelixAndBGPConfiguration applies the non-default FelixConfiguration and
 // BGPConfiguration values the operator needs (defaults, nftables mode, cluster routing).
-// It is only called when a Linux dataplane is running; a headless installation has no Felix
+// It is only called when a Linux dataplane is running; an install with the dataplane disabled has no Felix
 // or BIRD to consume these settings, so the caller skips seeding entirely and leaves the
 // returned FelixConfiguration nil.
 func (r *ReconcileInstallation) seedFelixAndBGPConfiguration(ctx context.Context, instance *operatorv1.Installation, needsNamespaceMigration bool, reqLogger logr.Logger) (*v3.FelixConfiguration, error) {

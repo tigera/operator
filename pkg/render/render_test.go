@@ -79,17 +79,16 @@ func allCalicoComponents(
 	secretsAndConfigMaps := render.NewCreationPassthrough(objs...)
 
 	nodeCfg := &render.NodeConfiguration{
-		K8sServiceEp:            k8sServiceEp,
-		Installation:            cr,
-		TLS:                     typhaNodeTLS,
-		NodeAppArmorProfile:     nodeAppArmorProfile,
-		ClusterDomain:           clusterDomain,
-		NodeReporterMetricsPort: nodeReporterMetricsPort,
-		BGPLayouts:              bgpLayout,
-		LogCollector:            logCollector,
-		BirdTemplates:           bt,
-		MigrateNamespaces:       up,
-		FelixHealthPort:         9099,
+		K8sServiceEp:        k8sServiceEp,
+		Installation:        cr,
+		TLS:                 typhaNodeTLS,
+		NodeAppArmorProfile: nodeAppArmorProfile,
+		ClusterDomain:       clusterDomain,
+		BGPLayouts:          bgpLayout,
+		LogCollector:        logCollector,
+		BirdTemplates:       bt,
+		MigrateNamespaces:   up,
+		FelixHealthPort:     9099,
 	}
 	typhaCfg := &render.TyphaConfiguration{
 		K8sServiceEp:      k8sServiceEp,
@@ -225,16 +224,16 @@ var _ = Describe("Rendering tests", func() {
 	})
 
 	It("should render all resources when variant is Tigera Secure", func() {
-		// For this scenario, we expect the basic resources plus the following for Tigera Secure:
-		// - X Same as default config
-		// - 1 Service to expose calico/node metrics.
-		// - 1 Service to expose Windows calico/node metrics.
+		// For this scenario, we expect the basic resources plus the following for Tigera Secure.
+		// The calico/node and Windows calico/node metrics Services are added by the
+		// enterprise modifiers at the componentHandler, not by Objects(), so they do
+		// not appear in this render-only aggregation.
 		var nodeMetricsPort int32 = 9081
 		instance.Variant = operatorv1.CalicoEnterprise
 		instance.NodeMetricsPort = &nodeMetricsPort
 		c, err := allCalicoComponents(k8sServiceEp, instance, nil, nil, nil, typhaNodeTLS, nil, nil, false, "", dns.DefaultClusterDomain, 9094, 0, nil, nil)
 		Expect(err).To(BeNil(), "Expected Calico to create successfully %s", err)
-		Expect(componentCount(c)).To(Equal((5 + 3 + 4 + 1 + 6 + 6 + 1 + 2) + 1 + 1))
+		Expect(componentCount(c)).To(Equal(5 + 3 + 4 + 1 + 6 + 6 + 1 + 2))
 	})
 
 	It("should render all resources when variant is Tigera Secure and Management Cluster", func() {
@@ -267,7 +266,6 @@ var _ = Describe("Rendering tests", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-cni-plugin", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-cni-plugin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-cni-plugin"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-metrics", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cni-config", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 
@@ -279,8 +277,8 @@ var _ = Describe("Rendering tests", func() {
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-kube-controllers-metrics", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 
-			// Windows node objects.
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.WindowsNodeMetricsService, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			// Windows node objects. The Windows node-metrics Service is added by the
+			// enterprise modifier at the componentHandler, so it is not in this output.
 			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cni-config-windows", Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: common.WindowsDaemonSetName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 

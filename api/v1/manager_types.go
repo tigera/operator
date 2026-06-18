@@ -26,6 +26,37 @@ type ManagerSpec struct {
 	// ManagerDeployment configures the Manager Deployment.
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
+
+	// RBAC configures the RBAC management UI feature.
+	// +optional
+	RBAC *RBAC `json:"rbac,omitempty"`
+}
+
+// RBAC controls the RBAC management UI feature surface.
+type RBAC struct {
+	// UI controls whether the RBAC management UI is enabled. Defaults to
+	// Disabled.
+	// +optional
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	UI RBACUI `json:"ui,omitempty"`
+}
+
+// RBACUI toggles the RBAC management UI feature.
+type RBACUI string
+
+const (
+	RBACUIEnabled  RBACUI = "Enabled"
+	RBACUIDisabled RBACUI = "Disabled"
+)
+
+// RBACManagementEnabled returns true when the Manager CR opts the cluster
+// into the RBAC management UI. Safe to call on a nil receiver; returns false
+// for either a nil Manager or any UI value other than Enabled.
+func (m *Manager) RBACManagementEnabled() bool {
+	if m == nil || m.Spec.RBAC == nil {
+		return false
+	}
+	return m.Spec.RBAC.UI == RBACUIEnabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

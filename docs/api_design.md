@@ -1,10 +1,8 @@
-# API Conventions
+# API Design
 
-Concrete Go and kubebuilder coding conventions for CRD types under `api/v1/`.
-This is the *how*; it implements the design rules in
-[`principles.md`](principles.md) (the *why* — "API Design", "Respect User
-Input", "Resource Ownership") and pairs with the workflow in
-[`dev_guidelines.md`](dev_guidelines.md) ("API code", "Code generation").
+Design principles and the concrete Go/kubebuilder coding conventions for CRD
+types under `api/v1/`. The post-change workflow (code generation, validation)
+is in [`dev_guidelines.md`](dev_guidelines.md).
 
 When adding or changing a CRD field, follow these and finish with the
 [checklist](#checklist-for-a-new-field). APIs follow the
@@ -12,6 +10,27 @@ When adding or changing a CRD field, follow these and finish with the
 when in doubt, mirror the upstream Kubernetes type you're configuring, and match
 a recent similar `*_types.go` file (e.g. `whisker_types.go`,
 `whisker_deployment_types.go`).
+
+## Design principles
+
+- **APIs are declarative.** The final state of the system should depend only on
+  the current desired state, not on the order of transitions that got there.
+- **Minimal API surface.** Prefer auto-detection over configuration. Every new
+  field is a maintenance burden and a potential source of user confusion — only
+  add fields when there's a clear, concrete need.
+- **Prefer `projectcalico.org/v3` over `crd.projectcalico.org/v1`.** The v3 API
+  group is the standard going forward.
+- **Every container needs overrides.** Resource requirements/requests,
+  scheduling, topology, and similar configuration must be overridable for every
+  container. Use the overrides mechanism, and model the API after the upstream
+  Kubernetes API being configured (see [the override pattern](#deployment--container-override-pattern)).
+- **Prefer kubebuilder defaulting and validation.** Use kubebuilder markers and
+  CEL expressions wherever possible. Fall back to reconcile-loop logic only when
+  kubebuilder can't express it (e.g. cross-resource validation, dynamic defaults
+  based on cluster state).
+- **Validation must be bounded.** Fields used in CEL `XValidation` expressions
+  require `MaxLength` / `MaxItems` bounds (details under
+  [Validation markers](#validation-and-defaulting-markers)).
 
 ## Optional vs. required fields
 
@@ -44,9 +63,6 @@ const (
 ```
 
 ## Validation and defaulting markers
-
-Prefer kubebuilder markers and CEL over reconcile-loop logic (see
-[`principles.md`](principles.md)). 
 
 - Any closed set of string values gets `// +kubebuilder:validation:Enum=A;B;C`.
 - Numeric fields get `// +kubebuilder:validation:Minimum=`/`Maximum=`.
@@ -89,8 +105,7 @@ Don't redefine: `Metadata` (`common_types.go`), `ProbeOverride`
 ## Deployment / container override pattern
 
 Every container's resources, scheduling, tolerations, topology, and probe timing
-must be overridable (see [`principles.md`](principles.md), "Every container needs
-overrides"). When a component runs a Deployment/DaemonSet that needs to be
+must be overridable. When a component runs a Deployment/DaemonSet that needs to be
 customizable, follow the established nesting (see `whisker_deployment_types.go`):
 `<Comp>Deployment` → `Metadata` + `Spec` (`<Comp>DeploymentSpec`) → `Template`
 (`...PodTemplateSpec`) → `Metadata` + `Spec` (`...PodSpec`) →

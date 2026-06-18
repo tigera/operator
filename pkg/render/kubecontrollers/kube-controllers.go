@@ -38,7 +38,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -46,7 +45,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-	"github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -72,18 +70,12 @@ const (
 	// bundle, provisioned by the core controller and passed in as WASMCACert.
 	WASMCACertName = "tigera-waf-ca-bundle"
 
-	EsKubeController                    = "es-calico-kube-controllers"
-	EsKubeControllerRole                = "es-calico-kube-controllers"
-	EsKubeControllerRoleBinding         = "es-calico-kube-controllers"
-	EsKubeControllerMetrics             = "es-calico-kube-controllers-metrics"
-	EsKubeControllerNetworkPolicyName   = networkpolicy.CalicoComponentPolicyPrefix + "es-kube-controller-access"
+	// ManagedClustersWatchRoleBindingName binds kube-controllers to the managed-cluster
+	// watch ClusterRole. Used by both calico-kube-controllers (in a management cluster)
+	// and the enterprise es-calico-kube-controllers, so the binding stays generic here.
 	ManagedClustersWatchRoleBindingName = "es-calico-kube-controllers-managed-cluster-watch"
 
-	ElasticsearchKubeControllersUserSecret             = "tigera-ee-kube-controllers-elasticsearch-access"
-	ElasticsearchKubeControllersUserName               = "tigera-ee-kube-controllers"
-	ElasticsearchKubeControllersSecureUserSecret       = "tigera-ee-kube-controllers-elasticsearch-access-gateway"
-	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
-	KubeControllerPrometheusTLSSecret                  = "calico-kube-controllers-metrics-tls"
+	KubeControllerPrometheusTLSSecret = "calico-kube-controllers-metrics-tls"
 
 	// KubeControllersHealthPort is the port the kube-controllers HealthAggregator listens on when run from the
 	// combined calico binary. The legacy per-component image uses file-based health checks instead.
@@ -98,9 +90,6 @@ type KubeControllersConfiguration struct {
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 	Authentication              *operatorv1.Authentication
-
-	// Whether or not the LogStorage CRD is present in the cluster.
-	LogStorageExists bool
 
 	ClusterDomain string
 	MetricsPort   int
@@ -150,6 +139,39 @@ type KubeControllersConfiguration struct {
 	// caBundle so the apiserver can verify the in-process webhook endpoint.
 	// Only consulted when WAFGatewayExtensionEnabled is true.
 	WAFWebhookCABundle []byte
+
+	// The fields below parameterize the generic kube-controllers component. The
+	// variant assemblers (NewCalicoKubeControllers, the enterprise es builder)
+	// fill them; the component renders them without any variant or component-name
+	// branching.
+
+	// Name is the deployment / pod / container name (and the value the metrics
+	// Service selects on).
+	Name string
+	// ConfigName is the KUBE_CONTROLLERS_CONFIG_NAME the binary reconciles.
+	ConfigName string
+	// RoleName / RoleBindingName / MetricsName name the ClusterRole, its binding,
+	// and the Prometheus metrics Service.
+	RoleName        string
+	RoleBindingName string
+	MetricsName     string
+	// EnabledControllers is the ENABLED_CONTROLLERS list. The deployment is only
+	// rendered when it is non-empty.
+	EnabledControllers []string
+	// Rules are the ClusterRole policy rules.
+	Rules []rbacv1.PolicyRule
+	// NetworkPolicy, when set, is rendered into the install namespace (and the
+	// deprecated allow-tigera policy named DeprecatedNetworkPolicyName is deleted).
+	NetworkPolicy               *v3.NetworkPolicy
+	DeprecatedNetworkPolicyName string
+	// ExtraEnv is appended to the deployment's container env.
+	ExtraEnv []corev1.EnvVar
+	// DisableConfigAPI sets DISABLE_KUBE_CONTROLLERS_CONFIG_API.
+	DisableConfigAPI bool
+	// ManageWAFWebhook makes this component own the in-process WAF admission
+	// webhook surface lifecycle (rendered when WAFGatewayExtensionEnabled, deleted
+	// otherwise). Only the calico-kube-controllers component sets this.
+	ManageWAFWebhook bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -169,12 +191,27 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDe
 	)
 }
 
-func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
-	enabledControllers := []string{"node", "loadbalancer"}
+// NewKubeControllers builds a kube-controllers component from a fully-populated
+// configuration. Callers (NewCalicoKubeControllers, the enterprise es-kube-controllers
+// builder) fill the generic Name/Rules/EnabledControllers/ExtraEnv/NetworkPolicy fields;
+// the component renders them with no variant branching.
+func NewKubeControllers(cfg *KubeControllersConfiguration) render.Component {
+	return &kubeControllersComponent{cfg: cfg}
+}
+
+func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) render.Component {
+	cfg.Name = KubeController
+	cfg.ConfigName = "default"
+	cfg.RoleName = KubeControllerRole
+	cfg.RoleBindingName = KubeControllerRoleBinding
+	cfg.MetricsName = KubeControllerMetrics
+	cfg.ManageWAFWebhook = true
+
+	cfg.Rules = KubeControllersRoleCommonRules(cfg)
+	cfg.EnabledControllers = []string{"node", "loadbalancer"}
 	if cfg.Installation.Variant.IsEnterprise() {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
+		cfg.Rules = append(cfg.Rules, KubeControllersRoleEnterpriseCommonRules(cfg)...)
+		cfg.Rules = append(cfg.Rules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 				Resources: []string{"remoteclusterconfigurations"},
@@ -196,69 +233,31 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 				Verbs:     []string{"create", "update", "delete", "watch", "list", "get"},
 			},
 		)
-		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
+		cfg.EnabledControllers = append(cfg.EnabledControllers, "service", "federatedservices", "usage")
 		if cfg.WAFGatewayExtensionEnabled {
-			enabledControllers = append(enabledControllers, "applicationlayer")
+			cfg.EnabledControllers = append(cfg.EnabledControllers, "applicationlayer")
 		}
+		cfg.ExtraEnv = calicoEnterpriseEnv(cfg)
 	}
 
-	return &kubeControllersComponent{
-		cfg:                              cfg,
-		kubeControllerServiceAccountName: KubeControllerServiceAccount,
-		kubeControllerRoleName:           KubeControllerRole,
-		kubeControllerRoleBindingName:    KubeControllerRoleBinding,
-		kubeControllerName:               KubeController,
-		kubeControllerConfigName:         "default",
-		kubeControllerMetricsName:        KubeControllerMetrics,
-		kubeControllersRules:             kubeControllerRolePolicyRules,
-		enabledControllers:               enabledControllers,
-	}
+	return NewKubeControllers(cfg)
 }
 
-func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {
-	var kubeControllerCalicoSystemPolicy *v3.NetworkPolicy
-	kubeControllerRolePolicyRules := kubeControllersRoleCommonRules(cfg)
-
-	if cfg.Installation.Variant.IsEnterprise() {
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
-		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
-				Resources: []string{"elasticsearches"},
-				Verbs:     []string{"watch", "get", "list"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterroles", "clusterrolebindings"},
-				Verbs:     []string{"watch", "list", "get"},
-			},
-		)
-
-		kubeControllerCalicoSystemPolicy = esKubeControllersCalicoSystemPolicy(cfg)
+// calicoEnterpriseEnv builds the enterprise-only static env vars for
+// calico-kube-controllers. The dynamic WASM_* vars depend on resolved images and
+// are added at deployment-render time.
+func calicoEnterpriseEnv(cfg *KubeControllersConfiguration) []corev1.EnvVar {
+	var env []corev1.EnvVar
+	if cfg.Tenant != nil {
+		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID})
 	}
-
-	var enabledControllers []string
-	if !cfg.Tenant.MultiTenant() {
-		// Zero and single tenant cluster needs elasticsearch configuration
-		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
-		if cfg.ManagementCluster != nil && cfg.Tenant == nil {
-			// Enterprise will require the managedcluster controller to push licenses
-			enabledControllers = append(enabledControllers, "managedcluster")
-		}
+	if cfg.TrustedBundle != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: cfg.TrustedBundle.MountPath()})
 	}
-
-	return &kubeControllersComponent{
-		cfg:                              cfg,
-		kubeControllerServiceAccountName: KubeControllerServiceAccount,
-		kubeControllerRoleName:           EsKubeControllerRole,
-		kubeControllerRoleBindingName:    EsKubeControllerRoleBinding,
-		kubeControllerName:               EsKubeController,
-		kubeControllerConfigName:         "elasticsearch",
-		kubeControllerMetricsName:        EsKubeControllerMetrics,
-		kubeControllersRules:             kubeControllerRolePolicyRules,
-		kubeControllerCalicoSystemPolicy: kubeControllerCalicoSystemPolicy,
-		enabledControllers:               enabledControllers,
+	if cfg.Installation.CalicoNetwork != nil && cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
+	return env
 }
 
 type kubeControllersComponent struct {
@@ -267,18 +266,6 @@ type kubeControllersComponent struct {
 
 	// Internal state generated by the given configuration.
 	calicoImage string
-
-	kubeControllerServiceAccountName string
-	kubeControllerRoleName           string
-	kubeControllerRoleBindingName    string
-	kubeControllerName               string
-	kubeControllerConfigName         string
-	kubeControllerMetricsName        string
-
-	kubeControllersRules             []rbacv1.PolicyRule
-	kubeControllerCalicoSystemPolicy *v3.NetworkPolicy
-
-	enabledControllers []string
 
 	// wasmImage is the fully-resolved OCI reference for the Coraza WAF wasm
 	// binary (Enterprise only). Surfaced to the kube-controllers binary via
@@ -296,7 +283,7 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	if err != nil {
 		return err
 	}
-	if c.cfg.Installation.Variant.IsEnterprise() && c.cfg.WAFGatewayExtensionEnabled {
+	if c.cfg.WAFGatewayExtensionEnabled {
 		// The Coraza WAF wasm is baked into the gateway envoy-proxy image as its
 		// final layer; Envoy Gateway extracts it from there. Point WASM_IMAGE at
 		// that same image (no standalone coraza-wasm image needed).
@@ -316,12 +303,14 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	objectsToCreate := []client.Object{}
 	objectsToDelete := []client.Object{}
 
-	if c.kubeControllerCalicoSystemPolicy != nil {
-		objectsToCreate = append(objectsToCreate, c.kubeControllerCalicoSystemPolicy)
-		// allow-tigera Tier was renamed to calico-system
-		objectsToDelete = append(objectsToDelete,
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("es-kube-controller-access", c.cfg.Namespace),
-		)
+	if c.cfg.NetworkPolicy != nil {
+		objectsToCreate = append(objectsToCreate, c.cfg.NetworkPolicy)
+		if c.cfg.DeprecatedNetworkPolicyName != "" {
+			// allow-tigera Tier was renamed to calico-system
+			objectsToDelete = append(objectsToDelete,
+				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject(c.cfg.DeprecatedNetworkPolicyName, c.cfg.Namespace),
+			)
+		}
 	}
 
 	objectsToCreate = append(objectsToCreate,
@@ -331,7 +320,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	)
 	objectsToCreate = append(objectsToCreate, c.managedClusterRoleBindings()...)
 
-	if len(c.enabledControllers) > 0 {
+	if len(c.cfg.EnabledControllers) > 0 {
 		// There's something to run, so create the deployment.
 		objectsToCreate = append(objectsToCreate, c.controllersDeployment())
 	} else {
@@ -358,7 +347,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 	// ValidatingWebhookConfiguration). Rendered here, rather than as a
 	// passthrough in the core controller, so the objects are cleaned up when the
 	// WAF extension is disabled or the GatewayAPI CR is removed.
-	if c.kubeControllerName == KubeController {
+	if c.cfg.ManageWAFWebhook {
 		webhookObjs := applicationlayer.WAFAdmissionWebhookComponents(c.cfg.WAFWebhookCABundle)
 		if c.cfg.WAFGatewayExtensionEnabled {
 			objectsToCreate = append(objectsToCreate, webhookObjs...)
@@ -385,7 +374,7 @@ func (c *kubeControllersComponent) Ready() bool {
 	return true
 }
 
-func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
+func KubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			// Nodes are watched to monitor for deletions.
@@ -511,7 +500,7 @@ func kubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 	return rules
 }
 
-func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
+func KubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -662,7 +651,7 @@ func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAc
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.kubeControllerServiceAccountName,
+			Name:      KubeControllerServiceAccount,
 			Namespace: c.cfg.Namespace,
 			Labels:    map[string]string{},
 		},
@@ -673,9 +662,9 @@ func (c *kubeControllersComponent) controllersClusterRole() *rbacv1.ClusterRole 
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: c.kubeControllerRoleName,
+			Name: c.cfg.RoleName,
 		},
-		Rules: c.kubeControllersRules,
+		Rules: c.cfg.Rules,
 	}
 
 	return role
@@ -698,7 +687,7 @@ func (c *kubeControllersComponent) controllersOCPFederationRoleBinding() *rbacv1
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      KubeController,
+				Name:      KubeControllerServiceAccount,
 				Namespace: c.cfg.Namespace,
 			},
 		},
@@ -707,71 +696,46 @@ func (c *kubeControllersComponent) controllersOCPFederationRoleBinding() *rbacv1
 
 func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	env := []corev1.EnvVar{
-		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.kubeControllerConfigName},
+		{Name: "KUBE_CONTROLLERS_CONFIG_NAME", Value: c.cfg.ConfigName},
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
-		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
-		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
+		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.cfg.EnabledControllers, ",")},
+		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.DisableConfigAPI)},
 	}
 
 	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
+	env = append(env, c.cfg.ExtraEnv...)
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		if c.cfg.Tenant != nil {
-			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})
+	// Application-layer (gateway-addons / WAF v3) env vars, gated by
+	// GatewayAPI.spec.extensions.waf.state == Enabled. When the gate is off
+	// (default), none of the WASM_* env vars are rendered and the kube-controllers
+	// binary skips the WAF reconcilers entirely (see the applicationlayer entry in
+	// EnabledControllers). The WASM_IMAGE value depends on resolved images, so this
+	// is rendered here rather than in the static ExtraEnv.
+	if c.cfg.WAFGatewayExtensionEnabled {
+		// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
+		// wasm OCI reference from this env var to program WAF policy attachments.
+		// Empty when ResolveImages was not called for the Calico variant; the
+		// reconciler stamps Programmed=False/WASMUnavailable in that case.
+		if c.wasmImage != "" {
+			env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
 		}
 
-		if c.kubeControllerName == EsKubeController {
-			// What started as a workaround is now the default behaviour. This feature uses our backend in order to
-			// log into Kibana for users from external identity providers, rather than configuring an authn realm
-			// in the Elastic stack.
-			env = append(env, corev1.EnvVar{Name: "ENABLE_ELASTICSEARCH_OIDC_WORKAROUND", Value: "true"})
-
-			if c.cfg.Authentication != nil {
-				env = append(env,
-					corev1.EnvVar{Name: "OIDC_AUTH_USERNAME_PREFIX", Value: c.cfg.Authentication.Spec.UsernamePrefix},
-					corev1.EnvVar{Name: "OIDC_AUTH_GROUP_PREFIX", Value: c.cfg.Authentication.Spec.GroupsPrefix},
-				)
-			}
-		}
-		if c.cfg.TrustedBundle != nil {
-			env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: c.cfg.TrustedBundle.MountPath()})
+		// WASM_PULL_SECRET names the imagePullSecret the reconciler replicates
+		// from the kube-controllers namespace into a WAFPolicy's namespace so
+		// the rendered EnvoyExtensionPolicy can pull the wasm OCI artifact from
+		// a private Tigera registry. Source the name from the first
+		// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
+		// installs reuse whatever pull secret operator already attaches here.
+		if c.cfg.WASMPullSecret != nil {
+			env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.WASMPullSecret.Name})
 		}
 
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
-		}
-
-		// Application-layer (gateway-addons / WAF v3) env vars, gated by
-		// GatewayAPI.spec.extensions.waf.state == Enabled. When the gate is
-		// off (default), none of the WASM_* env vars are rendered and the
-		// kube-controllers binary skips the WAF reconcilers entirely (see the
-		// applicationlayer entry in enabledControllers).
-		if c.cfg.WAFGatewayExtensionEnabled {
-			// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
-			// wasm OCI reference from this env var to program WAF policy attachments.
-			// Empty when ResolveImages was not called for the Calico variant; the
-			// reconciler stamps Programmed=False/WASMUnavailable in that case.
-			if c.wasmImage != "" {
-				env = append(env, corev1.EnvVar{Name: "WASM_IMAGE", Value: c.wasmImage})
-			}
-
-			// WASM_PULL_SECRET names the imagePullSecret the reconciler replicates
-			// from the kube-controllers namespace into a WAFPolicy's namespace so
-			// the rendered EnvoyExtensionPolicy can pull the wasm OCI artifact from
-			// a private Tigera registry. Source the name from the first
-			// Installation.ImagePullSecrets entry so multi-tenant / BYO-registry
-			// installs reuse whatever pull secret operator already attaches here.
-			if c.cfg.WASMPullSecret != nil {
-				env = append(env, corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: c.cfg.WASMPullSecret.Name})
-			}
-
-			// WASM_CA_CERT names the dedicated CA bundle ConfigMap (provisioned as
-			// WASMCACert) that the reconciler replicates alongside WASM_PULL_SECRET
-			// so the EnvoyExtensionPolicy wasm fetcher trusts the registry's TLS
-			// chain. Only set when the source ConfigMap is actually rendered.
-			if c.cfg.WASMCACert != nil {
-				env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: c.cfg.WASMCACert.Name})
-			}
+		// WASM_CA_CERT names the dedicated CA bundle ConfigMap (provisioned as
+		// WASMCACert) that the reconciler replicates alongside WASM_PULL_SECRET
+		// so the EnvoyExtensionPolicy wasm fetcher trusts the registry's TLS
+		// chain. Only set when the source ConfigMap is actually rendered.
+		if c.cfg.WASMCACert != nil {
+			env = append(env, corev1.EnvVar{Name: "WASM_CA_CERT", Value: c.cfg.WASMCACert.Name})
 		}
 	}
 
@@ -828,7 +792,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	}
 
 	container := corev1.Container{
-		Name:            c.kubeControllerName,
+		Name:            c.cfg.Name,
 		Image:           c.calicoImage,
 		Command:         containerCommand,
 		Env:             env,
@@ -849,17 +813,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		})
 	}
 
-	if c.kubeControllerName == EsKubeController && !c.cfg.Tenant.MultiTenant() {
-		_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.ElasticsearchNamespace))
-		container.Env = append(container.Env, []corev1.EnvVar{
-			relasticsearch.ElasticHostEnvVar(esHost),
-			relasticsearch.ElasticPortEnvVar(esPort),
-			relasticsearch.ElasticUsernameEnvVar(ElasticsearchKubeControllersUserSecret),
-			relasticsearch.ElasticPasswordEnvVar(ElasticsearchKubeControllersUserSecret),
-			relasticsearch.ElasticCAEnvVar(c.SupportedOSType()),
-		}...)
-	}
-
 	var initContainers []corev1.Container
 	if c.cfg.MetricsServerTLS != nil && c.cfg.MetricsServerTLS.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.MetricsServerTLS.InitContainer(c.cfg.Namespace, sc))
@@ -875,7 +828,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
 		Tolerations:        tolerations,
 		ImagePullSecrets:   c.cfg.Installation.ImagePullSecrets,
-		ServiceAccountName: c.kubeControllerServiceAccountName,
+		ServiceAccountName: KubeControllerServiceAccount,
 		InitContainers:     initContainers,
 		Containers:         []corev1.Container{container},
 		Volumes:            c.kubeControllersVolumes(),
@@ -886,7 +839,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 	d := appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.kubeControllerName,
+			Name:      c.cfg.Name,
 			Namespace: c.cfg.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
@@ -896,7 +849,7 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:        c.kubeControllerName,
+					Name:        c.cfg.Name,
 					Namespace:   c.cfg.Namespace,
 					Annotations: c.annotations(),
 				},
@@ -928,20 +881,20 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 	for _, ns := range c.cfg.BindingNamespaces {
 		subjects = append(subjects, rbacv1.Subject{
 			Kind:      "ServiceAccount",
-			Name:      c.kubeControllerServiceAccountName,
+			Name:      KubeControllerServiceAccount,
 			Namespace: ns,
 		})
 	}
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   c.kubeControllerRoleBindingName,
+			Name:   c.cfg.RoleBindingName,
 			Labels: map[string]string{},
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     c.kubeControllerRoleName,
+			Name:     c.cfg.RoleName,
 		},
 		Subjects: subjects,
 	}
@@ -950,7 +903,7 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 func (c *kubeControllersComponent) managedClusterRoleBindings() []client.Object {
 	if c.cfg.ManagementCluster != nil {
 		return []client.Object{
-			rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, c.kubeControllerServiceAccountName, []string{c.cfg.Namespace}),
+			rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, KubeControllerServiceAccount, []string{c.cfg.Namespace}),
 		}
 	}
 	return []client.Object{}
@@ -962,16 +915,16 @@ func (c *kubeControllersComponent) prometheusService() *corev1.Service {
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.kubeControllerMetricsName,
+			Name:      c.cfg.MetricsName,
 			Namespace: c.cfg.Namespace,
 			Annotations: map[string]string{
 				"prometheus.io/scrape": "true",
 				"prometheus.io/port":   fmt.Sprintf("%d", c.cfg.MetricsPort),
 			},
-			Labels: map[string]string{"k8s-app": c.kubeControllerName},
+			Labels: map[string]string{"k8s-app": c.cfg.Name},
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"k8s-app": c.kubeControllerName},
+			Selector: map[string]string{"k8s-app": c.cfg.Name},
 			// "Headless" service; prevent kube-proxy from rendering any rules for this service
 			// (which is only intended for Prometheus to scrape).
 			ClusterIP: "None",
@@ -1111,56 +1064,6 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
 			Egress:   egressRules,
 			Ingress:  ingressRules,
-		},
-	}
-}
-
-func esKubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.NetworkPolicy {
-	if cfg.ManagementClusterConnection != nil {
-		return nil
-	}
-
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Installation.KubernetesProvider.IsOpenShift())
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(443, 6443, 12388),
-			},
-		},
-	}...)
-
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ESGatewayEntityRule(),
-		},
-	}...)
-
-	networkpolicyHelper := networkpolicy.Helper(cfg.Tenant.MultiTenant(), cfg.Namespace)
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicyHelper.ManagerEntityRule(),
-		},
-	}...)
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      EsKubeControllerNetworkPolicyName,
-			Namespace: cfg.Namespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
-			Selector: networkpolicy.KubernetesAppSelector(EsKubeController),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress},
-			Egress:   egressRules,
 		},
 	}
 }

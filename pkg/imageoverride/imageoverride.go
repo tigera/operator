@@ -22,9 +22,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 )
 
-// Override selects the component image to use for an installation.
-type Override func(in *operatorv1.InstallationSpec) components.Component
-
 type overrideKey struct {
 	variant operatorv1.ProductVariant
 	key     string
@@ -33,19 +30,21 @@ type overrideKey struct {
 // Overrides maps a component (keyed by variant) to the image it should resolve
 // to, letting a variant swap a component's image without the render package
 // branching on variant. The render component holds one and resolves through it.
+// Registry, image path, and FIPS handling are applied downstream in the render
+// package, so an override only picks which component.
 type Overrides struct {
-	m map[overrideKey]Override
+	m map[overrideKey]components.Component
 }
 
 // New returns an empty Overrides.
 func New() *Overrides {
-	return &Overrides{m: map[overrideKey]Override{}}
+	return &Overrides{m: map[overrideKey]components.Component{}}
 }
 
-// Register stores fn under key for the given variant. The key is the render
+// Register stores image under key for the given variant. The key is the render
 // component's image identifier (e.g. "node").
-func (o *Overrides) Register(variant operatorv1.ProductVariant, key string, fn Override) {
-	o.m[overrideKey{variant, key}] = fn
+func (o *Overrides) Register(variant operatorv1.ProductVariant, key string, image components.Component) {
+	o.m[overrideKey{variant, key}] = image
 }
 
 // Resolve returns the override registered for key under the installation's
@@ -55,8 +54,8 @@ func (o *Overrides) Resolve(key string, def components.Component, in *operatorv1
 	if o == nil || in == nil {
 		return def
 	}
-	if fn, ok := o.m[overrideKey{in.Variant, key}]; ok {
-		return fn(in)
+	if image, ok := o.m[overrideKey{in.Variant, key}]; ok {
+		return image
 	}
 	return def
 }

@@ -46,7 +46,7 @@ func registerGuardian(v *extensions.Variant) {
 // enterprise management-cluster policy. Building the enterprise egress rules can
 // fail (proxy URL parsing); on failure we drop the policy entirely, matching the
 // core behavior of omitting it rather than installing a partial policy.
-func modifyGuardianPolicy(ctx extensions.RenderContext, gpc render.GuardianPolicyExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyGuardianPolicy(rc extensions.RenderContext, gpc render.GuardianPolicyExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
 	if !ok {
 		return objs, del
@@ -204,7 +204,7 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3
 // objects: the secrets Role/RoleBinding and default UI settings, the
 // elasticsearch/kibana service ports, the management-cluster-request cluster
 // role rules (which replace the OSS rules), and the CA bundle env vars.
-func modifyGuardian(ctx extensions.RenderContext, gc render.GuardianExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyGuardian(rc extensions.RenderContext, gc render.GuardianExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
 		role.Rules = guardianEnterpriseRules(gc)
 	}

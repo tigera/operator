@@ -22,20 +22,18 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 )
 
-// ControllerExtension is a variant's controller-side reconcile hook. The
-// installation controller calls it to do the work core can't: reject
-// unsupported configuration (Validate) and create the controller-side artifacts
-// - certificates, trusted bundle additions - that feed the render context
-// (ExtendContext). A variant registers at most one; the core operator registers
-// none and runs with the base behavior.
+// ControllerExtension extends a controller's reconcile: it validates the
+// configuration and builds the RenderContext the render phase consumes. The core
+// operator registers none and runs with the base behavior; an extension build
+// registers one.
 type ControllerExtension interface {
-	// Validate rejects configuration the variant does not support, before any
+	// Validate rejects configuration the extension does not support, before any
 	// rendering happens.
 	Validate(cc ControllerContext) error
 
-	// ExtendContext does the controller-side work the render modifiers can't
-	// (creating certificates, extending the trusted bundle) and returns the
-	// RenderContext those modifiers read, or an error that aborts the reconcile.
+	// ExtendContext does the controller-side reconcile work the render phase
+	// cannot, returning the RenderContext the render phase consumes, or an error
+	// that aborts the reconcile.
 	ExtendContext(cc ControllerContext) (RenderContext, error)
 }
 

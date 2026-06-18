@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"slices"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	appsv1 "k8s.io/api/apps/v1"
@@ -47,23 +48,19 @@ const (
 )
 
 func registerNode(v *extensions.Variant) {
-	v.Image(render.ComponentNameNode, func(in *operatorv1.InstallationSpec) components.Component {
-		return components.ComponentTigeraNode
-	})
+	v.Image(render.ComponentNameNode, components.ComponentTigeraNode)
 	v.Modify(render.ComponentNameNode, modifyNode)
 
 	// The node component renders the cni-plugins init container; its image
 	// resolves through its own override key.
-	v.Image(render.ComponentNameCNIPlugins, func(in *operatorv1.InstallationSpec) components.Component {
-		return components.ComponentTigeraCNIPlugins
-	})
+	v.Image(render.ComponentNameCNIPlugins, components.ComponentTigeraCNIPlugins)
 }
 
 // modifyNode layers Calico Enterprise behavior onto the rendered calico/node
 // objects: the extra RBAC rules, the node-metrics Service, and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, BGP metrics
 // readiness check, multi-interface mode, and the calico log volume).
-func modifyNode(ctx extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyNode(rc extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName); ok {
 		role.Rules = append(role.Rules, nodeEnterpriseRules()...)
 	}
@@ -78,10 +75,10 @@ func modifyNode(ctx extensions.RenderContext, objs, del []client.Object) ([]clie
 	}
 
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.NodeDaemonSetName); ok {
-		modifyNodeDaemonSet(ctx, ds)
+		modifyNodeDaemonSet(rc, ds)
 	}
 
-	return append(objs, nodeMetricsService(ctx)), del
+	return append(objs, nodeMetricsService(rc)), del
 }
 
 // nodeEnterpriseRules are the additional cluster role rules calico/node needs in
@@ -119,10 +116,10 @@ func nodeEnterpriseRules() []rbacv1.PolicyRule {
 // BGP metrics readiness check, and the prometheus reporter keypair mount. The
 // calico log volume is mounted by the base render for both variants, so it is
 // not handled here.
-func modifyNodeDaemonSet(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
+func modifyNodeDaemonSet(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 	spec := &ds.Spec.Template.Spec
 
-	multiInterfaceMode := multiInterfaceModeEnv(ctx.Installation)
+	multiInterfaceMode := multiInterfaceModeEnv(rc.Installation)
 
 	for i := range spec.InitContainers {
 		if spec.InitContainers[i].Name == installCNIContainerName && multiInterfaceMode != nil {
@@ -136,30 +133,30 @@ func modifyNodeDaemonSet(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
 			continue
 		}
 
-		c.Env = append(c.Env, nodeEnterpriseEnv(ctx)...)
+		c.Env = append(c.Env, nodeEnterpriseEnv(rc)...)
 
 		// Add the BGP metrics readiness check, but only when the base render kept
 		// the bird readiness check (i.e. BGP is in use and we're not on VPP).
-		if c.ReadinessProbe != nil && c.ReadinessProbe.Exec != nil && containsString(c.ReadinessProbe.Exec.Command, "--bird-ready") {
+		if c.ReadinessProbe != nil && c.ReadinessProbe.Exec != nil && slices.Contains(c.ReadinessProbe.Exec.Command, "--bird-ready") {
 			c.ReadinessProbe.Exec.Command = append(c.ReadinessProbe.Exec.Command, "--bgp-metrics-ready")
 		}
 	}
 
-	mountNodePrometheusTLS(ctx, ds)
+	mountNodePrometheusTLS(rc, ds)
 }
 
 // mountNodePrometheusTLS mounts the node prometheus reporter keypair onto the
 // daemonset: the volume, the calico-node volume mount, the cert-management init
 // container (when in use), and the pod hash annotation that rolls the pods on
 // cert rotation. The keypair has cluster side effects, so the enterprise setup
-// creates it and hands it in via ctx rather than the modifier building it. In
+// creates it and hands it in via rc rather than the modifier building it. In
 // core (calico) the keypair is never created, so the base node render carries
 // no prometheus mount at all.
-func mountNodePrometheusTLS(ctx extensions.RenderContext, ds *appsv1.DaemonSet) {
-	if ctx.NodePrometheusTLS == nil {
+func mountNodePrometheusTLS(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
+	if rc.NodePrometheusTLS == nil {
 		return
 	}
-	tls := ctx.NodePrometheusTLS
+	tls := rc.NodePrometheusTLS
 	spec := &ds.Spec.Template.Spec
 
 	spec.Volumes = append(spec.Volumes, tls.Volume())
@@ -183,10 +180,10 @@ func mountNodePrometheusTLS(ctx extensions.RenderContext, ds *appsv1.DaemonSet) 
 
 // nodeEnterpriseEnv is the Enterprise felix configuration added to the
 // calico/node container.
-func nodeEnterpriseEnv(ctx extensions.RenderContext) []corev1.EnvVar {
+func nodeEnterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort(ctx.FelixConfiguration))},
+		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort(rc.FelixConfiguration))},
 		{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -197,15 +194,15 @@ func nodeEnterpriseEnv(ctx extensions.RenderContext) []corev1.EnvVar {
 		{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 	}
 
-	if mode := multiInterfaceModeEnv(ctx.Installation); mode != nil {
+	if mode := multiInterfaceModeEnv(rc.Installation); mode != nil {
 		env = append(env, *mode)
 	}
 
-	if ctx.NodePrometheusTLS != nil && ctx.TrustedBundle != nil {
+	if rc.NodePrometheusTLS != nil && rc.TrustedBundle != nil {
 		env = append(env,
-			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: ctx.NodePrometheusTLS.VolumeMountCertificateFilePath()},
-			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: ctx.NodePrometheusTLS.VolumeMountKeyFilePath()},
-			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: ctx.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: rc.NodePrometheusTLS.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: rc.NodePrometheusTLS.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: rc.TrustedBundle.MountPath()},
 		)
 	}
 
@@ -222,10 +219,10 @@ func multiInterfaceModeEnv(install *operatorv1.InstallationSpec) *corev1.EnvVar 
 }
 
 // nodeMetricsService builds the enterprise-only calico-node-metrics Service.
-func nodeMetricsService(ctx extensions.RenderContext) *corev1.Service {
-	reporterPort := nodeReporterPort(ctx.FelixConfiguration)
-	felixPort := felixMetricsPort(ctx.FelixConfiguration)
-	felixEnabled := ctx.FelixConfiguration != nil && utils.IsFelixPrometheusMetricsEnabled(ctx.FelixConfiguration)
+func nodeMetricsService(rc extensions.RenderContext) *corev1.Service {
+	reporterPort := nodeReporterPort(rc.FelixConfiguration)
+	felixPort := felixMetricsPort(rc.FelixConfiguration)
+	felixEnabled := rc.FelixConfiguration != nil && utils.IsFelixPrometheusMetricsEnabled(rc.FelixConfiguration)
 
 	ports := []corev1.ServicePort{
 		{
@@ -282,13 +279,4 @@ func felixMetricsPort(fc *v3.FelixConfiguration) int {
 		return *fc.Spec.PrometheusMetricsPort
 	}
 	return defaultFelixMetricsPort
-}
-
-func containsString(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }

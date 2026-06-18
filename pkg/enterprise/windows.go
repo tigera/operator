@@ -36,12 +36,8 @@ import (
 var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd": true}
 
 func registerWindows(v *extensions.Variant) {
-	v.Image(render.ComponentNameWindowsNodeImg, func(*operatorv1.InstallationSpec) components.Component {
-		return components.ComponentTigeraNodeWindows
-	})
-	v.Image(render.ComponentNameWindowsCNIImg, func(*operatorv1.InstallationSpec) components.Component {
-		return components.ComponentTigeraCNIWindows
-	})
+	v.Image(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
+	v.Image(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
 	extensions.RegisterModifier(v, render.ComponentNameWindows, modifyWindows)
 }
 
@@ -49,15 +45,15 @@ func registerWindows(v *extensions.Variant) {
 // calico-node-windows objects: the node-metrics Service and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
-func modifyWindows(ctx extensions.RenderContext, wc render.WindowsExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyWindows(rc extensions.RenderContext, wc render.WindowsExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
-		modifyWindowsDaemonSet(ctx, wc, ds)
+		modifyWindowsDaemonSet(rc, wc, ds)
 	}
 
 	return append(objs, windowsNodeMetricsService(wc)), del
 }
 
-func modifyWindowsDaemonSet(ctx extensions.RenderContext, wc render.WindowsExtensionContext, ds *appsv1.DaemonSet) {
+func modifyWindowsDaemonSet(rc extensions.RenderContext, wc render.WindowsExtensionContext, ds *appsv1.DaemonSet) {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	spec := &ds.Spec.Template.Spec
 
@@ -72,7 +68,7 @@ func modifyWindowsDaemonSet(ctx extensions.RenderContext, wc render.WindowsExten
 			continue
 		}
 
-		c.Env = append(c.Env, windowsEnterpriseEnv(ctx, wc)...)
+		c.Env = append(c.Env, windowsEnterpriseEnv(rc, wc)...)
 
 		// Enterprise mounts the calico log directory in place of the OSS CNI log
 		// directory, so drop the OSS mount before adding the enterprise one.
@@ -85,7 +81,7 @@ func modifyWindowsDaemonSet(ctx extensions.RenderContext, wc render.WindowsExten
 
 // windowsEnterpriseEnv is the Enterprise felix configuration added to the
 // calico-node-windows containers.
-func windowsEnterpriseEnv(ctx extensions.RenderContext, wc render.WindowsExtensionContext) []corev1.EnvVar {
+func windowsEnterpriseEnv(rc extensions.RenderContext, wc render.WindowsExtensionContext) []corev1.EnvVar {
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", wc.NodeReporterMetricsPort)},
@@ -108,7 +104,7 @@ func windowsEnterpriseEnv(ctx extensions.RenderContext, wc render.WindowsExtensi
 	}
 
 	// Providers without a kube-dns service need a non-default trusted DNS server.
-	switch ctx.Installation.KubernetesProvider {
+	switch rc.Installation.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:
 		env = append(env, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 	case operatorv1.ProviderRKE2:

@@ -458,14 +458,7 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
-	// Decorate the component with any registered variant extension before doing
-	// anything with it, so Ready, SupportedOSType, and Objects all reflect the
-	// extended component. Decorate is a no-op for components with no registered
-	// extension.
 	if ext, ok := component.(render.Extensible); ok && c.extensions == nil {
-		// The component can be extended but this handler was built without an
-		// extension Set, so any registered extension silently won't run. That is
-		// a wiring bug in the controller, not a normal state.
 		c.log.Info("BUG: extensible component rendered by a handler with no extension Set; extensions will not be applied", "component", ext.ModifierKey())
 	}
 	component = c.extensions.Decorate(component, c.renderCtx)

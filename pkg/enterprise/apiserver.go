@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -64,7 +65,7 @@ func registerAPIServerCleanup(v *extensions.Variant) {
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:
 // the query server container and its volumes, audit logging on the aggregation API server
 // container, the Enterprise RBAC objects, and the query server port on the Service.
-func modifyAPIServer(ctx extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+func modifyAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage}
 
 	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
@@ -76,7 +77,7 @@ func modifyAPIServer(ctx extensions.RenderContext, ec render.APIServerExtensionC
 	// Enterprise serves staged policies through the tiered-policy passthrough role.
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, "calico-tiered-policy-passthrough"); ok {
 		for i := range role.Rules {
-			if contains(role.Rules[i].Resources, "networkpolicies") {
+			if slices.Contains(role.Rules[i].Resources, "networkpolicies") {
 				role.Rules[i].Resources = append(role.Rules[i].Resources, "stagednetworkpolicies", "stagedglobalnetworkpolicies")
 			}
 		}
@@ -143,7 +144,7 @@ func modifyAPIServer(ctx extensions.RenderContext, ec render.APIServerExtensionC
 
 // cleanupAPIServer deletes the Enterprise API server objects when running Calico, so a
 // cluster switched from Enterprise to Calico does not leave them behind.
-func cleanupAPIServer(ctx extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+func cleanupAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config}
 
 	del = append(del, c.tigeraAPIServerClusterRole(), c.tigeraAPIServerClusterRoleBinding())
@@ -233,15 +234,6 @@ func (c *apiServer) addQueryServerPort(s *corev1.Service) {
 		Protocol:   corev1.ProtocolTCP,
 		TargetPort: intstr.FromInt32(queryServerTargetPort.ContainerPort),
 	})
-}
-
-func contains(s []string, v string) bool {
-	for _, x := range s {
-		if x == v {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {

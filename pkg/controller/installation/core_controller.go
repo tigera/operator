@@ -1221,7 +1221,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		CertificateManager: certificateManager,
 	}
 	if err := r.opts.Extensions.Validate(cc); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration for variant", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	renderCtx, err := r.opts.Extensions.ExtendContext(cc)

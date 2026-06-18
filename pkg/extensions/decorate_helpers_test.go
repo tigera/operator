@@ -59,13 +59,13 @@ func (s stubExtComponent) ExtensionContext() any {
 // applyExtensions decorates a stub component holding the given objects with the
 // extension registered under key, then renders it. For a modifier that needs the
 // component's typed config, use applyExtensionsWithContext.
-func applyExtensions(s *extensions.Set, key string, ctx extensions.RenderContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	return applyExtensionsWithContext(s, key, ctx, nil, create, del)
+func applyExtensions(s *extensions.Set, key string, rc extensions.RenderContext, create, del []client.Object) ([]client.Object, []client.Object) {
+	return applyExtensionsWithContext(s, key, rc, nil, create, del)
 }
 
 // applyExtensionsWithContext is applyExtensions for a modifier that reads the
 // component's typed config: extCtx is delivered as the stub's ExtensionContext.
-func applyExtensionsWithContext(s *extensions.Set, key string, ctx extensions.RenderContext, extCtx any, create, del []client.Object) ([]client.Object, []client.Object) {
+func applyExtensionsWithContext(s *extensions.Set, key string, rc extensions.RenderContext, extCtx any, create, del []client.Object) ([]client.Object, []client.Object) {
 	stub := stubExtComponent{key: key, extCtx: extCtx, create: create, delete: del}
-	return s.Decorate(stub, ctx).Objects()
+	return s.Decorate(stub, rc).Objects()
 }

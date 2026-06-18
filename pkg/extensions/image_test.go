@@ -27,9 +27,7 @@ var _ = Describe("image overrides", func() {
 	var s *extensions.Set
 	BeforeEach(func() {
 		s = extensions.NewSet()
-		s.Variant(operatorv1.CalicoEnterprise).Image("node", func(in *operatorv1.InstallationSpec) components.Component {
-			return components.ComponentTigeraNode
-		})
+		s.Variant(operatorv1.CalicoEnterprise).Image("node", components.ComponentTigeraNode)
 	})
 
 	It("uses the override registered for the installation variant", func() {

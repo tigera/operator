@@ -60,9 +60,10 @@ type WindowsConfiguration struct {
 }
 
 type windowsComponent struct {
-	cfg       *WindowsConfiguration
-	cniImage  string
-	nodeImage string
+	cfg              *WindowsConfiguration
+	cniImage         string
+	nodeImage        string
+	useCombinedImage bool
 }
 
 func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -78,6 +79,9 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	}
 
 	if c.cfg.Installation.Variant.IsEnterprise() {
+		// The Enterprise Windows images ship the combined calico.exe binary, which the
+		// container commands below drive via "component" subcommands.
+		c.useCombinedImage = true
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIWindows, reg, path, prefix, is))
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNodeWindows, reg, path, prefix, is))
 	} else {
@@ -453,14 +457,19 @@ func (c *windowsComponent) cniContainer() corev1.Container {
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
 
-	// install-cni runs the cni image, which ships the combined binary at
-	// /opt/cni/bin/calico.exe. The node containers below run the node image,
-	// which ships the same binary at /CalicoWindows/calico.exe. Keep each
-	// command's path in sync with the image it runs in.
+	// The Enterprise cni image ships the combined binary at /opt/cni/bin/calico.exe
+	// and installs CNI via its "component cni install" subcommand. The Calico OSS
+	// cni image ships the standalone install.exe. The node containers below run the
+	// node image; keep each command's path in sync with the image it runs in.
+	cniCommand := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/install.exe"}
+	if c.useCombinedImage {
+		cniCommand = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/calico.exe", "component", "cni", "install"}
+	}
+
 	return corev1.Container{
 		Name:            "install-cni",
 		Image:           c.cniImage,
-		Command:         []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/calico.exe", "component", "cni", "install"},
+		Command:         cniCommand,
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewWindowsHostProcessContext(),
 		VolumeMounts:    cniVolumeMounts,
@@ -751,8 +760,14 @@ func (c *windowsComponent) windowsVolumeMounts() []corev1.VolumeMount {
 
 // windowsLivenessReadinessProbes creates the node's liveness and readiness probes.
 func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *corev1.Probe) {
-	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
-	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
+	// The Enterprise node image drives health checks through the combined calico.exe
+	// binary; the Calico OSS node image uses the standalone calico-node.exe.
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
+	if c.useCombinedImage {
+		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
+		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
+	}
 
 	lp := &corev1.Probe{
 		ProbeHandler:        corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: livenessCmd}},
@@ -771,9 +786,15 @@ func (c *windowsComponent) windowsLivenessReadinessProbes() (*corev1.Probe, *cor
 
 // windowsLifecycle creates the node's postStart and preStop hooks.
 func (c *windowsComponent) windowsLifecycle() *corev1.Lifecycle {
+	// The Enterprise node image shuts down via the combined calico.exe binary; the
+	// Calico OSS node image uses the standalone calico-node.exe.
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
+	if c.useCombinedImage {
+		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}
+	}
 	return &corev1.Lifecycle{
 		PreStop: &corev1.LifecycleHandler{Exec: &corev1.ExecAction{
-			Command: []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"},
+			Command: preStopCmd,
 		}},
 	}
 }

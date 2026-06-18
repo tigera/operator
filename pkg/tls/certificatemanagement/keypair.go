@@ -35,6 +35,10 @@ var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
 	CSRImage string
+	// UseCombinedImage reports whether CSRImage is the combined calico/calico image
+	// (Enterprise), which drives the CSR init container via the calico binary. Calico
+	// OSS uses the standalone calico/key-cert-provisioner image and its default entrypoint.
+	UseCombinedImage bool
 
 	Name      string
 	Namespace string
@@ -175,6 +179,7 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 		k.DNSNames,
 		namespace,
 		securityContext,
+		k.UseCombinedImage,
 	)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer

@@ -67,7 +67,6 @@ var _ = Describe("imageset tests", func() {
 						Images: []operator.Image{
 							{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/calico", Digest: "sha256:xxxxxxxxx"},
-							{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 						},
 					},
 				},
@@ -82,7 +81,6 @@ var _ = Describe("imageset tests", func() {
 						Images: []operator.Image{
 							{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/calico", Digest: "sha256:xxxxxxxxx"},
-							{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 							{Image: "tigera/unknown", Digest: "sha256:xxxxxxxxx"},
 						},
 					},
@@ -126,7 +124,6 @@ var _ = Describe("imageset tests", func() {
 				Images: []operator.Image{
 					{Image: "calico/node", Digest: "sha256:xxxxxxxxx"},
 					{Image: "tigera/calico", Digest: "sha256:xxxxxxxxx"},
-					{Image: "calico/calico", Digest: "sha256:xxxxxxxxx"},
 				},
 			}
 			c := fake.NewClientBuilder().WithScheme(kscheme.Scheme).WithObjects(

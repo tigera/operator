@@ -83,7 +83,8 @@ type Configuration struct {
 type Component struct {
 	cfg *Configuration
 
-	calicoImage string
+	calicoImage      string
+	useCombinedImage bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -92,7 +93,14 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	// Enterprise deploys goldmane from the combined calico/calico image; Calico OSS
+	// uses the standalone calico/goldmane image.
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.useCombinedImage = true
+		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	} else {
+		c.calicoImage, err = components.GetReference(components.ComponentCalicoGoldmane, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -232,26 +240,43 @@ func (c *Component) goldmaneContainer() corev1.Container {
 		MountPath: GoldmaneConfigFilePath,
 	})
 
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            GoldmaneContainerName,
 		Image:           c.calicoImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "goldmane"},
 		Env:             env,
 		SecurityContext: securitycontext.NewNonRootContext(),
-		ReadinessProbe: &corev1.Probe{
+		VolumeMounts:    volumeMounts,
+	}
+	if c.useCombinedImage {
+		// The combined calico/calico image runs goldmane via the calico binary and
+		// exposes health through the shared "calico health" subcommand.
+		container.Command = []string{components.CalicoBinaryPath, "component", "goldmane"}
+		container.ReadinessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 				Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=readiness"},
 			}},
 			PeriodSeconds: 10,
-		},
-		LivenessProbe: &corev1.Probe{
+		}
+		container.LivenessProbe = &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
 				Command: []string{components.CalicoBinaryPath, "health", fmt.Sprintf("--port=%d", GoldmaneHealthPort), "--type=liveness"},
 			}},
 			PeriodSeconds: 10,
-		},
-		VolumeMounts: volumeMounts,
+		}
+	} else {
+		// The standalone calico/goldmane image ships its own /health binary.
+		container.ReadinessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+				Command: []string{"/health", "-ready"},
+			}},
+		}
+		container.LivenessProbe = &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
+				Command: []string{"/health", "-live"},
+			}},
+		}
 	}
+	return container
 }
 
 func (c *Component) goldmaneService() *corev1.Service {

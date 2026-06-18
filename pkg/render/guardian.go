@@ -133,8 +133,9 @@ type GuardianConfiguration struct {
 }
 
 type GuardianComponent struct {
-	cfg         *GuardianConfiguration
-	calicoImage string
+	cfg              *GuardianConfiguration
+	calicoImage      string
+	useCombinedImage bool
 }
 
 func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -142,7 +143,14 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	// Enterprise deploys guardian from the combined calico/calico image; Calico OSS
+	// uses the standalone calico/guardian image.
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.useCombinedImage = true
+		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	} else {
+		c.calicoImage, err = components.GetReference(components.ComponentCalicoGuardian, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -493,11 +501,18 @@ func (c *GuardianComponent) container() []corev1.Container {
 		)
 	}
 
+	// The combined calico/calico image runs guardian via the calico binary; the
+	// standalone calico/guardian image uses its default entrypoint.
+	var command []string
+	if c.useCombinedImage {
+		command = []string{components.CalicoBinaryPath, "component", "guardian"}
+	}
+
 	return []corev1.Container{
 		{
 			Name:         GuardianContainerName,
 			Image:        c.calicoImage,
-			Command:      []string{components.CalicoBinaryPath, "component", "guardian"},
+			Command:      command,
 			Env:          envVars,
 			VolumeMounts: c.volumeMounts(),
 			LivenessProbe: &corev1.Probe{

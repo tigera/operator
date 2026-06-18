@@ -43,13 +43,13 @@ type ControllerOptions struct {
 	// instead of cluster scoped.
 	MultiTenant bool
 
-	// Headless is true when the default Installation disables the Linux dataplane
-	// (spec.calicoNetwork.linuxDataplane: None). In a headless install no Calico dataplane
+	// DataplaneDisabled is true when the default Installation disables the Linux dataplane
+	// (spec.calicoNetwork.linuxDataplane: None). With the dataplane disabled no Calico dataplane
 	// runs, spec.cni is omitted, and the projectcalico.org/v3 API is never served, so the
 	// controllers that depend on those are not registered (see internal/controller). It is
 	// detected once at startup; the Installation controller reboots the operator
 	// (os.Exit(0)) if the dataplane mode changes so the correct controller set is registered.
-	Headless bool
+	DataplaneDisabled bool
 
 	// Whether or not the operator is running in a management cluster configured to
 	// use external elasticsearch. When set, the operator will not install Elasticsearch

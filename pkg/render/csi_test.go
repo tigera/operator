@@ -130,7 +130,7 @@ var _ = Describe("CSI rendering tests", func() {
 		}
 	})
 
-	It("should render objects for deletion in headless mode (linuxDataplane: None)", Label("headless"), func() {
+	It("should render objects for deletion when the dataplane is disabled (linuxDataplane: None)", Label("no-dataplane"), func() {
 		dpNone := operatorv1.LinuxDataplaneNone
 		cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 

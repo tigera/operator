@@ -1404,12 +1404,12 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
 
-		Context("headless mode (cni omitted, linuxDataplane None)", Label("headless"), func() {
+		Context("dataplane-disabled mode (cni omitted, linuxDataplane None)", Label("no-dataplane"), func() {
 			BeforeEach(func() {
 				dpNone := operator.LinuxDataplaneNone
-				// The operator was started headless, matching this CR, so the runtime
+				// The operator was started with the dataplane disabled, matching this CR, so the runtime
 				// dataplane-mode-change reboot does not fire.
-				r.headless = true
+				r.dataplaneDisabled = true
 				cr.Spec.CNI = nil
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
 					LinuxDataplane: &dpNone,
@@ -1417,9 +1417,9 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 
 			It("should reboot the operator when the dataplane mode changed since startup", func() {
-				// The operator started non-headless but the live Installation is now headless, so
+				// The operator started with the dataplane enabled but the live Installation now disables it, so
 				// Reconcile must reboot to (de)register the dataplane controllers.
-				r.headless = false
+				r.dataplaneDisabled = false
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 				exited := false
@@ -1433,8 +1433,8 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 
 			It("should not reboot the operator when the dataplane mode is unchanged since startup", func() {
-				// The operator started headless and the live Installation is still headless
-				// (r.headless was set to true in the BeforeEach), so no reboot must occur.
+				// The operator started with the dataplane disabled and the live Installation still disables it
+				// (r.dataplaneDisabled was set to true in the BeforeEach), so no reboot must occur.
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
 				exited := false
@@ -1483,7 +1483,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
 			})
 
-			It("should delete an existing csi-node-driver DaemonSet when switching to headless", func() {
+			It("should delete an existing csi-node-driver DaemonSet when switching to the dataplane-disabled mode", func() {
 				Expect(c.Create(ctx, &appsv1.DaemonSet{
 					ObjectMeta: metav1.ObjectMeta{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace},
 				})).NotTo(HaveOccurred())
@@ -1496,11 +1496,11 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected csi-node-driver DaemonSet to be deleted")
 			})
 
-			It("should not start the non-cluster-host typha autoscaler in an Enterprise headless install", func() {
+			It("should not start the non-cluster-host typha autoscaler in an Enterprise install with the dataplane disabled", func() {
 				cr.Spec.Variant = operator.CalicoEnterprise
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 
-				// A NonClusterHost CR exists, but headless mode runs no dataplane, so the
+				// A NonClusterHost CR exists, but dataplane-disabled mode runs no dataplane, so the
 				// operator must not start a Typha autoscaler for a Deployment it never renders.
 				Expect(c.Create(ctx, &operator.NonClusterHost{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -1513,20 +1513,20 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				Expect(r.typhaAutoscalerNonClusterHost).To(BeNil(), "expected no non-cluster-host typha autoscaler in headless mode")
+				Expect(r.typhaAutoscalerNonClusterHost).To(BeNil(), "expected no non-cluster-host typha autoscaler when the dataplane is disabled")
 			})
 		})
 
 		// Sweep every valid combination of variant, CNI plugin and Linux dataplane through a
 		// full reconcile, and assert the complete suppression matrix: which workloads are
 		// rendered and whether FelixConfiguration defaults are seeded.
-		DescribeTable("dataplane mode suppression matrix", Label("headless"),
+		DescribeTable("dataplane mode suppression matrix", Label("no-dataplane"),
 			func(variant operator.ProductVariant, cniType operator.CNIPluginType, dataplane operator.LinuxDataplaneOption, expectDataplane bool, expectCNIConfig bool) {
 				cr.Spec.Variant = variant
 				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &dataplane}
 				// The operator boots in the mode this row exercises, so the reboot does not fire.
-				r.headless = dataplane == operator.LinuxDataplaneNone
-				// A headless install (linuxDataplane None) omits spec.cni; otherwise set it.
+				r.dataplaneDisabled = dataplane == operator.LinuxDataplaneNone
+				// An install with the dataplane disabled (linuxDataplane None) omits spec.cni; otherwise set it.
 				if dataplane == operator.LinuxDataplaneNone {
 					cr.Spec.CNI = nil
 				} else {
@@ -1553,7 +1553,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				expectPresence(expectDataplane, &appsv1.DaemonSet{}, render.CSIDaemonSetName)
 				expectPresence(expectCNIConfig, &corev1.ConfigMap{}, "cni-config")
 
-				// FelixConfiguration defaults are seeded whenever a dataplane runs, never in headless.
+				// FelixConfiguration defaults are seeded whenever a dataplane runs, never when the dataplane is disabled.
 				err = c.Get(ctx, types.NamespacedName{Name: "default"}, &v3.FelixConfiguration{})
 				if expectDataplane {
 					Expect(err).NotTo(HaveOccurred(), "expected FelixConfiguration to be seeded")
@@ -1585,12 +1585,12 @@ var _ = Describe("Testing core-controller installation", func() {
 			Entry("Policy-only / Enterprise / Iptables", operator.CalicoEnterprise, operator.PluginAmazonVPC, operator.LinuxDataplaneIptables, true, false),
 			Entry("Policy-only / Enterprise / BPF", operator.CalicoEnterprise, operator.PluginAmazonVPC, operator.LinuxDataplaneBPF, true, false),
 
-			// Headless: spec.cni is omitted (cniType arg is ignored); nothing dataplane-related is rendered.
-			Entry("Headless / Calico", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
-			Entry("Headless / Enterprise", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
+			// Dataplane disabled: spec.cni is omitted (cniType arg is ignored); nothing dataplane-related is rendered.
+			Entry("Dataplane disabled / Calico", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
+			Entry("Dataplane disabled / Enterprise", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
 		)
 
-		Context("policy-only mode (recognized third-party CNI, default dataplane)", Label("headless"), func() {
+		Context("policy-only mode (recognized third-party CNI, default dataplane)", Label("no-dataplane"), func() {
 			BeforeEach(func() {
 				cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
 			})

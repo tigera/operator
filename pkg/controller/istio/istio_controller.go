@@ -233,7 +233,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	// Render the Calico NetworkPolicies for the Istio components only when the
 	// calico-system Tier exists — the same pattern as the other controllers. This
 	// tolerates clusters where the projectcalico.org/v3 API is not (yet) served, such as
-	// headless installations or clusters where the Calico API server is still coming up.
+	// installs with the dataplane disabled or clusters where the Calico API server is still coming up.
 	includeV3NetworkPolicy := false
 	if r.tierWatchReady.IsReady() {
 		if err := r.Get(ctx, types.NamespacedName{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
@@ -282,7 +282,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Patch FelixConfiguration with the Istio integration settings (ambient mode, DSCP).
-	// In headless installations (spec.calicoNetwork.linuxDataplane: None) there is no Felix,
+	// When the Linux dataplane is disabled (spec.calicoNetwork.linuxDataplane: None) there is no Felix,
 	// so the Calico dataplane integration is unavailable and the patch is skipped.
 	if installationSpec.LinuxDataplaneEnabled() {
 		_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
@@ -299,7 +299,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			return reconcile.Result{}, err
 		}
 	} else {
-		// Running headless without the Calico dataplane integration is an expected
+		// Running without the Calico dataplane integration is an expected
 		// configuration, not an error: do not set TigeraStatus Degraded. Surface it via a log
 		// line and a Normal Event on the Istio resource so it is visible in `kubectl describe`.
 		reqLogger.Info("Linux dataplane is disabled; Istio is installed without the Calico dataplane integration (IstioAmbientMode, DSCP)")
@@ -457,8 +457,8 @@ func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, inst
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !instance.DeletionTimestamp.IsZero() {
-		// Determine whether the Calico dataplane integration was active. In headless
-		// installations (or if the Installation is already gone) there is no Felix and
+		// Determine whether the Calico dataplane integration was active. When the Linux
+		// dataplane is disabled (or if the Installation is already gone) there is no Felix and
 		// nothing to clean up in FelixConfiguration; only the finalizer must be removed.
 		dataplaneEnabled := false
 		var installationSpec *operatorv1.InstallationSpec

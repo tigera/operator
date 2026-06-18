@@ -37,7 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// Shared helpers for the headless "real-life usage" FV specs (see headless_test.go).
+// Shared helpers for the dataplane-disabled "real-life usage" FV specs (see no_dataplane_test.go).
 // They deploy lightweight, publicly-pullable workloads and drive real HTTP traffic
 // between in-cluster pods so the specs can assert on the behaviour of the Calico
 // Ingress Gateway data path and the Calico Istio ambient mesh — not just that the

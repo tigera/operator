@@ -691,9 +691,9 @@ var _ = Describe("Defaulting logic tests", func() {
 		}),
 	)
 
-	Describe("headless mode", Label("headless"), func() {
-		It("should leave spec.cni unset in headless mode", func() {
-			// Headless is triggered by linuxDataplane None; spec.cni is omitted.
+	Describe("dataplane-disabled mode", Label("no-dataplane"), func() {
+		It("should leave spec.cni unset when the dataplane is disabled", func() {
+			// The dataplane-disabled mode is triggered by linuxDataplane None; spec.cni is omitted.
 			dpNone := operator.LinuxDataplaneNone
 			instance := &operator.Installation{
 				Spec: operator.InstallationSpec{
@@ -720,7 +720,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					},
 				},
 			}
-			// Even with pre-existing pools in the cluster, headless mode must not default
+			// Even with pre-existing pools in the cluster, dataplane-disabled mode must not default
 			// node address autodetection (there is no calico-node to perform it).
 			currentPools := v3.IPPoolList{
 				Items: []v3.IPPool{

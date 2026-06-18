@@ -40,9 +40,9 @@ import (
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
-	// A headless install (spec.calicoNetwork.linuxDataplane: None) runs no Calico dataplane
-	// and must omit spec.cni; every other install must define it. The headless block below
-	// rejects linuxDataplane None combined with spec.cni set.
+	// An install with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None) runs no
+	// Calico dataplane and must omit spec.cni; every other install must define it. The
+	// dataplane-disabled block below rejects linuxDataplane None combined with spec.cni set.
 	if instance.Spec.CNI == nil && instance.Spec.LinuxDataplaneEnabled() {
 		return fmt.Errorf("spec.cni must be defined")
 	}
@@ -146,17 +146,17 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 		felixClusterRoutingMode := felixProgramsClusterRoutes(instance)
 
-		// Headless mode: the Linux dataplane is disabled entirely, so reject any
-		// configuration that implies a running dataplane. Every spec.calicoNetwork field
-		// rejected here only takes effect through calico-node/Felix/the Calico CNI, none of
-		// which are deployed in a headless install, so accepting them would silently ignore
-		// the user's intent. Several (hostPorts, multiInterfaceMode, containerIPForwarding,
-		// linuxPodInterfaceType) are also validated against spec.cni further below, which is
-		// nil in headless mode and would otherwise cause a nil-pointer panic.
-		if instance.Spec.IsHeadless() {
+		// The Linux dataplane is disabled entirely, so reject any configuration that implies a
+		// running dataplane. Every spec.calicoNetwork field rejected here only takes effect
+		// through calico-node/Felix/the Calico CNI, none of which are deployed when the dataplane
+		// is disabled, so accepting them would silently ignore the user's intent. Several
+		// (hostPorts, multiInterfaceMode, containerIPForwarding, linuxPodInterfaceType) are also
+		// validated against spec.cni further below, which is nil when the dataplane is disabled
+		// and would otherwise cause a nil-pointer panic.
+		if instance.Spec.DataplaneDisabled() {
 			cn := instance.Spec.CalicoNetwork
 
-			// Headless: there is no Calico dataplane, so spec.cni (which describes the CNI the
+			// There is no Calico dataplane, so spec.cni (which describes the CNI the
 			// operator integrates Felix with) must be omitted entirely.
 			if instance.Spec.CNI != nil {
 				return fmt.Errorf("spec.cni must not be set when spec.calicoNetwork.linuxDataplane is %s",
@@ -463,7 +463,7 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	// Verify CNILogging to not exist for non-calico cni (a headless install has no spec.cni).
+	// Verify CNILogging to not exist for non-calico cni (an install with the dataplane disabled has no spec.cni).
 	if instance.Spec.CNI != nil && instance.Spec.CNI.Type != operatorv1.PluginCalico {
 		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
 			return fmt.Errorf("installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")

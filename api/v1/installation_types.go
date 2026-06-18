@@ -595,9 +595,9 @@ const (
 // One of: Iptables, BPF, VPP, Nftables, None
 //
 // The value None disables the Linux dataplane entirely: calico-node, Typha, and
-// calico-kube-controllers are not rendered. It is the trigger for a "headless" install,
-// intended for clusters that run only standalone components (such as Gateway API support
-// or Istio) on top of a third-party CNI. When None, spec.cni must be omitted.
+// calico-kube-controllers are not rendered, intended for clusters that run only standalone
+// components (such as Gateway API support or Istio) on top of a third-party CNI. When None,
+// spec.cni must be omitted.
 // +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;None;
 type LinuxDataplaneOption string
 
@@ -630,11 +630,10 @@ type CalicoNetworkSpec struct {
 	// If not specified, iptables mode is used.
 	//
 	// The value None disables the Linux dataplane entirely: calico-node, Typha, and
-	// calico-kube-controllers are not deployed. It is the trigger for a "headless" install,
-	// intended for clusters that run only standalone components (such as Gateway API support
-	// or Istio) on top of a third-party CNI. When None, spec.cni must be omitted. Note that
-	// switching an existing cluster to None does not remove previously deployed dataplane
-	// components.
+	// calico-kube-controllers are not deployed, intended for clusters that run only standalone
+	// components (such as Gateway API support or Istio) on top of a third-party CNI. When None,
+	// spec.cni must be omitted. Note that switching an existing cluster to None does not remove
+	// previously deployed dataplane components.
 	// Default: Iptables
 	// +optional
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
@@ -642,7 +641,7 @@ type CalicoNetworkSpec struct {
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
 	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
-	// A headless install (spec.calicoNetwork.linuxDataplane: None) must leave this disabled.
+	// An install with the Linux dataplane disabled (spec.calicoNetwork.linuxDataplane: None) must leave this disabled.
 	// Default: Disabled
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
@@ -1014,8 +1013,8 @@ type CNISpec struct {
 	// to be installed separately.
 	//
 	// Note: spec.cni describes the CNI plugin the cluster is using; it is not a request to install
-	// one. A "headless" install (spec.calicoNetwork.linuxDataplane: None, with no Calico dataplane)
-	// must omit spec.cni entirely.
+	// one. An install with no Calico dataplane (spec.calicoNetwork.linuxDataplane: None) must omit
+	// spec.cni entirely.
 	//
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
@@ -1118,7 +1117,7 @@ func (s *InstallationSpec) BPFEnabled() bool {
 
 // LinuxDataplaneEnabled is an extension method that returns false only when the
 // Installation resource explicitly disables the Linux dataplane by setting
-// spec.calicoNetwork.linuxDataplane to "None" (a "headless" installation in which
+// spec.calicoNetwork.linuxDataplane to "None" (an install in which
 // calico-node, Typha, and calico-kube-controllers are not deployed).
 func (s *InstallationSpec) LinuxDataplaneEnabled() bool {
 	return s.CalicoNetwork == nil ||
@@ -1126,12 +1125,11 @@ func (s *InstallationSpec) LinuxDataplaneEnabled() bool {
 		*s.CalicoNetwork.LinuxDataplane != LinuxDataplaneNone
 }
 
-// IsHeadless is an extension method that returns true when the Installation disables the
-// Linux dataplane (spec.calicoNetwork.linuxDataplane: None) — a "headless" installation in
-// which calico-node, Typha, and calico-kube-controllers are not deployed, spec.cni is
-// omitted, and the projectcalico.org/v3 API is not served. It is the inverse of
-// LinuxDataplaneEnabled, named positively so call sites read without a double negative.
-func (s *InstallationSpec) IsHeadless() bool {
+// DataplaneDisabled is an extension method that returns true when the Installation disables
+// the Linux dataplane (spec.calicoNetwork.linuxDataplane: None): calico-node, Typha, and
+// calico-kube-controllers are not deployed, spec.cni is omitted, and the projectcalico.org/v3
+// API is not served. It is the inverse of LinuxDataplaneEnabled.
+func (s *InstallationSpec) DataplaneDisabled() bool {
 	return !s.LinuxDataplaneEnabled()
 }
 

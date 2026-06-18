@@ -1,5 +1,5 @@
-# Kind cluster for headless-mode FV tests. Unlike kind-config.yaml, the default
-# CNI (kindnet) is left enabled: headless installations run no Calico dataplane,
+# Kind cluster for no-dataplane FV tests. Unlike kind-config.yaml, the default
+# CNI (kindnet) is left enabled: installs with the dataplane disabled run no Calico dataplane,
 # so a third-party CNI must provide pod networking.
 #
 # Note the IPv6 pod subnet is a /56 rather than the /64 used by kind-config.yaml:
@@ -29,7 +29,7 @@ kubeadmConfigPatches:
     metadata:
       name: config
     # iptables, not ipvs: ipvs kube-proxy has known friction with Istio ambient's
-    # ztunnel-to-ztunnel HBONE data path, and it buys nothing here since headless
+    # ztunnel-to-ztunnel HBONE data path, and it buys nothing here since dataplane-disabled
     # installs run no Calico dataplane. iptables is the kind default.
     mode: iptables
     conntrack:

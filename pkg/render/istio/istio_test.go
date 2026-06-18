@@ -257,7 +257,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
 		})
 
-		It("should omit v3 NetworkPolicies when the projectcalico.org/v3 API is not available", Label("headless"), func() {
+		It("should omit v3 NetworkPolicies when the projectcalico.org/v3 API is not available", Label("no-dataplane"), func() {
 			cfg.IncludeV3NetworkPolicy = false
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -364,7 +364,7 @@ var _ = Describe("Istio Component Rendering", func() {
 			expectDatapathWired(objsToCreate)
 		})
 
-		It("should not enable Transparent Network Policies in headless mode", Label("headless"), func() {
+		It("should not enable Transparent Network Policies when the dataplane is disabled", Label("no-dataplane"), func() {
 			// Without the Calico dataplane there is no Felix to DSCP-mark HBONE traffic,
 			// so the Transparent Network Policies datapath must stay disabled or all
 			// in-mesh traffic would be misclassified as plaintext on the destination.

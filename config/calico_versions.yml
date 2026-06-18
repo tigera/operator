@@ -2,7 +2,7 @@
 title: v3.32.0
 components:
   libcalico-go:
-    version: v3.32.0
+    version: release-v3.32
   typha:
     version: v3.32.0
   node:

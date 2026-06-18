@@ -314,6 +314,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			os.Exit(1)
 		}
 
+		if err := admission.EnsureValidating(mgr.GetClient(), variant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy), setupLog); err != nil {
+			setupLog.Error(err, "Failed to ensure ValidatingAdmissionPolicies are created")
+			os.Exit(1)
+		}
+
 		if bootstrapCRDs {
 			setupLog.Info("CRDs installed successfully")
 			os.Exit(0)

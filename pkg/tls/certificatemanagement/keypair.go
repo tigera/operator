@@ -35,6 +35,8 @@ var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
 	CSRImage string
+	// UseCombinedImage indicates CSRImage is the combined image, which needs an explicit CSR entrypoint.
+	UseCombinedImage bool
 
 	Name      string
 	Namespace string
@@ -175,6 +177,7 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 		k.DNSNames,
 		namespace,
 		securityContext,
+		k.UseCombinedImage,
 	)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer

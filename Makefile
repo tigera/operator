@@ -369,14 +369,8 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 FV_IMAGE_REGISTRY := docker.io
 VERSION_TAG := v3.32.0
-CALICO_IMAGE := calico/calico
 NODE_IMAGE := calico/node
 WHISKER_IMAGE := calico/whisker
-
-.PHONY: calico-calico.tar
-calico-calico.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(CALICO_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-node.tar
 calico-node.tar:
@@ -388,8 +382,7 @@ calico-whisker.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(WHISKER_IMAGE):$(VERSION_TAG)
 
-IMAGE_TARS := calico-calico.tar \
-	calico-node.tar \
+IMAGE_TARS := calico-node.tar \
 	calico-whisker.tar
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)

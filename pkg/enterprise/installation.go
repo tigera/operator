@@ -41,6 +41,10 @@ type coreControllerExtension struct{}
 // modifier type-asserts it back out.
 type installationRenderData struct {
 	nodePrometheusTLS certificatemanagement.KeyPairInterface
+
+	// collectProcessPath mirrors LogCollector.Spec.CollectProcessPath being
+	// enabled; the node modifier uses it to set HostPID and the felix env.
+	collectProcessPath bool
 }
 
 // installationData pulls the installation extension's render data back out of the
@@ -48,6 +52,12 @@ type installationRenderData struct {
 func installationData(rc extensions.RenderContext) installationRenderData {
 	data, _ := rc.Extension.(installationRenderData)
 	return data
+}
+
+func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
+	return lc != nil &&
+		lc.Spec.CollectProcessPath != nil &&
+		*lc.Spec.CollectProcessPath == operatorv1.CollectProcessPathEnable
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
@@ -90,7 +100,15 @@ func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (e
 	if nodePrometheusTLS != nil {
 		cc.TrustedBundle.AddCertificates(nodePrometheusTLS)
 	}
-	rc.Extension = installationRenderData{nodePrometheusTLS: nodePrometheusTLS}
+
+	logCollector, err := utils.GetLogCollector(cc.Ctx, cc.Client)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error reading LogCollector: %w", err)
+	}
+	rc.Extension = installationRenderData{
+		nodePrometheusTLS:  nodePrometheusTLS,
+		collectProcessPath: collectProcessPathEnabled(logCollector),
+	}
 
 	prometheusClientCert, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {

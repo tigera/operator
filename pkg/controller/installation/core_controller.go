@@ -1007,16 +1007,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
-	var logCollector *operatorv1.LogCollector
 	if r.opts.EnterpriseCRDExists {
-		logCollector, err = utils.GetLogCollector(ctx, r.client)
-		if logCollector != nil {
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading LogCollector", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
@@ -1520,7 +1511,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		K8sServiceEp:          k8sapi.Endpoint,
 		Installation:          &instance.Spec,
 		IPPools:               crdPoolsToOperator(currentPools.Items),
-		LogCollector:          logCollector,
 		BirdTemplates:         birdTemplates,
 		TLS:                   typhaNodeTLS,
 		ClusterDomain:         r.opts.ClusterDomain,

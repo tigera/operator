@@ -116,7 +116,6 @@ type NodeConfiguration struct {
 	GoldmaneIP string
 
 	// Optional fields.
-	LogCollector        *operatorv1.LogCollector
 	MigrateNamespaces   bool
 	NodeAppArmorProfile string
 	BirdTemplates       map[string]string
@@ -1025,10 +1024,6 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
-	if c.collectProcessPathEnabled() {
-		ds.Spec.Template.Spec.HostPID = true
-	}
-
 	setNodeCriticalPod(&(ds.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
@@ -1142,12 +1137,6 @@ func (c *nodeComponent) vppDataplaneEnabled() bool {
 	return c.cfg.Installation.CalicoNetwork != nil &&
 		c.cfg.Installation.CalicoNetwork.LinuxDataplane != nil &&
 		*c.cfg.Installation.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneVPP
-}
-
-func (c *nodeComponent) collectProcessPathEnabled() bool {
-	return c.cfg.LogCollector != nil &&
-		c.cfg.LogCollector.Spec.CollectProcessPath != nil &&
-		*c.cfg.LogCollector.Spec.CollectProcessPath == operatorv1.CollectProcessPathEnable
 }
 
 // cniContainer creates the node's init container that installs CNI.
@@ -1507,10 +1496,6 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 				Value: "Disable",
 			})
 		}
-	}
-
-	if c.collectProcessPathEnabled() {
-		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
 	}
 
 	// Determine MTU to use. If specified explicitly, use that. Otherwise, set defaults based on an overall

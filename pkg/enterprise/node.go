@@ -120,6 +120,11 @@ func nodeEnterpriseRules() []rbacv1.PolicyRule {
 func modifyNodeDaemonSet(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 	spec := &ds.Spec.Template.Spec
 
+	// Collecting process info for flow logs reads from the host's process table.
+	if installationData(rc).collectProcessPath {
+		spec.HostPID = true
+	}
+
 	multiInterfaceMode := multiInterfaceModeEnv(rc.Installation)
 
 	for i := range spec.InitContainers {
@@ -182,7 +187,7 @@ func mountNodePrometheusTLS(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 // nodeEnterpriseEnv is the Enterprise felix configuration added to the
 // calico/node container.
 func nodeEnterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
-	tls := installationData(rc).nodePrometheusTLS
+	data := installationData(rc)
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort(rc.FelixConfiguration))},
@@ -196,10 +201,15 @@ func nodeEnterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
 		{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 	}
 
+	if data.collectProcessPath {
+		env = append(env, corev1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"})
+	}
+
 	if mode := multiInterfaceModeEnv(rc.Installation); mode != nil {
 		env = append(env, *mode)
 	}
 
+	tls := data.nodePrometheusTLS
 	if tls != nil && rc.TrustedBundle != nil {
 		env = append(env,
 			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: tls.VolumeMountCertificateFilePath()},

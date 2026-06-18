@@ -23,6 +23,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -113,7 +114,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 
 	// renderNodeObjects renders the real node component and applies the registered
 	// modifier, exactly as the componentHandler does.
-	renderNodeObjects := func() []client.Object {
+	renderNodeObjects := func(rc extensions.RenderContext) []client.Object {
 		cfg := &render.NodeConfiguration{
 			K8sServiceEp:    k8sapi.ServiceEndpoint{},
 			Installation:    instance,
@@ -125,19 +126,19 @@ var _ = Describe("node enterprise modifier integration", func() {
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		out, _ := applyExtensions(ext, render.ComponentNameNode, renderCtx, objs, nil)
+		out, _ := applyExtensions(ext, render.ComponentNameNode, rc, objs, nil)
 		return out
 	}
 
 	It("appends the node metrics service to the real render output", func() {
-		objs := renderNodeObjects()
+		objs := renderNodeObjects(renderCtx)
 		svc, ok := extensions.FindObject[*corev1.Service](objs, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeTrue(), "expected the modifier to append %s", render.CalicoNodeMetricsService)
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
 	})
 
 	It("adds the enterprise rules to the real cluster roles", func() {
-		objs := renderNodeObjects()
+		objs := renderNodeObjects(renderCtx)
 
 		nodeRole, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName)
 		Expect(ok).To(BeTrue())
@@ -149,7 +150,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 	})
 
 	It("rewrites the real node daemonset for enterprise", func() {
-		objs := renderNodeObjects()
+		objs := renderNodeObjects(renderCtx)
 		ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.NodeDaemonSetName)
 		Expect(ok).To(BeTrue())
 
@@ -170,6 +171,32 @@ var _ = Describe("node enterprise modifier integration", func() {
 		// BGP is enabled, so the bird readiness check is present and the modifier
 		// adds the BGP metrics check.
 		Expect(c.ReadinessProbe.Exec.Command).To(ContainElement("--bgp-metrics-ready"))
+	})
+
+	It("enables process-path collection when the LogCollector requests it", func() {
+		enable := operatorv1.CollectProcessPathEnable
+		Expect(cli.Create(context.Background(), &operatorv1.LogCollector{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec:       operatorv1.LogCollectorSpec{CollectProcessPath: &enable},
+		})).NotTo(HaveOccurred())
+
+		rc, _, err := ext.ExtendContext(extensions.ControllerContext{
+			RenderContext: extensions.RenderContext{
+				Installation:  instance,
+				TrustedBundle: typhaNodeTLS.TrustedBundle,
+				ClusterDomain: dns.DefaultClusterDomain,
+			},
+			Controller:         extensions.InstallationController,
+			Ctx:                context.Background(),
+			Client:             cli,
+			CertificateManager: certManager,
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		ds, ok := extensions.FindObject[*appsv1.DaemonSet](renderNodeObjects(rc), common.NodeDaemonSetName)
+		Expect(ok).To(BeTrue())
+		Expect(ds.Spec.Template.Spec.HostPID).To(BeTrue())
+		Expect(nodeContainer(ds).Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"}))
 	})
 
 	It("adds the enterprise rules to the real typha cluster role", func() {

@@ -19,6 +19,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // Set is all the variant extensions the operator runs with, indexed by product
@@ -88,11 +89,12 @@ func (s *Set) Validate(cc ControllerContext) error {
 }
 
 // ExtendContext runs the controller extension for the installation's variant and
-// returns the resulting RenderContext, or the base render context when no
+// returns the resulting RenderContext plus any keypairs the extension wants the
+// controller to manage, or the base render context and no keypairs when no
 // extension is registered. Nil-safe.
-func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, error) {
+func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if cc.Installation == nil {
-		return cc.RenderContext, nil
+		return cc.RenderContext, nil, nil
 	}
 	return s.variant(cc.Installation.Variant).extendContext(cc)
 }

@@ -153,10 +153,10 @@ func modifyNodeDaemonSet(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 // core (calico) the keypair is never created, so the base node render carries
 // no prometheus mount at all.
 func mountNodePrometheusTLS(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
-	if rc.NodePrometheusTLS == nil {
+	tls := installationData(rc).nodePrometheusTLS
+	if tls == nil {
 		return
 	}
-	tls := rc.NodePrometheusTLS
 	spec := &ds.Spec.Template.Spec
 
 	spec.Volumes = append(spec.Volumes, tls.Volume())
@@ -181,6 +181,7 @@ func mountNodePrometheusTLS(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 // nodeEnterpriseEnv is the Enterprise felix configuration added to the
 // calico/node container.
 func nodeEnterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
+	tls := installationData(rc).nodePrometheusTLS
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
 		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort(rc.FelixConfiguration))},
@@ -198,10 +199,10 @@ func nodeEnterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
 		env = append(env, *mode)
 	}
 
-	if rc.NodePrometheusTLS != nil && rc.TrustedBundle != nil {
+	if tls != nil && rc.TrustedBundle != nil {
 		env = append(env,
-			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: rc.NodePrometheusTLS.VolumeMountCertificateFilePath()},
-			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: rc.NodePrometheusTLS.VolumeMountKeyFilePath()},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: tls.VolumeMountCertificateFilePath()},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: tls.VolumeMountKeyFilePath()},
 			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: rc.TrustedBundle.MountPath()},
 		)
 	}

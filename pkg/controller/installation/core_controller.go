@@ -1224,7 +1224,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	renderCtx, err := r.opts.Extensions.ExtendContext(cc)
+	renderCtx, managedKeyPairs, err := r.opts.Extensions.ExtendContext(cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1367,13 +1367,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-		rcertificatemanagement.NewKeyPairOption(renderCtx.NodePrometheusTLS, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
 		// Nil when the WAF v3 surface is disabled; the certificate-management
 		// render skips nil key pairs.
 		rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true),
+	}
+	// Manage any key pairs the variant extension created controller-side.
+	for _, kp := range managedKeyPairs {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(kp, true, true))
 	}
 
 	components = append(components,
@@ -1795,13 +1798,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	r.status.ReadyToMonitor()
 
 	// Check BYO certificate expiry warnings and propagate them to the status manager.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+	keyPairWarnings := map[string]certificatemanagement.KeyPairInterface{
 		render.TyphaTLSSecretName:                                    typhaNodeTLS.TyphaSecret,
 		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
 		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
-		render.NodePrometheusTLSServerSecret:                         renderCtx.NodePrometheusTLS,
 		kubecontrollers.KubeControllerPrometheusTLSSecret:            kubeControllerTLS,
-	}, r.status)
+	}
+	for _, kp := range managedKeyPairs {
+		keyPairWarnings[kp.GetName()] = kp
+	}
+	certificatemanagement.CheckKeyPairWarnings(keyPairWarnings, r.status)
 
 	// We can clear the degraded state now since as far as we know everything is in order.
 	r.status.ClearDegraded()

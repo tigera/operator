@@ -22,6 +22,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("controller extension", func() {
@@ -32,25 +33,25 @@ var _ = Describe("controller extension", func() {
 
 	It("returns the base render context when the variant has no extension", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, err := s.ExtendContext(extensions.ControllerContext{
+		rc, _, err := s.ExtendContext(extensions.ControllerContext{
 			RenderContext: extensions.RenderContext{Installation: install, ClusterDomain: "cluster.local"},
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.Installation).To(BeIdenticalTo(install))
 		Expect(rc.ClusterDomain).To(Equal("cluster.local"))
-		Expect(rc.NodePrometheusTLS).To(BeNil())
+		Expect(rc.Extension).To(BeNil())
 	})
 
 	It("runs the extension registered for the installation variant", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{})
-		rc, err := s.ExtendContext(enterpriseContext())
+		rc, _, err := s.ExtendContext(enterpriseContext())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores an extension registered for a different variant", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{})
-		rc, err := s.ExtendContext(extensions.ControllerContext{
+		rc, _, err := s.ExtendContext(extensions.ControllerContext{
 			RenderContext: extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -59,7 +60,7 @@ var _ = Describe("controller extension", func() {
 
 	It("surfaces the extension error", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(fakeController{err: errors.New("boom")})
-		_, err := s.ExtendContext(enterpriseContext())
+		_, _, err := s.ExtendContext(enterpriseContext())
 		Expect(err).To(MatchError("boom"))
 	})
 
@@ -72,7 +73,7 @@ var _ = Describe("controller extension", func() {
 		var nilSet *extensions.Set
 		cc := enterpriseContext()
 		cc.ClusterDomain = "real"
-		rc, err := nilSet.ExtendContext(cc)
+		rc, _, err := nilSet.ExtendContext(cc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 		Expect(nilSet.Validate(cc)).NotTo(HaveOccurred())
@@ -96,9 +97,9 @@ func (f fakeController) Validate(_ extensions.ControllerContext) error {
 	return f.validateErr
 }
 
-func (f fakeController) ExtendContext(_ extensions.ControllerContext) (extensions.RenderContext, error) {
+func (f fakeController) ExtendContext(_ extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if f.err != nil {
-		return extensions.RenderContext{}, f.err
+		return extensions.RenderContext{}, nil, f.err
 	}
-	return extensions.RenderContext{ClusterDomain: "from-fake"}, nil
+	return extensions.RenderContext{ClusterDomain: "from-fake"}, nil, nil
 }

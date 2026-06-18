@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/render"
 )
 
 var _ = Describe("installation controller extension", func() {
@@ -43,15 +44,16 @@ var _ = Describe("installation controller extension", func() {
 	})
 
 	It("creates the node prometheus keypair for the enterprise variant", func() {
-		rc, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		_, managed, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(rc.NodePrometheusTLS).NotTo(BeNil())
+		Expect(managed).To(HaveLen(1), "expected the node prometheus keypair to be managed")
+		Expect(managed[0].GetName()).To(Equal(render.NodePrometheusTLSServerSecret))
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		rc, err := ext.ExtendContext(newControllerContext(operatorv1.Calico))
+		_, managed, err := ext.ExtendContext(newControllerContext(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
-		Expect(rc.NodePrometheusTLS).To(BeNil())
+		Expect(managed).To(BeEmpty())
 	})
 })
 

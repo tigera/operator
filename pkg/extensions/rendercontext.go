@@ -22,11 +22,10 @@ import (
 
 // RenderContext carries reconcile-derived inputs from controllers into render
 // modifiers. Core operator code never reads these fields - only registered
-// modifiers do. Two kinds of value live here:
-//   - raw cluster state gathered generically (Installation, FelixConfiguration,
-//     ClusterDomain) that modifiers derive their own values from, and
-//   - controller-produced artifacts (TrustedBundle, NodePrometheusTLS) that can
-//     only be created controller-side because they have cluster side effects.
+// modifiers do. It carries raw cluster state gathered generically (Installation,
+// FelixConfiguration, ClusterDomain) that modifiers derive their own values from,
+// the shared TrustedBundle, and an opaque Extension slot for controller-produced
+// data specific to one extension.
 //
 // Per-component config a modifier needs but can't derive from these fields is
 // not carried here; it flows to the modifier as a typed argument (see
@@ -39,9 +38,10 @@ type RenderContext struct {
 	// TrustedBundle is the shared CA bundle for the calico-system namespace.
 	TrustedBundle certificatemanagement.TrustedBundle
 
-	// NodePrometheusTLS is created by the enterprise controller extension (it has
-	// cluster side effects, so it can't be built in a modifier). The node modifier
-	// is its only consumer: it mounts the keypair onto the daemonset and sets the
-	// FELIX_PROMETHEUSREPORTER* certificate env vars.
-	NodePrometheusTLS certificatemanagement.KeyPairInterface
+	// Extension is opaque, extension-owned data that the controller extension
+	// produced for its own modifiers - typically an artifact that can only be
+	// created controller-side because it has cluster side effects (e.g. a keypair).
+	// The extension that set it type-asserts it back out in its modifiers; core
+	// code never reads it. Nil when no extension is active.
+	Extension any
 }

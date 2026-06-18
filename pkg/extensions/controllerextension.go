@@ -20,6 +20,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // ControllerExtension extends a controller's reconcile: it validates the
@@ -32,9 +33,11 @@ type ControllerExtension interface {
 	Validate(cc ControllerContext) error
 
 	// ExtendContext does the controller-side reconcile work the render phase
-	// cannot, returning the RenderContext the render phase consumes, or an error
-	// that aborts the reconcile.
-	ExtendContext(cc ControllerContext) (RenderContext, error)
+	// cannot, returning the RenderContext the render phase consumes plus any
+	// keypairs the extension created that the controller should manage (add to
+	// certificate management and BYO-expiry warnings), or an error that aborts the
+	// reconcile.
+	ExtendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error)
 }
 
 // ControllerContext is the controller-phase context, the corollary to the

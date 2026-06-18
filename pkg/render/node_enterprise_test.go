@@ -15,6 +15,8 @@
 package render_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -34,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // These tests run the real node/typha render output through the registered
@@ -43,11 +46,12 @@ import (
 // matching because render renamed an object or container.
 var _ = Describe("node enterprise modifier integration", func() {
 	var (
-		cli          client.Client
-		certManager  certificatemanager.CertificateManager
-		typhaNodeTLS *render.TyphaNodeTLS
-		instance     *operatorv1.InstallationSpec
-		renderCtx    extensions.RenderContext
+		cli               client.Client
+		certManager       certificatemanager.CertificateManager
+		typhaNodeTLS      *render.TyphaNodeTLS
+		instance          *operatorv1.InstallationSpec
+		renderCtx         extensions.RenderContext
+		nodePrometheusTLS certificatemanagement.KeyPairInterface
 	)
 
 	nodeContainer := func(ds *appsv1.DaemonSet) *corev1.Container {
@@ -69,7 +73,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS = getTyphaNodeTLS(cli, certManager)
 
-		nodePrometheusTLS, err := certManager.GetOrCreateKeyPair(cli, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), []string{"calico-node-metrics"})
+		nodePrometheusTLS, err = certManager.GetOrCreateKeyPair(cli, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), []string{"calico-node-metrics"})
 		Expect(err).NotTo(HaveOccurred())
 		typhaNodeTLS.TrustedBundle.AddCertificates(nodePrometheusTLS)
 
@@ -89,11 +93,21 @@ var _ = Describe("node enterprise modifier integration", func() {
 			},
 		}
 
-		renderCtx = extensions.RenderContext{
-			Installation:      instance,
-			TrustedBundle:     typhaNodeTLS.TrustedBundle,
-			NodePrometheusTLS: nodePrometheusTLS,
+		// Build the render context the way the controller does: run the enterprise
+		// controller extension, which stashes the node prometheus keypair in the
+		// context for the node modifier to read.
+		cc := extensions.ControllerContext{
+			RenderContext: extensions.RenderContext{
+				Installation:  instance,
+				TrustedBundle: typhaNodeTLS.TrustedBundle,
+				ClusterDomain: dns.DefaultClusterDomain,
+			},
+			Ctx:                context.Background(),
+			Client:             cli,
+			CertificateManager: certManager,
 		}
+		renderCtx, _, err = ext.ExtendContext(cc)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	// renderNodeObjects renders the real node component and applies the registered
@@ -148,9 +162,9 @@ var _ = Describe("node enterprise modifier integration", func() {
 		// The reporter cert env is wired from the NodePrometheusTLS keypair the
 		// builder creates, and the modifier mounts that keypair onto the daemonset.
 		Expect(c.Env).To(ContainElement(HaveField("Name", "FELIX_PROMETHEUSREPORTERCERTFILE")))
-		Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(renderCtx.NodePrometheusTLS.Volume()))
-		Expect(c.VolumeMounts).To(ContainElement(renderCtx.NodePrometheusTLS.VolumeMount(rmeta.OSTypeLinux)))
-		Expect(ds.Spec.Template.Annotations).To(HaveKey(renderCtx.NodePrometheusTLS.HashAnnotationKey()))
+		Expect(ds.Spec.Template.Spec.Volumes).To(ContainElement(nodePrometheusTLS.Volume()))
+		Expect(c.VolumeMounts).To(ContainElement(nodePrometheusTLS.VolumeMount(rmeta.OSTypeLinux)))
+		Expect(ds.Spec.Template.Annotations).To(HaveKey(nodePrometheusTLS.HashAnnotationKey()))
 
 		// BGP is enabled, so the bird readiness check is present and the modifier
 		// adds the BGP metrics check.

@@ -22,6 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // Variant bundles everything that extends the core operator for one product
@@ -117,10 +118,10 @@ func (v *Variant) validate(cc ControllerContext) error {
 }
 
 // extendContext runs the controller extension, or returns the base render
-// context when the variant has none. Nil-safe.
-func (v *Variant) extendContext(cc ControllerContext) (RenderContext, error) {
+// context and no managed keypairs when the variant has none. Nil-safe.
+func (v *Variant) extendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if v == nil || v.controller == nil {
-		return cc.RenderContext, nil
+		return cc.RenderContext, nil, nil
 	}
 	return v.controller.ExtendContext(cc)
 }

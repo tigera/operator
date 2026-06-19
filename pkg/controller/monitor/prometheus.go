@@ -24,7 +24,6 @@ import (
 
 	"github.com/go-logr/logr"
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -109,22 +108,6 @@ func addWatch(c ctrlruntime.Controller) error {
 
 	if err = addServiceMonitorKubeControllerWatch(c); err != nil {
 		return fmt.Errorf("failed to watch ServiceMonitor calico-kube-controller-metrics resource: %w", err)
-	}
-
-	// Watch the user-provided AlertmanagerConfig in the operator namespace and the rendered copy
-	// in the prometheus namespace so changes to either reconcile the Alertmanager configuration.
-	if err = utils.AddNamespacedWatch(c, &monitoringv1alpha1.AlertmanagerConfig{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1alpha1.AlertmanagerConfigKind, APIVersion: monitoringv1alpha1.SchemeGroupVersion.String()},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.AlertmanagerConfigName, Namespace: common.OperatorNamespace()},
-	}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("failed to watch AlertmanagerConfig in Operator namespace: %w", err)
-	}
-
-	if err = utils.AddNamespacedWatch(c, &monitoringv1alpha1.AlertmanagerConfig{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1alpha1.AlertmanagerConfigKind, APIVersion: monitoringv1alpha1.SchemeGroupVersion.String()},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.AlertmanagerConfigName, Namespace: common.TigeraPrometheusNamespace},
-	}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("failed to watch AlertmanagerConfig in Prometheus namespace: %w", err)
 	}
 
 	return err

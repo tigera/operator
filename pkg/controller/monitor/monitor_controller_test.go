@@ -37,7 +37,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
-	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -349,46 +348,28 @@ var _ = Describe("Monitor controller tests", func() {
 	})
 
 	Context("Alertmanager Configuration", func() {
-		amConfigKey := client.ObjectKey{Name: monitor.AlertmanagerConfigName, Namespace: common.TigeraPrometheusNamespace}
+		amSecretKey := client.ObjectKey{Name: monitor.AlertmanagerConfigSecret, Namespace: common.TigeraPrometheusNamespace}
 
-		It("should render the default Linseed AlertmanagerConfig in the prometheus namespace for new install", func() {
+		getAlertmanagerYAML := func() string {
+			s := &corev1.Secret{}
+			Expect(cli.Get(ctx, amSecretKey, s)).NotTo(HaveOccurred())
+			if v, ok := s.StringData["alertmanager.yaml"]; ok {
+				return v
+			}
+			return string(s.Data["alertmanager.yaml"])
+		}
+
+		It("should render the Linseed webhook in the alertmanager config secret for new install", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 
-			amc := &monitoringv1alpha1.AlertmanagerConfig{}
-			Expect(cli.Get(ctx, amConfigKey, amc)).NotTo(HaveOccurred())
-			Expect(amc.Spec.Route.Receiver).To(Equal("linseed"))
-			Expect(amc.Spec.Receivers).To(HaveLen(1))
-			Expect(amc.Spec.Receivers[0].WebhookConfigs).To(HaveLen(1))
-			Expect(*amc.Spec.Receivers[0].WebhookConfigs[0].URL).To(Equal(monitor.LinseedEventsURL))
-
-			ownerRefs := amc.GetObjectMeta().GetOwnerReferences()
-			Expect(ownerRefs).To(HaveLen(1))
-			Expect(ownerRefs[0].APIVersion).To(Equal("operator.tigera.io/v1"))
+			y := getAlertmanagerYAML()
+			Expect(y).To(ContainSubstring("receiver: linseed"))
+			Expect(y).To(ContainSubstring(monitor.LinseedEventsURL))
+			Expect(y).To(ContainSubstring("/etc/alertmanager/secrets/calico-alertmanager-tigera-linseed-token/token"))
 		})
 
-		It("should use a user-provided AlertmanagerConfig from the operator namespace", func() {
-			userReceiver := "user-receiver"
-			Expect(cli.Create(ctx, &monitoringv1alpha1.AlertmanagerConfig{
-				TypeMeta:   metav1.TypeMeta{Kind: monitoringv1alpha1.AlertmanagerConfigKind, APIVersion: monitoringv1alpha1.SchemeGroupVersion.String()},
-				ObjectMeta: metav1.ObjectMeta{Name: monitor.AlertmanagerConfigName, Namespace: common.OperatorNamespace()},
-				Spec: monitoringv1alpha1.AlertmanagerConfigSpec{
-					Route:     &monitoringv1alpha1.Route{Receiver: userReceiver},
-					Receivers: []monitoringv1alpha1.Receiver{{Name: userReceiver}},
-				},
-			})).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred())
-
-			amc := &monitoringv1alpha1.AlertmanagerConfig{}
-			Expect(cli.Get(ctx, amConfigKey, amc)).NotTo(HaveOccurred())
-			Expect(amc.Spec.Route.Receiver).To(Equal(userReceiver))
-			Expect(amc.Spec.Receivers).To(HaveLen(1))
-			Expect(amc.Spec.Receivers[0].WebhookConfigs).To(BeEmpty())
-		})
-
-		It("should render the null-receiver AlertmanagerConfig when the UI alerts integration is disabled", func() {
+		It("should render a null-only config when all alerts are disabled", func() {
 			Expect(cli.Get(ctx, client.ObjectKeyFromObject(monitorCR), monitorCR)).NotTo(HaveOccurred())
 			disabled := operatorv1.AlertStatusDisabled
 			monitorCR.Spec.Alerts = operatorv1.Alerts{
@@ -403,11 +384,9 @@ var _ = Describe("Monitor controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 
-			amc := &monitoringv1alpha1.AlertmanagerConfig{}
-			Expect(cli.Get(ctx, amConfigKey, amc)).NotTo(HaveOccurred())
-			Expect(amc.Spec.Route.Receiver).To(Equal("null"))
-			Expect(amc.Spec.Receivers).To(HaveLen(1))
-			Expect(amc.Spec.Receivers[0].WebhookConfigs).To(BeEmpty())
+			y := getAlertmanagerYAML()
+			Expect(y).NotTo(ContainSubstring("linseed"))
+			Expect(y).To(ContainSubstring(`receiver: "null"`))
 		})
 	})
 

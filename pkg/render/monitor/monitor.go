@@ -323,9 +323,12 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		)
 	}
 
-	// The Linseed bearer-token secret is only needed when Alertmanager is running and forwarding
-	// alerts to Linseed (the UI alerts integration is enabled); otherwise remove it.
-	if mc.alertmanagerReplicas() > 0 && mc.cfg.Monitor.UIAlertsEnabled() {
+	// The operator provisions Alertmanager's Linseed bearer token as a service-account-token Secret
+	// (validated by Linseed via TokenReview) only on non-managed clusters, when Alertmanager is running
+	// and forwarding to Linseed. On a managed cluster the token is instead a Linseed-issued JWT pushed
+	// into this namespace by Linseed's token controller (an Opaque Secret of the same name); the operator
+	// must not also create a service-account-token Secret there, as the two have different, immutable types.
+	if mc.alertmanagerReplicas() > 0 && mc.cfg.Monitor.UIAlertsEnabled() && !mc.cfg.ManagedCluster {
 		toCreate = append(toCreate, mc.alertmanagerLinseedTokenSecret())
 	} else {
 		toDelete = append(toDelete, mc.alertmanagerLinseedTokenSecret())

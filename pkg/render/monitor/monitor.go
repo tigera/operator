@@ -85,18 +85,22 @@ const (
 	AlertmanagerPort           = 9093
 	MeshAlertmanagerPolicyName = AlertmanagerPolicyName + "-mesh"
 
+	// AlertmanagerServiceAccountName is the dedicated service account Alertmanager runs as. Its
+	// bearer token authenticates the Alertmanager webhook to Linseed (see AlertmanagerLinseedTokenSecretName).
+	AlertmanagerServiceAccountName = "calico-alertmanager"
+
 	// AlertmanagerConfigName is the name of the AlertmanagerConfig custom resource that
 	// configures the Alertmanager. It is referenced from Alertmanager.spec.alertmanagerConfiguration
 	// and must live in the same namespace as the Alertmanager (tigera-prometheus).
 	AlertmanagerConfigName = CalicoNodeAlertmanager
 
-	// AlertmanagerLinseedTokenSecretName is the secret holding a bearer token for the Prometheus
-	// service account (that Alertmanager runs as), which the webhook uses to authenticate to Linseed.
-	// The operator provisions it as a kubernetes.io/service-account-token secret (see
-	// alertmanagerLinseedTokenSecret); Kubernetes populates it with a valid token for the service
-	// account, which Linseed validates via TokenReview. A Secret is required because an
+	// AlertmanagerLinseedTokenSecretName is the secret holding a bearer token for the
+	// calico-alertmanager service account (that Alertmanager runs as), which the webhook uses to
+	// authenticate to Linseed. The operator provisions it as a kubernetes.io/service-account-token
+	// secret (see alertmanagerLinseedTokenSecret); Kubernetes populates it with a valid token for the
+	// service account, which Linseed validates via TokenReview. A Secret is required because an
 	// AlertmanagerConfig webhook cannot reference a projected service-account token file.
-	AlertmanagerLinseedTokenSecretName = PrometheusServiceAccountName + "-tigera-linseed-token"
+	AlertmanagerLinseedTokenSecretName = AlertmanagerServiceAccountName + "-tigera-linseed-token"
 	AlertmanagerLinseedTokenKey        = "token"
 
 	// LinseedEventsURL is the Linseed endpoint that ingests Alertmanager webhook alerts as events.
@@ -309,6 +313,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 			mc.cfg.AlertmanagerConfig,
 			mc.alertmanagerService(),
 			mc.alertmanager(),
+			mc.alertmanagerServiceAccount(),
 			mc.alertmanagerLinseedClusterRole(),
 			mc.alertmanagerLinseedClusterRoleBinding(),
 		)
@@ -316,6 +321,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		toDelete = append(toDelete,
 			mc.alertmanager(),
 			mc.alertmanagerService(),
+			mc.alertmanagerServiceAccount(),
 			mc.alertmanagerLinseedClusterRole(),
 			mc.alertmanagerLinseedClusterRoleBinding(),
 			mc.cfg.AlertmanagerConfig,
@@ -591,7 +597,7 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
 			Replicas:           mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
-			ServiceAccountName: PrometheusServiceAccountName,
+			ServiceAccountName: AlertmanagerServiceAccountName,
 			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
@@ -615,8 +621,8 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 }
 
 // alertmanagerLinseedTokenSecret returns a kubernetes.io/service-account-token secret for the
-// Prometheus service account that Alertmanager runs as. Kubernetes populates it with a valid token
-// for the service account; the Alertmanager webhook uses it as its Linseed bearer token (referenced
+// calico-alertmanager service account that Alertmanager runs as. Kubernetes populates it with a valid
+// token for the service account; the Alertmanager webhook uses it as its Linseed bearer token (referenced
 // from the AlertmanagerConfig), and Linseed validates it via TokenReview. The data Kubernetes
 // populated is carried forward via Config.AlertmanagerLinseedTokenData so the component handler does
 // not wipe the token on reconcile (Kubernetes won't re-populate a secret it has already processed).
@@ -626,7 +632,7 @@ func (mc *monitorComponent) alertmanagerLinseedTokenSecret() *corev1.Secret {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        AlertmanagerLinseedTokenSecretName,
 			Namespace:   common.TigeraPrometheusNamespace,
-			Annotations: map[string]string{corev1.ServiceAccountNameKey: PrometheusServiceAccountName},
+			Annotations: map[string]string{corev1.ServiceAccountNameKey: AlertmanagerServiceAccountName},
 		},
 		Type: corev1.SecretTypeServiceAccountToken,
 		Data: mc.cfg.AlertmanagerLinseedTokenData,
@@ -758,7 +764,7 @@ func (mc *monitorComponent) alertmanagerLinseedClusterRoleBinding() *rbacv1.Clus
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      PrometheusServiceAccountName,
+				Name:      AlertmanagerServiceAccountName,
 				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
@@ -934,6 +940,18 @@ func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      PrometheusServiceAccountName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+	}
+}
+
+// alertmanagerServiceAccount is the dedicated service account Alertmanager runs as. Its bearer token
+// (see alertmanagerLinseedTokenSecret) authenticates the Alertmanager webhook to Linseed.
+func (mc *monitorComponent) alertmanagerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      AlertmanagerServiceAccountName,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 	}

@@ -479,12 +479,16 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.ObjectMeta.Labels["role"]).To(Equal("tigera-prometheus-rules"))
 		Expect(prometheusruleObj.Spec.Groups).To(HaveLen(1))
 		Expect(prometheusruleObj.Spec.Groups[0].Name).To(Equal("calico.rules"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(1))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(3))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPacketsRate"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("info"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[1].Alert).To(Equal("IPPoolNearlyExhausted"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[1].Labels["severity"]).To(Equal("warning"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[2].Alert).To(Equal("IPPoolExhausted"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[2].Labels["severity"]).To(Equal("critical"))
 
 		// ServiceMonitor
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
@@ -1077,7 +1081,7 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusRule, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
 		Expect(ok).To(BeTrue())
 		rules := prometheusruleObj.Spec.Groups[0].Rules
-		Expect(rules).To(HaveLen(9))
+		Expect(rules).To(HaveLen(11))
 
 		// DeniedPacketsRate - base rule, severity downgraded to info
 		Expect(rules[0].Alert).To(Equal("DeniedPacketsRate"))
@@ -1140,6 +1144,14 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rules[8].Labels["severity"]).To(Equal("critical"))
 		Expect(rules[8].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is progressing"))
 		Expect(rules[8].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a progressing state for more than 30 minutes."))
+
+		// IP pool utilisation alerts (always present, appended after the operator-metrics rules)
+		Expect(rules[9].Alert).To(Equal("IPPoolNearlyExhausted"))
+		Expect(rules[9].For).To(Equal(ptr.To(monitoringv1.Duration("5m"))))
+		Expect(rules[9].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[10].Alert).To(Equal("IPPoolExhausted"))
+		Expect(rules[10].For).To(Equal(ptr.To(monitoringv1.Duration("5m"))))
+		Expect(rules[10].Labels["severity"]).To(Equal("critical"))
 	})
 
 	It("Should delete operator metrics resources when OperatorMetricsEnabled is false", func() {

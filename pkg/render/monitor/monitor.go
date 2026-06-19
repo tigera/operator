@@ -1191,6 +1191,34 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 		)
 	}
 
+	// IP pool utilisation alerts. ipam_allocations_in_use is reported per node+pool, so sum it per
+	// pool and divide by the pool size; summing both sides on ippool also collapses the scrape labels
+	// so the two metrics match on ippool alone. These rely on kube-controllers IPAM metrics, which are
+	// always exported, so they are not gated on the operator-metrics feature.
+	forDuration5m := monitoringv1.Duration("5m")
+	rules = append(rules,
+		monitoringv1.Rule{
+			Alert:  "IPPoolNearlyExhausted",
+			Expr:   intstr.FromString("100 * sum by (ippool) (ipam_allocations_in_use) / sum by (ippool) (ipam_ippool_size) >= 90 < 100"),
+			For:    &forDuration5m,
+			Labels: map[string]string{"severity": "warning"},
+			Annotations: map[string]string{
+				"summary":     "IP pool {{$labels.ippool}} is nearly full",
+				"description": "IP pool {{$labels.ippool}} is {{ $value | printf \"%.1f\" }}% allocated.",
+			},
+		},
+		monitoringv1.Rule{
+			Alert:  "IPPoolExhausted",
+			Expr:   intstr.FromString("100 * sum by (ippool) (ipam_allocations_in_use) / sum by (ippool) (ipam_ippool_size) >= 100"),
+			For:    &forDuration5m,
+			Labels: map[string]string{"severity": "critical"},
+			Annotations: map[string]string{
+				"summary":     "IP pool {{$labels.ippool}} is exhausted",
+				"description": "IP pool {{$labels.ippool}} has no free addresses ({{ $value | printf \"%.1f\" }}% allocated).",
+			},
+		},
+	)
+
 	return &monitoringv1.PrometheusRule{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{

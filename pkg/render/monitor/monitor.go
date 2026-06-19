@@ -1097,12 +1097,12 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	rules := []monitoringv1.Rule{
 		{
-			Alert:  "DeniedPacketsRate",
+			Alert:  "DeniedPackets",
 			Expr:   intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0"),
 			Labels: map[string]string{"severity": "info"},
 			Annotations: map[string]string{
-				"summary":     "High rate of denied packets",
-				"description": "Policy {{$labels.policy}} is denying packets at a high rate.",
+				"summary":     "Denied packets",
+				"description": "Policy {{$labels.policy}} is denying packets.",
 			},
 		},
 	}

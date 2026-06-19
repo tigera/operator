@@ -480,11 +480,11 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.Spec.Groups).To(HaveLen(1))
 		Expect(prometheusruleObj.Spec.Groups[0].Name).To(Equal("calico.rules"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(3))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPacketsRate"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPackets"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("info"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("Denied packets"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets."))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[1].Alert).To(Equal("IPPoolNearlyExhausted"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[1].Labels["severity"]).To(Equal("warning"))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[2].Alert).To(Equal("IPPoolExhausted"))
@@ -1083,12 +1083,12 @@ var _ = Describe("monitor rendering tests", func() {
 		rules := prometheusruleObj.Spec.Groups[0].Rules
 		Expect(rules).To(HaveLen(11))
 
-		// DeniedPacketsRate - base rule, severity downgraded to info
-		Expect(rules[0].Alert).To(Equal("DeniedPacketsRate"))
+		// DeniedPackets - base rule, severity downgraded to info
+		Expect(rules[0].Alert).To(Equal("DeniedPackets"))
 		Expect(rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(rules[0].Labels["severity"]).To(Equal("info"))
-		Expect(rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
-		Expect(rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
+		Expect(rules[0].Annotations["summary"]).To(Equal("Denied packets"))
+		Expect(rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets."))
 
 		// TLS certificate expiry alerts
 		Expect(rules[1].Alert).To(Equal("TLSCertExpiringWarning"))

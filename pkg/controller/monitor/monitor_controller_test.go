@@ -394,8 +394,14 @@ var _ = Describe("Monitor controller tests", func() {
 
 		It("should render the null-receiver AlertmanagerConfig when the UI alerts integration is disabled", func() {
 			Expect(cli.Get(ctx, client.ObjectKeyFromObject(monitorCR), monitorCR)).NotTo(HaveOccurred())
-			disabled := operatorv1.UIAlertsIntegrationDisabled
-			monitorCR.Spec.UIAlertsIntegration = &disabled
+			disabled := operatorv1.AlertStatusDisabled
+			monitorCR.Spec.Alerts = operatorv1.Alerts{
+				DeniedPackets:    operatorv1.Alert{Status: disabled},
+				TigeraStatus:     operatorv1.Alert{Status: disabled},
+				TLSCertExpiry:    operatorv1.Alert{Status: disabled},
+				LicenseExpiry:    operatorv1.Alert{Status: disabled},
+				IPPoolExhaustion: operatorv1.Alert{Status: disabled},
+			}
 			Expect(cli.Update(ctx, monitorCR)).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})

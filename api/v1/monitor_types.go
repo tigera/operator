@@ -37,24 +37,66 @@ type MonitorSpec struct {
 	// +optional
 	Alertmanager *Alertmanager `json:"alertmanager,omitempty"`
 
-	// UIAlertsIntegration controls whether Prometheus/Alertmanager alerts are forwarded to Linseed and surfaced
-	// on the manager Alerts page. When omitted, the integration is Enabled.
+	// Alerts enables or disables Calico Enterprise's built-in alerts. See Alerts for details.
 	// +optional
-	UIAlertsIntegration *UIAlertsIntegrationStatusType `json:"uiAlertsIntegration,omitempty"`
+	Alerts Alerts `json:"alerts,omitempty"`
+}
+
+// Alerts enables or disables Calico Enterprise's built-in alerts and whether their events appear on the
+// Manager Alerts page. The alert set is a curated, closed catalog: one field per alert, not an open list.
+// New alerts ship as new fields in future releases and default to Enabled, so they turn on automatically
+// without changes to existing Monitor resources. Users may disable alerts but not define their own; custom
+// alerting belongs in the user's own Alertmanager. Each warning+critical rule pair is a single alert.
+type Alerts struct {
+	// DeniedPackets fires when calico-node is denying packets.
+	// +optional
+	DeniedPackets Alert `json:"deniedPackets,omitempty"`
+
+	// TigeraStatus fires when a component stays degraded or progressing.
+	// +optional
+	TigeraStatus Alert `json:"tigeraStatus,omitempty"`
+
+	// TLSCertExpiry fires when a TLS certificate is close to expiry.
+	// +optional
+	TLSCertExpiry Alert `json:"tlsCertExpiry,omitempty"`
+
+	// LicenseExpiry fires when the license is close to expiry or invalid.
+	// +optional
+	LicenseExpiry Alert `json:"licenseExpiry,omitempty"`
+
+	// IPPoolExhaustion fires when an IP pool is nearly (>=90%) or fully (>=100%) exhausted.
+	// +optional
+	IPPoolExhaustion Alert `json:"ipPoolExhaustion,omitempty"`
+}
+
+type Alert struct {
+	// Status enables or disables the alert. Defaults to Enabled when unset.
+	// +optional
+	Status AlertStatusType `json:"status,omitempty"`
+}
+
+// Enabled reports whether the alert is active. An unset status defaults to Enabled.
+func (a Alert) Enabled() bool {
+	return a.Status != AlertStatusDisabled
 }
 
 // +kubebuilder:validation:Enum=Enabled;Disabled
-type UIAlertsIntegrationStatusType string
+type AlertStatusType string
 
 const (
-	UIAlertsIntegrationEnabled  UIAlertsIntegrationStatusType = "Enabled"
-	UIAlertsIntegrationDisabled UIAlertsIntegrationStatusType = "Disabled"
+	// AlertStatusEnabled creates an alert for Alertmanager and displays its events in the Manager UI.
+	AlertStatusEnabled AlertStatusType = "Enabled"
+	// AlertStatusDisabled disables this alert.
+	AlertStatusDisabled AlertStatusType = "Disabled"
 )
 
-// UIAlertsEnabled reports whether the Alerts-page integration is enabled. It defaults to true when the field
-// is unset, preserving the always-on behavior of clusters provisioned before this field existed.
+// UIAlertsEnabled reports whether any alert is configured to surface its events on the Manager Alerts page.
+// The Alertmanager-to-Linseed webhook is only rendered when this is true. An unconfigured Monitor returns true,
+// preserving the always-on behavior of clusters provisioned before this field existed.
 func (s MonitorSpec) UIAlertsEnabled() bool {
-	return s.UIAlertsIntegration == nil || *s.UIAlertsIntegration != UIAlertsIntegrationDisabled
+	return s.Alerts.DeniedPackets.Enabled() || s.Alerts.TigeraStatus.Enabled() ||
+		s.Alerts.TLSCertExpiry.Enabled() || s.Alerts.LicenseExpiry.Enabled() ||
+		s.Alerts.IPPoolExhaustion.Enabled()
 }
 
 type ExternalPrometheus struct {
@@ -205,7 +247,7 @@ type Alertmanager struct {
 }
 type AlertmanagerSpec struct {
 	// Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
-	// Default: 0
+	// Default: 1
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 

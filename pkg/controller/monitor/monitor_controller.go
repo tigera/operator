@@ -545,7 +545,7 @@ func fillDefaults(instance *operatorv1.Monitor) {
 		instance.Spec.Alertmanager.AlertmanagerSpec = &operatorv1.AlertmanagerSpec{}
 	}
 	if instance.Spec.Alertmanager.AlertmanagerSpec.Replicas == nil {
-		var replicas int32 = 0
+		var replicas int32 = 1
 		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas = &replicas
 	}
 

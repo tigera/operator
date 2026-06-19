@@ -36,6 +36,25 @@ type MonitorSpec struct {
 	// Alertmanager is the configuration for the Alertmanager.
 	// +optional
 	Alertmanager *Alertmanager `json:"alertmanager,omitempty"`
+
+	// UIAlertsIntegration controls whether Prometheus/Alertmanager alerts are forwarded to Linseed and surfaced
+	// on the manager Alerts page. When omitted, the integration is Enabled.
+	// +optional
+	UIAlertsIntegration *UIAlertsIntegrationStatusType `json:"uiAlertsIntegration,omitempty"`
+}
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type UIAlertsIntegrationStatusType string
+
+const (
+	UIAlertsIntegrationEnabled  UIAlertsIntegrationStatusType = "Enabled"
+	UIAlertsIntegrationDisabled UIAlertsIntegrationStatusType = "Disabled"
+)
+
+// UIAlertsEnabled reports whether the Alerts-page integration is enabled. It defaults to true when the field
+// is unset, preserving the always-on behavior of clusters provisioned before this field existed.
+func (s MonitorSpec) UIAlertsEnabled() bool {
+	return s.UIAlertsIntegration == nil || *s.UIAlertsIntegration != UIAlertsIntegrationDisabled
 }
 
 type ExternalPrometheus struct {

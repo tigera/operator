@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -50,16 +51,7 @@ import (
 )
 
 var _ = Describe("monitor rendering tests", func() {
-	defaultAlertmanagerConfigSecret := &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      monitor.AlertmanagerConfigSecret,
-			Namespace: common.OperatorNamespace(),
-		},
-		Data: map[string][]byte{
-			"alertmanager.yaml": []byte("Alertmanager configuration secret"),
-		},
-	}
+	defaultAlertmanagerConfig := monitor.DefaultAlertmanagerConfig(true)
 	expectedAlertmanagerPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager.json")
 	expectedAlertmanagerMeshPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/alertmanager-mesh.json")
 	expectedPrometheusPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/prometheus.json")
@@ -103,11 +95,11 @@ var _ = Describe("monitor rendering tests", func() {
 			PullSecrets: []*corev1.Secret{
 				{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret"}},
 			},
-			ServerTLSSecret:          prometheusKeyPair,
-			ClientTLSSecret:          prometheusClientKeyPair,
-			AlertmanagerConfigSecret: defaultAlertmanagerConfigSecret,
-			ClusterDomain:            "example.org",
-			TrustedCertBundle:        bundle,
+			ServerTLSSecret:    prometheusKeyPair,
+			ClientTLSSecret:    prometheusClientKeyPair,
+			AlertmanagerConfig: defaultAlertmanagerConfig,
+			ClusterDomain:      "example.org",
+			TrustedCertBundle:  bundle,
 		}
 	})
 
@@ -120,7 +112,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -177,7 +169,7 @@ var _ = Describe("monitor rendering tests", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -345,10 +337,13 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(serviceObj.Spec.Selector).To(HaveLen(1))
 		Expect(serviceObj.Spec.Selector["alertmanager"]).To(Equal("calico-node-alertmanager"))
 
-		// Alertmanager configuration secret
-		secretObj, ok := rtest.GetResource(toCreate, "alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret").(*corev1.Secret)
+		// Alertmanager configuration (AlertmanagerConfig custom resource)
+		amConfigObj, ok := rtest.GetResource(toCreate, monitor.AlertmanagerConfigName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1alpha1", monitoringv1alpha1.AlertmanagerConfigKind).(*monitoringv1alpha1.AlertmanagerConfig)
 		Expect(ok).To(BeTrue())
-		Expect(secretObj.Data).To(HaveKeyWithValue("alertmanager.yaml", []byte("Alertmanager configuration secret")))
+		Expect(amConfigObj.Spec.Route.Receiver).To(Equal("linseed"))
+		Expect(amConfigObj.Spec.Receivers).To(HaveLen(1))
+		Expect(amConfigObj.Spec.Receivers[0].WebhookConfigs).To(HaveLen(1))
+		Expect(*amConfigObj.Spec.Receivers[0].WebhookConfigs[0].URL).To(Equal(monitor.LinseedEventsURL))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -484,12 +479,16 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(prometheusruleObj.ObjectMeta.Labels["role"]).To(Equal("tigera-prometheus-rules"))
 		Expect(prometheusruleObj.Spec.Groups).To(HaveLen(1))
 		Expect(prometheusruleObj.Spec.Groups[0].Name).To(Equal("calico.rules"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(1))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules).To(HaveLen(3))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Alert).To(Equal("DeniedPacketsRate"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Labels["severity"]).To(Equal("info"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
-		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[1].Alert).To(Equal("IPPoolNearlyExhausted"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[1].Labels["severity"]).To(Equal("warning"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[2].Alert).To(Equal("IPPoolExhausted"))
+		Expect(prometheusruleObj.Spec.Groups[0].Rules[2].Labels["severity"]).To(Equal("critical"))
 
 		// ServiceMonitor
 		servicemonitorObj, ok = rtest.GetResource(toCreate, monitor.CalicoNodeMonitor, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
@@ -679,7 +678,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -869,7 +868,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 	})
 
 	It("Should render external prometheus resources with service monitor and custom token", func() {
@@ -895,7 +894,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 	})
 
 	It("Should render external prometheus resources without service monitor", func() {
@@ -911,7 +910,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
@@ -925,7 +924,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(4))
+		Expect(toDelete).To(HaveLen(5))
 		sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
 		Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
 			TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
@@ -1065,7 +1064,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(serviceMonitor.Spec.Endpoints[0].Port).To(Equal(monitor.OperatorMetricsPortName))
 
 		// Neither should be in toDelete (only PodMonitor, Deployment, typhaServiceMonitor).
-		Expect(toDelete).To(HaveLen(3))
+		Expect(toDelete).To(HaveLen(4))
 	})
 
 	It("Should include operator alert rules in PrometheusRule when OperatorMetricsEnabled is true", func() {
@@ -1079,14 +1078,14 @@ var _ = Describe("monitor rendering tests", func() {
 		prometheusruleObj, ok := rtest.GetResource(toCreate, monitor.TigeraPrometheusRule, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusRuleKind).(*monitoringv1.PrometheusRule)
 		Expect(ok).To(BeTrue())
 		rules := prometheusruleObj.Spec.Groups[0].Rules
-		Expect(rules).To(HaveLen(9))
+		Expect(rules).To(HaveLen(11))
 
 		// DeniedPacketsRate - base rule, severity downgraded to info
 		Expect(rules[0].Alert).To(Equal("DeniedPacketsRate"))
-		Expect(rules[0].Expr).To(Equal(intstr.FromString("rate(calico_denied_packets[10s]) > 50")))
+		Expect(rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(rules[0].Labels["severity"]).To(Equal("info"))
-		Expect(rules[0].Annotations["summary"]).To(Equal("Instance {{$labels.instance}} - Large rate of packets denied"))
-		Expect(rules[0].Annotations["description"]).To(Equal("{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}."))
+		Expect(rules[0].Annotations["summary"]).To(Equal("High rate of denied packets"))
+		Expect(rules[0].Annotations["description"]).To(Equal("Policy {{$labels.policy}} is denying packets at a high rate."))
 
 		// TLS certificate expiry alerts
 		Expect(rules[1].Alert).To(Equal("TLSCertExpiringWarning"))
@@ -1142,6 +1141,14 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rules[8].Labels["severity"]).To(Equal("critical"))
 		Expect(rules[8].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is progressing"))
 		Expect(rules[8].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a progressing state for more than 30 minutes."))
+
+		// IP pool utilisation alerts (always present, appended after the operator-metrics rules)
+		Expect(rules[9].Alert).To(Equal("IPPoolNearlyExhausted"))
+		Expect(rules[9].For).To(Equal(ptr.To(monitoringv1.Duration("5m"))))
+		Expect(rules[9].Labels["severity"]).To(Equal("warning"))
+		Expect(rules[10].Alert).To(Equal("IPPoolExhausted"))
+		Expect(rules[10].For).To(Equal(ptr.To(monitoringv1.Duration("5m"))))
+		Expect(rules[10].Labels["severity"]).To(Equal("critical"))
 	})
 
 	It("Should delete operator metrics resources when OperatorMetricsEnabled is false", func() {
@@ -1172,7 +1179,7 @@ func expectedBaseResources() []client.Object {
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-role-binding", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator-secret", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
-		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "alertmanager-calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
+		&monitoringv1alpha1.AlertmanagerConfig{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "AlertmanagerConfig", APIVersion: "monitoring.coreos.com/v1alpha1"}},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator", Namespace: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-prometheus-operator"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -1182,6 +1189,9 @@ func expectedBaseResources() []client.Object {
 		&monitoringv1.Prometheus{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-prometheus", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Prometheus", APIVersion: "monitoring.coreos.com/v1"}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 		&monitoringv1.Alertmanager{ObjectMeta: metav1.ObjectMeta{Name: "calico-node-alertmanager", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Alertmanager", APIVersion: "monitoring.coreos.com/v1"}},
+		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-alertmanager-linseed"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
+		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-alertmanager-linseed"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-tigera-linseed-token", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "prometheus-http-api", Namespace: common.TigeraPrometheusNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},

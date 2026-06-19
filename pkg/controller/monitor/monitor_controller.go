@@ -19,10 +19,8 @@ import (
 	"fmt"
 	"time"
 
-	monitoringv1alpha1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -396,12 +394,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	alertmanagerConfig, err := r.readAlertmanagerConfig(ctx, instance.Spec.UIAlertsEnabled())
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Alertmanager configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Carry forward the token Kubernetes populated into the Alertmanager Linseed token secret, so the
 	// component handler preserves it on reconcile instead of wiping it (Kubernetes won't re-populate a
 	// secret it has already processed). Empty until Kubernetes first populates the created secret.
@@ -441,11 +433,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedBundle.AddCertificates(operatorTLSSecret)
 	}
 
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,
+		ManagedCluster:                managementClusterConnection != nil,
 		Installation:                  installationSpec,
 		PullSecrets:                   pullSecrets,
-		AlertmanagerConfig:            alertmanagerConfig,
 		AlertmanagerLinseedTokenData:  alertmanagerLinseedTokenData,
 		KeyValidatorConfig:            keyValidatorConfig,
 		ServerTLSSecret:               serverTLSSecret,
@@ -582,31 +580,4 @@ func fillDefaults(instance *operatorv1.Monitor) {
 // PrometheusTLSServerDNSNames returns all the DNS names valid for the prometheus server TLS asset.
 func PrometheusTLSServerDNSNames(clusterDomain string) []string {
 	return dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, clusterDomain)
-}
-
-// readAlertmanagerConfig returns the AlertmanagerConfig to render in the tigera-prometheus
-// namespace, where it is referenced by Alertmanager.spec.alertmanagerConfiguration.
-//
-// If the user supplies their own AlertmanagerConfig in the tigera-operator namespace (named
-// monitor.AlertmanagerConfigName), the operator renders a copy of it in tigera-prometheus.
-// Otherwise it renders the operator's default config (the Linseed webhook receiver when the UI
-// alerts integration is enabled, or a null receiver when disabled).
-func (r *ReconcileMonitor) readAlertmanagerConfig(ctx context.Context, uiAlertsEnabled bool) (*monitoringv1alpha1.AlertmanagerConfig, error) {
-	userConfig := &monitoringv1alpha1.AlertmanagerConfig{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: monitor.AlertmanagerConfigName, Namespace: common.OperatorNamespace()}, userConfig)
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, err
-		}
-		// No user-provided config: render the operator default.
-		return monitor.DefaultAlertmanagerConfig(uiAlertsEnabled), nil
-	}
-
-	// A user-provided config exists in the operator namespace: render a copy of its spec in the
-	// tigera-prometheus namespace (where the Alertmanager and its alertmanagerConfiguration live).
-	return &monitoringv1alpha1.AlertmanagerConfig{
-		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1alpha1.AlertmanagerConfigKind, APIVersion: monitoringv1alpha1.SchemeGroupVersion.String()},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.AlertmanagerConfigName, Namespace: common.TigeraPrometheusNamespace},
-		Spec:       userConfig.Spec,
-	}, nil
 }

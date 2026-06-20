@@ -103,8 +103,14 @@ const (
 	AlertmanagerLinseedTokenSecretName = AlertmanagerServiceAccountName + "-tigera-linseed-token"
 	AlertmanagerLinseedTokenKey        = "token"
 
-	// LinseedEventsURL is the Linseed endpoint that ingests Alertmanager webhook alerts as events.
+	// LinseedEventsURL is the Linseed endpoint that ingests Alertmanager webhook alerts as events,
+	// as addressed from a standalone or management cluster where Linseed runs in-cluster.
 	LinseedEventsURL = "https://tigera-linseed.tigera-elasticsearch.svc/api/v1/events/alertmanager"
+	// LinseedEventsURLManaged is the same endpoint as addressed from a managed cluster. There is no
+	// Linseed in tigera-elasticsearch on a managed cluster; Alertmanager reaches Linseed via the
+	// namespace-local "tigera-linseed" ExternalName service that redirects to Guardian (see
+	// externalLinseedService). The Linseed certificate accepts SNI "tigera-linseed".
+	LinseedEventsURLManaged = "https://tigera-linseed/api/v1/events/alertmanager"
 
 	// AlertmanagerLinseedClusterRoleName is the ClusterRole that grants Alertmanager
 	// permission to push Prometheus alerts to Linseed as events. It is bound to the
@@ -326,11 +332,14 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	// (validated by Linseed via TokenReview) only on non-managed clusters, when Alertmanager is running
 	// and forwarding to Linseed. On a managed cluster the token is instead a Linseed-issued JWT pushed
 	// into this namespace by Linseed's token controller (an Opaque Secret of the same name); the operator
-	// must not also create a service-account-token Secret there, as the two have different, immutable types.
-	if mc.alertmanagerReplicas() > 0 && mc.cfg.Monitor.UIAlertsEnabled() && !mc.cfg.ManagedCluster {
-		toCreate = append(toCreate, mc.alertmanagerLinseedTokenSecret())
-	} else {
-		toDelete = append(toDelete, mc.alertmanagerLinseedTokenSecret())
+	// must neither create nor delete it there, as the two have different, immutable types and the token
+	// controller — not the operator — owns that Secret's lifecycle.
+	if !mc.cfg.ManagedCluster {
+		if mc.alertmanagerReplicas() > 0 && mc.cfg.Monitor.UIAlertsEnabled() {
+			toCreate = append(toCreate, mc.alertmanagerLinseedTokenSecret())
+		} else {
+			toDelete = append(toDelete, mc.alertmanagerLinseedTokenSecret())
+		}
 	}
 
 	// On a managed cluster, allow the management cluster's guardian service account to manage the
@@ -338,8 +347,13 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	// provision it through the tunnel (mirrors the per-namespace binding fluentd/compliance/etc. create).
 	if mc.cfg.ManagedCluster {
 		toCreate = append(toCreate, mc.externalLinseedRoleBinding())
+		// Alertmanager has no in-cluster Linseed to POST events to on a managed cluster; give it a
+		// namespace-local "tigera-linseed" ExternalName service that redirects to Guardian (mirrors
+		// fluentd's tigera-fluentd service). Without it the webhook URL fails to resolve (no such host).
+		toCreate = append(toCreate, mc.externalLinseedService())
 	} else {
 		toDelete = append(toDelete, mc.externalLinseedRoleBinding())
+		toDelete = append(toDelete, mc.externalLinseedService())
 	}
 
 	serviceMonitors := []client.Object{
@@ -668,6 +682,13 @@ func (mc *monitorComponent) alertmanagerConfigYAML() string {
 	}
 	receivers := []map[string]interface{}{{"name": "null"}}
 
+	// On a managed cluster Linseed is not in-cluster; address it via the namespace-local
+	// "tigera-linseed" ExternalName service that redirects to Guardian, using SNI "tigera-linseed".
+	url, serverName := LinseedEventsURL, "tigera-linseed.tigera-elasticsearch.svc"
+	if mc.cfg.ManagedCluster {
+		url, serverName = LinseedEventsURLManaged, "tigera-linseed"
+	}
+
 	if mc.cfg.Monitor.UIAlertsEnabled() {
 		if names := enabledAlertNames(mc.cfg.Monitor.Alerts); len(names) > 0 {
 			route["routes"] = []map[string]interface{}{{
@@ -677,7 +698,7 @@ func (mc *monitorComponent) alertmanagerConfigYAML() string {
 			receivers = append(receivers, map[string]interface{}{
 				"name": "linseed",
 				"webhook_configs": []map[string]interface{}{{
-					"url":           LinseedEventsURL,
+					"url":           url,
 					"send_resolved": true,
 					"http_config": map[string]interface{}{
 						"authorization": map[string]interface{}{
@@ -688,7 +709,7 @@ func (mc *monitorComponent) alertmanagerConfigYAML() string {
 							"ca_file":     "/etc/alertmanager/configmaps/" + certificatemanagement.TrustedCertConfigMapName + "/" + certificatemanagement.TrustedCertConfigMapKeyName,
 							"cert_file":   "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSCertKey,
 							"key_file":    "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSPrivateKeyKey,
-							"server_name": "tigera-linseed.tigera-elasticsearch.svc",
+							"server_name": serverName,
 						},
 					},
 				}},
@@ -722,6 +743,24 @@ func enabledAlertNames(a operatorv1.Alerts) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// externalLinseedService is rendered only on managed clusters. Alertmanager's webhook posts events to
+// "https://tigera-linseed" (see alertmanagerConfigYAML); this ExternalName service resolves that name to
+// Guardian, which tunnels the request to the management cluster's Linseed. The Linseed certificate
+// accepts SNI "tigera-linseed". Mirrors fluentd's externalLinseedService in tigera-fluentd.
+func (mc *monitorComponent) externalLinseedService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, mc.cfg.ClusterDomain),
+		},
+	}
 }
 
 func (mc *monitorComponent) alertmanagerService() *corev1.Service {

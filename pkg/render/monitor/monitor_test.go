@@ -109,7 +109,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -166,7 +166,7 @@ var _ = Describe("monitor rendering tests", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -678,7 +678,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -777,6 +777,33 @@ var _ = Describe("monitor rendering tests", func() {
 		}))
 	})
 
+	It("Should point the Alertmanager webhook at Guardian on a managed cluster", func() {
+		cfg.ManagedCluster = true
+		component := monitor.Monitor(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		toCreate, toDelete := component.Objects()
+
+		// The Linseed bearer token is a Linseed-issued JWT owned by the token controller on a managed
+		// cluster; the operator must neither create nor delete it (same name, different immutable type).
+		Expect(rtest.GetResource(toCreate, "calico-alertmanager-tigera-linseed-token", common.TigeraPrometheusNamespace, "", "v1", "Secret")).To(BeNil())
+		Expect(rtest.GetResource(toDelete, "calico-alertmanager-tigera-linseed-token", common.TigeraPrometheusNamespace, "", "v1", "Secret")).To(BeNil())
+
+		// The webhook must target the namespace-local tigera-linseed name (which redirects to Guardian),
+		// not the management-cluster in-cluster service that does not resolve on a managed cluster.
+		amConfigSecret, ok := rtest.GetResource(toCreate, "alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret").(*corev1.Secret)
+		Expect(ok).To(BeTrue())
+		amYAML := amConfigSecret.StringData["alertmanager.yaml"]
+		Expect(amYAML).To(ContainSubstring(monitor.LinseedEventsURLManaged))
+		Expect(amYAML).NotTo(ContainSubstring(monitor.LinseedEventsURL))
+		Expect(amYAML).To(ContainSubstring("server_name: tigera-linseed\n"))
+
+		// And the ExternalName service backing that name must exist, pointing at Guardian.
+		svc, ok := rtest.GetResource(toCreate, "tigera-linseed", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
+		Expect(ok).To(BeTrue())
+		Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeExternalName))
+		Expect(svc.Spec.ExternalName).To(Equal("guardian.calico-system.svc.example.org"))
+	})
+
 	Context("calico-system rendering", func() {
 		policyNames := []types.NamespacedName{
 			{Name: "calico-system.calico-node-alertmanager", Namespace: "tigera-prometheus"},
@@ -868,7 +895,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render external prometheus resources with service monitor and custom token", func() {
@@ -894,7 +921,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render external prometheus resources without service monitor", func() {
@@ -910,7 +937,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
@@ -924,7 +951,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 		sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
 		Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
 			TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
@@ -1063,8 +1090,9 @@ var _ = Describe("monitor rendering tests", func() {
 		serviceMonitor := sm.(*monitoringv1.ServiceMonitor)
 		Expect(serviceMonitor.Spec.Endpoints[0].Port).To(Equal(monitor.OperatorMetricsPortName))
 
-		// Neither should be in toDelete (only the legacy monitors, Deployment, typhaServiceMonitor).
-		Expect(toDelete).To(HaveLen(4))
+		// Neither should be in toDelete (only the legacy monitors, Deployment, typhaServiceMonitor,
+		// and the managed-only Linseed service/rolebinding).
+		Expect(toDelete).To(HaveLen(5))
 	})
 
 	It("Should include operator alert rules in PrometheusRule when OperatorMetricsEnabled is true", func() {

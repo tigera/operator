@@ -438,10 +438,29 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	managedCluster := managementClusterConnection != nil
+
+	// On a managed cluster, Alertmanager forwards alerts to the management cluster's Linseed through
+	// Guardian (see monitor.LinseedEventsURLManaged). That TLS connection is terminated by the management
+	// Linseed, whose serving certificate is signed by the management cluster's CA — not the local one.
+	// Add the management Linseed public certificate (copied into this cluster by kube-controllers) to
+	// Alertmanager's trusted bundle so the webhook can verify it; otherwise the POST fails with an
+	// unknown-authority error. Mirrors how fluentd trusts Linseed on managed clusters.
+	if managedCluster {
+		linseedCertificate, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error fetching Linseed certificate %s", render.VoltronLinseedPublicCert), err, reqLogger)
+			return reconcile.Result{}, err
+		} else if linseedCertificate == nil {
+			log.Info(fmt.Sprintf("Linseed certificate %s/%s not yet available; Alertmanager webhook trust will be incomplete until it is copied in", common.OperatorNamespace(), render.VoltronLinseedPublicCert))
+		} else {
+			trustedBundle.AddCertificates(linseedCertificate)
+		}
+	}
 
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,
-		ManagedCluster:                managementClusterConnection != nil,
+		ManagedCluster:                managedCluster,
 		Installation:                  installationSpec,
 		PullSecrets:                   pullSecrets,
 		AlertmanagerLinseedTokenData:  alertmanagerLinseedTokenData,

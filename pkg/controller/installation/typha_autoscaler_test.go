@@ -74,11 +74,6 @@ var _ = Describe("Test typha autoscaler ", func() {
 	})
 
 	It("should initialize an autoscaler", func() {
-		// With no nodes the autoscaler's start-up run degrades ("not enough linux nodes"),
-		// so tolerate the SetDegraded call its goroutine makes. This test only verifies that
-		// the autoscaler initializes and starts without panicking.
-		statusManager.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Maybe()
-
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
 		ta.start(ctx)
 	})
@@ -139,13 +134,6 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// Create a few nodes
 		CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
 		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
-
-		// Wait for the informer to observe both nodes before starting the autoscaler.
-		// Otherwise the autoscaler's start-up run can fire before the nodes are picked up,
-		// see zero linux nodes, and call SetDegraded - which this test does not expect.
-		Eventually(func() []any {
-			return nodeIndexInformer.GetStore().List()
-		}, 5*time.Second).Should(HaveLen(2))
 
 		// Create the autoscaler and run it
 		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))

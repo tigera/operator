@@ -16,7 +16,9 @@ package enterprise
 
 import (
 	"fmt"
+	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -76,6 +78,42 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 // Validate rejects installation config Calico Enterprise does not support.
 func (coreControllerExtension) Validate(cc extensions.ControllerContext) error {
 	return validateReporterPort(cc.FelixConfiguration)
+}
+
+// DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.
+// Some platforms run a DNS service that isn't named "kube-dns", so dnsTrustedServers
+// needs a provider-specific default for Enterprise DNS logging to work. Returns
+// whether it changed fc.
+func (coreControllerExtension) DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
+	dnsService := ""
+	switch install.KubernetesProvider {
+	case operatorv1.ProviderOpenShift:
+		dnsService = "k8s-service:openshift-dns/dns-default"
+	case operatorv1.ProviderRKE2:
+		dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
+	}
+	if dnsService == "" {
+		return false, nil
+	}
+
+	felixDefault := "k8s-service:kube-dns"
+	trustedServers := []string{dnsService}
+	// Keep any other values that are already configured, excepting the value we are
+	// setting and the kube-dns default.
+	existingSetting := ""
+	if fc.Spec.DNSTrustedServers != nil {
+		existingSetting = strings.Join(*fc.Spec.DNSTrustedServers, ",")
+		for _, server := range *fc.Spec.DNSTrustedServers {
+			if server != felixDefault && server != dnsService {
+				trustedServers = append(trustedServers, server)
+			}
+		}
+	}
+	if strings.Join(trustedServers, ",") == existingSetting {
+		return false, nil
+	}
+	fc.Spec.DNSTrustedServers = &trustedServers
+	return true, nil
 }
 
 // Watches registers the enterprise resources the installation controller

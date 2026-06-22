@@ -17,8 +17,10 @@ package extensions
 import (
 	"context"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -57,6 +59,17 @@ type ControllerExtension interface {
 // secrets) instead of the controller naming them.
 type Watcher interface {
 	Watches(c ctrlruntime.Controller) error
+}
+
+// FelixConfigDefaulter is an optional companion to ControllerExtension. A
+// controller's FelixConfiguration defaulting calls Set.DefaultFelixConfiguration,
+// which invokes this on a registered extension that implements it, so the variant's
+// FelixConfiguration defaults (e.g. the provider-specific dnsTrustedServers) live in
+// the extension instead of the controller. It returns whether it changed fc. Felix
+// defaulting persists early in reconcile, before ExtendContext runs, so it can't fold
+// into ExtendContext.
+type FelixConfigDefaulter interface {
+	DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error)
 }
 
 // ControllerContext is the controller-phase context, the corollary to the

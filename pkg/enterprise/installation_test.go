@@ -43,6 +43,33 @@ var _ = Describe("installation controller extension", func() {
 		Expect(ext.Validate(cc)).To(HaveOccurred())
 	})
 
+	DescribeTable("defaults dnsTrustedServers for providers whose DNS service isn't kube-dns",
+		func(provider operatorv1.Provider, expected []string) {
+			fc := &v3.FelixConfiguration{}
+			install := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider}
+			updated, err := ext.DefaultFelixConfiguration(extensions.InstallationController, install, fc)
+			Expect(err).NotTo(HaveOccurred())
+			if expected == nil {
+				Expect(updated).To(BeFalse())
+				Expect(fc.Spec.DNSTrustedServers).To(BeNil())
+				return
+			}
+			Expect(updated).To(BeTrue())
+			Expect(*fc.Spec.DNSTrustedServers).To(ConsistOf(expected))
+		},
+		Entry("OpenShift", operatorv1.ProviderOpenShift, []string{"k8s-service:openshift-dns/dns-default"}),
+		Entry("RKE2", operatorv1.ProviderRKE2, []string{"k8s-service:kube-system/rke2-coredns-rke2-coredns"}),
+		Entry("other providers keep the felix default", operatorv1.ProviderNone, nil),
+	)
+
+	It("does no felix defaulting for the Calico variant", func() {
+		fc := &v3.FelixConfiguration{}
+		updated, err := ext.DefaultFelixConfiguration(extensions.InstallationController, &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated).To(BeFalse())
+		Expect(fc.Spec.DNSTrustedServers).To(BeNil())
+	})
+
 	It("manages the node prometheus and kube-controllers metrics keypairs for the enterprise variant", func() {
 		_, managed, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())

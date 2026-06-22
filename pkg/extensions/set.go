@@ -15,6 +15,8 @@
 package extensions
 
 import (
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -119,6 +121,25 @@ func (s *Set) SetupWatches(controller ControllerName, c ctrlruntime.Controller) 
 		}
 	}
 	return nil
+}
+
+// DefaultFelixConfiguration runs the named controller's extension FelixConfiguration
+// defaulting for the installation's variant, returning whether it changed fc. The
+// extension implements the optional FelixConfigDefaulter companion; when it doesn't
+// (or no extension is registered) this is a no-op. Nil-safe.
+func (s *Set) DefaultFelixConfiguration(controller ControllerName, install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
+	if install == nil {
+		return false, nil
+	}
+	v := s.variant(install.Variant)
+	if v == nil {
+		return false, nil
+	}
+	d, ok := v.controllers[controller].(FelixConfigDefaulter)
+	if !ok {
+		return false, nil
+	}
+	return d.DefaultFelixConfiguration(install, fc)
 }
 
 // Images returns the shared image override table. The render package resolves a

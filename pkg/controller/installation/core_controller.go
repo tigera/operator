@@ -1901,36 +1901,13 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 		updated = true
 	}
 
-	if install.Spec.Variant.IsEnterprise() {
-		// Some platforms need a different default setting for dnsTrustedServers, because their DNS service is not named "kube-dns".
-		dnsService := ""
-		switch install.Spec.KubernetesProvider {
-		case operatorv1.ProviderOpenShift:
-			dnsService = "k8s-service:openshift-dns/dns-default"
-		case operatorv1.ProviderRKE2:
-			dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
-		}
-		if dnsService != "" {
-			felixDefault := "k8s-service:kube-dns"
-			trustedServers := []string{dnsService}
-			// Keep any other values that are already configured, excepting the value
-			// that we are setting and the kube-dns default.
-			existingSetting := ""
-			if fc.Spec.DNSTrustedServers != nil {
-				existingSetting = strings.Join(*(fc.Spec.DNSTrustedServers), ",")
-				for _, server := range *(fc.Spec.DNSTrustedServers) {
-					if server != felixDefault && server != dnsService {
-						trustedServers = append(trustedServers, server)
-					}
-				}
-			}
-			newSetting := strings.Join(trustedServers, ",")
-			if newSetting != existingSetting {
-				fc.Spec.DNSTrustedServers = &trustedServers
-				updated = true
-			}
-		}
+	// Variant-specific FelixConfiguration defaults (e.g. the Enterprise
+	// provider-specific dnsTrustedServers) are owned by the variant extension.
+	extUpdated, err := r.opts.Extensions.DefaultFelixConfiguration(extensions.InstallationController, &install.Spec, fc)
+	if err != nil {
+		return updated, err
 	}
+	updated = updated || extUpdated
 
 	// If BPF is enabled, but not set on FelixConfiguration, do so here. This could happen when an older
 	// version of operator is replaced by the new one. Older versions of the operator used an
@@ -1941,7 +1918,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 	// If calico-node daemonset exists, we need to check the ENV VAR and set FelixConfiguration accordingly.
 	// Otherwise, this is a fresh install in eBPF mode, set the felix config.
 	ds := &appsv1.DaemonSet{}
-	err := r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: common.CalicoNamespace, Name: common.NodeDaemonSetName}, ds)
 	if err != nil {
 		if !apierrors.IsNotFound(err) {
 			reqLogger.Error(err, "An error occurred when getting the Daemonset resource")

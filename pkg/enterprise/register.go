@@ -30,6 +30,7 @@ func New() *extensions.Set {
 	ent := s.Variant(operatorv1.CalicoEnterprise)
 	ent.Controller(extensions.InstallationController, coreControllerExtension{})
 	ent.Controller(extensions.WindowsController, windowsControllerExtension{})
+	ent.Controller(extensions.APIServerController, apiServerControllerExtension{})
 	registerTypha(ent)
 	registerNode(ent)
 	registerWindows(ent)

@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
@@ -28,17 +27,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -59,6 +55,11 @@ const (
 	// ComponentNameAPIServer is the extension key under which a variant registers
 	// its API server modifier and image override.
 	ComponentNameAPIServer = "apiserver"
+
+	// ComponentNameAPIServerPolicy keys the API server network policy modifier (the
+	// OIDC egress rule and the L7 admission controller ingress port). The base policy
+	// carries neither.
+	ComponentNameAPIServerPolicy = "apiserver-policy"
 )
 
 const (
@@ -114,14 +115,33 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	}, nil
 }
 
+// apiServerPolicyComponent wraps the API server network policy passthrough so it is
+// render.Extensible: the variant modifier adds the OIDC egress rule and the L7
+// admission controller ingress port. The base policy carries neither.
+type apiServerPolicyComponent struct {
+	Component
+	cfg *APIServerConfiguration
+}
+
+func (apiServerPolicyComponent) ModifierKey() string { return ComponentNameAPIServerPolicy }
+
+// ExtensionContext hands the policy modifier the config it needs to look up container
+// ports.
+func (c apiServerPolicyComponent) ExtensionContext() any {
+	return APIServerExtensionContext{Config: c.cfg}
+}
+
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
-	return NewPassthrough(
-		[]client.Object{calicoSystemAPIServerPolicy(cfg)},
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
-		},
-	)
+	return apiServerPolicyComponent{
+		Component: NewPassthrough(
+			[]client.Object{calicoSystemAPIServerPolicy(cfg)},
+			[]client.Object{
+				// allow-tigera Tier was renamed to calico-system
+				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
+			},
+		),
+		cfg: cfg,
+	}
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -131,38 +151,22 @@ type APIServerConfiguration struct {
 	Installation                 *operatorv1.InstallationSpec
 	APIServer                    *operatorv1.APIServerSpec
 	ForceHostNetwork             bool
-	ApplicationLayer             *operatorv1.ApplicationLayer
-	ManagementCluster            *operatorv1.ManagementCluster
-	ManagementClusterConnection  *operatorv1.ManagementClusterConnection
 	TLSKeyPair                   certificatemanagement.KeyPairInterface
 	PullSecrets                  []*corev1.Secret
 	OpenShift                    bool
 	TrustedBundle                certificatemanagement.TrustedBundle
 	MultiTenant                  bool
-	KeyValidatorConfig           authentication.KeyValidatorConfig
 	KubernetesVersion            *common.VersionInfo
 	ClusterDomain                string
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool
-
-	// Whether or not the API server deployment must run a query server alongside the API
-	// server. The deployment (and its supporting objects) are rendered when either an
-	// aggregation API server or a query server is required. The query server itself, and
-	// the rest of its supporting configuration, is layered on by the variant's modifier.
-	RequiresQueryServer bool
-
-	// When certificate management is enabled, we need a separate init container to create a cert, running
-	// with the same permissions as query server.
-	QueryServerTLSKeyPairCertificateManagementOnly certificatemanagement.KeyPairInterface
 }
 
 type apiServerComponent struct {
-	cfg                             *APIServerConfiguration
-	calicoImage                     string
-	l7AdmissionControllerEnvoyImage string
-	dikastesImage                   string
+	cfg         *APIServerConfiguration
+	calicoImage string
 }
 
 // APIServerExtensionContext carries the API server's render configuration and resolved
@@ -188,29 +192,14 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
+
+	// Resolve the calico image unconditionally: the base uses it for the aggregation
+	// API server container, and a variant modifier needs it for the query server
+	// container and the deployment skeleton it may render itself.
 	var err error
-	errMsgs := []string{}
-
-	if c.cfg.RequiresAggregationServer || c.cfg.RequiresQueryServer {
-		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if c.cfg.IsSidecarInjectionEnabled() {
-		c.l7AdmissionControllerEnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-		c.dikastesImage, err = components.GetReference(components.ComponentDikastes, reg, path, prefix, is)
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		}
-	}
-
-	if len(errMsgs) != 0 {
-		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if err != nil {
+		return err
 	}
 	return nil
 }
@@ -239,22 +228,14 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	secrets := secret.CopyToNamespace(APIServerNamespace, c.cfg.PullSecrets...)
 	namespacedObjects = append(namespacedObjects, secret.ToRuntimeObjects(secrets...)...)
 
-	// The deployment and its supporting objects are needed when running the aggregation API server
-	// or when a query server runs alongside it (the query server is added by a variant modifier).
-	if c.cfg.RequiresAggregationServer || c.cfg.RequiresQueryServer {
-		namespacedObjects = append(namespacedObjects,
-			c.apiServerServiceAccount(),
-			c.apiServerDeployment(),
-			c.apiServerService(),
-			c.apiServerPodDisruptionBudget(),
-		)
+	// The deployment and its supporting objects are needed when running the aggregation
+	// API server. A variant that needs the deployment without an aggregation server (e.g.
+	// to run only a query server) renders the skeleton itself in its modifier and pulls
+	// these back out of the delete list.
+	if c.cfg.RequiresAggregationServer {
+		namespacedObjects = append(namespacedObjects, c.deploymentObjects()...)
 	} else {
-		objsToDelete = append(objsToDelete,
-			&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceAccountName, Namespace: APIServerNamespace}},
-			&appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
-			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceName, Namespace: APIServerNamespace}},
-			&policyv1.PodDisruptionBudget{TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
-		)
+		objsToDelete = append(objsToDelete, APIServerDeploymentObjectMeta()...)
 	}
 
 	// These are objects that only need to exist when we are running an aggregation API server to
@@ -274,12 +255,11 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
 	}
 
-	// The sidecar mutating webhook is driven by ApplicationLayer configuration, not by variant.
-	if c.cfg.IsSidecarInjectionEnabled() {
-		namespacedObjects = append(namespacedObjects, c.sidecarMutatingWebhookConfig())
-	} else {
-		objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
-	}
+	// The L7 sidecar mutating webhook is an enterprise (ApplicationLayer) concern added
+	// by the variant modifier. The base always queues it for deletion so a cluster
+	// without sidecar injection (including any OSS install) never retains a stale one;
+	// the modifier pulls it back out of the delete list when sidecar injection is on.
+	objsToDelete = append(objsToDelete, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
 
 	// Clean up deprecated k8s NetworkPolicy, regardless of variant,
 	// avoiding leftovers in the case of switching between variants.
@@ -306,6 +286,40 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 func (c *apiServerComponent) Ready() bool {
 	return true
+}
+
+// deploymentObjects returns the API server Deployment and its supporting objects.
+func (c *apiServerComponent) deploymentObjects() []client.Object {
+	return []client.Object{
+		c.apiServerServiceAccount(),
+		c.apiServerDeployment(),
+		c.apiServerService(),
+		c.apiServerPodDisruptionBudget(),
+	}
+}
+
+// APIServerDeploymentObjects returns the API server Deployment and its supporting
+// objects (ServiceAccount, Service, PodDisruptionBudget). The base renders these when
+// running an aggregation API server; a variant modifier renders them itself when it
+// needs the deployment but the base did not (e.g. a query-server-only deployment in
+// v3-CRD mode). calicoImage is the resolved image for any base containers.
+func APIServerDeploymentObjects(cfg *APIServerConfiguration, calicoImage string) []client.Object {
+	c := &apiServerComponent{cfg: cfg, calicoImage: calicoImage}
+	return c.deploymentObjects()
+}
+
+// APIServerDeploymentObjectMeta returns empty-shell copies of the API server Deployment
+// and its supporting objects, identifying them by name/kind/namespace. The base queues
+// these for deletion when it isn't running an aggregation API server; a variant modifier
+// matches against them to pull them back out of the delete list when it renders the
+// deployment skeleton itself.
+func APIServerDeploymentObjectMeta() []client.Object {
+	return []client.Object{
+		&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceAccountName, Namespace: APIServerNamespace}},
+		&appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
+		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerServiceName, Namespace: APIServerNamespace}},
+		&policyv1.PodDisruptionBudget{TypeMeta: metav1.TypeMeta{Kind: "PodDisruptionBudget", APIVersion: "policy/v1"}, ObjectMeta: metav1.ObjectMeta{Name: APIServerName, Namespace: APIServerNamespace}},
+	}
 }
 
 // For legacy reasons we use apiserver: true here instead of the k8s-app: name label,
@@ -452,13 +466,6 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 		},
 	}...)
 
-	if cfg.KeyValidatorConfig != nil {
-		if parsedURL, err := url.Parse(cfg.KeyValidatorConfig.Issuer()); err == nil {
-			oidcEgressRule := networkpolicy.GetOIDCEgressRule(parsedURL)
-			egressRules = append(egressRules, oidcEgressRule)
-		}
-	}
-
 	if r, err := cfg.K8SServiceEndpoint.DestinationEntityRule(); r != nil && err == nil {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
@@ -475,13 +482,10 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 
 	apiServerContainerPort := GetContainerPort(cfg, APIServerContainerName).ContainerPort
 	queryServerContainerPort := GetContainerPort(cfg, TigeraAPIServerQueryServerContainerName).ContainerPort
-	l7AdmCtrlContainerPort := GetContainerPort(cfg, L7AdmissionControllerContainerName).ContainerPort
 
-	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
+	// The ports the API server and query server listen on. The L7 admission controller
+	// ingress port is added by the variant modifier when sidecar injection is enabled.
 	ingressPorts := networkpolicy.Ports(443, uint16(apiServerContainerPort), uint16(queryServerContainerPort), 10443)
-	if cfg.IsSidecarInjectionEnabled() {
-		ingressPorts = append(ingressPorts, numorstring.Port{MinPort: uint16(l7AdmCtrlContainerPort), MaxPort: uint16(l7AdmCtrlContainerPort)})
-	}
 
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
@@ -832,7 +836,6 @@ func GetContainerPort(cfg *APIServerConfiguration, containerName ContainerName) 
 // additional ports (e.g. the query server port).
 func (c *apiServerComponent) apiServerService() *corev1.Service {
 	apiServerTargetPort := GetContainerPort(c.cfg, APIServerContainerName)
-	l7AdmissionControllerTargetPort := GetContainerPort(c.cfg, L7AdmissionControllerContainerName)
 
 	s := &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
@@ -856,17 +859,6 @@ func (c *apiServerComponent) apiServerService() *corev1.Service {
 		},
 	}
 
-	if c.cfg.IsSidecarInjectionEnabled() {
-		s.Spec.Ports = append(s.Spec.Ports,
-			corev1.ServicePort{
-				Name:       L7AdmissionControllerPortName,
-				Port:       L7AdmissionControllerPort,
-				Protocol:   corev1.ProtocolTCP,
-				TargetPort: intstr.FromInt32(l7AdmissionControllerTargetPort.ContainerPort),
-			},
-		)
-	}
-
 	return s
 }
 
@@ -885,28 +877,21 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 		c.cfg.TLSKeyPair.HashAnnotationKey(): c.cfg.TLSKeyPair.HashAnnotationValue(),
 	}
 
+	// The API server cert init container is only needed when running the aggregation API
+	// server under certificate management. A variant modifier adds any further init
+	// containers it needs (e.g. the query server cert).
 	var initContainers []corev1.Container
-	if c.cfg.TLSKeyPair.UseCertificateManagement() {
-		if c.cfg.RequiresAggregationServer {
-			// Only include the API server init container if we're running the aggregation API server!
-			initContainerAPIServer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
-			initContainerAPIServer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
-			initContainers = append(initContainers, initContainerAPIServer)
-		}
-
-		initContainerQueryServer := c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.InitContainer(APIServerNamespace, securitycontext.NewNonRootContext())
-		annotations[c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationKey()] = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.HashAnnotationValue()
-		initContainers = append(initContainers, initContainerQueryServer)
+	if c.cfg.TLSKeyPair.UseCertificateManagement() && c.cfg.RequiresAggregationServer {
+		initContainerAPIServer := c.cfg.TLSKeyPair.InitContainer(APIServerNamespace, c.apiServerContainer().SecurityContext)
+		initContainerAPIServer.Name = fmt.Sprintf("%s-%s", CalicoAPIServerTLSSecretName, certificatemanagement.CSRInitContainerName)
+		initContainers = append(initContainers, initContainerAPIServer)
 	}
 
 	// Determine which containers to run. A variant modifier may add additional
-	// containers (e.g. the query server).
+	// containers (e.g. the query server and the L7 admission controller).
 	containers := []corev1.Container{}
 	if c.cfg.RequiresAggregationServer {
 		containers = append(containers, c.apiServerContainer())
-	}
-	if c.cfg.IsSidecarInjectionEnabled() {
-		containers = append(containers, c.l7AdmissionControllerContainer())
 	}
 
 	d := &appsv1.Deployment{
@@ -957,65 +942,6 @@ func (c *apiServerComponent) apiServerDeployment() *appsv1.Deployment {
 	}
 
 	return d
-}
-
-// apiServer creates a MutatingWebhookConfiguration for sidecars.
-func (c *apiServerComponent) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
-	var cacert []byte
-	svcPort := GetContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
-
-	svcpath := "/sidecar-webhook"
-	svcref := admregv1.ServiceReference{
-		Name:      QueryserverServiceName,
-		Namespace: QueryserverNamespace,
-		Path:      &svcpath,
-		Port:      &svcPort,
-	}
-	failpol := admregv1.Fail
-	labelsel := metav1.LabelSelector{
-		MatchLabels: map[string]string{
-			"applicationlayer.projectcalico.org/sidecar": "true",
-		},
-	}
-	rules := []admregv1.RuleWithOperations{
-		{
-			Rule: admregv1.Rule{
-				APIGroups:   []string{""},
-				APIVersions: []string{"v1"},
-				Resources:   []string{"pods"},
-			},
-			Operations: []admregv1.OperationType{admregv1.Create},
-		},
-	}
-	sidefx := admregv1.SideEffectClassNone
-	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		cacert = c.cfg.TLSKeyPair.GetIssuer().GetCertificatePEM()
-	} else {
-		cacert = c.cfg.Installation.CertificateManagement.CACert
-	}
-	mwc := admregv1.MutatingWebhookConfiguration{
-		TypeMeta: metav1.TypeMeta{
-			Kind:       "MutatingWebhookConfiguration",
-			APIVersion: "admissionregistration.k8s.io/v1",
-		},
-		ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName},
-		Webhooks: []admregv1.MutatingWebhook{
-			{
-				AdmissionReviewVersions: []string{"v1"},
-				ClientConfig: admregv1.WebhookClientConfig{
-					Service:  &svcref,
-					CABundle: cacert,
-				},
-				Name:           "sidecar.projectcalico.org",
-				FailurePolicy:  &failpol,
-				ObjectSelector: &labelsel,
-				Rules:          rules,
-				SideEffects:    &sidefx,
-			},
-		},
-	}
-
-	return &mwc
 }
 
 func (c *apiServerComponent) hostNetwork() bool {
@@ -1113,18 +1039,9 @@ func (c *apiServerComponent) startUpArgs() []string {
 		fmt.Sprintf("--tls-cert-file=%s", c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()),
 	}
 
-	if c.cfg.ManagementCluster != nil {
-		args = append(args, "--enable-managed-clusters-create-api=true")
-		if c.cfg.ManagementCluster.Spec.Address != "" {
-			args = append(args, fmt.Sprintf("--managementClusterAddr=%s", c.cfg.ManagementCluster.Spec.Address))
-		}
-		if c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName != "" {
-			if c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName {
-				args = append(args, "--managementClusterCAType=Public")
-			}
-			args = append(args, fmt.Sprintf("--tunnelSecretName=%s", c.cfg.ManagementCluster.Spec.TLS.SecretName))
-		}
-	}
+	// The management-cluster tunnel args (--enable-managed-clusters-create-api,
+	// --managementClusterAddr, --tunnelSecretName, --managementClusterCAType) are an
+	// enterprise concern, appended to this container by the variant modifier.
 	if c.cfg.KubernetesVersion != nil && c.cfg.KubernetesVersion.Major < 2 && c.cfg.KubernetesVersion.Minor < 30 {
 		// Disable this API as it is not available by default. If we don't, the server fails to start, due to trying to
 		// establish watches for unavailable APIs.
@@ -1133,31 +1050,13 @@ func (c *apiServerComponent) startUpArgs() []string {
 	return args
 }
 
-// apiServerVolumes creates the volumes used by the API server deployment.
+// apiServerVolumes creates the volumes used by the API server deployment. A variant
+// modifier adds any further volumes it needs (the query server cert and the Linseed
+// token).
 func (c *apiServerComponent) apiServerVolumes() []corev1.Volume {
-	volumes := []corev1.Volume{
+	return []corev1.Volume{
 		c.cfg.TLSKeyPair.Volume(),
 	}
-	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
-		volumes = append(volumes, c.cfg.QueryServerTLSKeyPairCertificateManagementOnly.Volume())
-	}
-
-	if c.cfg.ManagementClusterConnection != nil {
-		// Optional: the Secret is delivered over the Guardian tunnel, which can't be
-		// established until calico-apiserver is Ready.
-		volumes = append(volumes, corev1.Volume{
-			Name: LinseedTokenVolumeName,
-			VolumeSource: corev1.VolumeSource{
-				Secret: &corev1.SecretVolumeSource{
-					SecretName: fmt.Sprintf(LinseedTokenSecret, "calico-apiserver"),
-					Items:      []corev1.KeyToPath{{Key: LinseedTokenKey, Path: LinseedTokenSubPath}},
-					Optional:   ptr.To(true),
-				},
-			},
-		})
-	}
-
-	return volumes
 }
 
 // tolerations creates the tolerations used by the API server deployment.
@@ -1316,67 +1215,4 @@ func (c *apiServerComponent) getDeprecatedResources() []client.Object {
 	})
 
 	return renamedRscList
-}
-
-func (cfg *APIServerConfiguration) IsSidecarInjectionEnabled() bool {
-	return cfg.ApplicationLayer != nil &&
-		cfg.ApplicationLayer.Spec.SidecarInjection != nil &&
-		*cfg.ApplicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled
-}
-
-func (c *apiServerComponent) l7AdmissionControllerContainer() corev1.Container {
-	volumeMounts := []corev1.VolumeMount{
-		c.cfg.TLSKeyPair.VolumeMount(c.SupportedOSType()),
-	}
-
-	l7AdmissionControllerTargetPort := GetContainerPort(c.cfg, L7AdmissionControllerContainerName).ContainerPort
-
-	dataplane := "iptables"
-	if c.cfg.Installation.IsNftables() {
-		dataplane = "nftables"
-	}
-
-	l7AdmssCtrl := corev1.Container{
-		Name:    string(L7AdmissionControllerContainerName),
-		Image:   c.calicoImage,
-		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
-		Env: []corev1.EnvVar{
-			{
-				Name:  "L7ADMCTRL_TLSCERTPATH",
-				Value: c.cfg.TLSKeyPair.VolumeMountCertificateFilePath(),
-			},
-			{
-				Name:  "L7ADMCTRL_TLSKEYPATH",
-				Value: c.cfg.TLSKeyPair.VolumeMountKeyFilePath(),
-			},
-			{
-				Name:  "L7ADMCTRL_ENVOYIMAGE",
-				Value: c.l7AdmissionControllerEnvoyImage,
-			},
-			{
-				Name:  "L7ADMCTRL_DIKASTESIMAGE",
-				Value: c.dikastesImage,
-			},
-			{
-				Name:  "L7ADMCTRL_LISTENADDR",
-				Value: fmt.Sprintf(":%d", l7AdmissionControllerTargetPort),
-			},
-			{
-				Name:  "DATAPLANE",
-				Value: dataplane,
-			},
-		},
-		VolumeMounts: volumeMounts,
-		LivenessProbe: &corev1.Probe{
-			ProbeHandler: corev1.ProbeHandler{
-				HTTPGet: &corev1.HTTPGetAction{
-					Path:   "/live",
-					Port:   intstr.FromInt32(l7AdmissionControllerTargetPort),
-					Scheme: corev1.URISchemeHTTPS,
-				},
-			},
-		},
-	}
-
-	return l7AdmssCtrl
 }

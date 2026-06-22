@@ -34,6 +34,7 @@ type ControllerName string
 const (
 	InstallationController ControllerName = "installation"
 	WindowsController      ControllerName = "windows"
+	APIServerController    ControllerName = "apiserver"
 )
 
 // ControllerExtension extends a controller's reconcile: it validates the
@@ -92,4 +93,9 @@ type ControllerContext struct {
 	Ctx                context.Context
 	Client             client.Client
 	CertificateManager certificatemanager.CertificateManager
+
+	// MultiTenant reports whether the operator runs in multi-tenant mode. It's a
+	// controller-phase operator mode some extensions gate on (e.g. the API server's
+	// management-cluster tunnel-secret check).
+	MultiTenant bool
 }

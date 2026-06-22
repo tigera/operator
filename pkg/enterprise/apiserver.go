@@ -16,25 +16,40 @@ package enterprise
 
 import (
 	"fmt"
+	"net/url"
 	"slices"
 	"strings"
 
+	admregv1 "k8s.io/api/admissionregistration/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"github.com/tigera/api/pkg/lib/numorstring"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -43,16 +58,218 @@ const (
 	auditPolicyVolumeName = "calico-audit-policy"
 )
 
-// apiServer carries the rendered API server configuration and resolved image so the
-// enterprise builders (moved verbatim from the render package) can construct the
+// apiServerRenderData is the controller-produced data the API server hook hands to its
+// modifiers through RenderContext.Extension. It carries the enterprise inputs the base
+// render no longer knows about: the management cluster / managed cluster CRs, the
+// ApplicationLayer (which drives the L7 sidecar), the cert-management-only query server
+// keypair, the OIDC key validator config, and the resolved L7 sidecar images.
+type apiServerRenderData struct {
+	managementCluster           *operatorv1.ManagementCluster
+	managementClusterConnection *operatorv1.ManagementClusterConnection
+	applicationLayer            *operatorv1.ApplicationLayer
+	queryServerTLS              certificatemanagement.KeyPairInterface
+	keyValidatorConfig          authentication.KeyValidatorConfig
+	l7EnvoyImage                string
+	dikastesImage               string
+}
+
+// apiServerData pulls the API server hook's render data back out of the render context,
+// returning the zero value when none is set.
+func apiServerData(rc extensions.RenderContext) apiServerRenderData {
+	d, _ := rc.Extension.(apiServerRenderData)
+	return d
+}
+
+// apiServer carries the rendered API server configuration, the resolved image, and the
+// controller-produced render data so the enterprise builders can construct the
 // Enterprise-only objects and deployment additions.
 type apiServer struct {
 	cfg         *render.APIServerConfiguration
 	calicoImage string
+	data        apiServerRenderData
 }
 
 func registerAPIServer(v *extensions.Variant) {
 	extensions.RegisterModifier(v, render.ComponentNameAPIServer, modifyAPIServer)
+	extensions.RegisterModifier(v, render.ComponentNameAPIServerPolicy, modifyAPIServerPolicy)
+}
+
+func (c *apiServer) isSidecarInjectionEnabled() bool {
+	al := c.data.applicationLayer
+	return al != nil &&
+		al.Spec.SidecarInjection != nil &&
+		*al.Spec.SidecarInjection == operatorv1.SidecarEnabled
+}
+
+// apiServerControllerExtension is the Calico Enterprise controller-side hook for the API
+// server controller. It does the enterprise reconcile work the render phase can't:
+// fetching the enterprise CRs, creating the trusted bundle and the query server cert,
+// and resolving the L7 sidecar images.
+type apiServerControllerExtension struct{}
+
+// Validate rejects an API server configuration Calico Enterprise does not support: a
+// cluster cannot be both a management cluster and a managed cluster.
+func (apiServerControllerExtension) Validate(cc extensions.ControllerContext) error {
+	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
+	if err != nil {
+		return fmt.Errorf("error reading ManagementCluster: %w", err)
+	}
+	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
+	if err != nil {
+		return fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+	}
+	if managementCluster != nil && managementClusterConnection != nil {
+		return fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+	}
+	return nil
+}
+
+// Watches registers the enterprise resources the API server controller reconciles on.
+func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
+	for _, obj := range []client.Object{
+		&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}},
+		&operatorv1.ManagementCluster{},
+		&operatorv1.ManagementClusterConnection{},
+		&operatorv1.Authentication{},
+	} {
+		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
+			return err
+		}
+	}
+	for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
+		for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
+			if err := utils.AddSecretsWatch(c, secretName, namespace); err != nil {
+				return err
+			}
+		}
+	}
+	return utils.AddSecretsWatch(c, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+}
+
+// ExtendContext does the enterprise controller-side work: it builds the trusted bundle,
+// fetches the enterprise CRs, creates the query server certificate, resolves the L7
+// sidecar images, and stashes them for the modifiers. The base API server render carries
+// none of this.
+func (apiServerControllerExtension) ExtendContext(cc extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+	rc := cc.RenderContext
+	in := cc.Installation
+
+	trustedBundle, err := cc.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, cc.Client, common.OperatorNamespace(), false)
+	if err != nil {
+		return rc, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
+	}
+
+	applicationLayer, err := utils.GetApplicationLayer(cc.Ctx, cc.Client)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
+	}
+
+	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
+	}
+
+	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
+	if err != nil {
+		return rc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+	}
+
+	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
+	// certificates for managed clusters. The manager controller writes it once
+	// ManagementCluster.Spec.TLS is defaulted; degrade until it exists.
+	if managementCluster != nil && managementCluster.Spec.TLS != nil && !cc.MultiTenant {
+		if _, err := utils.GetSecret(cc.Ctx, cc.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
+			return rc, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
+		}
+	}
+
+	prometheusCertificate, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	if err != nil {
+		return rc, nil, fmt.Errorf("failed to get certificate: %w", err)
+	}
+	if prometheusCertificate != nil {
+		trustedBundle.AddCertificates(prometheusCertificate)
+	}
+
+	if managementClusterConnection != nil {
+		voltronLinseedCert, err := cc.CertificateManager.GetCertificate(cc.Client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		if err != nil {
+			return rc, nil, fmt.Errorf("failed to retrieve %s: %w", render.VoltronLinseedPublicCert, err)
+		}
+		if voltronLinseedCert != nil {
+			trustedBundle.AddCertificates(voltronLinseedCert)
+		}
+	}
+
+	// Authentication: when a Dex-backed Authentication CR is ready, add its cert to the
+	// bundle and build the key validator config for the query server and the policy.
+	var keyValidatorConfig authentication.KeyValidatorConfig
+	authenticationCR, err := utils.GetAuthentication(cc.Ctx, cc.Client)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return rc, nil, fmt.Errorf("error while fetching Authentication: %w", err)
+	}
+	if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
+		if utils.DexEnabled(authenticationCR) {
+			certificate, err := cc.CertificateManager.GetCertificate(cc.Client, render.DexTLSSecretName, common.OperatorNamespace())
+			if err != nil {
+				return rc, nil, fmt.Errorf("failed to retrieve %s: %w", render.DexTLSSecretName, err)
+			} else if certificate == nil {
+				return rc, nil, fmt.Errorf("waiting for secret %q to become available", render.DexTLSSecretName)
+			}
+			trustedBundle.AddCertificates(certificate)
+		}
+		keyValidatorConfig, err = utils.GetKeyValidatorConfig(cc.Ctx, cc.Client, authenticationCR, cc.ClusterDomain)
+		if err != nil {
+			return rc, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
+		}
+	}
+
+	// Under certificate management, the query server needs its own keypair so it can run
+	// with different permissions than the apiserver.
+	var queryServerTLS certificatemanagement.KeyPairInterface
+	if in.CertificateManagement != nil {
+		queryServerTLS, err = cc.CertificateManager.GetOrCreateKeyPair(
+			cc.Client,
+			"query-server-tls",
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, cc.ClusterDomain),
+		)
+		if err != nil {
+			return rc, nil, fmt.Errorf("unable to get or create query server tls key pair: %w", err)
+		}
+	}
+
+	// Resolve the L7 sidecar images when sidecar injection is enabled. The modifier runs
+	// after image resolution, so the hook resolves them here.
+	var l7EnvoyImage, dikastesImage string
+	if applicationLayer != nil &&
+		applicationLayer.Spec.SidecarInjection != nil &&
+		*applicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled {
+		imageSet, err := imageset.GetImageSet(cc.Ctx, cc.Client, in.Variant)
+		if err != nil {
+			return rc, nil, err
+		}
+		l7EnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
+		if err != nil {
+			return rc, nil, err
+		}
+		dikastesImage, err = components.GetReference(components.ComponentDikastes, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
+		if err != nil {
+			return rc, nil, err
+		}
+	}
+
+	rc.TrustedBundle = trustedBundle
+	rc.Extension = apiServerRenderData{
+		managementCluster:           managementCluster,
+		managementClusterConnection: managementClusterConnection,
+		applicationLayer:            applicationLayer,
+		queryServerTLS:              queryServerTLS,
+		keyValidatorConfig:          keyValidatorConfig,
+		l7EnvoyImage:                l7EnvoyImage,
+		dikastesImage:               dikastesImage,
+	}
+	return rc, nil, nil
 }
 
 // registerAPIServerCleanup registers, for the Calico variant, the cleanup that
@@ -66,13 +283,19 @@ func registerAPIServerCleanup(v *extensions.Variant) {
 // the query server container and its volumes, audit logging on the aggregation API server
 // container, the Enterprise RBAC objects, and the query server port on the Service.
 func modifyAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage}
+	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage, data: apiServerData(rc)}
+
+	// Ensure the deployment and its supporting objects exist. The base renders them when
+	// running an aggregation API server; in v3-CRD mode it queues them for deletion, but
+	// Enterprise always runs a query server, so render the skeleton ourselves and pull
+	// those objects back out of the delete list.
+	create, del = c.ensureDeployment(create, del)
 
 	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
 		c.layerDeployment(dep)
 	}
 	if svc, ok := extensions.FindObject[*corev1.Service](create, render.APIServerServiceName); ok {
-		c.addQueryServerPort(svc)
+		c.addServicePorts(svc)
 	}
 	// Enterprise serves staged policies through the tiered-policy passthrough role.
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, "calico-tiered-policy-passthrough"); ok {
@@ -83,13 +306,21 @@ func modifyAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionCo
 		}
 	}
 
+	// The L7 sidecar mutating webhook is driven by ApplicationLayer. The base always
+	// queues it for deletion; when sidecar injection is on, render it and pull it back
+	// out of the delete list.
+	if c.isSidecarInjectionEnabled() {
+		create = append(create, c.sidecarMutatingWebhookConfig())
+		del = removeByRef(del, &admregv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName}})
+	}
+
 	// Global Enterprise RBAC.
 	create = append(create, c.tigeraAPIServerClusterRole(), c.tigeraAPIServerClusterRoleBinding())
 	if !c.cfg.MultiTenant {
 		// These resources are only installed in zero-tenant clusters.
 		create = append(create, c.tigeraUserClusterRole(), c.tigeraNetworkAdminClusterRole())
 	}
-	if c.cfg.ManagementCluster != nil {
+	if c.data.managementCluster != nil {
 		create = append(create, c.managedClusterWatchClusterRole())
 		if c.cfg.MultiTenant {
 			create = append(create, c.multiTenantSecretsRBAC()...)
@@ -109,7 +340,7 @@ func modifyAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionCo
 	if c.cfg.TrustedBundle != nil {
 		create = append(create, c.cfg.TrustedBundle.ConfigMap(render.QueryserverNamespace))
 	}
-	if c.cfg.ManagementClusterConnection != nil {
+	if c.data.managementClusterConnection != nil {
 		create = append(create, c.externalLinseedRoleBinding())
 	}
 
@@ -159,14 +390,22 @@ func cleanupAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionC
 	return create, del
 }
 
-// layerDeployment adds the Enterprise query server container, audit logging, and the
-// query server / trusted bundle volumes to the rendered API server deployment.
+// layerDeployment adds the Enterprise additions to the rendered API server deployment:
+// the query server container (and, under certificate management, its init container and
+// volume), audit logging and the management-cluster tunnel args on the aggregation API
+// server container, the L7 admission controller sidecar, and the Linseed token and
+// trusted bundle volumes.
 func (c *apiServer) layerDeployment(d *appsv1.Deployment) {
-	// Audit logging is performed through the aggregation API server container, which is
-	// only present when the aggregation API server is running.
+	spec := &d.Spec.Template.Spec
+	if d.Spec.Template.Annotations == nil {
+		d.Spec.Template.Annotations = map[string]string{}
+	}
+
+	// Audit logging and the management-cluster tunnel args are layered onto the
+	// aggregation API server container, which is only present when that server runs.
 	if c.cfg.RequiresAggregationServer {
-		for i := range d.Spec.Template.Spec.Containers {
-			ctr := &d.Spec.Template.Spec.Containers[i]
+		for i := range spec.Containers {
+			ctr := &spec.Containers[i]
 			if ctr.Name != string(render.APIServerContainerName) {
 				continue
 			}
@@ -178,22 +417,256 @@ func (c *apiServer) layerDeployment(d *appsv1.Deployment) {
 				"--audit-policy-file=/etc/tigera/audit/policy.conf",
 				"--audit-log-path=/var/log/calico/audit/tsee-audit.log",
 			)
+			ctr.Args = append(ctr.Args, c.managementClusterArgs()...)
 			// In case of OpenShift, apiserver needs privileged access to write audit logs to the
 			// host path volume. Audit logs are owned by root on hosts so we need to be root.
 			ctr.SecurityContext = securitycontext.NewRootContext(c.cfg.OpenShift)
 		}
 
-		d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, c.auditVolumes()...)
+		spec.Volumes = append(spec.Volumes, c.auditVolumes()...)
 	}
 
-	d.Spec.Template.Spec.Containers = append(d.Spec.Template.Spec.Containers, c.queryServerContainer())
+	spec.Containers = append(spec.Containers, c.queryServerContainer())
+	if c.isSidecarInjectionEnabled() {
+		spec.Containers = append(spec.Containers, c.l7AdmissionControllerContainer())
+	}
+
+	// Under certificate management the query server gets its own cert init container and
+	// volume, since apiserver and queryserver may run with different UID:GID.
+	if c.data.queryServerTLS != nil {
+		init := c.data.queryServerTLS.InitContainer(render.APIServerNamespace, securitycontext.NewNonRootContext())
+		spec.InitContainers = append(spec.InitContainers, init)
+		spec.Volumes = append(spec.Volumes, c.data.queryServerTLS.Volume())
+		d.Spec.Template.Annotations[c.data.queryServerTLS.HashAnnotationKey()] = c.data.queryServerTLS.HashAnnotationValue()
+	}
+
+	if c.data.managementClusterConnection != nil {
+		// Optional: the Secret is delivered over the Guardian tunnel, which can't be
+		// established until calico-apiserver is Ready.
+		spec.Volumes = append(spec.Volumes, corev1.Volume{
+			Name: render.LinseedTokenVolumeName,
+			VolumeSource: corev1.VolumeSource{
+				Secret: &corev1.SecretVolumeSource{
+					SecretName: fmt.Sprintf(render.LinseedTokenSecret, "calico-apiserver"),
+					Items:      []corev1.KeyToPath{{Key: render.LinseedTokenKey, Path: render.LinseedTokenSubPath}},
+					Optional:   ptr.To(true),
+				},
+			},
+		})
+	}
 
 	if c.cfg.TrustedBundle != nil {
-		d.Spec.Template.Spec.Volumes = append(d.Spec.Template.Spec.Volumes, c.cfg.TrustedBundle.Volume())
+		spec.Volumes = append(spec.Volumes, c.cfg.TrustedBundle.Volume())
 		for k, v := range c.cfg.TrustedBundle.HashAnnotations() {
 			d.Spec.Template.Annotations[k] = v
 		}
 	}
+}
+
+// managementClusterArgs returns the aggregation API server tunnel args for a management
+// cluster, or nil when this isn't one.
+func (c *apiServer) managementClusterArgs() []string {
+	mc := c.data.managementCluster
+	if mc == nil {
+		return nil
+	}
+	args := []string{"--enable-managed-clusters-create-api=true"}
+	if mc.Spec.Address != "" {
+		args = append(args, fmt.Sprintf("--managementClusterAddr=%s", mc.Spec.Address))
+	}
+	if mc.Spec.TLS != nil && mc.Spec.TLS.SecretName != "" {
+		if mc.Spec.TLS.SecretName == render.ManagerTLSSecretName {
+			args = append(args, "--managementClusterCAType=Public")
+		}
+		args = append(args, fmt.Sprintf("--tunnelSecretName=%s", mc.Spec.TLS.SecretName))
+	}
+	return args
+}
+
+// ensureDeployment makes sure the API server Deployment and its supporting objects are
+// in the create list. The base renders them when running an aggregation API server; when
+// it doesn't (v3-CRD mode), it queues them for deletion, so render the skeleton and pull
+// those objects back out of the delete list.
+func (c *apiServer) ensureDeployment(create, del []client.Object) ([]client.Object, []client.Object) {
+	if _, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
+		return create, del
+	}
+	skeleton := render.APIServerDeploymentObjects(c.cfg, c.calicoImage)
+	create = append(create, skeleton...)
+	for _, obj := range render.APIServerDeploymentObjectMeta() {
+		del = removeByRef(del, obj)
+	}
+	return create, del
+}
+
+// removeByRef returns del with any object matching ref's kind, namespace, and name
+// removed.
+func removeByRef(del []client.Object, ref client.Object) []client.Object {
+	out := del[:0:0]
+	for _, o := range del {
+		if o.GetObjectKind().GroupVersionKind().Kind == ref.GetObjectKind().GroupVersionKind().Kind &&
+			o.GetNamespace() == ref.GetNamespace() &&
+			o.GetName() == ref.GetName() {
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
+}
+
+// addServicePorts adds the query server port and, when sidecar injection is enabled, the
+// L7 admission controller port to the API server Service.
+func (c *apiServer) addServicePorts(s *corev1.Service) {
+	queryServerTargetPort := render.GetContainerPort(c.cfg, render.TigeraAPIServerQueryServerContainerName)
+	s.Spec.Ports = append(s.Spec.Ports, corev1.ServicePort{
+		Name:       render.QueryServerPortName,
+		Port:       render.QueryServerPort,
+		Protocol:   corev1.ProtocolTCP,
+		TargetPort: intstr.FromInt32(queryServerTargetPort.ContainerPort),
+	})
+	if c.isSidecarInjectionEnabled() {
+		l7Port := render.GetContainerPort(c.cfg, render.L7AdmissionControllerContainerName)
+		s.Spec.Ports = append(s.Spec.Ports, corev1.ServicePort{
+			Name:       render.L7AdmissionControllerPortName,
+			Port:       render.L7AdmissionControllerPort,
+			Protocol:   corev1.ProtocolTCP,
+			TargetPort: intstr.FromInt32(l7Port.ContainerPort),
+		})
+	}
+}
+
+// l7AdmissionControllerContainer is the L7 admission controller sidecar, rendered when
+// ApplicationLayer sidecar injection is enabled.
+func (c *apiServer) l7AdmissionControllerContainer() corev1.Container {
+	volumeMounts := []corev1.VolumeMount{
+		c.cfg.TLSKeyPair.VolumeMount(rmeta.OSTypeLinux),
+	}
+
+	l7Port := render.GetContainerPort(c.cfg, render.L7AdmissionControllerContainerName).ContainerPort
+
+	dataplane := "iptables"
+	if c.cfg.Installation.IsNftables() {
+		dataplane = "nftables"
+	}
+
+	return corev1.Container{
+		Name:    string(render.L7AdmissionControllerContainerName),
+		Image:   c.calicoImage,
+		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
+		Env: []corev1.EnvVar{
+			{Name: "L7ADMCTRL_TLSCERTPATH", Value: c.cfg.TLSKeyPair.VolumeMountCertificateFilePath()},
+			{Name: "L7ADMCTRL_TLSKEYPATH", Value: c.cfg.TLSKeyPair.VolumeMountKeyFilePath()},
+			{Name: "L7ADMCTRL_ENVOYIMAGE", Value: c.data.l7EnvoyImage},
+			{Name: "L7ADMCTRL_DIKASTESIMAGE", Value: c.data.dikastesImage},
+			{Name: "L7ADMCTRL_LISTENADDR", Value: fmt.Sprintf(":%d", l7Port)},
+			{Name: "DATAPLANE", Value: dataplane},
+		},
+		VolumeMounts: volumeMounts,
+		LivenessProbe: &corev1.Probe{
+			ProbeHandler: corev1.ProbeHandler{
+				HTTPGet: &corev1.HTTPGetAction{
+					Path:   "/live",
+					Port:   intstr.FromInt32(l7Port),
+					Scheme: corev1.URISchemeHTTPS,
+				},
+			},
+		},
+	}
+}
+
+// sidecarMutatingWebhookConfig is the L7 sidecar injection webhook, rendered when
+// ApplicationLayer sidecar injection is enabled.
+func (c *apiServer) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConfiguration {
+	var cacert []byte
+	svcPort := render.GetContainerPort(c.cfg, render.L7AdmissionControllerContainerName).ContainerPort
+
+	svcpath := "/sidecar-webhook"
+	svcref := admregv1.ServiceReference{
+		Name:      render.QueryserverServiceName,
+		Namespace: render.QueryserverNamespace,
+		Path:      &svcpath,
+		Port:      &svcPort,
+	}
+	failpol := admregv1.Fail
+	labelsel := metav1.LabelSelector{
+		MatchLabels: map[string]string{
+			"applicationlayer.projectcalico.org/sidecar": "true",
+		},
+	}
+	rules := []admregv1.RuleWithOperations{
+		{
+			Rule: admregv1.Rule{
+				APIGroups:   []string{""},
+				APIVersions: []string{"v1"},
+				Resources:   []string{"pods"},
+			},
+			Operations: []admregv1.OperationType{admregv1.Create},
+		},
+	}
+	sidefx := admregv1.SideEffectClassNone
+	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
+		cacert = c.cfg.TLSKeyPair.GetIssuer().GetCertificatePEM()
+	} else {
+		cacert = c.cfg.Installation.CertificateManagement.CACert
+	}
+	return &admregv1.MutatingWebhookConfiguration{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "MutatingWebhookConfiguration",
+			APIVersion: "admissionregistration.k8s.io/v1",
+		},
+		ObjectMeta: metav1.ObjectMeta{Name: common.SidecarMutatingWebhookConfigName},
+		Webhooks: []admregv1.MutatingWebhook{
+			{
+				AdmissionReviewVersions: []string{"v1"},
+				ClientConfig: admregv1.WebhookClientConfig{
+					Service:  &svcref,
+					CABundle: cacert,
+				},
+				Name:           "sidecar.projectcalico.org",
+				FailurePolicy:  &failpol,
+				ObjectSelector: &labelsel,
+				Rules:          rules,
+				SideEffects:    &sidefx,
+			},
+		},
+	}
+}
+
+// modifyAPIServerPolicy adds the enterprise additions to the API server network policy:
+// the OIDC egress rule (when an OIDC key validator is configured) and the L7 admission
+// controller ingress port (when sidecar injection is enabled). The base policy carries
+// neither.
+func modifyAPIServerPolicy(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+	c := &apiServer{cfg: ec.Config, data: apiServerData(rc)}
+
+	policy, ok := extensions.FindObject[*v3.NetworkPolicy](create, render.APIServerPolicyName)
+	if !ok {
+		return create, del
+	}
+
+	// Insert the OIDC egress rule before the trailing Pass rule so it is evaluated.
+	if c.data.keyValidatorConfig != nil {
+		if parsedURL, err := url.Parse(c.data.keyValidatorConfig.Issuer()); err == nil {
+			oidc := networkpolicy.GetOIDCEgressRule(parsedURL)
+			egress := policy.Spec.Egress
+			if n := len(egress); n > 0 && egress[n-1].Action == v3.Pass {
+				policy.Spec.Egress = append(egress[:n-1:n-1], oidc, egress[n-1])
+			} else {
+				policy.Spec.Egress = append(egress, oidc)
+			}
+		}
+	}
+
+	// Allow the kube-apiserver to reach the L7 admission controller.
+	if c.isSidecarInjectionEnabled() {
+		l7Port := render.GetContainerPort(c.cfg, render.L7AdmissionControllerContainerName).ContainerPort
+		for i := range policy.Spec.Ingress {
+			policy.Spec.Ingress[i].Destination.Ports = append(policy.Spec.Ingress[i].Destination.Ports,
+				numorstring.Port{MinPort: uint16(l7Port), MaxPort: uint16(l7Port)})
+		}
+	}
+
+	return create, del
 }
 
 // auditVolumes are the host-path audit log and audit policy volumes used by the
@@ -226,30 +699,20 @@ func (c *apiServer) auditVolumes() []corev1.Volume {
 	}
 }
 
-func (c *apiServer) addQueryServerPort(s *corev1.Service) {
-	queryServerTargetPort := render.GetContainerPort(c.cfg, render.TigeraAPIServerQueryServerContainerName)
-	s.Spec.Ports = append(s.Spec.Ports, corev1.ServicePort{
-		Name:       render.QueryServerPortName,
-		Port:       render.QueryServerPort,
-		Protocol:   corev1.ProtocolTCP,
-		TargetPort: intstr.FromInt32(queryServerTargetPort.ContainerPort),
-	})
-}
-
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.cfg.ManagementCluster, true)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, true)
 }
 
 func (c *apiServer) secretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.cfg.ManagementCluster, false)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, false)
 }
 
 func (c *apiServer) queryServerContainer() corev1.Container {
 	queryServerTargetPort := render.GetContainerPort(c.cfg, render.TigeraAPIServerQueryServerContainerName).ContainerPort
 
 	var tlsSecret certificatemanagement.KeyPairInterface
-	if c.cfg.QueryServerTLSKeyPairCertificateManagementOnly != nil {
-		tlsSecret = c.cfg.QueryServerTLSKeyPairCertificateManagementOnly
+	if c.data.queryServerTLS != nil {
+		tlsSecret = c.data.queryServerTLS
 	} else {
 		tlsSecret = c.cfg.TLSKeyPair
 	}
@@ -273,17 +736,17 @@ func (c *apiServer) queryServerContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	if c.cfg.KeyValidatorConfig != nil {
-		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
+	if c.data.keyValidatorConfig != nil {
+		env = append(env, c.data.keyValidatorConfig.RequiredEnv("")...)
 	}
 
-	linseedURL := relasticsearch.LinseedEndpoint(rmeta.OSTypeLinux, c.cfg.ClusterDomain, render.ElasticsearchNamespace, c.cfg.ManagementClusterConnection != nil, false)
+	linseedURL := relasticsearch.LinseedEndpoint(rmeta.OSTypeLinux, c.cfg.ClusterDomain, render.ElasticsearchNamespace, c.data.managementClusterConnection != nil, false)
 	env = append(env,
 		corev1.EnvVar{Name: "LINSEED_URL", Value: linseedURL},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", tlsSecret.GetName())},
 		corev1.EnvVar{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", tlsSecret.GetName())},
 	)
-	if c.cfg.ManagementClusterConnection != nil {
+	if c.data.managementClusterConnection != nil {
 		env = append(env,
 			corev1.EnvVar{Name: "CLUSTER_ID", Value: ""},
 			corev1.EnvVar{Name: "LINSEED_TOKEN", Value: render.GetLinseedTokenPath(true)},
@@ -309,7 +772,7 @@ func (c *apiServer) queryServerContainer() corev1.Container {
 	if c.cfg.TrustedBundle != nil {
 		volumeMounts = append(volumeMounts, c.cfg.TrustedBundle.VolumeMounts(rmeta.OSTypeLinux)...)
 	}
-	if c.cfg.ManagementClusterConnection != nil {
+	if c.data.managementClusterConnection != nil {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
 			Name:      render.LinseedTokenVolumeName,
 			MountPath: render.LinseedVolumeMountPath,
@@ -685,7 +1148,7 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
-	if c.cfg.ManagementClusterConnection == nil {
+	if c.data.managementClusterConnection == nil {
 		// Access to flow logs, audit logs, and statistics.
 		// Access to log into Kibana for oidc users.
 		rules = append(rules, rbacv1.PolicyRule{
@@ -904,7 +1367,7 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
-	if c.cfg.ManagementClusterConnection == nil {
+	if c.data.managementClusterConnection == nil {
 		// Access to flow logs, audit logs, and statistics.
 		// Elasticsearch superuser access once logged into Kibana.
 		rules = append(rules, rbacv1.PolicyRule{

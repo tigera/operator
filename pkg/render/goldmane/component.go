@@ -404,14 +404,37 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			},
 		})
 	}
+
+	egressRules := networkpolicy.AppendDNSEgressRules([]v3.Rule{}, c.cfg.OpenShift)
+
+	// Allow egress to the Kubernetes API server. Goldmane reads the
+	// flow-emitter-state ConfigMap.
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
+	})
+
+	// In a managed cluster Goldmane posts flows to Guardian, which tunnels them
+	// to the management cluster.
+	if c.cfg.ManagementClusterConnection != nil {
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		})
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: GoldmanePolicyName, Namespace: GoldmaneNamespace},
 		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GoldmaneDeploymentName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress:  ingressRules,
+			Egress:   egressRules,
 		},
 	}
 }

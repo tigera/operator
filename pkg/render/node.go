@@ -476,6 +476,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"globalnetworkpolicies",
 					"globalnetworksets",
 					"hostendpoints",
+					"hostqospolicies",
 					"ipamblocks",
 					"ippools",
 					"ipreservations",

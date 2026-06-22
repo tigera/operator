@@ -387,6 +387,29 @@ KEEP_CLUSTER?=false
 cluster-create-no-dataplane: KIND_CONFIG=./deploy/kind-config-no-dataplane.yaml
 cluster-create-no-dataplane: cluster-create
 
+## Create a no-dataplane kind cluster, install every product available in that
+## configuration (the dataplane-disabled Installation, the Calico Ingress Gateway, and the
+## Calico Istio service mesh), and run the operator in the foreground so the products are
+## reconciled and stay up for manual inspection. Unlike `make fv-no-dataplane KEEP_CLUSTER=true`
+## (whose specs delete their own resources in AfterEach, leaving a bare cluster), this target
+## leaves the products installed.
+##
+## Inspect from another terminal, e.g.:
+##   KUBECONFIG=$(KIND_KUBECONFIG) kubectl get tigerastatus
+## Ctrl-C stops the operator but leaves the cluster running; tear it down with `make cluster-destroy`.
+.PHONY: cluster-create-no-dataplane-all
+cluster-create-no-dataplane-all: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES) cluster-create-no-dataplane
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl create ns tigera-operator
+	KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl apply \
+		-f config/samples/operator_v1_installation_no_dataplane.yaml \
+		-f config/samples/operator_v1_gatewayapi.yaml \
+		-f config/samples/operator_v1_istio.yaml
+	@echo "==> Products applied (Installation [no dataplane], GatewayAPI, Istio)."
+	@echo "==> Starting the operator in the foreground; Ctrl-C to stop."
+	@echo "==> Inspect from another terminal: KUBECONFIG=$(KIND_KUBECONFIG) kubectl get tigerastatus"
+	@echo "==> The cluster stays up after Ctrl-C; tear down with 'make cluster-destroy'."
+	KUBECONFIG=$(KIND_KUBECONFIG) go run ./cmd --enable-leader-election=false
+
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy

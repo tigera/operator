@@ -16,6 +16,7 @@ package render_test
 
 import (
 	"fmt"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -2719,12 +2720,17 @@ var _ = Describe("Windows rendering tests", func() {
 })
 
 // verifyWindowsProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
-// The unused argument is kept temporarily so existing call sites compile while the OSS/Enterprise distinction
-// is being phased out.
 func verifyWindowsProbesAndLifecycle(ds *appsv1.DaemonSet, _ bool) {
-	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
-	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
-	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}
+	// Infer the variant from the rendered felix image rather than the caller's flag.
+	isEnterprise := strings.Contains(rtest.GetContainer(ds.Spec.Template.Spec.Containers, "felix").Image, "tigera/")
+	livenessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-live"}
+	readinessCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-felix-ready"}
+	preStopCmd := []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico-node.exe", "-shutdown"}
+	if isEnterprise {
+		livenessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-live"}
+		readinessCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "health", "--felix-ready"}
+		preStopCmd = []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/calico.exe", "component", "node", "shutdown"}
+	}
 
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{

@@ -97,7 +97,8 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	calicoImage string
+	calicoImage      string
+	useCombinedImage bool
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -105,7 +106,12 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.useCombinedImage = true
+		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	} else {
+		c.calicoImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -571,10 +577,9 @@ func (c *typhaComponent) typhaPorts() []corev1.ContainerPort {
 // typhaContainer creates the main typha container.
 func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes("localhost")
-	return corev1.Container{
+	container := corev1.Container{
 		Name:            TyphaContainerName,
 		Image:           c.calicoImage,
-		Command:         []string{components.CalicoBinaryPath, "component", "typha"},
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),
 		VolumeMounts:    c.typhaVolumeMounts(),
@@ -583,6 +588,10 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		ReadinessProbe:  rp,
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
+	if c.useCombinedImage {
+		container.Command = []string{components.CalicoBinaryPath, "component", "typha"}
+	}
+	return container
 }
 
 func (c *typhaComponent) typhaContainerNonClusterHost() corev1.Container {

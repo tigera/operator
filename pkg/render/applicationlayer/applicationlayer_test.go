@@ -43,6 +43,7 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		// Initialize a default installation spec.
 		installation = &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
+			Variant:            operatorv1.CalicoEnterprise,
 		}
 
 		cfg = &applicationlayer.Config{

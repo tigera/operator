@@ -15,8 +15,6 @@
 package goldmane_test
 
 import (
-	"fmt"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -30,6 +28,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -42,6 +41,9 @@ var (
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	metricsPort              = int32(9081)
+
+	// goldmaneImageRef tracks the pinned ComponentCalicoGoldmane version on any branch.
+	goldmaneImageRef, _ = components.GetReference(components.ComponentCalicoGoldmane, "", "", "", nil)
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -139,9 +141,8 @@ var _ = Describe("ComponentRendering", func() {
 							Tolerations:        append(rmeta.TolerateCriticalAddonsAndControlPlane, rmeta.TolerateGKEARM64NoSchedule),
 							Containers: []corev1.Container{
 								{
-									Name:    goldmane.GoldmaneContainerName,
-									Image:   "quay.io/calico/calico:master",
-									Command: []string{"/usr/bin/calico", "component", "goldmane"},
+									Name:  goldmane.GoldmaneContainerName,
+									Image: goldmaneImageRef,
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "7443"},
@@ -155,15 +156,13 @@ var _ = Describe("ComponentRendering", func() {
 									SecurityContext: securitycontext.NewNonRootContext(),
 									ReadinessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=readiness"},
+											Command: []string{"/health", "-ready"},
 										}},
-										PeriodSeconds: 10,
 									},
 									LivenessProbe: &corev1.Probe{
 										ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{
-											Command: []string{"/usr/bin/calico", "health", fmt.Sprintf("--port=%d", goldmane.GoldmaneHealthPort), "--type=liveness"},
+											Command: []string{"/health", "-live"},
 										}},
-										PeriodSeconds: 10,
 									},
 									VolumeMounts: append(
 										[]corev1.VolumeMount{defaultTLSKeyPair.VolumeMount(rmeta.OSTypeLinux)},

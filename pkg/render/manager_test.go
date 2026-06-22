@@ -54,7 +54,7 @@ import (
 
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	var replicas int32 = 2
-	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
+	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, Variant: operatorv1.CalicoEnterprise}
 	compliance := &operatorv1.Compliance{}
 
 	expectedManagerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager.json")
@@ -130,9 +130,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		manager := deployment.Spec.Template.Spec.Containers[3]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/manager:" + components.ComponentManager.Version))
-		Expect(uiAPIs.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
-		Expect(dashboard.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
-		Expect(voltron.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
+		Expect(uiAPIs.Image).Should(Equal(components.TigeraRegistry + components.TigeraImagePath + components.ComponentTigeraCalico.Image + ":" + components.ComponentTigeraCalico.Version))
+		Expect(dashboard.Image).Should(Equal(components.TigeraRegistry + components.TigeraImagePath + components.ComponentTigeraCalico.Image + ":" + components.ComponentTigeraCalico.Version))
+		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + components.TigeraImagePath + components.ComponentTigeraCalico.Image + ":" + components.ComponentTigeraCalico.Version))
 
 		// manager container
 		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -268,7 +268,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift},
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 		})
@@ -917,7 +917,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -974,7 +974,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -991,7 +991,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -1036,7 +1036,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -1093,7 +1093,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,
@@ -1152,7 +1152,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:                    false,
 			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, CertificateManagement: certificateManagement},
+			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, CertificateManagement: certificateManagement, Variant: operatorv1.CalicoEnterprise},
 			compliance:              compliance,
 			complianceFeatureActive: true,
 			ns:                      render.ManagerNamespace,

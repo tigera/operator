@@ -92,6 +92,7 @@ var _ = Describe("monitor rendering tests", func() {
 		cfg = &monitor.Config{
 			Installation: &operatorv1.InstallationSpec{
 				ControlPlaneReplicas: ptr.To(int32(3)),
+				Variant:              operatorv1.CalicoEnterprise,
 			},
 			Monitor: operatorv1.MonitorSpec{
 				Alertmanager: &operatorv1.Alertmanager{

@@ -155,6 +155,52 @@ var _ = Describe("Application layer controller tests", func() {
 				},
 			}
 			Expect(test.GetResource(c, &f2)).To(BeNil())
+			// The operator-managed default is shared with egressgateway and
+			// Gateway API, which never clear it; the AL controller must not
+			// clear a value it may not own, so it is preserved here.
+			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+		})
+
+		It("should leave PolicySyncPathPrefix set on AL deletion when Istio CR still needs it", func() {
+			// Symmetric coordination: AL cleanup must consult Istio state
+			// before clearing policySyncPathPrefix. With an Istio CR present
+			// on an Enterprise install, the istio side claims the field.
+			mockStatus.On("AddDaemonsets", mock.Anything).Return()
+			mockStatus.On("AddDeployments", mock.Anything).Return()
+			mockStatus.On("IsAvailable").Return(true)
+			mockStatus.On("AddStatefulSets", mock.Anything).Return()
+			mockStatus.On("AddCronJobs", mock.Anything)
+			mockStatus.On("OnCRNotFound").Return()
+			mockStatus.On("ClearDegraded")
+			mockStatus.On("ReadyToMonitor")
+			mockStatus.On("SetMetaData", mock.Anything).Return()
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &operatorv1.Istio{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+
+			enabled := operatorv1.ApplicationLayerPolicyEnabled
+			alSpec := &operatorv1.ApplicationLayer{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.ApplicationLayerSpec{
+					ApplicationLayerPolicy: &enabled,
+				},
+			}
+			Expect(c.Create(ctx, alSpec)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			f1 := v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			Expect(test.GetResource(c, &f1)).To(BeNil())
+			Expect(f1.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+
+			Expect(c.Delete(ctx, alSpec)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("ensuring AL deletion does not clear policySyncPathPrefix while Istio still needs it")
+			f2 := v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			Expect(test.GetResource(c, &f2)).To(BeNil())
 			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 		})
 

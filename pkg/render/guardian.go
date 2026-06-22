@@ -555,7 +555,22 @@ func (c *GuardianComponent) annotations() map[string]string {
 	return annotations
 }
 
-func ossNetworkPolicy() *v3.NetworkPolicy {
+func ossNetworkPolicy(cfg *GuardianConfiguration) *v3.NetworkPolicy {
+	egressRules := networkpolicy.AppendDNSEgressRules([]v3.Rule{}, cfg.OpenShift)
+
+	// Allow egress to the Kubernetes API server.
+	egressRules = append(egressRules, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: networkpolicy.KubeAPIServerEntityRule,
+	})
+
+	// Guardian's tunnel destination is the management cluster, whose address is
+	// environment-specific and often a hostname. OSS policy can't express a
+	// domain-based egress rule, so Pass and let the cluster's default posture
+	// govern the tunnel (and the management cluster's queries back to Goldmane).
+	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
+
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianPolicyName, Namespace: GuardianNamespace},
@@ -563,7 +578,7 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(GuardianName),
-			Types:    []v3.PolicyType{v3.PolicyTypeIngress},
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
 				{
 					Action:   v3.Allow,
@@ -575,21 +590,15 @@ func ossNetworkPolicy() *v3.NetworkPolicy {
 						Ports: networkpolicy.Ports(GuardianTargetPort),
 					},
 				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.UDPProtocol,
-					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(53),
-					},
-				},
 			},
+			Egress: egressRules,
 		},
 	}
 }
 
 func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, error) {
 	if !cfg.Installation.Variant.IsEnterprise() {
-		return ossNetworkPolicy(), nil
+		return ossNetworkPolicy(cfg), nil
 	}
 
 	egressRules := []v3.Rule{

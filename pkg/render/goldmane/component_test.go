@@ -29,7 +29,9 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -268,6 +270,55 @@ var _ = Describe("ComponentRendering", func() {
 		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, goldmane.GoldmanePolicyName, goldmane.GoldmaneNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(np.Spec.Ingress).To(HaveLen(1))
+	})
+
+	It("Should render locked-down egress in a standalone cluster", func() {
+		cfg := &goldmane.Configuration{
+			ClusterDomain: "cluster.local",
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     certificatemanagement.CreateTrustedBundle(nil),
+			GoldmaneServerKeyPair: defaultTLSKeyPair,
+			Goldmane:              &operatorv1.Goldmane{},
+		}
+		objsToCreate, _ := goldmane.Goldmane(cfg).Objects()
+
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, goldmane.GoldmanePolicyName, goldmane.GoldmaneNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+
+		// Goldmane's egress is fully specified (DNS + kube API), so every rule is an
+		// explicit Allow - no Pass that would defer to lower tiers.
+		Expect(np.Spec.Egress).NotTo(BeEmpty())
+		for _, rule := range np.Spec.Egress {
+			Expect(rule.Action).To(Equal(v3.Allow))
+			Expect(rule.Destination).NotTo(Equal(render.GuardianEntityRule))
+		}
+	})
+
+	It("Should render egress to Guardian in a managed cluster", func() {
+		cfg := &goldmane.Configuration{
+			ClusterDomain: "cluster.local",
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:           certificatemanagement.CreateTrustedBundle(nil),
+			GoldmaneServerKeyPair:       defaultTLSKeyPair,
+			Goldmane:                    &operatorv1.Goldmane{},
+			ManagementClusterConnection: &operatorv1.ManagementClusterConnection{},
+		}
+		objsToCreate, _ := goldmane.Goldmane(cfg).Objects()
+
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, goldmane.GoldmanePolicyName, goldmane.GoldmaneNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(np.Spec.Egress).To(ContainElement(v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		}))
 	})
 
 	It("Should apply overrides", func() {

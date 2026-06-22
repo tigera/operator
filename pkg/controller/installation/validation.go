@@ -40,106 +40,184 @@ import (
 // validateCustomResource validates that the given custom resource is correct. This
 // should be called after populating defaults and before rendering objects.
 func validateCustomResource(instance *operatorv1.Installation) error {
-	if instance.Spec.CNI == nil {
+	// An install with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None) runs no
+	// Calico dataplane and must omit spec.cni; every other install must define it. The
+	// dataplane-disabled block below rejects linuxDataplane None combined with spec.cni set.
+	if instance.Spec.CNI == nil && instance.Spec.LinuxDataplaneEnabled() {
 		return fmt.Errorf("spec.cni must be defined")
 	}
 
 	// Perform validation based on the chosen CNI plugin.
 	// For example, make sure the plugin is supported on the specified k8s provider.
-	switch instance.Spec.CNI.Type {
-	case operatorv1.PluginCalico:
-		switch instance.Spec.CNI.IPAM.Type {
-		case operatorv1.IPAMPluginCalico:
-		case operatorv1.IPAMPluginHostLocal:
-		default:
-			return fmt.Errorf(
-				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
-				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type,
-				strings.Join([]string{
-					operatorv1.IPAMPluginCalico.String(),
-					operatorv1.IPAMPluginHostLocal.String(),
-				}, ",",
-				),
-			)
-		}
-
-		// validate logging config for calico-cni
-		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
-			if instance.Spec.Logging.CNI.LogFileMaxCount != nil &&
-				*instance.Spec.Logging.CNI.LogFileMaxCount <= 0 {
-				return fmt.Errorf("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero")
+	if instance.Spec.CNI != nil {
+		switch instance.Spec.CNI.Type {
+		case operatorv1.PluginCalico:
+			switch instance.Spec.CNI.IPAM.Type {
+			case operatorv1.IPAMPluginCalico:
+			case operatorv1.IPAMPluginHostLocal:
+			default:
+				return fmt.Errorf(
+					"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+					instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type,
+					strings.Join([]string{
+						operatorv1.IPAMPluginCalico.String(),
+						operatorv1.IPAMPluginHostLocal.String(),
+					}, ",",
+					),
+				)
 			}
 
-			if instance.Spec.Logging.CNI.LogFileMaxSize != nil &&
-				(instance.Spec.Logging.CNI.LogFileMaxSize.Format != resource.BinarySI ||
-					instance.Spec.Logging.CNI.LogFileMaxSize.Value() <= 0) {
-				return fmt.Errorf("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei")
+			// validate logging config for calico-cni
+			if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
+				if instance.Spec.Logging.CNI.LogFileMaxCount != nil &&
+					*instance.Spec.Logging.CNI.LogFileMaxCount <= 0 {
+					return fmt.Errorf("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero")
+				}
+
+				if instance.Spec.Logging.CNI.LogFileMaxSize != nil &&
+					(instance.Spec.Logging.CNI.LogFileMaxSize.Format != resource.BinarySI ||
+						instance.Spec.Logging.CNI.LogFileMaxSize.Value() <= 0) {
+					return fmt.Errorf("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei")
+				}
+
+				if instance.Spec.Logging.CNI.LogFileMaxAgeDays != nil &&
+					*instance.Spec.Logging.CNI.LogFileMaxAgeDays <= 0 {
+					return fmt.Errorf("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer")
+				}
 			}
 
-			if instance.Spec.Logging.CNI.LogFileMaxAgeDays != nil &&
-				*instance.Spec.Logging.CNI.LogFileMaxAgeDays <= 0 {
-				return fmt.Errorf("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer")
+		case operatorv1.PluginGKE:
+			// The GKE CNI plugin is only supported on GKE or BYO.
+			switch instance.Spec.KubernetesProvider {
+			case operatorv1.ProviderGKE, "":
+			default:
+				return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
+					instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
 			}
-		}
 
-	case operatorv1.PluginGKE:
-		// The GKE CNI plugin is only supported on GKE or BYO.
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderGKE, "":
-		default:
-			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
-				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
-		}
+			switch instance.Spec.CNI.IPAM.Type {
+			case operatorv1.IPAMPluginHostLocal:
+			default:
+				return fmt.Errorf(
+					"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+					instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginHostLocal)
+			}
+		case operatorv1.PluginAmazonVPC:
+			// The AmazonVPC CNI plugin is only supported on EKS or BYO.
+			switch instance.Spec.KubernetesProvider {
+			case operatorv1.ProviderEKS, "":
+			default:
+				return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
+					instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+			}
 
-		switch instance.Spec.CNI.IPAM.Type {
-		case operatorv1.IPAMPluginHostLocal:
-		default:
-			return fmt.Errorf(
-				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
-				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginHostLocal)
-		}
-	case operatorv1.PluginAmazonVPC:
-		// The AmazonVPC CNI plugin is only supported on EKS or BYO.
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderEKS, "":
-		default:
-			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
-				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
-		}
+			switch instance.Spec.CNI.IPAM.Type {
+			case operatorv1.IPAMPluginAmazonVPC:
+			default:
+				return fmt.Errorf(
+					"spec.cni.ipam.type  %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+					instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAmazonVPC)
+			}
+		case operatorv1.PluginAzureVNET:
+			// The AzureVNET CNI plugin is only supported on AKS or BYO.
+			switch instance.Spec.KubernetesProvider {
+			case operatorv1.ProviderAKS, "":
+			default:
+				return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
+					instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
+			}
 
-		switch instance.Spec.CNI.IPAM.Type {
-		case operatorv1.IPAMPluginAmazonVPC:
+			switch instance.Spec.CNI.IPAM.Type {
+			case operatorv1.IPAMPluginAzureVNET:
+			default:
+				return fmt.Errorf(
+					"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
+					instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAzureVNET)
+			}
 		default:
-			return fmt.Errorf(
-				"spec.cni.ipam.type  %s is not compatible with spec.cni.type %s, valid IPAM values %s",
-				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAmazonVPC)
+			// The specified CNI plugin is not supported by this version of the operator.
+			return fmt.Errorf("invalid value '%s' for spec.cni.type, it should be one of %s",
+				instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
 		}
-	case operatorv1.PluginAzureVNET:
-		// The AzureVNET CNI plugin is only supported on AKS or BYO.
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderAKS, "":
-		default:
-			return fmt.Errorf("spec.kubernetesProvider %s is not compatible with spec.cni.type %s",
-				instance.Spec.KubernetesProvider, instance.Spec.CNI.Type)
-		}
-
-		switch instance.Spec.CNI.IPAM.Type {
-		case operatorv1.IPAMPluginAzureVNET:
-		default:
-			return fmt.Errorf(
-				"spec.cni.ipam.type %s is not compatible with spec.cni.type %s, valid IPAM values %s",
-				instance.Spec.CNI.IPAM.Type, instance.Spec.CNI.Type, operatorv1.IPAMPluginAzureVNET)
-		}
-	default:
-		// The specified CNI plugin is not supported by this version of the operator.
-		return fmt.Errorf("invalid value '%s' for spec.cni.type, it should be one of %s",
-			instance.Spec.CNI.Type, strings.Join(operatorv1.CNIPluginTypesString, ","))
 	}
 
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
 		felixClusterRoutingMode := felixProgramsClusterRoutes(instance)
+
+		// The Linux dataplane is disabled entirely, so reject any configuration that implies a
+		// running dataplane. Every spec.calicoNetwork field rejected here only takes effect
+		// through calico-node/Felix/the Calico CNI, none of which are deployed when the dataplane
+		// is disabled, so accepting them would silently ignore the user's intent. Several
+		// (hostPorts, multiInterfaceMode, containerIPForwarding, linuxPodInterfaceType) are also
+		// validated against spec.cni further below, which is nil when the dataplane is disabled
+		// and would otherwise cause a nil-pointer panic.
+		if instance.Spec.DataplaneDisabled() {
+			cn := instance.Spec.CalicoNetwork
+
+			// There is no Calico dataplane, so spec.cni (which describes the CNI the
+			// operator integrates Felix with) must be omitted entirely.
+			if instance.Spec.CNI != nil {
+				return fmt.Errorf("spec.cni must not be set when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+			if common.WindowsEnabled(instance.Spec) {
+				return fmt.Errorf("spec.calicoNetwork.windowsDataplane must be Disabled when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+			if cn.BGP != nil && *cn.BGP == operatorv1.BGPEnabled {
+				return fmt.Errorf("spec.calicoNetwork.bgp cannot be Enabled when spec.calicoNetwork.linuxDataplane is %s",
+					operatorv1.LinuxDataplaneNone)
+			}
+
+			// Reject any remaining dataplane-only field that is explicitly set, reporting them
+			// all at once so the user can fix the spec in a single pass.
+			var disallowed []string
+			if len(cn.IPPools) != 0 {
+				disallowed = append(disallowed, "ipPools")
+			}
+			if cn.NodeAddressAutodetectionV4 != nil {
+				disallowed = append(disallowed, "nodeAddressAutodetectionV4")
+			}
+			if cn.NodeAddressAutodetectionV6 != nil {
+				disallowed = append(disallowed, "nodeAddressAutodetectionV6")
+			}
+			if cn.MTU != nil {
+				disallowed = append(disallowed, "mtu")
+			}
+			if cn.HostPorts != nil {
+				disallowed = append(disallowed, "hostPorts")
+			}
+			if cn.MultiInterfaceMode != nil {
+				disallowed = append(disallowed, "multiInterfaceMode")
+			}
+			if cn.ContainerIPForwarding != nil {
+				disallowed = append(disallowed, "containerIPForwarding")
+			}
+			if cn.LinuxPodInterfaceType != nil {
+				disallowed = append(disallowed, "linuxPodInterfaceType")
+			}
+			if len(cn.Sysctl) != 0 {
+				disallowed = append(disallowed, "sysctl")
+			}
+			if cn.BPFNetworkBootstrap != nil {
+				disallowed = append(disallowed, "bpfNetworkBootstrap")
+			}
+			if cn.KubeProxyManagement != nil {
+				disallowed = append(disallowed, "kubeProxyManagement")
+			}
+			if cn.ClusterRoutingMode != nil {
+				disallowed = append(disallowed, "clusterRoutingMode")
+			}
+			if cn.LinuxPolicySetupTimeoutSeconds != nil {
+				disallowed = append(disallowed, "linuxPolicySetupTimeoutSeconds")
+			}
+			if len(disallowed) != 0 {
+				return fmt.Errorf("the following spec.calicoNetwork fields must not be set when spec.calicoNetwork.linuxDataplane is %s: %s",
+					operatorv1.LinuxDataplaneNone, strings.Join(disallowed, ", "))
+			}
+		}
 
 		// Perform validation on non-IPPool fields that rely on IP pool configuration. Validation of the IP pools themselves
 		// happens in the IP pool controller.
@@ -385,8 +463,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	// Verify CNILogging to not exist for non-calico cni
-	if cni := instance.Spec.CNI.Type; cni != operatorv1.PluginCalico {
+	// Verify CNILogging to not exist for non-calico cni (an install with the dataplane disabled has no spec.cni).
+	if instance.Spec.CNI != nil && instance.Spec.CNI.Type != operatorv1.PluginCalico {
 		if instance.Spec.Logging != nil && instance.Spec.Logging.CNI != nil {
 			return fmt.Errorf("installation spec.Logging.cni is not valid and should not be provided when spec.cni.type is Not Calico")
 		}

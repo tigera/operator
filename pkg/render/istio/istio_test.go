@@ -157,8 +157,9 @@ var _ = Describe("Istio Component Rendering", func() {
 					DSCPMark: func() *numorstring.DSCP { d := numorstring.DSCPFromInt(11); return &d }(),
 				},
 			},
-			IstioNamespace: istio.IstioNamespace,
-			Scheme:         testScheme,
+			IstioNamespace:         istio.IstioNamespace,
+			Scheme:                 testScheme,
+			IncludeV3NetworkPolicy: true,
 		}
 	})
 
@@ -238,6 +239,22 @@ var _ = Describe("Istio Component Rendering", func() {
 			rtest.ExpectResources(objsToDelete, expectedDeleteResources)
 		})
 
+		It("should omit v3 NetworkPolicies when the projectcalico.org/v3 API is not available", Label("no-dataplane"), func() {
+			cfg.IncludeV3NetworkPolicy = false
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, objsToDelete := component.Objects()
+
+			// Same as above minus the 3 NetworkPolicies to create and 3 to delete.
+			Expect(objsToCreate).To(HaveLen(29))
+			Expect(objsToDelete).To(BeEmpty())
+			for _, obj := range objsToCreate {
+				_, isV3Policy := obj.(*v3.NetworkPolicy)
+				Expect(isV3Policy).To(BeFalse(), "expected no v3 NetworkPolicy objects, got %s", obj.GetName())
+			}
+		})
+
 		It("should render network policies with correct tier, selector, and ingress/egress rules", func() {
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
@@ -281,34 +298,76 @@ var _ = Describe("Istio Component Rendering", func() {
 			Expect(foundIstiodRule).To(BeTrue(), "Expected egress rule for istiod service")
 		})
 
-		It("should set TRANSPARENT_NETWORK_POLICIES env var on ztunnel", func() {
-			_, component, err := istio.Istio(cfg)
+		// expectDatapathWired asserts that ztunnel carries TRANSPARENT_NETWORK_POLICIES and
+		// istio-cni carries MAGIC_DSCP_MARK — i.e. the Transparent Network Policies datapath
+		// is wired so Felix-marked HBONE packets get steered to the HBONE listener.
+		expectDatapathWired := func(objsToCreate []client.Object) {
+			ztunnel, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-
-			objsToCreate, _ := component.Objects()
-
-			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
-			Expect(err).ShouldNot(HaveOccurred())
-
-			Expect(daemonset.Spec.Template.Spec.Containers[0].Env).To(ContainElements(corev1.EnvVar{
+			Expect(ztunnel.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
 				Name:  "TRANSPARENT_NETWORK_POLICIES",
 				Value: "true",
 			}))
+
+			cni, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(cni.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name:  "MAGIC_DSCP_MARK",
+				Value: "11",
+			}))
+		}
+
+		// The integration is gated only on LinuxDataplaneEnabled() (no dataplane-type-specific
+		// code), so the wiring must be identical for every non-None dataplane. Iptables is
+		// being deprecated, so we exercise the dataplanes we expect to support going forward.
+		DescribeTable("should wire the Transparent Network Policies datapath when the Calico dataplane is enabled",
+			func(dataplane operatorv1.LinuxDataplaneOption) {
+				cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+				_, component, err := istio.Istio(cfg)
+				Expect(err).ShouldNot(HaveOccurred())
+
+				objsToCreate, _ := component.Objects()
+				expectDatapathWired(objsToCreate)
+			},
+			Entry("Nftables dataplane", operatorv1.LinuxDataplaneNftables),
+			Entry("BPF (eBPF) dataplane", operatorv1.LinuxDataplaneBPF),
+		)
+
+		It("should wire the datapath in policy-only mode (calico-node over a recognized third-party CNI)", func() {
+			// Policy-only runs calico-node (and therefore Felix) over a third-party CNI, so
+			// LinuxDataplaneEnabled() is true and the integration must still be wired.
+			nft := operatorv1.LinuxDataplaneNftables
+			cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &nft}
+			cfg.Installation.CNI = &operatorv1.CNISpec{Type: operatorv1.PluginAmazonVPC}
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+			expectDatapathWired(objsToCreate)
 		})
 
-		It("should set MAGIC_DSCP_MARK env var on CNI", func() {
+		It("should not enable Transparent Network Policies when the dataplane is disabled", Label("no-dataplane"), func() {
+			// Without the Calico dataplane there is no Felix to DSCP-mark HBONE traffic,
+			// so the Transparent Network Policies datapath must stay disabled or all
+			// in-mesh traffic would be misclassified as plaintext on the destination.
+			dpNone := operatorv1.LinuxDataplaneNone
+			cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
 			_, component, err := istio.Istio(cfg)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			objsToCreate, _ := component.Objects()
 
-			daemonset, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			ztunnel, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioZTunnelDaemonSetName, istio.IstioNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
+			for _, env := range ztunnel.Spec.Template.Spec.Containers[0].Env {
+				Expect(env.Name).NotTo(Equal("TRANSPARENT_NETWORK_POLICIES"))
+			}
 
-			Expect(daemonset.Spec.Template.Spec.Containers[0].Env).To(ContainElements(corev1.EnvVar{
-				Name:  "MAGIC_DSCP_MARK",
-				Value: "11",
-			}))
+			cni, err := rtest.GetResourceOfType[*appsv1.DaemonSet](objsToCreate, istio.IstioCNIDaemonSetName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			for _, env := range cni.Spec.Template.Spec.Containers[0].Env {
+				Expect(env.Name).NotTo(Equal("MAGIC_DSCP_MARK"))
+			}
 		})
 	})
 

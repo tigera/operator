@@ -37,16 +37,13 @@ type MonitorSpec struct {
 	// +optional
 	Alertmanager *Alertmanager `json:"alertManager,omitempty"`
 
-	// Alerts enables or disables Calico Enterprise's built-in alerts. See Alerts for details.
+	// Alerts enables or disables Calico Enterprise's built-in alerts.
 	// +optional
 	Alerts Alerts `json:"alerts,omitempty"`
 }
 
 // Alerts enables or disables Calico Enterprise's built-in alerts and whether their events appear on the
-// Manager Alerts page. The alert set is a curated, closed catalog: one field per alert, not an open list.
-// New alerts ship as new fields in future releases and default to Enabled, so they turn on automatically
-// without changes to existing Monitor resources. Users may disable alerts but not define their own; custom
-// alerting belongs in the user's own Alertmanager. Each warning+critical rule pair is a single alert.
+// Manager Alerts page.
 type Alerts struct {
 	// DeniedPackets fires when calico-node is denying packets.
 	// +optional
@@ -91,9 +88,7 @@ const (
 )
 
 // UIAlertsEnabled reports whether any alert is configured to surface its events on the Manager Alerts page.
-// The Alertmanager-to-Linseed webhook is only rendered when this is true. An unconfigured Monitor returns true,
-// preserving the always-on behavior of clusters provisioned before this field existed.
-func (s MonitorSpec) UIAlertsEnabled() bool {
+func (s *MonitorSpec) UIAlertsEnabled() bool {
 	return s.Alerts.DeniedPackets.Enabled() || s.Alerts.TigeraStatus.Enabled() ||
 		s.Alerts.TLSCertExpiry.Enabled() || s.Alerts.LicenseExpiry.Enabled() ||
 		s.Alerts.IPPoolExhaustion.Enabled()

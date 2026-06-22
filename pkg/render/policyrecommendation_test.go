@@ -78,7 +78,7 @@ var _ = Describe("Policy recommendation rendering tests", func() {
 		cfg = &render.PolicyRecommendationConfiguration{
 			ClusterDomain:                  dns.DefaultClusterDomain,
 			TrustedBundle:                  bundle,
-			Installation:                   &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			Installation:                   &operatorv1.InstallationSpec{Registry: "testregistry.com/", Variant: operatorv1.CalicoEnterprise},
 			ManagedCluster:                 notManagedCluster,
 			PolicyRecommendationCertSecret: keyPair,
 			Namespace:                      render.PolicyRecommendationNamespace,

@@ -226,18 +226,9 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
-{{ with index .Components.calico }}
-	ComponentCalico = Component{
-		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   calicoVariant,
-	}
-{{- end }}
 
-	// CalicoImages omits ComponentCalico: Calico OSS ships the individual
-	// per-component images, not the combined calico/calico image.
+	// Calico OSS ships the individual per-component images rather than the
+	// combined calico/calico image, so there is no ComponentCalico.
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIWindows,

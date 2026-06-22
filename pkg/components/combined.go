@@ -23,10 +23,11 @@ import (
 const CalicoBinaryPath = "/usr/bin/calico"
 
 // CombinedCalicoImage returns the combined calico/calico Component for the given installation.
-// The right Component is selected based on the installation variant (Calico OSS vs. Calico Enterprise).
+// Only Calico Enterprise ships the combined image. Calico OSS renders the individual
+// per-component images, so calling this for an OSS installation is a programming error.
 func CombinedCalicoImage(installation *operatorv1.InstallationSpec) Component {
-	if installation.Variant.IsEnterprise() {
-		return ComponentTigeraCalico
+	if !installation.Variant.IsEnterprise() {
+		panic("CombinedCalicoImage called for a non-Enterprise installation; Calico OSS renders individual per-component images")
 	}
-	return ComponentCalico
+	return ComponentTigeraCalico
 }

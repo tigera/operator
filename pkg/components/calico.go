@@ -204,16 +204,8 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalico = Component{
-		Version:   "v3.32.0",
-		Image:     "calico",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	// CalicoImages omits ComponentCalico: Calico OSS ships the individual
-	// per-component images, not the combined calico/calico image.
+	// Calico OSS ships the individual per-component images rather than the
+	// combined calico/calico image, so there is no ComponentCalico.
 	CalicoImages = []Component{
 		ComponentCalicoCNI,
 		ComponentCalicoCNIWindows,

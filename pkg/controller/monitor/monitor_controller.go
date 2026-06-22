@@ -394,18 +394,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	// Create a component handler to manage the rendered component.
 	hdler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	// Carry forward the token Kubernetes populated into the Alertmanager Linseed token secret, so the
-	// component handler preserves it on reconcile instead of wiping it (Kubernetes won't re-populate a
-	// secret it has already processed). Empty until Kubernetes first populates the created secret.
-	var alertmanagerLinseedTokenData map[string][]byte
-	existingToken := &corev1.Secret{}
-	if err := r.client.Get(ctx, types.NamespacedName{Name: monitor.AlertmanagerLinseedTokenSecretName, Namespace: common.TigeraPrometheusNamespace}, existingToken); err == nil {
-		alertmanagerLinseedTokenData = existingToken.Data
-	} else if !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Alertmanager Linseed token secret", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	kubeControllersMetricsPort, err := utils.GetKubeControllerMetricsPort(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read KubeControllersConfiguration", err, reqLogger)
@@ -440,12 +428,23 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	managedCluster := managementClusterConnection != nil
 
+	// Carry forward the token Kubernetes populated into the Alertmanager Linseed token secret so the
+	// component handler preserves it on reconcile instead of wiping it. Empty until Kubernetes first
+	// populates the created secret.
+	var alertmanagerLinseedTokenData map[string][]byte
+	if !managedCluster {
+		existingToken := &corev1.Secret{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: monitor.AlertmanagerLinseedTokenSecretName, Namespace: common.TigeraPrometheusNamespace}, existingToken); err == nil {
+			alertmanagerLinseedTokenData = existingToken.Data
+		} else if !errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Alertmanager Linseed token secret", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// On a managed cluster, Alertmanager forwards alerts to the management cluster's Linseed through
-	// Guardian (see monitor.LinseedEventsURLManaged). That TLS connection is terminated by the management
-	// Linseed, whose serving certificate is signed by the management cluster's CA — not the local one.
-	// Add the management Linseed public certificate (copied into this cluster by kube-controllers) to
-	// Alertmanager's trusted bundle so the webhook can verify it; otherwise the POST fails with an
-	// unknown-authority error. Mirrors how fluentd trusts Linseed on managed clusters.
+	// Guardian (see monitor.LinseedEventsURLManaged). Add the management Linseed public certificate
+	// to the Alertmanager's trusted bundle so the webhook can verify it.
 	if managedCluster {
 		linseedCertificate, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 		if err != nil {

@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -303,8 +304,11 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	v3CRDs, err := apis.UseV3CRDS(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create a scheme to use.
+	// Create a scheme to use. Mirror the production scheme set up in cmd/main.go: the
+	// client-go scheme registers core types like autoscaling/v2 that some renders (e.g.
+	// the Istio helm charts, which contain a HorizontalPodAutoscaler) depend on.
 	s := runtime.NewScheme()
+	Expect(clientgoscheme.AddToScheme(s)).NotTo(HaveOccurred())
 	err = apis.AddToScheme(s, v3CRDs)
 	Expect(err).NotTo(HaveOccurred())
 

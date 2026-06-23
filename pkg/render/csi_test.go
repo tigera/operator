@@ -130,6 +130,18 @@ var _ = Describe("CSI rendering tests", func() {
 		}
 	})
 
+	It("should render objects for deletion when the dataplane is disabled (linuxDataplane: None)", Label("no-dataplane"), func() {
+		dpNone := operatorv1.LinuxDataplaneNone
+		cfg.Installation.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+
+		comp := render.CSI(&cfg)
+		Expect(comp.ResolveImages(nil)).To(BeNil())
+		createObjs, delObjs := comp.Objects()
+
+		Expect(createObjs).To(BeEmpty())
+		Expect(delObjs).NotTo(BeEmpty())
+	})
+
 	It("should set priority class to system-node-critical", func() {
 		resources, _ := render.CSI(&cfg).Objects()
 		ds := rtest.GetResource(resources, render.CSIDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)

@@ -282,6 +282,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagednetworkpolicies",
 					"globalnetworksets",
 					"hostendpoints",
+					"hostqospolicies",
 					"ipamblocks",
 					"ippools",
 					"ipreservations",

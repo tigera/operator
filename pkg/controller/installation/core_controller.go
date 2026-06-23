@@ -347,6 +347,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		typhaAutoscaler:      typhaScaler,
 		namespaceMigration:   nm,
 		enterpriseCRDsExist:  opts.EnterpriseCRDExists,
+		dataplaneDisabled:    opts.DataplaneDisabled,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
 		tierWatchReady:       &utils.ReadyFlag{},
@@ -406,14 +407,18 @@ type ReconcileInstallation struct {
 	typhaAutoscalerNonClusterHost *typhaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
 	enterpriseCRDsExist           bool
-	migrationChecked              bool
-	clusterDomain                 string
-	manageCRDs                    bool
-	tierWatchReady                *utils.ReadyFlag
-	migrationWatchReady           *utils.ReadyFlag
-	v3CRDs                        bool
-	kubernetesVersion             *common.VersionInfo
-	apiDiscovery                  *discovery.APIDiscovery
+	// dataplaneDisabled is the dataplane mode detected at operator startup
+	// (spec.calicoNetwork.linuxDataplane: None). If the live Installation's mode later differs,
+	// Reconcile reboots the operator so the correct controller set is registered.
+	dataplaneDisabled   bool
+	migrationChecked    bool
+	clusterDomain       string
+	manageCRDs          bool
+	tierWatchReady      *utils.ReadyFlag
+	migrationWatchReady *utils.ReadyFlag
+	v3CRDs              bool
+	kubernetesVersion   *common.VersionInfo
+	apiDiscovery        *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -516,37 +521,43 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 	}
 
-	// Default the CNI plugin based on the Kubernetes provider.
-	if instance.Spec.CNI == nil {
-		instance.Spec.CNI = &operatorv1.CNISpec{}
-	}
-	if instance.Spec.CNI.Type == "" {
-		switch instance.Spec.KubernetesProvider {
-		case operatorv1.ProviderAKS:
-			instance.Spec.CNI.Type = operatorv1.PluginAzureVNET
-		case operatorv1.ProviderEKS:
-			instance.Spec.CNI.Type = operatorv1.PluginAmazonVPC
-		case operatorv1.ProviderGKE:
-			instance.Spec.CNI.Type = operatorv1.PluginGKE
-		default:
-			instance.Spec.CNI.Type = operatorv1.PluginCalico
+	// Default the CNI plugin based on the Kubernetes provider. An install with the dataplane disabled
+	// (spec.calicoNetwork.linuxDataplane: None) runs no Calico dataplane and omits spec.cni,
+	// so skip CNI defaulting entirely and leave it nil.
+	if instance.Spec.LinuxDataplaneEnabled() {
+		if instance.Spec.CNI == nil {
+			instance.Spec.CNI = &operatorv1.CNISpec{}
+		}
+		if instance.Spec.CNI.Type == "" {
+			switch instance.Spec.KubernetesProvider {
+			case operatorv1.ProviderAKS:
+				instance.Spec.CNI.Type = operatorv1.PluginAzureVNET
+			case operatorv1.ProviderEKS:
+				instance.Spec.CNI.Type = operatorv1.PluginAmazonVPC
+			case operatorv1.ProviderGKE:
+				instance.Spec.CNI.Type = operatorv1.PluginGKE
+			default:
+				instance.Spec.CNI.Type = operatorv1.PluginCalico
+			}
 		}
 	}
 
 	// Default IPAM based on CNI.
-	if instance.Spec.CNI.IPAM == nil {
-		instance.Spec.CNI.IPAM = &operatorv1.IPAMSpec{}
-	}
-	if instance.Spec.CNI.IPAM.Type == "" {
-		switch instance.Spec.CNI.Type {
-		case operatorv1.PluginAzureVNET:
-			instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginAzureVNET
-		case operatorv1.PluginAmazonVPC:
-			instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginAmazonVPC
-		case operatorv1.PluginGKE:
-			instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
-		default:
-			instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
+	if instance.Spec.CNI != nil {
+		if instance.Spec.CNI.IPAM == nil {
+			instance.Spec.CNI.IPAM = &operatorv1.IPAMSpec{}
+		}
+		if instance.Spec.CNI.IPAM.Type == "" {
+			switch instance.Spec.CNI.Type {
+			case operatorv1.PluginAzureVNET:
+				instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginAzureVNET
+			case operatorv1.PluginAmazonVPC:
+				instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginAmazonVPC
+			case operatorv1.PluginGKE:
+				instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginHostLocal
+			default:
+				instance.Spec.CNI.IPAM.Type = operatorv1.IPAMPluginCalico
+			}
 		}
 	}
 
@@ -591,8 +602,11 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	if instance.Spec.CalicoNetwork.BGP == nil {
 		enabled := operatorv1.BGPEnabled
 		disabled := operatorv1.BGPDisabled
-		switch instance.Spec.CNI.Type {
-		case operatorv1.PluginCalico:
+		switch {
+		case instance.Spec.CNI == nil:
+			// Dataplane disabled (no CNI / no Calico dataplane): BGP is off.
+			instance.Spec.CalicoNetwork.BGP = &disabled
+		case instance.Spec.CNI.Type == operatorv1.PluginCalico:
 			switch instance.Spec.KubernetesProvider {
 			case operatorv1.ProviderEKS:
 				// On EKS, we use VXLAN mode with Calico CNI so default BGP off.
@@ -608,8 +622,12 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	}
 
 	// BPF dataplane requires IP autodetection even if we're not using Calico IPAM.
+	// With the Linux dataplane disabled there is no calico-node to perform autodetection,
+	// so skip defaulting these fields (validation rejects them when the dataplane is disabled).
 	needIPv4Autodetection := *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
-	if currentPools != nil {
+	if instance.Spec.DataplaneDisabled() {
+		needIPv4Autodetection = false
+	} else if currentPools != nil {
 		for _, pool := range currentPools.Items {
 			ip, _, err := net.ParseCIDR(pool.Spec.CIDR)
 			if err != nil {
@@ -653,29 +671,33 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 	}
 
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico &&
+	if instance.Spec.CNI != nil && instance.Spec.CNI.Type == operatorv1.PluginCalico &&
 		*instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneIptables &&
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds == nil {
 		var delay int32 = 0
 		instance.Spec.CalicoNetwork.LinuxPolicySetupTimeoutSeconds = &delay
 	}
 
-	defaultCNINetDir, defaultCNIBinDir := render.DefaultCNIDirectories(instance.Spec.KubernetesProvider)
-	if instance.Spec.CNI.ConfDir == nil || *instance.Spec.CNI.ConfDir == "" {
-		instance.Spec.CNI.ConfDir = &defaultCNINetDir
-	}
-	if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
-		instance.Spec.CNI.BinDir = &defaultCNIBinDir
-	}
-	if instance.Spec.CNI.InstallMode == nil {
-		mode := operatorv1.CNIInstallModeAll
-		instance.Spec.CNI.InstallMode = &mode
+	// Default the CNI binary/config directories (not applicable to an install with the dataplane disabled, which
+	// has no spec.cni).
+	if instance.Spec.CNI != nil {
+		defaultCNINetDir, defaultCNIBinDir := render.DefaultCNIDirectories(instance.Spec.KubernetesProvider)
+		if instance.Spec.CNI.ConfDir == nil || *instance.Spec.CNI.ConfDir == "" {
+			instance.Spec.CNI.ConfDir = &defaultCNINetDir
+		}
+		if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
+			instance.Spec.CNI.BinDir = &defaultCNIBinDir
+		}
+		if instance.Spec.CNI.InstallMode == nil {
+			mode := operatorv1.CNIInstallModeAll
+			instance.Spec.CNI.InstallMode = &mode
+		}
 	}
 
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
 	// Handle those here.
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico {
+	if instance.Spec.CNI != nil && instance.Spec.CNI.Type == operatorv1.PluginCalico {
 		if instance.Spec.CalicoNetwork.HostPorts == nil {
 			hp := operatorv1.HostPortsEnabled
 			instance.Spec.CalicoNetwork.HostPorts = &hp
@@ -983,8 +1005,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Make sure CNI is configured before continuing.
-	if instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil {
+	// The Linux dataplane is disabled, so calico-node, Typha,
+	// calico-kube-controllers, and csi-node-driver are not rendered, spec.cni is omitted, and
+	// the FelixConfiguration/BGPConfiguration defaults are not seeded.
+	dataplaneDisabled := instance.Spec.DataplaneDisabled()
+
+	// Make sure CNI is configured before continuing. In an install with the dataplane disabled spec.cni is omitted
+	// (validation rejects it being set), so this check only applies when a dataplane runs.
+	if !dataplaneDisabled && (instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil) {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "waiting for spec.cni to be filled in", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -992,8 +1020,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Determine if this cluster needs IP pools in order to operate.
 	// - If the installation has IP pools specified, then the cluster wants IP pools.
 	// - If the installation has no IP pools specified, it may still need them if it's using Calico IPAM or networking.
+	// An install with the dataplane disabled has no CNI/dataplane and never needs IP pools.
 	needsIPPools := instance.Spec.CalicoNetwork != nil && len(instance.Spec.CalicoNetwork.IPPools) != 0
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico || instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico {
+	if !dataplaneDisabled && (instance.Spec.CNI.Type == operatorv1.PluginCalico ||
+		(instance.Spec.CNI.IPAM != nil && instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico)) {
 		needsIPPools = true
 	}
 	if needsIPPools && len(currentPools.Items) == 0 {
@@ -1001,7 +1031,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if !installationMarkedForDeletion {
+	if !installationMarkedForDeletion && !dataplaneDisabled {
 		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 		// the run the reset the degraded status and requeue the request.
 		if r.typhaAutoscaler.isDegraded() {
@@ -1017,6 +1047,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 		}
+	}
+
+	// An install with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None) runs a different set of
+	// controllers than a normal install (see internal/controller.AddToManager), and that set is
+	// fixed when the manager starts. If the dataplane mode has changed since the operator
+	// started, reboot so the correct controllers are (de)registered. This mirrors the enterprise
+	// switch below; controller-runtime cannot add or remove controllers from a running manager.
+	if instance.DeletionTimestamp.IsZero() && r.dataplaneDisabled != instance.Spec.DataplaneDisabled() {
+		reqLogger.Info("Linux dataplane mode changed since startup; rebooting operator to apply controller set",
+			"startupDataplaneDisabled", r.dataplaneDisabled, "currentDataplaneDisabled", instance.Spec.DataplaneDisabled())
+		osExitOverride(0)
 	}
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
@@ -1177,48 +1218,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		// Configure defaults.
-		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
+	// Set any non-default FelixConfiguration and BGPConfiguration values that we need.
+	// When the dataplane is disabled there is no Felix or BIRD to consume them, so skip seeding entirely.
+	var felixConfiguration *v3.FelixConfiguration
+	if !dataplaneDisabled {
+		felixConfiguration, err = r.seedFelixAndBGPConfiguration(ctx, instance, needsNamespaceMigration, reqLogger)
 		if err != nil {
-			return false, err
+			return reconcile.Result{}, err
 		}
-
-		// Configure nftables mode.
-		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
-		if err != nil {
-			return false, err
-		}
-
-		// Configure cluster routing mode.
-		u3, err := setClusterRoutingOnFelixConfiguration(instance, fc, reqLogger)
-		if err != nil {
-			return false, err
-		}
-
-		updated := u || u2 || u3
-		return updated, nil
-	})
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Set any non-default BGPConfiguration values that we need.
-	_, err = utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
-		// Configure cluster routing mode.
-		u, err := setClusterRoutingOnBGPConfiguration(instance, bgpConfig, reqLogger)
-		if err != nil {
-			return false, err
-		}
-
-		return u, nil
-	})
-	if err != nil {
-		// Since, programClusterRoutes in FelixConfiguration is already updated earlier,
-		// failure in updating programClusterRouting in BGPConfiguration, essentially results in inconsistency
-		// between the configuration of BIRD and Felix in programming cluster routes, until the next reconcile convergence
-		return reconcile.Result{}, err
 	}
 
 	// nodeReporterMetricsPort is a port used in Enterprise to host internal metrics.
@@ -1233,8 +1240,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	if instance.Spec.Variant.IsEnterprise() {
 
-		// Determine the port to use for nodeReporter metrics.
-		if felixConfiguration.Spec.PrometheusReporterPort != nil {
+		// Determine the port to use for nodeReporter metrics. When the dataplane is disabled the
+		// FelixConfiguration is not seeded (felixConfiguration is nil), so the defaults are used.
+		if felixConfiguration != nil && felixConfiguration.Spec.PrometheusReporterPort != nil {
 			nodeReporterMetricsPort = *felixConfiguration.Spec.PrometheusReporterPort
 		}
 		if nodeReporterMetricsPort == 0 {
@@ -1243,7 +1251,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		if felixConfiguration.Spec.PrometheusMetricsPort != nil {
+		if felixConfiguration != nil && felixConfiguration.Spec.PrometheusMetricsPort != nil {
 			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
 		}
 
@@ -1427,9 +1435,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:   typhaNodeTLS.TrustedBundle,
 		}))
 
-	// Check if non-cluster host feature is enabled.
+	// Check if non-cluster host feature is enabled. NonClusterHost is a dataplane feature
+	// (it scales Typha to serve out-of-cluster Felix/calico-node instances), so it has no
+	// meaning in an install with the dataplane disabled where no dataplane runs. Skip it entirely so we
+	// don't start a Typha autoscaler for a Deployment that is never rendered; the
+	// nonclusterhost controller separately rejects the NonClusterHost CR when the dataplane is disabled.
 	var nonclusterhost *operatorv1.NonClusterHost
-	if instance.Spec.Variant.IsEnterprise() {
+	if instance.Spec.Variant.IsEnterprise() && !dataplaneDisabled {
 		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
@@ -1469,18 +1481,21 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Build a configuration for rendering calico/typha.
-	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:           k8sapi.Endpoint,
-		K8sServiceEpPodNetwork: k8sapi.PodNetworkEndpoint,
-		Installation:           &instance.Spec,
-		TLS:                    typhaNodeTLS,
-		MigrateNamespaces:      needsNamespaceMigration,
-		ClusterDomain:          r.clusterDomain,
-		NonClusterHost:         nonclusterhost,
-		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
+	// Build a configuration for rendering calico/typha. Typha is not rendered when the dataplane is disabled.
+	var typhaCfg render.TyphaConfiguration
+	if !dataplaneDisabled {
+		typhaCfg = render.TyphaConfiguration{
+			K8sServiceEp:           k8sapi.Endpoint,
+			K8sServiceEpPodNetwork: k8sapi.PodNetworkEndpoint,
+			Installation:           &instance.Spec,
+			TLS:                    typhaNodeTLS,
+			MigrateNamespaces:      needsNamespaceMigration,
+			ClusterDomain:          r.clusterDomain,
+			NonClusterHost:         nonclusterhost,
+			FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
+		}
+		components = append(components, render.Typha(&typhaCfg))
 	}
-	components = append(components, render.Typha(&typhaCfg))
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for terminating details.
 	canRemoveCNI := false
@@ -1531,124 +1546,129 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Fetch any existing default BGPConfiguration object.
-	bgpConfiguration := &v3.BGPConfiguration{}
-	err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
-	if err != nil && !apierrors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	var goldmaneRunning bool
-	// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
-	if instance.Spec.Variant == operatorv1.Calico {
-		goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable retrieve Goldmane CR", err, reqLogger)
+	// Build and render the calico/node configuration. calico-node is not rendered when
+	// the dataplane is disabled, so all of the inputs gathered here are only needed when a
+	// Linux dataplane is enabled.
+	if !dataplaneDisabled {
+		// Fetch any existing default BGPConfiguration object.
+		bgpConfiguration := &v3.BGPConfiguration{}
+		err = r.client.Get(ctx, types.NamespacedName{Name: "default"}, bgpConfiguration)
+		if err != nil && !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read BGPConfiguration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		goldmaneRunning = goldmaneCR != nil
-	}
 
-	// Calico node DNS configuration and policy should be inherited from the tigera/operator Deployment by default since:
-	//
-	// - they are both host networked and run prior to CNI being installed (and thus beofre kube-dns is available)
-	// - they both need access to in-cluster serivces via kube-dns, as well as external services such as the API server.
-	//
-	// So, they will require the same DNS configuration.
-	//
-	// Users can override this with explicit configuration in the Installation resource, but using the operator as
-	// a baseline is a reasonable default.
-	operatorDeployment := &appsv1.Deployment{}
-	defaultDNSPolicy := corev1.DNSDefault
-	var defaultDNSConfig *corev1.PodDNSConfig
-	if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
-		if !apierrors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read operator Deployment", err, reqLogger)
-			return reconcile.Result{}, err
+		var goldmaneRunning bool
+		// Goldmane can only be running if the variant is Calico and the Whisker CRD exists.
+		if instance.Spec.Variant == operatorv1.Calico {
+			goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.client)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable retrieve Goldmane CR", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			goldmaneRunning = goldmaneCR != nil
 		}
-		reqLogger.Info("Operator Deployment not found, using default DNS configuration")
-	} else {
-		defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
-		defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
-	}
 
-	// Get the Goldmane Service in order to find its cluster IP.
-	goldmaneIP := ""
-	if goldmaneRunning {
-		goldmaneIP, err = utils.ResolveClusterIP(ctx, r.client, goldmane.GoldmaneServiceName, common.CalicoNamespace)
-		if apierrors.IsNotFound(err) {
-			// Service not found - Goldmane is probably still starting. Wait for it to appear. This helps prevent us from rolling out calico/node twice
-			// during initial installation - once when we first Reconcile and again when we detect the Goldmane Service, which triggers
-			// us adding host aliases to the calico/node DaemonSet.
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane enabled, waiting for Service to receive an IP", nil, reqLogger)
-			return reconcile.Result{}, nil
-		} else if err != nil {
-			// Some other error - degrade.
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
-			return reconcile.Result{}, err
+		// Calico node DNS configuration and policy should be inherited from the tigera/operator Deployment by default since:
+		//
+		// - they are both host networked and run prior to CNI being installed (and thus beofre kube-dns is available)
+		// - they both need access to in-cluster serivces via kube-dns, as well as external services such as the API server.
+		//
+		// So, they will require the same DNS configuration.
+		//
+		// Users can override this with explicit configuration in the Installation resource, but using the operator as
+		// a baseline is a reasonable default.
+		operatorDeployment := &appsv1.Deployment{}
+		defaultDNSPolicy := corev1.DNSDefault
+		var defaultDNSConfig *corev1.PodDNSConfig
+		if err := r.client.Get(ctx, common.OperatorKey(), operatorDeployment); err != nil {
+			if !apierrors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read operator Deployment", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			reqLogger.Info("Operator Deployment not found, using default DNS configuration")
+		} else {
+			defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
+			defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
 		}
-	}
 
-	// Build a configuration for rendering calico/node.
-	nodeCfg := render.NodeConfiguration{
-		GoldmaneRunning:               goldmaneRunning,
-		K8sServiceEp:                  k8sapi.Endpoint,
-		Installation:                  &instance.Spec,
-		IPPools:                       crdPoolsToOperator(currentPools.Items),
-		LogCollector:                  logCollector,
-		BirdTemplates:                 birdTemplates,
-		TLS:                           typhaNodeTLS,
-		ClusterDomain:                 r.clusterDomain,
-		DefaultDNSPolicy:              defaultDNSPolicy,
-		DefaultDNSConfig:              defaultDNSConfig,
-		GoldmaneIP:                    goldmaneIP,
-		NodeReporterMetricsPort:       nodeReporterMetricsPort,
-		BGPLayouts:                    bgpLayout,
-		NodeAppArmorProfile:           nodeAppArmorProfile,
-		MigrateNamespaces:             needsNamespaceMigration,
-		CanRemoveCNIFinalizer:         canRemoveCNI,
-		PrometheusServerTLS:           nodePrometheusTLS,
-		FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
-		NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
-		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
-		FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
-		V3CRDs:                        r.v3CRDs,
-	}
-
-	if bgpConfiguration.Spec.BindMode != nil {
-		nodeCfg.BindMode = string(*bgpConfiguration.Spec.BindMode)
-	}
-
-	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
-	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	// If BPFNetworkBootstrap is Enabled and its requirements are met configure the node with API Server info.
-	if bpfBootstrapReq != nil && instance.Spec.BPFEnabled() {
-		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
-		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
-		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
-
-		if !instance.Spec.KubernetesProvider.IsNone() {
-			// Warn once about potential issues with API server connectivity.
-			// This lock is necessary to prevent multiple warnings, since this Reconcile is called by multiple workers.
-			if warnOnce.TrySet() {
-				reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s. ", instance.Spec.KubernetesProvider) +
-					"If you experience API server communication issues, disable 'bpfBootstrapNetworking' in the Installation CR " +
-					"and follow the eBPF installation guide at https://docs.tigera.io.")
+		// Get the Goldmane Service in order to find its cluster IP.
+		goldmaneIP := ""
+		if goldmaneRunning {
+			goldmaneIP, err = utils.ResolveClusterIP(ctx, r.client, goldmane.GoldmaneServiceName, common.CalicoNamespace)
+			if apierrors.IsNotFound(err) {
+				// Service not found - Goldmane is probably still starting. Wait for it to appear. This helps prevent us from rolling out calico/node twice
+				// during initial installation - once when we first Reconcile and again when we detect the Goldmane Service, which triggers
+				// us adding host aliases to the calico/node DaemonSet.
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane enabled, waiting for Service to receive an IP", nil, reqLogger)
+				return reconcile.Result{}, nil
+			} else if err != nil {
+				// Some other error - degrade.
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read Goldmane Service", err, reqLogger)
+				return reconcile.Result{}, err
 			}
 		}
-	}
 
-	if !instance.Spec.BPFNetworkBootstrapEnabled() {
-		warnOnce.Reset()
-	}
+		// Build a configuration for rendering calico/node.
+		nodeCfg := render.NodeConfiguration{
+			GoldmaneRunning:               goldmaneRunning,
+			K8sServiceEp:                  k8sapi.Endpoint,
+			Installation:                  &instance.Spec,
+			IPPools:                       crdPoolsToOperator(currentPools.Items),
+			LogCollector:                  logCollector,
+			BirdTemplates:                 birdTemplates,
+			TLS:                           typhaNodeTLS,
+			ClusterDomain:                 r.clusterDomain,
+			DefaultDNSPolicy:              defaultDNSPolicy,
+			DefaultDNSConfig:              defaultDNSConfig,
+			GoldmaneIP:                    goldmaneIP,
+			NodeReporterMetricsPort:       nodeReporterMetricsPort,
+			BGPLayouts:                    bgpLayout,
+			NodeAppArmorProfile:           nodeAppArmorProfile,
+			MigrateNamespaces:             needsNamespaceMigration,
+			CanRemoveCNIFinalizer:         canRemoveCNI,
+			PrometheusServerTLS:           nodePrometheusTLS,
+			FelixHealthPort:               *felixConfiguration.Spec.HealthPort,
+			NodeCgroupV2Path:              felixConfiguration.Spec.CgroupV2Path,
+			FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
+			FelixPrometheusMetricsPort:    felixPrometheusMetricsPort,
+			V3CRDs:                        r.v3CRDs,
+		}
 
-	components = append(components, render.Node(&nodeCfg))
+		if bgpConfiguration.Spec.BindMode != nil {
+			nodeCfg.BindMode = string(*bgpConfiguration.Spec.BindMode)
+		}
+
+		// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
+		bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// If BPFNetworkBootstrap is Enabled and its requirements are met configure the node with API Server info.
+		if bpfBootstrapReq != nil && instance.Spec.BPFEnabled() {
+			// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
+			nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
+			nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
+
+			if !instance.Spec.KubernetesProvider.IsNone() {
+				// Warn once about potential issues with API server connectivity.
+				// This lock is necessary to prevent multiple warnings, since this Reconcile is called by multiple workers.
+				if warnOnce.TrySet() {
+					reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s. ", instance.Spec.KubernetesProvider) +
+						"If you experience API server communication issues, disable 'bpfBootstrapNetworking' in the Installation CR " +
+						"and follow the eBPF installation guide at https://docs.tigera.io.")
+				}
+			}
+		}
+
+		if !instance.Spec.BPFNetworkBootstrapEnabled() {
+			warnOnce.Reset()
+		}
+
+		components = append(components, render.Node(&nodeCfg))
+	}
 
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
@@ -1657,62 +1677,67 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.CSI(&csiCfg))
 
-	// Build a configuration for rendering calico/kube-controllers.
-	// Provision a dedicated WAF wasm pull secret so the WAF reconciler
-	// replicates it into tenant namespaces without clashing with the
-	// operator-managed tigera-pull-secret the GatewayAPI render also copies
-	// there (EV-6386). The EnvoyExtensionPolicy image source takes a single
-	// pullSecretRef, so the registry auths of all Installation pull secrets
-	// are merged into it rather than picking one.
-	var wasmPullSecret *corev1.Secret
-	if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
-		var skipped []string
-		wasmPullSecret, skipped = kubecontrollers.MergeWAFPullSecret(pullSecrets)
-		if len(skipped) > 0 {
-			reqLogger.Info("Skipped unparseable imagePullSecrets when building the WAF wasm pull secret", "skipped", skipped)
+	// Build a configuration for rendering calico/kube-controllers, which is not rendered
+	// when the dataplane is disabled.
+	var kubeControllersCfg kubecontrollers.KubeControllersConfiguration
+	if !dataplaneDisabled {
+		// Provision a dedicated WAF wasm pull secret so the WAF reconciler
+		// replicates it into tenant namespaces without clashing with the
+		// operator-managed tigera-pull-secret the GatewayAPI render also copies
+		// there (EV-6386). The EnvoyExtensionPolicy image source takes a single
+		// pullSecretRef, so the registry auths of all Installation pull secrets
+		// are merged into it rather than picking one.
+		var wasmPullSecret *corev1.Secret
+		if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
+			var skipped []string
+			wasmPullSecret, skipped = kubecontrollers.MergeWAFPullSecret(pullSecrets)
+			if len(skipped) > 0 {
+				reqLogger.Info("Skipped unparseable imagePullSecrets when building the WAF wasm pull secret", "skipped", skipped)
+			}
 		}
+		// Provision the dedicated WAF wasm CA-bundle ConfigMap as a renamed copy of
+		// the trusted CA bundle, so the WAF reconciler replicates it into tenant
+		// namespaces for the Coraza wasm OCI registry TLS check without clashing with
+		// the operator-managed tigera-ca-bundle the GatewayAPI render also copies
+		// there (EV-6386). The dedicated source was previously a TODO; the full
+		// TrustedBundle (not the RO interface the kube-controllers render sees) is
+		// available here, so build it in the core controller.
+		var wasmCACert *corev1.ConfigMap
+		if wafGatewayExtensionEnabled {
+			wasmCACert = typhaNodeTLS.TrustedBundle.ConfigMap(common.CalicoNamespace)
+			wasmCACert.Name = kubecontrollers.WASMCACertName
+		}
+		kubeControllersCfg = kubecontrollers.KubeControllersConfiguration{
+			K8sServiceEp:                k8sapi.Endpoint,
+			K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
+			Installation:                &instance.Spec,
+			ManagementCluster:           managementCluster,
+			ManagementClusterConnection: managementClusterConnection,
+			ClusterDomain:               r.clusterDomain,
+			MetricsPort:                 kubeControllersMetricsPort,
+			Terminating:                 installationMarkedForDeletion,
+			MetricsServerTLS:            kubeControllerTLS,
+			TrustedBundle:               typhaNodeTLS.TrustedBundle,
+			Namespace:                   common.CalicoNamespace,
+			BindingNamespaces:           []string{common.CalicoNamespace},
+			WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
+			WAFWebhookServerTLS:         wafWebhookTLS,
+			WASMPullSecret:              wasmPullSecret,
+			WASMCACert:                  wasmCACert,
+			// The webhook Service + ValidatingWebhookConfiguration are rendered by
+			// the kube-controllers component (and deleted when the WAF extension is
+			// disabled); the caBundle is the operator CA that issued the serving
+			// cert above.
+			WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
+		}
+		components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 	}
-	// Provision the dedicated WAF wasm CA-bundle ConfigMap as a renamed copy of
-	// the trusted CA bundle, so the WAF reconciler replicates it into tenant
-	// namespaces for the Coraza wasm OCI registry TLS check without clashing with
-	// the operator-managed tigera-ca-bundle the GatewayAPI render also copies
-	// there (EV-6386). The dedicated source was previously a TODO; the full
-	// TrustedBundle (not the RO interface the kube-controllers render sees) is
-	// available here, so build it in the core controller.
-	var wasmCACert *corev1.ConfigMap
-	if wafGatewayExtensionEnabled {
-		wasmCACert = typhaNodeTLS.TrustedBundle.ConfigMap(common.CalicoNamespace)
-		wasmCACert.Name = kubecontrollers.WASMCACertName
-	}
-	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
-		K8sServiceEp:                k8sapi.Endpoint,
-		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
-		Installation:                &instance.Spec,
-		ManagementCluster:           managementCluster,
-		ManagementClusterConnection: managementClusterConnection,
-		ClusterDomain:               r.clusterDomain,
-		MetricsPort:                 kubeControllersMetricsPort,
-		Terminating:                 installationMarkedForDeletion,
-		MetricsServerTLS:            kubeControllerTLS,
-		TrustedBundle:               typhaNodeTLS.TrustedBundle,
-		Namespace:                   common.CalicoNamespace,
-		BindingNamespaces:           []string{common.CalicoNamespace},
-		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
-		WAFWebhookServerTLS:         wafWebhookTLS,
-		WASMPullSecret:              wasmPullSecret,
-		WASMCACert:                  wasmCACert,
-		// The webhook Service + ValidatingWebhookConfiguration are rendered by
-		// the kube-controllers component (and deleted when the WAF extension is
-		// disabled); the caBundle is the operator CA that issued the serving
-		// cert above.
-		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
-	}
-	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
 	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	if includeV3NetworkPolicy {
+	// When the dataplane is disabled the components these policies select are not rendered, so neither are the policies.
+	if includeV3NetworkPolicy && !dataplaneDisabled {
 		if nonclusterhost != nil {
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
@@ -1761,17 +1786,24 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// TODO: We handle too many components in this controller at the moment. Once we are done consolidating,
 	// we can have the CreateOrUpdate logic handle this for us.
-	r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
-	r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
+	// When the dataplane is disabled these workloads are not rendered, so don't register them with the
+	// status manager; with nothing to monitor, the TigeraStatus reports Available.
+	if !dataplaneDisabled {
+		r.status.AddDaemonsets([]types.NamespacedName{{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}})
+		r.status.AddDeployments([]types.NamespacedName{{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}})
+	}
 	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
-	})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
-		return reconcile.Result{}, err
+	// No Felix runs when the dataplane is disabled, so there is nothing to patch.
+	if !dataplaneDisabled {
+		_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+			return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
+		})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Run this after we have rendered our components so the new (operator created)
@@ -1976,6 +2008,52 @@ func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certifi
 		NodeCommonName:            nodeCommonName,
 		NodeURISAN:                nodeURISAN,
 	}, nil
+}
+
+// seedFelixAndBGPConfiguration applies the non-default FelixConfiguration and
+// BGPConfiguration values the operator needs (defaults, nftables mode, cluster routing).
+// It is only called when a Linux dataplane is running; an install with the dataplane disabled has no Felix
+// or BIRD to consume these settings, so the caller skips seeding entirely and leaves the
+// returned FelixConfiguration nil.
+func (r *ReconcileInstallation) seedFelixAndBGPConfiguration(ctx context.Context, instance *operatorv1.Installation, needsNamespaceMigration bool, reqLogger logr.Logger) (*v3.FelixConfiguration, error) {
+	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+		// Configure defaults.
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
+		if err != nil {
+			return false, err
+		}
+
+		// Configure nftables mode.
+		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+
+		// Configure cluster routing mode.
+		u3, err := setClusterRoutingOnFelixConfiguration(instance, fc, reqLogger)
+		if err != nil {
+			return false, err
+		}
+
+		return u || u2 || u3, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Set any non-default BGPConfiguration values that we need.
+	if _, err := utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
+		// Configure cluster routing mode.
+		return setClusterRoutingOnBGPConfiguration(instance, bgpConfig, reqLogger)
+	}); err != nil {
+		// Since programClusterRoutes in FelixConfiguration is already updated earlier, failure in
+		// updating programClusterRouting in BGPConfiguration essentially results in inconsistency
+		// between the configuration of BIRD and Felix in programming cluster routes, until the next
+		// reconcile convergence.
+		return nil, err
+	}
+
+	return felixConfiguration, nil
 }
 
 func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {

@@ -690,4 +690,52 @@ var _ = Describe("Defaulting logic tests", func() {
 			{Spec: v3.IPPoolSpec{CIDR: "feed:beef:72e5:a94b::/64"}},
 		}),
 	)
+
+	Describe("dataplane-disabled mode", Label("no-dataplane"), func() {
+		It("should leave spec.cni unset when the dataplane is disabled", func() {
+			// The dataplane-disabled mode is triggered by linuxDataplane None; spec.cni is omitted.
+			dpNone := operator.LinuxDataplaneNone
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						LinuxDataplane: &dpNone,
+					},
+				},
+			}
+			Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+
+			// CNI defaulting is skipped entirely; spec.cni stays nil.
+			Expect(instance.Spec.CNI).To(BeNil())
+
+			Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneNone))
+		})
+
+		It("should preserve an explicit linuxDataplane None and skip dataplane-related defaults", func() {
+			dpNone := operator.LinuxDataplaneNone
+			instance := &operator.Installation{
+				Spec: operator.InstallationSpec{
+					CalicoNetwork: &operator.CalicoNetworkSpec{
+						LinuxDataplane: &dpNone,
+					},
+				},
+			}
+			// Even with pre-existing pools in the cluster, dataplane-disabled mode must not default
+			// node address autodetection (there is no calico-node to perform it).
+			currentPools := v3.IPPoolList{
+				Items: []v3.IPPool{
+					{Spec: v3.IPPoolSpec{CIDR: "192.168.0.0/16"}},
+					{Spec: v3.IPPoolSpec{CIDR: "fd80:24e2:f998:72d6::/64"}},
+				},
+			}
+			Expect(fillDefaults(instance, &currentPools)).NotTo(HaveOccurred())
+			Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+
+			Expect(*instance.Spec.CalicoNetwork.LinuxDataplane).To(Equal(operator.LinuxDataplaneNone))
+			Expect(*instance.Spec.CalicoNetwork.WindowsDataplane).To(Equal(operator.WindowsDataplaneDisabled))
+			Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV4).To(BeNil())
+			Expect(instance.Spec.CalicoNetwork.NodeAddressAutodetectionV6).To(BeNil())
+			Expect(instance.Spec.CNI).To(BeNil())
+		})
+	})
 })

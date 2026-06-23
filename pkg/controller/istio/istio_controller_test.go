@@ -569,7 +569,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -585,7 +585,7 @@ var _ = Describe("Istio controller tests", func() {
 				}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -610,7 +610,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -639,7 +639,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -661,7 +661,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 

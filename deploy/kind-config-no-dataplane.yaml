@@ -1,0 +1,36 @@
+# Kind cluster for no-dataplane FV tests. Unlike kind-config.yaml, the default
+# CNI (kindnet) is left enabled: installs with the dataplane disabled run no Calico dataplane,
+# so a third-party CNI must provide pod networking.
+#
+# Note the IPv6 pod subnet is a /56 rather than the /64 used by kind-config.yaml:
+# kindnet relies on per-node podCIDR allocation (a /64 per node), which needs a
+# larger pool. Calico IPAM does not, which is why the regular config can use a /64.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+networking:
+  podSubnet: "192.168.0.0/16,fd00:10:244::/56"
+  ipFamily: dual
+nodes:
+  - role: control-plane
+  - role: worker
+  - role: worker
+  - role: worker
+kubeadmConfigPatches:
+  - |
+    apiVersion: kubeadm.k8s.io/v1beta2
+    kind: ClusterConfiguration
+    metadata:
+      name: config
+    featureGates:
+      IPv6DualStack: true
+  - |
+    apiVersion: kubeproxy.config.k8s.io/v1alpha1
+    kind: KubeProxyConfiguration
+    metadata:
+      name: config
+    # iptables, not ipvs: ipvs kube-proxy has known friction with Istio ambient's
+    # ztunnel-to-ztunnel HBONE data path, and it buys nothing here since dataplane-disabled
+    # installs run no Calico dataplane. iptables is the kind default.
+    mode: iptables
+    conntrack:
+      maxPerCore: 0

@@ -592,8 +592,13 @@ const (
 
 // LinuxDataplaneOption controls which dataplane is to be used on Linux nodes.
 //
-// One of: Iptables, BPF, VPP, Nftables
-// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;
+// One of: Iptables, BPF, VPP, Nftables, None
+//
+// The value None disables the Linux dataplane entirely: calico-node, Typha, and
+// calico-kube-controllers are not rendered, intended for clusters that run only standalone
+// components (such as Gateway API support or Istio) on top of a third-party CNI. When None,
+// spec.cni must be omitted.
+// +kubebuilder:validation:Enum=Iptables;BPF;VPP;Nftables;None;
 type LinuxDataplaneOption string
 
 const (
@@ -601,6 +606,7 @@ const (
 	LinuxDataplaneBPF      LinuxDataplaneOption = "BPF"
 	LinuxDataplaneVPP      LinuxDataplaneOption = "VPP"
 	LinuxDataplaneNftables LinuxDataplaneOption = "Nftables"
+	LinuxDataplaneNone     LinuxDataplaneOption = "None"
 )
 
 // +kubebuilder:validation:Enum=HNS;Disabled
@@ -622,6 +628,12 @@ type CalicoNetworkSpec struct {
 	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
 	// If not specified, iptables mode is used.
+	//
+	// The value None disables the Linux dataplane entirely: calico-node, Typha, and
+	// calico-kube-controllers are not deployed, intended for clusters that run only standalone
+	// components (such as Gateway API support or Istio) on top of a third-party CNI. When None,
+	// spec.cni must be omitted. Note that switching an existing cluster to None does not remove
+	// previously deployed dataplane components.
 	// Default: Iptables
 	// +optional
 	LinuxDataplane *LinuxDataplaneOption `json:"linuxDataplane,omitempty"`
@@ -629,6 +641,7 @@ type CalicoNetworkSpec struct {
 	// WindowsDataplane is used to select the dataplane used for Windows nodes. In particular, it
 	// causes the operator to add required mounts and environment variables for the particular dataplane.
 	// If not specified, it is disabled and the operator will not render the Calico Windows nodes daemonset.
+	// An install with the Linux dataplane disabled (spec.calicoNetwork.linuxDataplane: None) must leave this disabled.
 	// Default: Disabled
 	// +optional
 	WindowsDataplane *WindowsDataplaneOption `json:"windowsDataplane,omitempty"`
@@ -999,6 +1012,10 @@ type CNISpec struct {
 	// for all other values the CNI plugin binaries and CNI config is a dependency that is expected
 	// to be installed separately.
 	//
+	// Note: spec.cni describes the CNI plugin the cluster is using; it is not a request to install
+	// one. An install with no Calico dataplane (spec.calicoNetwork.linuxDataplane: None) must omit
+	// spec.cni entirely.
+	//
 	// Default: Calico
 	// +kubebuilder:validation:Enum=Calico;GKE;AmazonVPC;AzureVNET
 	Type CNIPluginType `json:"type"`
@@ -1096,6 +1113,24 @@ func (s *InstallationSpec) BPFEnabled() bool {
 	return s.CalicoNetwork != nil &&
 		s.CalicoNetwork.LinuxDataplane != nil &&
 		*s.CalicoNetwork.LinuxDataplane == LinuxDataplaneBPF
+}
+
+// LinuxDataplaneEnabled is an extension method that returns false only when the
+// Installation resource explicitly disables the Linux dataplane by setting
+// spec.calicoNetwork.linuxDataplane to "None" (an install in which
+// calico-node, Typha, and calico-kube-controllers are not deployed).
+func (s *InstallationSpec) LinuxDataplaneEnabled() bool {
+	return s.CalicoNetwork == nil ||
+		s.CalicoNetwork.LinuxDataplane == nil ||
+		*s.CalicoNetwork.LinuxDataplane != LinuxDataplaneNone
+}
+
+// DataplaneDisabled is an extension method that returns true when the Installation disables
+// the Linux dataplane (spec.calicoNetwork.linuxDataplane: None): calico-node, Typha, and
+// calico-kube-controllers are not deployed, spec.cni is omitted, and the projectcalico.org/v3
+// API is not served. It is the inverse of LinuxDataplaneEnabled.
+func (s *InstallationSpec) DataplaneDisabled() bool {
+	return !s.LinuxDataplaneEnabled()
 }
 
 // IsNftables is an extension method that returns true if the Installation resource

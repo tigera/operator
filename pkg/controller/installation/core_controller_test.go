@@ -36,6 +36,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1401,6 +1402,221 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
+		})
+
+		Context("dataplane-disabled mode (cni omitted, linuxDataplane None)", Label("no-dataplane"), func() {
+			BeforeEach(func() {
+				dpNone := operator.LinuxDataplaneNone
+				// The operator was started with the dataplane disabled, matching this CR, so the runtime
+				// dataplane-mode-change reboot does not fire.
+				r.dataplaneDisabled = true
+				cr.Spec.CNI = nil
+				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+					LinuxDataplane: &dpNone,
+				}
+			})
+
+			It("should reboot the operator when the dataplane mode changed since startup", func() {
+				// The operator started with the dataplane enabled but the live Installation now disables it, so
+				// Reconcile must reboot to (de)register the dataplane controllers.
+				r.dataplaneDisabled = false
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				exited := false
+				origExit := osExitOverride
+				osExitOverride = func(_ int) { exited = true }
+				defer func() { osExitOverride = origExit }()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(exited).Should(BeTrue(), "expected the operator to reboot on a dataplane mode change")
+			})
+
+			It("should not reboot the operator when the dataplane mode is unchanged since startup", func() {
+				// The operator started with the dataplane disabled and the live Installation still disables it
+				// (r.dataplaneDisabled was set to true in the BeforeEach), so no reboot must occur.
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				exited := false
+				origExit := osExitOverride
+				osExitOverride = func(_ int) { exited = true }
+				defer func() { osExitOverride = origExit }()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(exited).Should(BeFalse(), "expected no reboot when the dataplane mode is unchanged")
+			})
+
+			It("should not render the dataplane components and should not seed FelixConfiguration", func() {
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				result, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+				// The calico-system namespace is still rendered.
+				ns := corev1.Namespace{}
+				Expect(c.Get(ctx, client.ObjectKey{Name: common.CalicoNamespace}, &ns)).NotTo(HaveOccurred())
+
+				// None of the dataplane workloads should be rendered.
+				ds := appsv1.DaemonSet{}
+				err = c.Get(ctx, client.ObjectKey{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, &ds)
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no calico-node DaemonSet")
+
+				err = c.Get(ctx, client.ObjectKey{Name: common.TyphaDeploymentName, Namespace: common.CalicoNamespace}, &appsv1.Deployment{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no calico-typha Deployment")
+
+				err = c.Get(ctx, client.ObjectKey{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}, &appsv1.Deployment{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no calico-kube-controllers Deployment")
+
+				err = c.Get(ctx, client.ObjectKey{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace}, &appsv1.DaemonSet{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no csi-node-driver DaemonSet")
+
+				// No FelixConfiguration defaults should have been seeded.
+				err = c.Get(ctx, types.NamespacedName{Name: "default"}, &v3.FelixConfiguration{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no default FelixConfiguration")
+
+				// The suppressed workloads must not be registered with the status manager,
+				// so that TigeraStatus reports Available with nothing to monitor.
+				mockStatus.AssertNotCalled(GinkgoT(), "AddDaemonsets", mock.Anything)
+				mockStatus.AssertNotCalled(GinkgoT(), "AddDeployments", mock.Anything)
+				mockStatus.AssertCalled(GinkgoT(), "ReadyToMonitor")
+				mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
+			})
+
+			It("should delete an existing csi-node-driver DaemonSet when switching to the dataplane-disabled mode", func() {
+				Expect(c.Create(ctx, &appsv1.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace},
+				})).NotTo(HaveOccurred())
+
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = c.Get(ctx, client.ObjectKey{Name: render.CSIDaemonSetName, Namespace: common.CalicoNamespace}, &appsv1.DaemonSet{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected csi-node-driver DaemonSet to be deleted")
+			})
+
+			It("should not start the non-cluster-host typha autoscaler in an Enterprise install with the dataplane disabled", func() {
+				cr.Spec.Variant = operator.CalicoEnterprise
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				// A NonClusterHost CR exists, but dataplane-disabled mode runs no dataplane, so the
+				// operator must not start a Typha autoscaler for a Deployment it never renders.
+				Expect(c.Create(ctx, &operator.NonClusterHost{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Spec: operator.NonClusterHostSpec{
+						Endpoint:      "https://1.2.3.4:443",
+						TyphaEndpoint: "1.2.3.4:5473",
+					},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(r.typhaAutoscalerNonClusterHost).To(BeNil(), "expected no non-cluster-host typha autoscaler when the dataplane is disabled")
+			})
+		})
+
+		// Sweep every valid combination of variant, CNI plugin and Linux dataplane through a
+		// full reconcile, and assert the complete suppression matrix: which workloads are
+		// rendered and whether FelixConfiguration defaults are seeded.
+		DescribeTable("dataplane mode suppression matrix", Label("no-dataplane"),
+			func(variant operator.ProductVariant, cniType operator.CNIPluginType, dataplane operator.LinuxDataplaneOption, expectDataplane bool, expectCNIConfig bool) {
+				cr.Spec.Variant = variant
+				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+				// The operator boots in the mode this row exercises, so the reboot does not fire.
+				r.dataplaneDisabled = dataplane == operator.LinuxDataplaneNone
+				// An install with the dataplane disabled (linuxDataplane None) omits spec.cni; otherwise set it.
+				if dataplane == operator.LinuxDataplaneNone {
+					cr.Spec.CNI = nil
+				} else {
+					cr.Spec.CNI = &operator.CNISpec{Type: cniType}
+				}
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				result, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(result.RequeueAfter).To(Equal(0 * time.Second))
+
+				expectPresence := func(expected bool, obj client.Object, name string) {
+					err := c.Get(ctx, client.ObjectKey{Name: name, Namespace: common.CalicoNamespace}, obj)
+					if expected {
+						ExpectWithOffset(1, err).NotTo(HaveOccurred(), "expected %s to be rendered", name)
+					} else {
+						ExpectWithOffset(1, apierrors.IsNotFound(err)).To(BeTrue(), "expected %s to be absent", name)
+					}
+				}
+
+				expectPresence(expectDataplane, &appsv1.DaemonSet{}, common.NodeDaemonSetName)
+				expectPresence(expectDataplane, &appsv1.Deployment{}, common.TyphaDeploymentName)
+				expectPresence(expectDataplane, &appsv1.Deployment{}, common.KubeControllersDeploymentName)
+				expectPresence(expectDataplane, &appsv1.DaemonSet{}, render.CSIDaemonSetName)
+				expectPresence(expectCNIConfig, &corev1.ConfigMap{}, "cni-config")
+
+				// FelixConfiguration defaults are seeded whenever a dataplane runs, never when the dataplane is disabled.
+				err = c.Get(ctx, types.NamespacedName{Name: "default"}, &v3.FelixConfiguration{})
+				if expectDataplane {
+					Expect(err).NotTo(HaveOccurred(), "expected FelixConfiguration to be seeded")
+				} else {
+					Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no FelixConfiguration")
+				}
+
+				// The status manager must only monitor workloads that are rendered.
+				if expectDataplane {
+					mockStatus.AssertCalled(GinkgoT(), "AddDaemonsets", mock.Anything)
+					mockStatus.AssertCalled(GinkgoT(), "AddDeployments", mock.Anything)
+				} else {
+					mockStatus.AssertNotCalled(GinkgoT(), "AddDaemonsets", mock.Anything)
+					mockStatus.AssertNotCalled(GinkgoT(), "AddDeployments", mock.Anything)
+				}
+			},
+
+			// Full: Calico CNI plus a running dataplane.
+			Entry("Full / Calico / Iptables", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneIptables, true, true),
+			Entry("Full / Calico / BPF", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneBPF, true, true),
+			Entry("Full / Calico / Nftables", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneNftables, true, true),
+			Entry("Full / Enterprise / Iptables", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneIptables, true, true),
+			Entry("Full / Enterprise / BPF", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneBPF, true, true),
+
+			// Policy-only: a recognized third-party CNI, dataplane still runs; no Calico CNI config.
+			Entry("Policy-only / Calico / Iptables", operator.Calico, operator.PluginAmazonVPC, operator.LinuxDataplaneIptables, true, false),
+			Entry("Policy-only / Calico / BPF", operator.Calico, operator.PluginAmazonVPC, operator.LinuxDataplaneBPF, true, false),
+			Entry("Policy-only / Calico / Nftables", operator.Calico, operator.PluginAmazonVPC, operator.LinuxDataplaneNftables, true, false),
+			Entry("Policy-only / Enterprise / Iptables", operator.CalicoEnterprise, operator.PluginAmazonVPC, operator.LinuxDataplaneIptables, true, false),
+			Entry("Policy-only / Enterprise / BPF", operator.CalicoEnterprise, operator.PluginAmazonVPC, operator.LinuxDataplaneBPF, true, false),
+
+			// Dataplane disabled: spec.cni is omitted (cniType arg is ignored); nothing dataplane-related is rendered.
+			Entry("Dataplane disabled / Calico", operator.Calico, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
+			Entry("Dataplane disabled / Enterprise", operator.CalicoEnterprise, operator.PluginCalico, operator.LinuxDataplaneNone, false, false),
+		)
+
+		Context("policy-only mode (recognized third-party CNI, default dataplane)", Label("no-dataplane"), func() {
+			BeforeEach(func() {
+				cr.Spec.CNI = &operator.CNISpec{Type: operator.PluginAmazonVPC}
+			})
+
+			It("should render the dataplane components but no Calico CNI config", func() {
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// calico-node, typha and kube-controllers are all rendered.
+				Expect(c.Get(ctx, client.ObjectKey{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, &appsv1.DaemonSet{})).NotTo(HaveOccurred())
+				Expect(c.Get(ctx, client.ObjectKey{Name: common.TyphaDeploymentName, Namespace: common.CalicoNamespace}, &appsv1.Deployment{})).NotTo(HaveOccurred())
+				Expect(c.Get(ctx, client.ObjectKey{Name: common.KubeControllersDeploymentName, Namespace: common.CalicoNamespace}, &appsv1.Deployment{})).NotTo(HaveOccurred())
+
+				// But no Calico CNI config is rendered.
+				err = c.Get(ctx, client.ObjectKey{Name: "cni-config", Namespace: common.CalicoNamespace}, &corev1.ConfigMap{})
+				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no cni-config ConfigMap")
+
+				// FelixConfiguration defaults are still seeded for the running Felix.
+				fc := &v3.FelixConfiguration{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, fc)).NotTo(HaveOccurred())
+				Expect(fc.Spec.HealthPort).NotTo(BeNil())
+
+				mockStatus.AssertCalled(GinkgoT(), "AddDaemonsets", mock.Anything)
+				mockStatus.AssertCalled(GinkgoT(), "AddDeployments", mock.Anything)
+			})
 		})
 
 		It("should reconcile namespace, role binding and pull secrets", func() {

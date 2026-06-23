@@ -114,7 +114,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *Reconci
 		status:         status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
 		provider:       opts.DetectedProvider,
 		tierWatchReady: &utils.ReadyFlag{},
-		recorder:       mgr.GetEventRecorderFor("istio-controller"),
+		recorder:       mgr.GetEventRecorderFor("istio-controller"), //nolint:staticcheck // record.EventRecorder is still used throughout the operator; GetEventRecorder returns the newer events.EventRecorder API
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -144,7 +144,8 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError,
+		r.status.SetDegraded(
+			operatorv1.ResourceReadError,
 			fmt.Sprintf("Error querying for Istio CR: failed to get Istio %q", utils.DefaultInstanceKey),
 			err,
 			reqLogger,
@@ -397,26 +398,24 @@ func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operat
 		// dataplane is disabled (or if the Installation is already gone) there is no Felix and
 		// nothing to clean up in FelixConfiguration; only the finalizer must be removed.
 		dataplaneEnabled := false
-		var installationSpec *operatorv1.InstallationSpec
-		if _, installationSpec, err = utils.GetInstallationSpec(ctx, r); err == nil {
+		if _, installationSpec, getErr := utils.GetInstallationSpec(ctx, r); getErr == nil {
 			dataplaneEnabled = installationSpec.LinuxDataplaneEnabled()
-		} else if !errors.IsNotFound(err) {
+		} else if !errors.IsNotFound(getErr) {
+			err = getErr
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 			return
-		} else {
-			err = nil
 		}
 
 		if dataplaneEnabled {
-			if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
+			if _, patchErr := utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
 				return r.setIstioFelixConfiguration(ctx, instance, fc, true)
-			}); err != nil {
-				if meta.IsNoMatchError(err) {
+			}); patchErr != nil {
+				if meta.IsNoMatchError(patchErr) {
 					// The projectcalico.org/v3 API is not served, so there is no
 					// FelixConfiguration to clean up; allow deletion to proceed.
 					reqLogger.Info("projectcalico.org/v3 API is not available; skipping felix configuration cleanup")
-					err = nil
 				} else {
+					err = patchErr
 					r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
 					return
 				}

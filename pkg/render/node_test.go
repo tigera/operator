@@ -2149,6 +2149,37 @@ var _ = Describe("Node rendering tests", func() {
 				verifyInitContainers(ds, defaultInstance)
 			})
 
+			It("should omit the cni-plugins init container when CNI.InstallMode is CalicoOnly", func() {
+				// OSS never stages the upstream plugins, so set Enterprise to exercise the
+				// InstallMode gate itself.
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
+				mode := operatorv1.CNIInstallModeCalicoOnly
+				defaultInstance.CNI.InstallMode = &mode
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				Expect(dsResource).ToNot(BeNil())
+				ds := dsResource.(*appsv1.DaemonSet)
+				Expect(ds).ToNot(BeNil())
+
+				// cni-plugins init container is absent and install-cni does not mount
+				// the staging volume.
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "cni-plugins")).To(BeNil())
+				installCNI := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+				Expect(installCNI).NotTo(BeNil())
+				for _, m := range installCNI.VolumeMounts {
+					Expect(m.Name).NotTo(Equal("cni-plugins-stage"))
+				}
+				// Pod has no cni-plugins-stage volume.
+				for _, v := range ds.Spec.Template.Spec.Volumes {
+					Expect(v.Name).NotTo(Equal("cni-plugins-stage"))
+				}
+
+				verifyInitContainers(ds, defaultInstance)
+			})
+
 			It("should render MaxUnavailable if a custom value was set", func() {
 				two := intstr.FromInt(2)
 				defaultInstance.NodeUpdateStrategy.RollingUpdate.MaxUnavailable = &two
@@ -3362,8 +3393,14 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	// Validate correct number of init containers.
 	numInitContainers := 1
 	isCalicoCNI := instance.CNI != nil && instance.CNI.Type == operatorv1.PluginCalico
-	// If using Calico CNI, the CNI install container is present.
+	// Only Enterprise stages the upstream plugins on this branch; OSS bakes them into its cni
+	// image. Default to InstallMode=All when unset.
+	installUpstreamPlugins := isCalicoCNI && instance.Variant.IsEnterprise() &&
+		(instance.CNI.InstallMode == nil || *instance.CNI.InstallMode != operatorv1.CNIInstallModeCalicoOnly)
 	if isCalicoCNI {
+		numInitContainers++
+	}
+	if installUpstreamPlugins {
 		numInitContainers++
 	}
 	// Certificate management adds an additional key/cert init container.
@@ -3437,9 +3474,40 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 		}
+		if installUpstreamPlugins {
+			expectedCNIVolumeMounts = append(expectedCNIVolumeMounts, corev1.VolumeMount{MountPath: "/opt/cni/bin", Name: "cni-plugins-stage"})
+		}
 		Expect(cniContainer.VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	} else {
 		Expect(cniContainer).To(BeNil())
+	}
+
+	// Verify the cni-plugins init container is present and runs before
+	// install-cni when using Calico Enterprise CNI with the default InstallMode.
+	cniPluginsContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "cni-plugins")
+	if installUpstreamPlugins {
+		Expect(cniPluginsContainer).NotTo(BeNil())
+		expectedImage := fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCNIPlugins.Image, components.ComponentTigeraCNIPlugins.Version)
+		Expect(cniPluginsContainer.Image).To(Equal(expectedImage))
+		Expect(cniPluginsContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
+			{MountPath: "/stage", Name: "cni-plugins-stage"},
+		}))
+		// cni-plugins must come before install-cni so it populates the staging
+		// volume before install-cni reads from it.
+		var pluginsIdx, installIdx = -1, -1
+		for i, ic := range ds.Spec.Template.Spec.InitContainers {
+			switch ic.Name {
+			case "cni-plugins":
+				pluginsIdx = i
+			case "install-cni":
+				installIdx = i
+			}
+		}
+		Expect(pluginsIdx).To(BeNumerically(">=", 0))
+		Expect(installIdx).To(BeNumerically(">=", 0))
+		Expect(pluginsIdx).To(BeNumerically("<", installIdx))
+	} else {
+		Expect(cniPluginsContainer).To(BeNil())
 	}
 
 	// Verify the ebpf-bootstrap container image and security context.

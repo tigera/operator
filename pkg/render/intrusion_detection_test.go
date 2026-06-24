@@ -100,7 +100,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		cfg = &render.IntrusionDetectionConfiguration{
 			TrustedCertBundle:            bundle,
 			IntrusionDetectionCertSecret: keyPair,
-			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/"},
+			Installation:                 &operatorv1.InstallationSpec{Registry: "testregistry.com/", Variant: operatorv1.CalicoEnterprise},
 			ClusterDomain:                dns.DefaultClusterDomain,
 			ESLicenseType:                render.ElasticsearchLicenseTypeUnknown,
 			ManagedCluster:               notManagedCluster,

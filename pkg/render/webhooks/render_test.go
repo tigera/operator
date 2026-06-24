@@ -93,15 +93,15 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		rtest.ExpectResources(resources, expectedResources)
 
-		// Verify the Calico (non-enterprise) variant uses the combined calico/calico image with Command set.
+		// Calico uses the standalone webhooks image with no Command override.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("test-registry.com/%s%s:%s",
 				components.CalicoImagePath,
-				components.ComponentCalico.Image,
-				components.ComponentCalico.Version)))
-		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/usr/bin/calico", "component", "webhooks"}))
+				components.ComponentCalicoWebhooks.Image,
+				components.ComponentCalicoWebhooks.Version)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(BeEmpty())
 
 		// Verify the ClusterRole includes expected rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)

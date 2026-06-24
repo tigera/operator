@@ -86,6 +86,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
+				Variant:              operatorv1.CalicoEnterprise,
 			}
 
 			replicas = 2
@@ -427,6 +428,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
+				Variant:              operatorv1.CalicoEnterprise,
 			}
 			tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{
@@ -744,6 +746,7 @@ var _ = Describe("Linseed rendering tests", func() {
 				ControlPlaneReplicas: &replicas,
 				KubernetesProvider:   operatorv1.ProviderNone,
 				Registry:             "testregistry.com/",
+				Variant:              operatorv1.CalicoEnterprise,
 			}
 			tenant = &operatorv1.Tenant{
 				ObjectMeta: metav1.ObjectMeta{

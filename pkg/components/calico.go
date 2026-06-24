@@ -20,9 +20,9 @@ package components
 var (
 	CalicoRelease string = "v3.32.0"
 
-	ComponentCalicoCNIPlugins = Component{
+	ComponentCalicoCNI = Component{
 		Version:   "v3.32.0",
-		Image:     "third-party-cni-plugins",
+		Image:     "cni",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -31,6 +31,22 @@ var (
 	ComponentCalicoCNIWindows = Component{
 		Version:   "v3.32.0",
 		Image:     "cni-windows",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoCSRInitContainer = Component{
+		Version:   "v3.32.0",
+		Image:     "key-cert-provisioner",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoKubeControllers = Component{
+		Version:   "v3.32.0",
+		Image:     "kube-controllers",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -52,9 +68,65 @@ var (
 		variant:   calicoVariant,
 	}
 
+	ComponentCalicoTypha = Component{
+		Version:   "v3.32.0",
+		Image:     "typha",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoFlexVolume = Component{
+		Version:   "v3.32.0",
+		Image:     "pod2daemon-flexvol",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoAPIServer = Component{
+		Version:   "v3.32.0",
+		Image:     "apiserver",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoCSI = Component{
+		Version:   "v3.32.0",
+		Image:     "csi",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoCSIRegistrar = Component{
+		Version:   "v3.32.0",
+		Image:     "node-driver-registrar",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoGoldmane = Component{
+		Version:   "v3.32.0",
+		Image:     "goldmane",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	ComponentCalicoWhisker = Component{
 		Version:   "v3.32.0",
 		Image:     "whisker",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoWhiskerBackend = Component{
+		Version:   "v3.32.0",
+		Image:     "whisker-backend",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -79,6 +151,14 @@ var (
 	ComponentCalicoEnvoyRatelimit = Component{
 		Version:   "v3.32.0",
 		Image:     "envoy-ratelimit",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
+	ComponentCalicoGuardian = Component{
+		Version:   "v3.32.0",
+		Image:     "guardian",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
@@ -116,27 +196,39 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalico = Component{
+	ComponentCalicoWebhooks = Component{
 		Version:   "v3.32.0",
-		Image:     "calico",
+		Image:     "webhooks",
 		Registry:  "",
 		imagePath: "",
 		variant:   calicoVariant,
 	}
 
+	// Calico OSS ships the individual per-component images rather than the
+	// combined calico/calico image, so there is no ComponentCalico.
 	CalicoImages = []Component{
-		ComponentCalicoCNIPlugins,
+		ComponentCalicoCNI,
 		ComponentCalicoCNIWindows,
+		ComponentCalicoCSRInitContainer,
+		ComponentCalicoKubeControllers,
 		ComponentCalicoNode,
 		ComponentCalicoNodeWindows,
+		ComponentCalicoTypha,
+		ComponentCalicoFlexVolume,
+		ComponentCalicoAPIServer,
+		ComponentCalicoCSI,
+		ComponentCalicoCSIRegistrar,
+		ComponentCalicoGoldmane,
 		ComponentCalicoWhisker,
+		ComponentCalicoWhiskerBackend,
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
+		ComponentCalicoGuardian,
 		ComponentCalicoIstioPilot,
 		ComponentCalicoIstioInstallCNI,
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
-		ComponentCalico,
+		ComponentCalicoWebhooks,
 	}
 )

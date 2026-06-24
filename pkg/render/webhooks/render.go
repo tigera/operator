@@ -70,7 +70,8 @@ type component struct {
 	cfg *Configuration
 
 	// Images.
-	calicoImage string
+	calicoImage      string
+	useCombinedImage bool
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -79,7 +80,12 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.useCombinedImage = true
+		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	} else {
+		c.calicoImage, err = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -102,6 +108,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	securtyContext := securitycontext.NewNonRootContext()
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		securtyContext = securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
+	}
+
+	var command []string
+	if c.useCombinedImage {
+		command = []string{components.CalicoBinaryPath, "component", "webhooks"}
 	}
 
 	// Create the Deployment for the webhook with defaults, then apply overrides.
@@ -135,7 +146,7 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Containers: []corev1.Container{{
 						Name:            WebhooksName,
 						Image:           c.calicoImage,
-						Command:         []string{components.CalicoBinaryPath, "component", "webhooks"},
+						Command:         command,
 						SecurityContext: securtyContext,
 						Args: []string{
 							"webhook",

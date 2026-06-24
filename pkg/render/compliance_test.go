@@ -97,6 +97,7 @@ var _ = Describe("compliance rendering tests", func() {
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 				Registry:           "testregistry.com/",
+				Variant:            operatorv1.CalicoEnterprise,
 			},
 			ServerKeyPair:      serverKP,
 			ControllerKeyPair:  controllerKP,

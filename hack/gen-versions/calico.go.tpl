@@ -19,8 +19,8 @@ package components
 
 var (
 	CalicoRelease string = "{{ .Title }}"
-{{ with index .Components "third-party-cni-plugins" }}
-	ComponentCalicoCNIPlugins = Component{
+{{ with index .Components.cni }}
+	ComponentCalicoCNI = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -30,6 +30,24 @@ var (
 {{- end }}
 {{ with index .Components "cni-windows" }}
 	ComponentCalicoCNIWindows = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "key-cert-provisioner" }}
+	ComponentCalicoCSRInitContainer = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "kube-controllers" }}
+	ComponentCalicoKubeControllers = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -55,8 +73,71 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
+{{ with .Components.typha }}
+	ComponentCalicoTypha = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with .Components.flexvol }}
+	ComponentCalicoFlexVolume = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components.apiserver }}
+	ComponentCalicoAPIServer = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components.csi }}
+	ComponentCalicoCSI = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "csi-node-driver-registrar" }}
+	ComponentCalicoCSIRegistrar = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components.goldmane }}
+	ComponentCalicoGoldmane = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
 {{ with index .Components.whisker }}
 	ComponentCalicoWhisker = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "whisker-backend" }}
+	ComponentCalicoWhiskerBackend = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -84,6 +165,15 @@ var (
 {{- end }}
 {{ with index .Components "envoy-ratelimit" }}
 	ComponentCalicoEnvoyRatelimit = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
+{{ with index .Components "guardian" }}
+	ComponentCalicoGuardian = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -127,8 +217,8 @@ var (
 		variant:   calicoVariant,
 	}
 {{- end }}
-{{ with index .Components.calico }}
-	ComponentCalico = Component{
+{{ with index .Components.webhooks }}
+	ComponentCalicoWebhooks = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -137,19 +227,31 @@ var (
 	}
 {{- end }}
 
+	// Calico OSS ships the individual per-component images rather than the
+	// combined calico/calico image, so there is no ComponentCalico.
 	CalicoImages = []Component{
-		ComponentCalicoCNIPlugins,
+		ComponentCalicoCNI,
 		ComponentCalicoCNIWindows,
+		ComponentCalicoCSRInitContainer,
+		ComponentCalicoKubeControllers,
 		ComponentCalicoNode,
 		ComponentCalicoNodeWindows,
+		ComponentCalicoTypha,
+		ComponentCalicoFlexVolume,
+		ComponentCalicoAPIServer,
+		ComponentCalicoCSI,
+		ComponentCalicoCSIRegistrar,
+		ComponentCalicoGoldmane,
 		ComponentCalicoWhisker,
+		ComponentCalicoWhiskerBackend,
 		ComponentCalicoEnvoyGateway,
 		ComponentCalicoEnvoyProxy,
 		ComponentCalicoEnvoyRatelimit,
+		ComponentCalicoGuardian,
 		ComponentCalicoIstioPilot,
 		ComponentCalicoIstioInstallCNI,
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
-		ComponentCalico,
+		ComponentCalicoWebhooks,
 	}
 )

@@ -13,8 +13,6 @@ components:
     version: v3.32.0
   cni-windows:
     version: v3.32.0
-  third-party-cni-plugins:
-    version: v3.32.0
   kube-controllers:
     version: v3.32.0
   goldmane:
@@ -24,6 +22,8 @@ components:
   apiserver:
     version: v3.32.0
   csi:
+    version: v3.32.0
+  csi-node-driver-registrar:
     version: v3.32.0
   key-cert-provisioner:
     version: v3.32.0

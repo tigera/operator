@@ -93,8 +93,9 @@ type Configuration struct {
 type Component struct {
 	cfg *Configuration
 
-	whiskerImage string
-	calicoImage  string
+	whiskerImage        string
+	whiskerBackendImage string
+	useCombinedImage    bool
 }
 
 func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -108,7 +109,12 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	if err != nil {
 		return err
 	}
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		c.useCombinedImage = true
+		c.whiskerBackendImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	} else {
+		c.whiskerBackendImage, err = components.GetReference(components.ComponentCalicoWhiskerBackend, reg, path, prefix, is)
+	}
 	return err
 }
 
@@ -193,10 +199,9 @@ func (c *Component) whiskerService() *corev1.Service {
 }
 
 func (c *Component) whiskerBackendContainer() corev1.Container {
-	return corev1.Container{
-		Name:    WhiskerBackendContainerName,
-		Image:   c.calicoImage,
-		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
+	container := corev1.Container{
+		Name:  WhiskerBackendContainerName,
+		Image: c.whiskerBackendImage,
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
 			{Name: "PORT", Value: "3002"},
@@ -209,6 +214,10 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 			c.cfg.WhiskerBackendKeyPair.VolumeMount(c.SupportedOSType())),
 	}
+	if c.useCombinedImage {
+		container.Command = []string{components.CalicoBinaryPath, "component", "whisker-backend"}
+	}
+	return container
 }
 
 func (c *Component) deployment() *appsv1.Deployment {

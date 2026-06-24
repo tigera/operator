@@ -509,6 +509,26 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Detect whether this Installation disables the Linux dataplane (spec.calicoNetwork.linuxDataplane: None).
+	// When the dataplane is disabled no Calico dataplane runs, spec.cni is omitted, and the
+	// projectcalico.org/v3 API is never served, so the dataplane-dependent controllers are not
+	// registered (see internal/controller.AddToManager). The dataplane mode can be set on either the
+	// 'default' Installation or the 'overlay' Installation, so we must compute the effective spec the
+	// same way the Installation controller does at reconcile time (utils.GetInstallationSpec applies
+	// the overlay); using only the raw 'default' spec here would disagree with reconcile and cause an
+	// endless reboot loop whenever the mode is supplied via the overlay. If the Installation cannot be
+	// read we assume the dataplane is enabled; the Installation controller reboots the operator
+	// (os.Exit(0)) if the dataplane mode later differs from what was detected here.
+	dataplaneDisabled := false
+	if _, detectSpec, err := utils.GetInstallationSpec(ctx, c); err != nil {
+		if !errors.IsNotFound(err) {
+			setupLog.Error(err, "Failed to read Installation to determine dataplane mode; assuming the dataplane is enabled")
+		}
+	} else {
+		dataplaneDisabled = detectSpec.DataplaneDisabled()
+	}
+	setupLog.WithValues("dataplaneDisabled", dataplaneDisabled).Info("Determined whether the operator is running with the Linux dataplane disabled")
+
 	options := options.ControllerOptions{
 		DetectedProvider:    provider,
 		EnterpriseCRDExists: enterpriseCRDExists,
@@ -521,6 +541,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
 		UseV3CRDs:           v3CRDs,
 		APIDiscovery:        apiDiscovery,
+		DataplaneDisabled:   dataplaneDisabled,
 	}
 
 	// Before we start any controllers, make sure our options are valid.

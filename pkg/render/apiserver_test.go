@@ -28,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -47,20 +46,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// apiServerObjects renders the API server component and applies the registered variant
-// modifier the way the componentHandler does, so the Enterprise objects (query server,
-// audit logging, Enterprise RBAC) and the Calico cleanup deletes are reflected in the
-// returned create and delete lists.
+// apiServerObjects renders the base (OSS) API server component. The enterprise
+// modifier and the Calico-variant cleanup are exercised in pkg/enterprise/apiserver;
+// these tests cover the OSS render path, which the base render handles on its own
+// (including the deletes it queues for itself).
 func apiServerObjects(c render.Component) ([]client.Object, []client.Object) {
-	create, del := c.Objects()
-	rc := render.RenderContext{}
-	var extCtx any
-	if p, ok := c.(render.ExtensionContextProvider); ok {
-		ec := p.ExtensionContext().(render.APIServerExtensionContext)
-		rc.Installation = ec.Config.Installation
-		extCtx = ec
-	}
-	return extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, extCtx, create, del)
+	return c.Objects()
 }
 
 func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDomain string) {

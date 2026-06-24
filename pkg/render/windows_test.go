@@ -35,7 +35,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -50,7 +49,7 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	comp := render.Windows(cfg)
 	ExpectWithOffset(1, comp.ResolveImages(nil)).To(BeNil())
 	objs, _ := comp.Objects()
-	rc := extensions.RenderContext{Installation: cfg.Installation}
+	rc := render.RenderContext{Installation: cfg.Installation}
 	out, _ := applyExtensions(ext, render.ComponentNameWindows, rc, objs, nil)
 	return out
 }

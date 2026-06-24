@@ -51,10 +51,10 @@ type Extensible interface {
 
 // ExtensionContextProvider is an optional companion to Extensible. A component
 // implements it to hand its modifier component-specific context that can't be
-// derived from the shared extensions.RenderContext - config only the component's
-// controller has, such as a keypair the controller created. The componentHandler
-// reads the returned value into RenderContext.Component before applying the
-// modifier, and the modifier type-asserts it to the component's own context type.
+// derived from the shared RenderContext - config only the component's controller
+// has, such as a keypair the controller created. extensions.RegisterModifier
+// asserts the returned value to the modifier's config type and passes it through,
+// so the modifier body needs no assertion.
 type ExtensionContextProvider interface {
 	ExtensionContext() any
 }

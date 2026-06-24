@@ -37,6 +37,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -75,7 +76,7 @@ type apiServerRenderData struct {
 
 // apiServerData pulls the API server hook's render data back out of the render context,
 // returning the zero value when none is set.
-func apiServerData(rc extensions.RenderContext) apiServerRenderData {
+func apiServerData(rc render.RenderContext) apiServerRenderData {
 	d, _ := rc.Extension.(apiServerRenderData)
 	return d
 }
@@ -109,7 +110,7 @@ type apiServerControllerExtension struct{}
 
 // Validate rejects an API server configuration Calico Enterprise does not support: a
 // cluster cannot be both a management cluster and a managed cluster.
-func (apiServerControllerExtension) Validate(cc extensions.ControllerContext) error {
+func (apiServerControllerExtension) Validate(cc contexts.ControllerContext) error {
 	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
@@ -150,7 +151,7 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetches the enterprise CRs, creates the query server certificate, resolves the L7
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
-func (apiServerControllerExtension) ExtendContext(cc extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	rc := cc.RenderContext
 	in := cc.Installation
 
@@ -282,7 +283,7 @@ func registerAPIServerCleanup(v *extensions.Variant) {
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:
 // the query server container and its volumes, audit logging on the aggregation API server
 // container, the Enterprise RBAC objects, and the query server port on the Service.
-func modifyAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+func modifyAPIServer(rc render.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage, data: apiServerData(rc)}
 
 	// Ensure the deployment and its supporting objects exist. The base renders them when
@@ -375,7 +376,7 @@ func modifyAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionCo
 
 // cleanupAPIServer deletes the Enterprise API server objects when running Calico, so a
 // cluster switched from Enterprise to Calico does not leave them behind.
-func cleanupAPIServer(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+func cleanupAPIServer(rc render.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config}
 
 	del = append(del, c.tigeraAPIServerClusterRole(), c.tigeraAPIServerClusterRoleBinding())
@@ -636,7 +637,7 @@ func (c *apiServer) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConf
 // the OIDC egress rule (when an OIDC key validator is configured) and the L7 admission
 // controller ingress port (when sidecar injection is enabled). The base policy carries
 // neither.
-func modifyAPIServerPolicy(rc extensions.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+func modifyAPIServerPolicy(rc render.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config, data: apiServerData(rc)}
 
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](create, render.APIServerPolicyName)

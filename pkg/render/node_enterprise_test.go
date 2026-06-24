@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -51,7 +52,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		certManager       certificatemanager.CertificateManager
 		typhaNodeTLS      *render.TyphaNodeTLS
 		instance          *operatorv1.InstallationSpec
-		renderCtx         extensions.RenderContext
+		renderCtx         render.RenderContext
 		nodePrometheusTLS certificatemanagement.KeyPairInterface
 	)
 
@@ -97,13 +98,13 @@ var _ = Describe("node enterprise modifier integration", func() {
 		// Build the render context the way the controller does: run the enterprise
 		// controller extension, which stashes the node prometheus keypair in the
 		// context for the node modifier to read.
-		cc := extensions.ControllerContext{
-			RenderContext: extensions.RenderContext{
+		cc := contexts.ControllerContext{
+			RenderContext: render.RenderContext{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
-			Controller:         extensions.InstallationController,
+			Controller:         contexts.InstallationController,
 			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: certManager,
@@ -114,7 +115,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 
 	// renderNodeObjects renders the real node component and applies the registered
 	// modifier, exactly as the componentHandler does.
-	renderNodeObjects := func(rc extensions.RenderContext) []client.Object {
+	renderNodeObjects := func(rc render.RenderContext) []client.Object {
 		cfg := &render.NodeConfiguration{
 			K8sServiceEp:    k8sapi.ServiceEndpoint{},
 			Installation:    instance,
@@ -180,13 +181,13 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Spec:       operatorv1.LogCollectorSpec{CollectProcessPath: &enable},
 		})).NotTo(HaveOccurred())
 
-		rc, _, err := ext.ExtendContext(extensions.ControllerContext{
-			RenderContext: extensions.RenderContext{
+		rc, _, err := ext.ExtendContext(contexts.ControllerContext{
+			RenderContext: render.RenderContext{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
-			Controller:         extensions.InstallationController,
+			Controller:         contexts.InstallationController,
 			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: certManager,

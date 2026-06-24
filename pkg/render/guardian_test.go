@@ -36,7 +36,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -50,7 +49,7 @@ func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 	g := render.Guardian(cfg)
 	ExpectWithOffset(1, g.ResolveImages(nil)).To(BeNil())
 	objs, _ := g.Objects()
-	rc := extensions.RenderContext{Installation: cfg.Installation}
+	rc := render.RenderContext{Installation: cfg.Installation}
 	var extCtx any
 	if p, ok := g.(render.ExtensionContextProvider); ok {
 		extCtx = p.ExtensionContext()
@@ -113,7 +112,7 @@ var _ = Describe("Rendering tests", func() {
 			resources, deleteResources = g.Objects()
 			// Apply the registered enterprise modifier the way the componentHandler
 			// does, so these enterprise tests exercise the integrated output.
-			rc := extensions.RenderContext{Installation: cfg.Installation}
+			rc := render.RenderContext{Installation: cfg.Installation}
 			var extCtx any
 			if p, ok := g.(render.ExtensionContextProvider); ok {
 				extCtx = p.ExtensionContext()
@@ -350,7 +349,7 @@ var _ = Describe("Rendering tests", func() {
 			// Apply the registered enterprise modifier the way the componentHandler
 			// does, so the enterprise policy is exercised. For the Calico variant the
 			// modifier is a no-op and the OSS policy is returned.
-			rc := extensions.RenderContext{Installation: cfg.Installation}
+			rc := render.RenderContext{Installation: cfg.Installation}
 			var extCtx any
 			if p, ok := g.(render.ExtensionContextProvider); ok {
 				extCtx = p.ExtensionContext()

@@ -61,7 +61,7 @@ func registerNode(v *extensions.Variant) {
 // objects: the extra RBAC rules, the node-metrics Service, and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, BGP metrics
 // readiness check, multi-interface mode, and the calico log volume).
-func modifyNode(rc extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyNode(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName); ok {
 		role.Rules = append(role.Rules, nodeEnterpriseRules()...)
 	}
@@ -117,7 +117,7 @@ func nodeEnterpriseRules() []rbacv1.PolicyRule {
 // BGP metrics readiness check, and the prometheus reporter keypair mount. The
 // calico log volume is mounted by the base render for both variants, so it is
 // not handled here.
-func modifyNodeDaemonSet(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
+func modifyNodeDaemonSet(rc render.RenderContext, ds *appsv1.DaemonSet) {
 	spec := &ds.Spec.Template.Spec
 
 	// Collecting process info for flow logs reads from the host's process table.
@@ -158,7 +158,7 @@ func modifyNodeDaemonSet(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 // creates it and hands it in via rc rather than the modifier building it. In
 // core (calico) the keypair is never created, so the base node render carries
 // no prometheus mount at all.
-func mountNodePrometheusTLS(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
+func mountNodePrometheusTLS(rc render.RenderContext, ds *appsv1.DaemonSet) {
 	tls := installationData(rc).nodePrometheusTLS
 	if tls == nil {
 		return
@@ -186,7 +186,7 @@ func mountNodePrometheusTLS(rc extensions.RenderContext, ds *appsv1.DaemonSet) {
 
 // nodeEnterpriseEnv is the Enterprise felix configuration added to the
 // calico/node container.
-func nodeEnterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
+func nodeEnterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
 	data := installationData(rc)
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
@@ -231,7 +231,7 @@ func multiInterfaceModeEnv(install *operatorv1.InstallationSpec) *corev1.EnvVar 
 }
 
 // nodeMetricsService builds the enterprise-only calico-node-metrics Service.
-func nodeMetricsService(rc extensions.RenderContext) *corev1.Service {
+func nodeMetricsService(rc render.RenderContext) *corev1.Service {
 	reporterPort := nodeReporterPort(rc.FelixConfiguration)
 	felixPort := felixMetricsPort(rc.FelixConfiguration)
 	felixEnabled := rc.FelixConfiguration != nil && utils.IsFelixPrometheusMetricsEnabled(rc.FelixConfiguration)

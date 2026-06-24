@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -48,7 +49,7 @@ const apiServerClusterDomain = "cluster.local"
 // seeded with a fake client that holds objs. The returned context carries a real
 // certificate manager and trusted bundle, so ExtendContext can create the query server
 // cert and the bundle the modifiers consume.
-func apiServerControllerContext(variant operatorv1.ProductVariant, install *operatorv1.InstallationSpec, objs ...client.Object) extensions.ControllerContext {
+func apiServerControllerContext(variant operatorv1.ProductVariant, install *operatorv1.InstallationSpec, objs ...client.Object) contexts.ControllerContext {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -64,13 +65,13 @@ func apiServerControllerContext(variant operatorv1.ProductVariant, install *oper
 	certManager, err := certificatemanager.Create(c, install, apiServerClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	return extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	return contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation:  install,
 			ClusterDomain: apiServerClusterDomain,
 			TrustedBundle: certManager.CreateTrustedBundle(),
 		},
-		Controller:         extensions.APIServerController,
+		Controller:         contexts.APIServerController,
 		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,
@@ -79,7 +80,7 @@ func apiServerControllerContext(variant operatorv1.ProductVariant, install *oper
 
 // apiServerKeyPair issues the API server TLS keypair from the context's certificate
 // manager, the way the controller does before rendering.
-func apiServerKeyPair(cc extensions.ControllerContext) certificatemanagement.KeyPairInterface {
+func apiServerKeyPair(cc contexts.ControllerContext) certificatemanagement.KeyPairInterface {
 	dnsNames := dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, cc.ClusterDomain)
 	kp, err := cc.CertificateManager.GetOrCreateKeyPair(cc.Client, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
 	Expect(err).NotTo(HaveOccurred())
@@ -137,7 +138,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	// renderAPIServer builds the base API server objects and applies the enterprise
 	// modifier, the way the component handler does. It returns the create and delete
 	// lists after the modifier ran.
-	renderAPIServer := func(cc extensions.ControllerContext, rc extensions.RenderContext, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
+	renderAPIServer := func(cc contexts.ControllerContext, rc render.RenderContext, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
@@ -357,7 +358,7 @@ var _ = Describe("API server enterprise modifier", func() {
 })
 
 var _ = Describe("API server enterprise policy modifier", func() {
-	applyPolicy := func(cc extensions.ControllerContext, rc extensions.RenderContext) *v3.NetworkPolicy {
+	applyPolicy := func(cc contexts.ControllerContext, rc render.RenderContext) *v3.NetworkPolicy {
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},

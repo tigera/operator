@@ -34,7 +34,6 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/enterprise"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -73,7 +72,7 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 			},
 		})
 
-		renderCtx := extensions.RenderContext{Installation: instance}
+		renderCtx := render.RenderContext{Installation: instance}
 		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderContext(renderCtx), utils.WithExtensions(enterprise.New()))
 		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
 

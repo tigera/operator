@@ -63,6 +63,7 @@ import (
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -73,7 +74,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -222,7 +222,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.EnterpriseCRDExists {
-		if err = opts.Extensions.SetupWatches(extensions.InstallationController, c); err != nil {
+		if err = opts.Extensions.SetupWatches(contexts.InstallationController, c); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
 		}
 
@@ -1152,14 +1152,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	cc := extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	cc := contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation:       &instance.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
-		Controller:         extensions.InstallationController,
+		Controller:         contexts.InstallationController,
 		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,
@@ -1903,7 +1903,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 	// Variant-specific FelixConfiguration defaults (e.g. the Enterprise
 	// provider-specific dnsTrustedServers) are owned by the variant extension.
-	extUpdated, err := r.opts.Extensions.DefaultFelixConfiguration(extensions.InstallationController, &install.Spec, fc)
+	extUpdated, err := r.opts.Extensions.DefaultFelixConfiguration(contexts.InstallationController, &install.Spec, fc)
 	if err != nil {
 		return updated, err
 	}

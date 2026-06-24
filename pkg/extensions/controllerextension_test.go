@@ -21,8 +21,10 @@ import (
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -34,9 +36,9 @@ var _ = Describe("controller extension", func() {
 
 	It("returns the base render context when the variant has no extension", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, _, err := s.ExtendContext(extensions.ControllerContext{
-			RenderContext: extensions.RenderContext{Installation: install, ClusterDomain: "cluster.local"},
-			Controller:    extensions.InstallationController,
+		rc, _, err := s.ExtendContext(contexts.ControllerContext{
+			RenderContext: render.RenderContext{Installation: install, ClusterDomain: "cluster.local"},
+			Controller:    contexts.InstallationController,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.Installation).To(BeIdenticalTo(install))
@@ -45,37 +47,37 @@ var _ = Describe("controller extension", func() {
 	})
 
 	It("runs the extension registered for the installation variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{})
 		rc, _, err := s.ExtendContext(enterpriseContext())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores an extension registered for a different variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{})
-		rc, _, err := s.ExtendContext(extensions.ControllerContext{
-			RenderContext: extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
-			Controller:    extensions.InstallationController,
+		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{})
+		rc, _, err := s.ExtendContext(contexts.ControllerContext{
+			RenderContext: render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
+			Controller:    contexts.InstallationController,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
 	})
 
 	It("surfaces the extension error", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{err: errors.New("boom")})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{err: errors.New("boom")})
 		_, _, err := s.ExtendContext(enterpriseContext())
 		Expect(err).To(MatchError("boom"))
 	})
 
 	It("runs the extension's validation", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, fakeController{validateErr: errors.New("invalid")})
+		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{validateErr: errors.New("invalid")})
 		Expect(s.Validate(enterpriseContext())).To(MatchError("invalid"))
 	})
 
 	It("runs the watch hook of an extension that implements Watcher", func() {
 		called := false
-		s.Variant(operatorv1.CalicoEnterprise).Controller(extensions.InstallationController, watchingController{called: &called})
-		Expect(s.SetupWatches(extensions.InstallationController, nil)).NotTo(HaveOccurred())
+		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, watchingController{called: &called})
+		Expect(s.SetupWatches(contexts.InstallationController, nil)).NotTo(HaveOccurred())
 		Expect(called).To(BeTrue())
 	})
 
@@ -90,10 +92,10 @@ var _ = Describe("controller extension", func() {
 	})
 })
 
-func enterpriseContext() extensions.ControllerContext {
-	return extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}},
-		Controller:    extensions.InstallationController,
+func enterpriseContext() contexts.ControllerContext {
+	return contexts.ControllerContext{
+		RenderContext: render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}},
+		Controller:    contexts.InstallationController,
 	}
 }
 
@@ -104,15 +106,15 @@ type fakeController struct {
 	validateErr error
 }
 
-func (f fakeController) Validate(_ extensions.ControllerContext) error {
+func (f fakeController) Validate(_ contexts.ControllerContext) error {
 	return f.validateErr
 }
 
-func (f fakeController) ExtendContext(_ extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (f fakeController) ExtendContext(_ contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if f.err != nil {
-		return extensions.RenderContext{}, nil, f.err
+		return render.RenderContext{}, nil, f.err
 	}
-	return extensions.RenderContext{ClusterDomain: "from-fake"}, nil, nil
+	return render.RenderContext{ClusterDomain: "from-fake"}, nil, nil
 }
 
 // watchingController is a fakeController that also implements the Watcher

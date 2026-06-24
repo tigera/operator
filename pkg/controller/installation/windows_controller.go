@@ -43,13 +43,13 @@ import (
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -148,7 +148,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
 	if ri.opts.EnterpriseCRDExists {
-		if err = ri.opts.Extensions.SetupWatches(extensions.WindowsController, c); err != nil {
+		if err = ri.opts.Extensions.SetupWatches(contexts.WindowsController, c); err != nil {
 			return fmt.Errorf("tigera-windows-controller failed to set up extension watches: %w", err)
 		}
 	}
@@ -340,14 +340,14 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Run the variant's windows controller extension to build the render context
 	// (creating no enterprise artifacts in core).
-	cc := extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	cc := contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation:       &instance.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
-		Controller:         extensions.WindowsController,
+		Controller:         contexts.WindowsController,
 		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,

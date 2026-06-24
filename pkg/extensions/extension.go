@@ -16,6 +16,8 @@ package extensions
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/tigera/operator/pkg/render"
 )
 
 // Modifier post-processes the objects a render component produced. It receives
@@ -24,7 +26,7 @@ import (
 // append objects to delete (e.g. to clean up resources a prior variant left
 // behind). It runs only for the variant it is registered under, so it need not
 // re-check the variant.
-type Modifier func(rc RenderContext, create, delete []client.Object) (newCreate, newDelete []client.Object)
+type Modifier func(rc render.RenderContext, create, delete []client.Object) (newCreate, newDelete []client.Object)
 
 // FindObject returns the first object of type T with the given name.
 func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {

@@ -31,6 +31,7 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -60,7 +61,7 @@ func registerKubeControllers(v *extensions.Variant) {
 // calico-kube-controllers calico-system network policy, so the kube-apiserver can
 // reach the in-process webhook on :9443 (EV-6386). Without it the calico-system
 // default-deny drops the apiserver->:9443 call and WAF admission times out.
-func modifyKubeControllersPolicy(rc extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyKubeControllersPolicy(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if !installationData(rc).waf.enabled {
 		return objs, del
 	}
@@ -85,7 +86,7 @@ func modifyKubeControllersPolicy(rc extensions.RenderContext, objs, del []client
 // is enterprise-only by construction - the base render carries none of it. The
 // controller-side inputs (keypairs, the resolved wasm image, the pull secret) are
 // produced by the installation hook and handed in through rc.
-func modifyKubeControllers(rc extensions.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyKubeControllers(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 	data := installationData(rc)
 
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole); ok {
@@ -115,7 +116,7 @@ func modifyKubeControllers(rc extensions.RenderContext, objs, del []client.Objec
 	return objs, del
 }
 
-func modifyKubeControllersDeployment(rc extensions.RenderContext, dp *appsv1.Deployment, data installationRenderData) {
+func modifyKubeControllersDeployment(rc render.RenderContext, dp *appsv1.Deployment, data installationRenderData) {
 	spec := &dp.Spec.Template.Spec
 	if dp.Spec.Template.Annotations == nil {
 		dp.Spec.Template.Annotations = map[string]string{}
@@ -183,7 +184,7 @@ func appendEnabledControllers(c *corev1.Container, extra []string) {
 
 // enterpriseEnv is the static enterprise env for calico-kube-controllers. The
 // modifier runs only for the enterprise variant, so these are never rendered for core.
-func enterpriseEnv(rc extensions.RenderContext) []corev1.EnvVar {
+func enterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
 	var env []corev1.EnvVar
 	if rc.TrustedBundle != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: rc.TrustedBundle.MountPath()})
@@ -582,7 +583,7 @@ type wafRenderData struct {
 // produces everything the modifier needs that it can't compute itself: the resolved
 // wasm image, the webhook serving keypair (also returned as a managed keypair), the
 // merged wasm pull secret, the wasm CA bundle ConfigMap, and the operator CA PEM.
-func buildWAFData(cc extensions.ControllerContext) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
+func buildWAFData(cc contexts.ControllerContext) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
 	gw, _, err := gatewayapi.GetGatewayAPI(cc.Ctx, cc.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return wafRenderData{}, nil, err

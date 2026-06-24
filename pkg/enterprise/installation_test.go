@@ -27,8 +27,8 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 )
@@ -47,7 +47,7 @@ var _ = Describe("installation controller extension", func() {
 		func(provider operatorv1.Provider, expected []string) {
 			fc := &v3.FelixConfiguration{}
 			install := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider}
-			updated, err := ext.DefaultFelixConfiguration(extensions.InstallationController, install, fc)
+			updated, err := ext.DefaultFelixConfiguration(contexts.InstallationController, install, fc)
 			Expect(err).NotTo(HaveOccurred())
 			if expected == nil {
 				Expect(updated).To(BeFalse())
@@ -64,7 +64,7 @@ var _ = Describe("installation controller extension", func() {
 
 	It("does no felix defaulting for the Calico variant", func() {
 		fc := &v3.FelixConfiguration{}
-		updated, err := ext.DefaultFelixConfiguration(extensions.InstallationController, &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
+		updated, err := ext.DefaultFelixConfiguration(contexts.InstallationController, &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeFalse())
 		Expect(fc.Spec.DNSTrustedServers).To(BeNil())
@@ -87,7 +87,7 @@ var _ = Describe("installation controller extension", func() {
 	})
 })
 
-func newControllerContext(variant operatorv1.ProductVariant) extensions.ControllerContext {
+func newControllerContext(variant operatorv1.ProductVariant) contexts.ControllerContext {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -96,14 +96,14 @@ func newControllerContext(variant operatorv1.ProductVariant) extensions.Controll
 	Expect(err).NotTo(HaveOccurred())
 	trustedBundle := certManager.CreateTrustedBundle()
 
-	return extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	return contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation:       &operatorv1.InstallationSpec{Variant: variant},
 			FelixConfiguration: &v3.FelixConfiguration{},
 			TrustedBundle:      trustedBundle,
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         extensions.InstallationController,
+		Controller:         contexts.InstallationController,
 		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,

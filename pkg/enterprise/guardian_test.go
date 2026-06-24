@@ -49,7 +49,7 @@ var _ = Describe("guardian enterprise modifier", func() {
 		}
 	}
 
-	entCtx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+	entCtx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 
 	It("appends the secrets RBAC and UI settings", func() {
 		out, _ := applyExtensionsWithContext(ext, render.GuardianName, entCtx, render.GuardianExtensionContext{}, newObjs(), nil)
@@ -92,7 +92,7 @@ var _ = Describe("guardian enterprise modifier", func() {
 	})
 
 	It("does nothing for the Calico variant", func() {
-		ctx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
+		ctx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
 		out, _ := applyExtensions(ext, render.GuardianName, ctx, newObjs(), nil)
 		Expect(out).To(HaveLen(len(newObjs())))
 		role, _ := extensions.FindObject[*rbacv1.ClusterRole](out, render.GuardianClusterRoleName)

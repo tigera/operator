@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/extensions"
@@ -97,7 +98,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 
 // certManagementControllerContext builds a controller context whose certificate
 // manager issues cert-management (CSR-based) keypairs.
-func certManagementControllerContext() extensions.ControllerContext {
+func certManagementControllerContext() contexts.ControllerContext {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -114,14 +115,14 @@ func certManagementControllerContext() extensions.ControllerContext {
 	certManager, err := certificatemanager.Create(c, installation, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	return extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	return contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation:       installation,
 			FelixConfiguration: &v3.FelixConfiguration{},
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         extensions.InstallationController,
+		Controller:         contexts.InstallationController,
 		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,
@@ -129,7 +130,7 @@ func certManagementControllerContext() extensions.ControllerContext {
 }
 
 var _ = Describe("calico-kube-controllers enterprise surface", func() {
-	calicoKubeControllersCfg := func(cc extensions.ControllerContext) *kubecontrollers.KubeControllersConfiguration {
+	calicoKubeControllersCfg := func(cc contexts.ControllerContext) *kubecontrollers.KubeControllersConfiguration {
 		return &kubecontrollers.KubeControllersConfiguration{
 			Installation:      cc.Installation,
 			ClusterDomain:     cc.ClusterDomain,
@@ -142,7 +143,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	// render builds the base calico-kube-controllers objects and applies the
 	// enterprise modifier, exactly as the component handler does.
-	renderKubeControllers := func(cc extensions.ControllerContext, rc extensions.RenderContext) []client.Object {
+	renderKubeControllers := func(cc contexts.ControllerContext, rc render.RenderContext) []client.Object {
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(cc))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
@@ -251,7 +252,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 // wafControllerContext builds a controller context with a WAF-enabled GatewayAPI CR
 // and an install pull secret, so the installation hook produces the full WAF data.
-func wafControllerContext() extensions.ControllerContext {
+func wafControllerContext() contexts.ControllerContext {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -273,8 +274,8 @@ func wafControllerContext() extensions.ControllerContext {
 	certManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	return extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	return contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation: &operatorv1.InstallationSpec{
 				Variant:          operatorv1.CalicoEnterprise,
 				Registry:         "test-reg/",
@@ -284,7 +285,7 @@ func wafControllerContext() extensions.ControllerContext {
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         extensions.InstallationController,
+		Controller:         contexts.InstallationController,
 		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,

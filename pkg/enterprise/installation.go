@@ -25,10 +25,10 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -64,7 +64,7 @@ type installationRenderData struct {
 
 // installationData pulls the installation extension's render data back out of the
 // render context, returning the zero value when none is set.
-func installationData(rc extensions.RenderContext) installationRenderData {
+func installationData(rc render.RenderContext) installationRenderData {
 	data, _ := rc.Extension.(installationRenderData)
 	return data
 }
@@ -76,7 +76,7 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
-func (coreControllerExtension) Validate(cc extensions.ControllerContext) error {
+func (coreControllerExtension) Validate(cc contexts.ControllerContext) error {
 	return validateReporterPort(cc.FelixConfiguration)
 }
 
@@ -138,7 +138,7 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetching the certificates that feed the trusted bundle. It returns the render
 // context carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
-func (coreControllerExtension) ExtendContext(cc extensions.ControllerContext) (extensions.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	rc := cc.RenderContext
 
 	nodePrometheusTLS, err := cc.CertificateManager.GetOrCreateKeyPair(

@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
@@ -87,8 +88,8 @@ var _ = Describe("windows enterprise modifier", func() {
 		return nil
 	}
 
-	ctxFor := func(provider operatorv1.Provider) extensions.RenderContext {
-		return extensions.RenderContext{
+	ctxFor := func(provider operatorv1.Provider) render.RenderContext {
+		return render.RenderContext{
 			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider},
 		}
 	}
@@ -138,13 +139,13 @@ var _ = Describe("windows enterprise modifier", func() {
 
 		// Build the render context the way the windows controller does: run the
 		// windows extension, which fetches the keypair into the context.
-		cc := extensions.ControllerContext{
-			RenderContext: extensions.RenderContext{
+		cc := contexts.ControllerContext{
+			RenderContext: render.RenderContext{
 				Installation:  ctxFor(operatorv1.ProviderNone).Installation,
 				TrustedBundle: bundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
-			Controller:         extensions.WindowsController,
+			Controller:         contexts.WindowsController,
 			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: cm,
@@ -162,7 +163,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("does nothing for the Calico variant", func() {
-		ctx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
+		ctx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
 		out, _ := applyExtensions(ext, render.ComponentNameWindows, ctx, newObjs(), nil)
 		_, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeFalse())

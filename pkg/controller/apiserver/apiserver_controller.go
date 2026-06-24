@@ -41,6 +41,7 @@ import (
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -49,7 +50,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -106,7 +106,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if opts.EnterpriseCRDExists {
 		// The variant extension registers the enterprise watches it needs (the management
 		// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
-		if err = opts.Extensions.SetupWatches(extensions.APIServerController, c); err != nil {
+		if err = opts.Extensions.SetupWatches(contexts.APIServerController, c); err != nil {
 			return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
 		}
 	}
@@ -299,12 +299,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// enterprise render data (the trusted bundle, the query server certificate, the
 	// management cluster CRs, the OIDC config, and the resolved L7 sidecar images). For
 	// the core operator this is a no-op and the render context carries no extension data.
-	cc := extensions.ControllerContext{
-		RenderContext: extensions.RenderContext{
+	cc := contexts.ControllerContext{
+		RenderContext: render.RenderContext{
 			Installation:  installationSpec,
 			ClusterDomain: r.opts.ClusterDomain,
 		},
-		Controller:         extensions.APIServerController,
+		Controller:         contexts.APIServerController,
 		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,

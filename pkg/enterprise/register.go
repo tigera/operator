@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
@@ -28,9 +29,9 @@ func New() *extensions.Set {
 	s := extensions.NewSet()
 
 	ent := s.Variant(operatorv1.CalicoEnterprise)
-	ent.Controller(extensions.InstallationController, coreControllerExtension{})
-	ent.Controller(extensions.WindowsController, windowsControllerExtension{})
-	ent.Controller(extensions.APIServerController, apiServerControllerExtension{})
+	ent.Controller(contexts.InstallationController, coreControllerExtension{})
+	ent.Controller(contexts.WindowsController, windowsControllerExtension{})
+	ent.Controller(contexts.APIServerController, apiServerControllerExtension{})
 	registerTypha(ent)
 	registerNode(ent)
 	registerWindows(ent)

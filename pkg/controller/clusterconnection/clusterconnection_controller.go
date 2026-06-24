@@ -49,7 +49,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -449,7 +448,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.cli,
 		r.scheme,
 		managementClusterConnection,
-		utils.WithRenderContext(extensions.RenderContext{Installation: installationSpec}),
+		utils.WithRenderContext(render.RenderContext{Installation: installationSpec}),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 	guardianCfg := &render.GuardianConfiguration{

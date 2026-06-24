@@ -19,6 +19,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
@@ -54,7 +55,7 @@ func (s *Set) Variant(v operatorv1.ProductVariant) *Variant {
 	if s.variants[v] == nil {
 		s.variants[v] = &Variant{
 			variant:     v,
-			controllers: map[ControllerName]ControllerExtension{},
+			controllers: map[contexts.ControllerName]ControllerExtension{},
 			modifiers:   map[string]decorator{},
 			images:      s.images,
 		}
@@ -76,7 +77,7 @@ func (s *Set) variant(v operatorv1.ProductVariant) *Variant {
 // objects are post-processed by that modifier. A decorated component is itself a
 // render.Component, so it flows through the component handler like any other.
 // Returns component unchanged when no extension applies. Nil-safe.
-func (s *Set) Decorate(component render.Component, ctx RenderContext) render.Component {
+func (s *Set) Decorate(component render.Component, ctx render.RenderContext) render.Component {
 	if ctx.Installation == nil {
 		return component
 	}
@@ -85,7 +86,7 @@ func (s *Set) Decorate(component render.Component, ctx RenderContext) render.Com
 
 // Validate runs the cc.Controller extension's validation for the installation's
 // variant, or returns nil when no extension is registered. Nil-safe.
-func (s *Set) Validate(cc ControllerContext) error {
+func (s *Set) Validate(cc contexts.ControllerContext) error {
 	if cc.Installation == nil {
 		return nil
 	}
@@ -93,10 +94,10 @@ func (s *Set) Validate(cc ControllerContext) error {
 }
 
 // ExtendContext runs the cc.Controller extension for the installation's variant
-// and returns the resulting RenderContext plus any keypairs the extension wants
+// and returns the resulting render.RenderContext plus any keypairs the extension wants
 // the controller to manage, or the base render context and no keypairs when no
 // extension is registered. Nil-safe.
-func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (s *Set) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if cc.Installation == nil {
 		return cc.RenderContext, nil, nil
 	}
@@ -107,7 +108,7 @@ func (s *Set) ExtendContext(cc ControllerContext) (RenderContext, []certificatem
 // named controller. It runs at controller startup, which is variant-agnostic, so
 // it registers the union across variants (in practice the one active extension
 // build's). Nil-safe.
-func (s *Set) SetupWatches(controller ControllerName, c ctrlruntime.Controller) error {
+func (s *Set) SetupWatches(controller contexts.ControllerName, c ctrlruntime.Controller) error {
 	if s == nil {
 		return nil
 	}
@@ -127,7 +128,7 @@ func (s *Set) SetupWatches(controller ControllerName, c ctrlruntime.Controller) 
 // defaulting for the installation's variant, returning whether it changed fc. The
 // extension implements the optional FelixConfigDefaulter companion; when it doesn't
 // (or no extension is registered) this is a no-op. Nil-safe.
-func (s *Set) DefaultFelixConfiguration(controller ControllerName, install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
+func (s *Set) DefaultFelixConfiguration(controller contexts.ControllerName, install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
 	if install == nil {
 		return false, nil
 	}

@@ -20,6 +20,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -32,18 +33,18 @@ import (
 // nothing here is itself keyed by variant.
 type Variant struct {
 	variant     operatorv1.ProductVariant
-	controllers map[ControllerName]ControllerExtension
+	controllers map[contexts.ControllerName]ControllerExtension
 	modifiers   map[string]decorator
 	images      *imageoverride.Overrides // shared with the owning Set
 }
 
 // decorator wraps a base component, returning one whose Objects() are augmented
 // by a registered modifier.
-type decorator func(base render.Component, rc RenderContext) render.Component
+type decorator func(base render.Component, rc render.RenderContext) render.Component
 
 // Controller registers the variant's controller-side extension for the named
 // controller. A controller has at most one; registering replaces any prior one.
-func (v *Variant) Controller(name ControllerName, c ControllerExtension) {
+func (v *Variant) Controller(name contexts.ControllerName, c ControllerExtension) {
 	v.controllers[name] = c
 }
 
@@ -56,7 +57,7 @@ func (v *Variant) Image(component string, image components.Component) {
 // config. For components whose modifier needs the component's own typed config,
 // use RegisterModifier.
 func (v *Variant) Modify(component string, m Modifier) {
-	v.modifiers[component] = func(base render.Component, rc RenderContext) render.Component {
+	v.modifiers[component] = func(base render.Component, rc render.RenderContext) render.Component {
 		return &decoratedComponent{Component: base, rc: rc, modify: m}
 	}
 }
@@ -69,9 +70,9 @@ func (v *Variant) Modify(component string, m Modifier) {
 func RegisterModifier[Cfg any](
 	v *Variant,
 	component string,
-	modify func(rc RenderContext, cfg Cfg, create, delete []client.Object) ([]client.Object, []client.Object),
+	modify func(rc render.RenderContext, cfg Cfg, create, delete []client.Object) ([]client.Object, []client.Object),
 ) {
-	v.modifiers[component] = func(base render.Component, rc RenderContext) render.Component {
+	v.modifiers[component] = func(base render.Component, rc render.RenderContext) render.Component {
 		provider, ok := base.(render.ExtensionContextProvider)
 		if !ok {
 			logrus.Errorf("BUG: component %q has a registered modifier but provides no extension context; leaving it unmodified", component)
@@ -83,7 +84,7 @@ func RegisterModifier[Cfg any](
 			logrus.Errorf("BUG: component %q extension context is %T, want %T; leaving it unmodified", component, provider.ExtensionContext(), want)
 			return base
 		}
-		bound := func(rc RenderContext, create, delete []client.Object) ([]client.Object, []client.Object) {
+		bound := func(rc render.RenderContext, create, delete []client.Object) ([]client.Object, []client.Object) {
 			return modify(rc, cfg, create, delete)
 		}
 		return &decoratedComponent{Component: base, rc: rc, modify: bound}
@@ -93,7 +94,7 @@ func RegisterModifier[Cfg any](
 // decorate wraps component with the modifier registered for its extension key,
 // or returns it unchanged when the component exposes no extension point or none
 // is registered. Nil-safe.
-func (v *Variant) decorate(component render.Component, rc RenderContext) render.Component {
+func (v *Variant) decorate(component render.Component, rc render.RenderContext) render.Component {
 	if v == nil {
 		return component
 	}
@@ -110,7 +111,7 @@ func (v *Variant) decorate(component render.Component, rc RenderContext) render.
 
 // validate runs the cc.Controller extension's validation, or nil when the
 // variant has none for it. Nil-safe.
-func (v *Variant) validate(cc ControllerContext) error {
+func (v *Variant) validate(cc contexts.ControllerContext) error {
 	if v == nil || v.controllers[cc.Controller] == nil {
 		return nil
 	}
@@ -119,7 +120,7 @@ func (v *Variant) validate(cc ControllerContext) error {
 
 // extendContext runs the cc.Controller extension, or returns the base render
 // context and no managed keypairs when the variant has none for it. Nil-safe.
-func (v *Variant) extendContext(cc ControllerContext) (RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (v *Variant) extendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
 	if v == nil || v.controllers[cc.Controller] == nil {
 		return cc.RenderContext, nil, nil
 	}
@@ -132,7 +133,7 @@ func (v *Variant) extendContext(cc ControllerContext) (RenderContext, []certific
 // and Ready delegate to the base; only Objects is augmented.
 type decoratedComponent struct {
 	render.Component
-	rc     RenderContext
+	rc     render.RenderContext
 	modify Modifier
 }
 

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package extensions
+package render
 
 import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -27,9 +27,15 @@ import (
 // the shared TrustedBundle, and an opaque Extension slot for controller-produced
 // data specific to one extension.
 //
+// It lives in render (not the extensions package) because it is the render-phase
+// input a modifier consumes - the render-side corollary to the controller-phase
+// ControllerContext. The extensions package wires modifiers to it; it is not
+// itself part of the extension mechanism.
+//
 // Per-component config a modifier needs but can't derive from these fields is
 // not carried here; it flows to the modifier as a typed argument (see
-// RegisterModifier), supplied by the component via render.ExtensionContextProvider.
+// extensions.RegisterModifier), supplied by the component via
+// ExtensionContextProvider.
 type RenderContext struct {
 	Installation       *operatorv1.InstallationSpec
 	FelixConfiguration *v3.FelixConfiguration

@@ -76,8 +76,8 @@ var _ = Describe("node enterprise modifier", func() {
 		return nil
 	}
 
-	entCtx := func() extensions.RenderContext {
-		return extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+	entCtx := func() render.RenderContext {
+		return render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 	}
 
 	It("adds the enterprise cluster role rules", func() {
@@ -173,7 +173,7 @@ var _ = Describe("node enterprise modifier", func() {
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		ctx := extensions.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
+		ctx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
 		out, _ := applyExtensions(ext, render.ComponentNameNode, ctx, newObjs(), nil)
 
 		_, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
@@ -183,7 +183,7 @@ var _ = Describe("node enterprise modifier", func() {
 	})
 
 	It("does not panic on a zero RenderContext", func() {
-		out, _ := applyExtensions(ext, render.ComponentNameNode, extensions.RenderContext{}, newObjs(), nil)
+		out, _ := applyExtensions(ext, render.ComponentNameNode, render.RenderContext{}, newObjs(), nil)
 		_, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeFalse())
 	})

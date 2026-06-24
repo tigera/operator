@@ -28,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -53,7 +52,7 @@ import (
 // returned create and delete lists.
 func apiServerObjects(c render.Component) ([]client.Object, []client.Object) {
 	create, del := c.Objects()
-	rc := extensions.RenderContext{}
+	rc := render.RenderContext{}
 	var extCtx any
 	if p, ok := c.(render.ExtensionContextProvider); ok {
 		ec := p.ExtensionContext().(render.APIServerExtensionContext)

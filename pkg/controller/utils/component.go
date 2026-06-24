@@ -78,9 +78,9 @@ type ComponentHandler interface {
 // ComponentHandlerOption configures a componentHandler.
 type ComponentHandlerOption func(*componentHandler)
 
-// WithRenderContext supplies the extensions.RenderContext passed to registered
+// WithRenderContext supplies the render.RenderContext passed to registered
 // render modifiers.
-func WithRenderContext(ctx extensions.RenderContext) ComponentHandlerOption {
+func WithRenderContext(ctx render.RenderContext) ComponentHandlerOption {
 	return func(c *componentHandler) { c.renderCtx = ctx }
 }
 
@@ -114,7 +114,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
-	renderCtx    extensions.RenderContext
+	renderCtx    render.RenderContext
 	extensions   *extensions.Set
 }
 

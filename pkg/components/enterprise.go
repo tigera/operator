@@ -45,12 +45,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version: "8.19.16",
+		Version: "8.19.17",
 		variant: enterpriseVariant,
 	}
 
 	ComponentEckKibana = Component{
-		Version: "8.19.16",
+		Version: "8.19.17",
 		variant: enterpriseVariant,
 	}
 
@@ -71,7 +71,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.4.0",
 		variant: enterpriseVariant,
 	}
 
@@ -176,7 +176,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version: "v0.31.1",
+		Version: "v0.32.1",
 		variant: enterpriseVariant,
 	}
 

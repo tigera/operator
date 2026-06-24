@@ -142,6 +142,14 @@ type IstioSpec struct {
 	// ZTunnelDaemonset defines the resource requirements for the ZTunnelDaemonset component.
 	// +optional
 	ZTunnelDaemonset *ZTunnelDaemonset `json:"ztunnel,omitempty"`
+	// WaypointLogging controls whether L7 logging is enabled on every Gateway
+	// using the istio-waypoint GatewayClass. When Enabled (the default), the
+	// operator injects an l7-collector sidecar into each waypoint pod via
+	// class-level defaults. When Disabled, no sidecar is injected and the
+	// associated EnvoyFilters are not created. Allowed values are Enabled or
+	// Disabled.
+	// +optional
+	WaypointLogging *LogCollectionStatusType `json:"waypointLogging,omitempty"`
 	// DSCPMark define the value of the DSCP mark done by Felix and recognised by Istio CNI for Transparent
 	// NetworkPolicies.
 	// +optional
@@ -171,6 +179,19 @@ type Istio struct {
 
 	Spec   IstioSpec   `json:"spec,omitempty"`
 	Status IstioStatus `json:"status,omitempty"`
+}
+
+// WaypointLoggingEnabled reports whether waypoint L7 logging should be rendered
+// for this Istio CR. It defaults to true when the field is unset, and is the
+// single source of truth shared by the renderer (which gates the l7-collector
+// sidecar + EnvoyFilters) and the policy-sync predicate (which gates
+// policySyncPathPrefix), so the two never diverge. A nil receiver reports false.
+func (i *Istio) WaypointLoggingEnabled() bool {
+	if i == nil {
+		return false
+	}
+	wl := i.Spec.WaypointLogging
+	return wl == nil || *wl != L7LogCollectionDisabled
 }
 
 // +kubebuilder:object:root=true

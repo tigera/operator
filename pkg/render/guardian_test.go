@@ -367,9 +367,16 @@ var _ = Describe("Rendering tests", func() {
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy).NotTo(BeNil(), "OSS variant should always render a network policy")
 
-				// Verify it's the OSS policy (should only have Ingress type, no Egress)
-				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress))
-				Expect(policy.Spec.Egress).To(BeEmpty())
+				// The OSS policy has both Ingress and Egress, ending in a Pass so the
+				// tunnel to the management cluster isn't dropped by the default-deny.
+				Expect(policy.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+				Expect(policy.Spec.Egress).NotTo(BeEmpty())
+				Expect(policy.Spec.Egress[len(policy.Spec.Egress)-1].Action).To(Equal(v3.Pass))
+
+				// OSS can't express domain-based egress rules.
+				for _, rule := range policy.Spec.Egress {
+					Expect(rule.Destination.Domains).To(BeEmpty())
+				}
 			})
 
 			It("should render Enterprise network policy without domain-based egress when IncludeEgressNetworkPolicy is false", func() {

@@ -51,3 +51,12 @@ type RenderContext struct {
 	// code never reads it. Nil when no extension is active.
 	Extension any
 }
+
+// ExtractExtensionData returns the extension-owned data a controller extension
+// stashed in the render context, asserted to T, or the zero value of T when the
+// slot is empty or holds a different type. Extensions use it instead of repeating
+// the type assertion in a per-component accessor.
+func ExtractExtensionData[T any](rc RenderContext) T {
+	data, _ := rc.Extension.(T)
+	return data
+}

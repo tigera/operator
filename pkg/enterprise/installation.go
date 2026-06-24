@@ -65,8 +65,7 @@ type installationRenderData struct {
 // installationData pulls the installation extension's render data back out of the
 // render context, returning the zero value when none is set.
 func installationData(rc render.RenderContext) installationRenderData {
-	data, _ := rc.Extension.(installationRenderData)
-	return data
+	return render.ExtractExtensionData[installationRenderData](rc)
 }
 
 func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {

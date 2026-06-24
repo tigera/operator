@@ -60,8 +60,7 @@ type windowsRenderData struct {
 // windowsData pulls the windows extension's render data back out of the render
 // context, returning the zero value when none is set.
 func windowsData(rc render.RenderContext) windowsRenderData {
-	data, _ := rc.Extension.(windowsRenderData)
-	return data
+	return render.ExtractExtensionData[windowsRenderData](rc)
 }
 
 // Validate rejects windows installation config Calico Enterprise does not support.

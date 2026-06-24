@@ -77,8 +77,7 @@ type apiServerRenderData struct {
 // apiServerData pulls the API server hook's render data back out of the render context,
 // returning the zero value when none is set.
 func apiServerData(rc render.RenderContext) apiServerRenderData {
-	d, _ := rc.Extension.(apiServerRenderData)
-	return d
+	return render.ExtractExtensionData[apiServerRenderData](rc)
 }
 
 // apiServer carries the rendered API server configuration, the resolved image, and the

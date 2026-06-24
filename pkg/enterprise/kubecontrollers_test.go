@@ -38,6 +38,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -68,7 +69,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 		rc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := applyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -87,7 +88,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 		rc, _, err := ext.ExtendContext(certManagementControllerContext())
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := applyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -147,7 +148,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(cc))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		out, _ := applyExtensions(ext, render.ComponentNameKubeControllers, rc, create, del)
+		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, create, del)
 		return out
 	}
 
@@ -223,7 +224,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(cc))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		_, toDelete := applyExtensions(ext, render.ComponentNameKubeControllers, rc, create, del)
+		_, toDelete := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, create, del)
 
 		_, ok := extensions.FindObject[*corev1.Service](toDelete, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeTrue(), "the webhook Service should be queued for deletion")
@@ -236,7 +237,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 		comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(cc), nil)
 		create, del := comp.Objects()
-		objs, _ := applyExtensions(ext, render.ComponentNameKubeControllersPolicy, rc, create, del)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllersPolicy, rc, create, del)
 
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, kubecontrollers.KubeControllerNetworkPolicyName)
 		Expect(ok).To(BeTrue())

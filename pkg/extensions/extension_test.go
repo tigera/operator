@@ -23,6 +23,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -43,7 +44,7 @@ var _ = Describe("extension registry", func() {
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out, _ := applyExtensions(s, "test", entCtx, in, nil)
+		out, _ := extensionstest.ApplyExtensions(s, "test", entCtx, in, nil)
 
 		Expect(out).To(HaveLen(2))
 		cm := out[0].(*corev1.ConfigMap)
@@ -57,7 +58,7 @@ var _ = Describe("extension registry", func() {
 		})
 
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out, del := applyExtensions(s, "test", entCtx, in, nil)
+		out, del := extensionstest.ApplyExtensions(s, "test", entCtx, in, nil)
 		Expect(out).To(Equal(in))
 		Expect(del).To(HaveLen(1))
 		Expect(del[0].GetName()).To(Equal("stale"))
@@ -65,7 +66,7 @@ var _ = Describe("extension registry", func() {
 
 	It("returns objects unchanged when no modifier is registered", func() {
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out, _ := applyExtensions(s, "unregistered", entCtx, in, nil)
+		out, _ := extensionstest.ApplyExtensions(s, "unregistered", entCtx, in, nil)
 		Expect(out).To(Equal(in))
 	})
 
@@ -76,13 +77,13 @@ var _ = Describe("extension registry", func() {
 
 		calicoCtx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out, _ := applyExtensions(s, "test", calicoCtx, in, nil)
+		out, _ := extensionstest.ApplyExtensions(s, "test", calicoCtx, in, nil)
 		Expect(out).To(Equal(in))
 	})
 
 	It("returns objects unchanged when no installation is set", func() {
 		in := []client.Object{&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cm"}}}
-		out, _ := applyExtensions(s, "test", render.RenderContext{}, in, nil)
+		out, _ := extensionstest.ApplyExtensions(s, "test", render.RenderContext{}, in, nil)
 		Expect(out).To(Equal(in))
 	})
 
@@ -95,7 +96,7 @@ var _ = Describe("extension registry", func() {
 		add("first")
 		add("second")
 
-		out, _ := applyExtensions(s, "test", entCtx, nil, nil)
+		out, _ := extensionstest.ApplyExtensions(s, "test", entCtx, nil, nil)
 		Expect(out).To(HaveLen(1))
 		Expect(out[0].GetName()).To(Equal("second"))
 	})

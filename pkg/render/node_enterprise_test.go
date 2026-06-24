@@ -36,6 +36,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -127,7 +128,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		out, _ := applyExtensions(ext, render.ComponentNameNode, rc, objs, nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameNode, rc, objs, nil)
 		return out
 	}
 
@@ -210,7 +211,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		})
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		objs, _ = applyExtensions(ext, render.ComponentNameTypha, renderCtx, objs, nil)
+		objs, _ = extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, renderCtx, objs, nil)
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha")
 		Expect(ok).To(BeTrue())

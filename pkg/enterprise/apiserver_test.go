@@ -39,6 +39,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -154,7 +155,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		create, del := comp.Objects()
 
 		ec := comp.(render.ExtensionContextProvider).ExtensionContext()
-		return applyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
+		return extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
 	}
 
 	apiServerDeployment := func(objs []client.Object) *appsv1.Deployment {
@@ -306,7 +307,7 @@ var _ = Describe("API server enterprise modifier", func() {
 			Expect(ok).To(BeTrue())
 
 			ec := comp.(render.ExtensionContextProvider).ExtensionContext()
-			create, del = applyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
+			create, del = extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
 
 			// After the modifier, the deployment (with the query server container) is in the
 			// create list and out of the delete list.
@@ -368,7 +369,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 		comp := render.APIServerPolicy(cfg)
 		create, del := comp.Objects()
 		ec := comp.(render.ExtensionContextProvider).ExtensionContext()
-		objs, _ := applyExtensionsWithContext(ext, render.ComponentNameAPIServerPolicy, rc, ec, create, del)
+		objs, _ := extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServerPolicy, rc, ec, create, del)
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.APIServerPolicyName)
 		Expect(ok).To(BeTrue())
 		return policy
@@ -430,7 +431,7 @@ var _ = Describe("API server Calico-variant cleanup", func() {
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
 		ec := comp.(render.ExtensionContextProvider).ExtensionContext()
-		_, del = applyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
+		_, del = extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
 
 		_, ok := extensions.FindObject[*rbacv1.ClusterRole](del, "tigera-ui-user")
 		Expect(ok).To(BeTrue())

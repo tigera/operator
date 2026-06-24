@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
@@ -59,7 +60,7 @@ func apiServerObjects(c render.Component) ([]client.Object, []client.Object) {
 		rc.Installation = ec.Config.Installation
 		extCtx = ec
 	}
-	return applyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, extCtx, create, del)
+	return extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, extCtx, create, del)
 }
 
 func verifyAPIService(service *apiregv1.APIService, enterprise bool, clusterDomain string) {

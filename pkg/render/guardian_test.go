@@ -36,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -54,7 +55,7 @@ func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 	if p, ok := g.(render.ExtensionContextProvider); ok {
 		extCtx = p.ExtensionContext()
 	}
-	out, _ := applyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, objs, nil)
+	out, _ := extensionstest.ApplyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, objs, nil)
 	return out
 }
 
@@ -117,7 +118,7 @@ var _ = Describe("Rendering tests", func() {
 			if p, ok := g.(render.ExtensionContextProvider); ok {
 				extCtx = p.ExtensionContext()
 			}
-			resources, _ = applyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, resources, nil)
+			resources, _ = extensionstest.ApplyExtensionsWithContext(ext, render.GuardianName, rc, extCtx, resources, nil)
 		}
 
 		BeforeEach(func() {
@@ -354,7 +355,7 @@ var _ = Describe("Rendering tests", func() {
 			if p, ok := g.(render.ExtensionContextProvider); ok {
 				extCtx = p.ExtensionContext()
 			}
-			resources, _ = applyExtensionsWithContext(ext, render.ComponentNameGuardianPolicy, rc, extCtx, objs, nil)
+			resources, _ = extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameGuardianPolicy, rc, extCtx, objs, nil)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

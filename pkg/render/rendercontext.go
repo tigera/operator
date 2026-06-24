@@ -45,10 +45,13 @@ type RenderContext struct {
 	TrustedBundle certificatemanagement.TrustedBundle
 
 	// Extension is opaque, extension-owned data that the controller extension
-	// produced for its own modifiers - typically an artifact that can only be
-	// created controller-side because it has cluster side effects (e.g. a keypair).
-	// The extension that set it type-asserts it back out in its modifiers; core
-	// code never reads it. Nil when no extension is active.
+	// produced. Usually a modifier reads it back out (an artifact that can only be
+	// created controller-side because it has cluster side effects, e.g. a keypair),
+	// in which case it holds an extension-package type core code never names. When a
+	// controller needs the extension's reconcile-derived inputs back (e.g. the
+	// clusterconnection controller's variant-specific Guardian inputs), the payload
+	// is instead a render-package type the controller reads generically without
+	// depending on the extension. Nil when no extension is active.
 	Extension any
 }
 

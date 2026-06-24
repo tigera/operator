@@ -149,6 +149,31 @@ type GuardianConfiguration struct {
 	Version string
 }
 
+// GuardianRenderData is the variant-specific Guardian input a controller extension
+// computes during reconcile and stashes in RenderContext.Extension. The
+// clusterconnection controller reads it back to fill GuardianConfiguration without
+// depending on the extension: when present it carries the enterprise values
+// (the management-cluster version and the license-gated egress policy flag) and
+// signals that the controller should not create the OSS Guardian client keypair.
+// It lives in render so the controller can read it generically.
+type GuardianRenderData struct {
+	// Version is the managed cluster version reported by ClusterInformation
+	// (CNXVersion for Enterprise, CalicoVersion for the OSS default).
+	Version string
+
+	// IncludeEgressNetworkPolicy enables the domain-based egress rules in the
+	// Guardian policy, gated on an Enterprise license feature.
+	IncludeEgressNetworkPolicy bool
+}
+
+// GuardianRenderDataFromContext returns the GuardianRenderData a controller
+// extension stashed in the render context, and whether it was present. Absent
+// means the OSS path: the controller applies its own defaults.
+func GuardianRenderDataFromContext(rc RenderContext) (GuardianRenderData, bool) {
+	data, ok := rc.Extension.(GuardianRenderData)
+	return data, ok
+}
+
 type GuardianComponent struct {
 	cfg         *GuardianConfiguration
 	calicoImage string

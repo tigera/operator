@@ -34,9 +34,10 @@ import (
 type ControllerName string
 
 const (
-	InstallationController ControllerName = "installation"
-	WindowsController      ControllerName = "windows"
-	APIServerController    ControllerName = "apiserver"
+	InstallationController      ControllerName = "installation"
+	WindowsController           ControllerName = "windows"
+	APIServerController         ControllerName = "apiserver"
+	ClusterConnectionController ControllerName = "clusterconnection"
 )
 
 // ControllerContext is the controller-phase context, the corollary to the

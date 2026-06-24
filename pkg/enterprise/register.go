@@ -17,6 +17,7 @@ package enterprise
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
+	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/guardian"
 	"github.com/tigera/operator/pkg/enterprise/installation"
 	"github.com/tigera/operator/pkg/enterprise/typha"
@@ -39,6 +40,7 @@ func New() *extensions.Set {
 	windows.Register(ent)
 	guardian.Register(ent)
 	apiserver.Register(ent)
+	clusterconnection.Register(ent)
 
 	// When the enterprise operator manages a Calico installation, clean up the
 	// Enterprise objects left behind by a prior Enterprise installation.

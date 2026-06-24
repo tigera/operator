@@ -118,11 +118,11 @@ func (v *Variant) validate(cc contexts.ControllerContext) error {
 	return v.controllers[cc.Controller].Validate(cc)
 }
 
-// extendContext runs the cc.Controller extension, or returns the base render
-// context and no managed keypairs when the variant has none for it. Nil-safe.
-func (v *Variant) extendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+// extendContext runs the cc.Controller extension, or returns the context unchanged
+// and no managed keypairs when the variant has none for it. Nil-safe.
+func (v *Variant) extendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	if v == nil || v.controllers[cc.Controller] == nil {
-		return cc.RenderContext, nil, nil
+		return cc, nil, nil
 	}
 	return v.controllers[cc.Controller].ExtendContext(cc)
 }

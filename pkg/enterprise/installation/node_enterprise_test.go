@@ -133,8 +133,9 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Client:             cli,
 			CertificateManager: certManager,
 		}
-		renderCtx, _, err = ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
 		Expect(err).NotTo(HaveOccurred())
+		renderCtx = ecc.RenderContext
 	})
 
 	// renderNodeObjects renders the real node component and applies the registered
@@ -205,7 +206,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Spec:       operatorv1.LogCollectorSpec{CollectProcessPath: &enable},
 		})).NotTo(HaveOccurred())
 
-		rc, _, err := ext.ExtendContext(contexts.ControllerContext{
+		ecc, _, err := ext.ExtendContext(contexts.ControllerContext{
 			RenderContext: render.RenderContext{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
@@ -217,6 +218,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 			CertificateManager: certManager,
 		})
 		Expect(err).NotTo(HaveOccurred())
+		rc := ecc.RenderContext
 
 		ds, ok := extensions.FindObject[*appsv1.DaemonSet](renderNodeObjects(rc), common.NodeDaemonSetName)
 		Expect(ok).To(BeTrue())

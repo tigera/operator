@@ -54,12 +54,10 @@ func (clusterConnectionControllerExtension) Validate(cc contexts.ControllerConte
 // permits the domain-based egress network policy. It creates no certificates, so it
 // returns no managed keypairs. The OSS controller path supplies its own defaults
 // when this hook is absent.
-func (clusterConnectionControllerExtension) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
-	rc := cc.RenderContext
-
+func (clusterConnectionControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	clusterInformation, err := utils.FetchClusterInformation(cc.Ctx, cc.Client)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error querying ClusterInformation: %w", err)
+		return cc, nil, fmt.Errorf("error querying ClusterInformation: %w", err)
 	}
 
 	// Ensure the license can support enterprise policy before enabling the
@@ -68,12 +66,12 @@ func (clusterConnectionControllerExtension) ExtendContext(cc contexts.Controller
 	if license, err := utils.FetchLicenseKey(cc.Ctx, cc.Client); err == nil {
 		includeEgressNetworkPolicy = utils.IsFeatureActive(license, common.EgressAccessControlFeature)
 	} else if !k8serrors.IsNotFound(err) {
-		return rc, nil, fmt.Errorf("error querying license: %w", err)
+		return cc, nil, fmt.Errorf("error querying license: %w", err)
 	}
 
-	rc.Extension = render.GuardianRenderData{
+	cc.Extension = render.GuardianRenderData{
 		Version:                    clusterInformation.Spec.CNXVersion,
 		IncludeEgressNetworkPolicy: includeEgressNetworkPolicy,
 	}
-	return rc, nil, nil
+	return cc, nil, nil
 }

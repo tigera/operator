@@ -175,7 +175,8 @@ var _ = Describe("API server enterprise modifier", func() {
 
 	It("is a no-op for the Calico variant (no enterprise objects added)", func() {
 		cc := apiServerControllerContext(operatorv1.Calico, nil)
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		objs, _ := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -190,7 +191,8 @@ var _ = Describe("API server enterprise modifier", func() {
 
 	It("layers the query server, enterprise RBAC, audit policy, and query server port on", func() {
 		cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil)
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		objs, _ := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -217,7 +219,8 @@ var _ = Describe("API server enterprise modifier", func() {
 
 	It("queues the enterprise RBAC for deletion when not a management cluster", func() {
 		cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil)
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		_, del := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -240,7 +243,8 @@ var _ = Describe("API server enterprise modifier", func() {
 					Data:       map[string][]byte{"cert": []byte("a"), "key": []byte("b")},
 				},
 			)
-			rc, _, err := ext.ExtendContext(cc)
+			ecc, _, err := ext.ExtendContext(cc)
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -266,7 +270,8 @@ var _ = Describe("API server enterprise modifier", func() {
 					ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 				},
 			)
-			rc, _, err := ext.ExtendContext(cc)
+			ecc, _, err := ext.ExtendContext(cc)
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -285,7 +290,8 @@ var _ = Describe("API server enterprise modifier", func() {
 	Context("v3-CRD mode (no aggregation server)", func() {
 		It("renders the deployment skeleton with the query server and pulls it out of the delete list", func() {
 			cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil)
-			rc, _, err := ext.ExtendContext(cc)
+			ecc, _, err := ext.ExtendContext(cc)
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg := &render.APIServerConfiguration{
@@ -330,7 +336,8 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		It("adds the L7 admission controller container, the sidecar webhook, and the L7 service port", func() {
 			cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil, applicationLayerSidecar())
-			rc, _, err := ext.ExtendContext(cc)
+			ecc, _, err := ext.ExtendContext(cc)
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -348,7 +355,8 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		It("pulls the sidecar webhook out of the delete list", func() {
 			cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil, applicationLayerSidecar())
-			rc, _, err := ext.ExtendContext(cc)
+			ecc, _, err := ext.ExtendContext(cc)
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
 			_, del := renderAPIServer(cc, rc, apiServerKeyPair(cc))
@@ -377,7 +385,8 @@ var _ = Describe("API server enterprise policy modifier", func() {
 
 	It("leaves the egress rules as the base when no OIDC key validator is configured", func() {
 		cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil)
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		policy := applyPolicy(cc, rc)
@@ -393,7 +402,8 @@ var _ = Describe("API server enterprise policy modifier", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 			Spec:       operatorv1.ApplicationLayerSpec{SidecarInjection: &enabled},
 		})
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		policy := applyPolicy(cc, rc)
@@ -415,7 +425,8 @@ var _ = Describe("API server enterprise policy modifier", func() {
 var _ = Describe("API server Calico-variant cleanup", func() {
 	It("queues the enterprise RBAC for deletion", func() {
 		cc := apiServerControllerContext(operatorv1.Calico, nil)
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		cfg := &render.APIServerConfiguration{

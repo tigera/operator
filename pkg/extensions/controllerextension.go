@@ -20,7 +20,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -34,11 +33,11 @@ type ControllerExtension interface {
 	Validate(cc contexts.ControllerContext) error
 
 	// ExtendContext does the controller-side reconcile work the render phase
-	// cannot, returning the RenderContext the render phase consumes plus any
-	// keypairs the extension created that the controller should manage (add to
-	// certificate management and BYO-expiry warnings), or an error that aborts the
-	// reconcile.
-	ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error)
+	// cannot, returning the updated ControllerContext (its embedded RenderContext is
+	// what the render phase consumes) plus any keypairs the extension created that the
+	// controller should manage (add to certificate management and BYO-expiry
+	// warnings), or an error that aborts the reconcile.
+	ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error)
 }
 
 // Watcher is an optional companion to ControllerExtension. A controller's Add()

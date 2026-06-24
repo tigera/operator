@@ -151,7 +151,8 @@ var _ = Describe("windows enterprise modifier", func() {
 			Client:             cli,
 			CertificateManager: cm,
 		}
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameWindows, rc, newObjs(), nil)

@@ -110,11 +110,12 @@ func (f fakeController) Validate(_ contexts.ControllerContext) error {
 	return f.validateErr
 }
 
-func (f fakeController) ExtendContext(_ contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (f fakeController) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	if f.err != nil {
-		return render.RenderContext{}, nil, f.err
+		return cc, nil, f.err
 	}
-	return render.RenderContext{ClusterDomain: "from-fake"}, nil, nil
+	cc.ClusterDomain = "from-fake"
+	return cc, nil, nil
 }
 
 // watchingController is a fakeController that also implements the Watcher

@@ -152,28 +152,27 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetches the enterprise CRs, creates the query server certificate, resolves the L7
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
-func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
-	rc := cc.RenderContext
+func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	in := cc.Installation
 
 	trustedBundle, err := cc.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, cc.Client, common.OperatorNamespace(), false)
 	if err != nil {
-		return rc, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
+		return cc, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
 	}
 
 	applicationLayer, err := utils.GetApplicationLayer(cc.Ctx, cc.Client)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
+		return cc, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
 	}
 
 	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
+		return cc, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
 
 	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+		return cc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
 
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
@@ -181,13 +180,13 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	// ManagementCluster.Spec.TLS is defaulted; degrade until it exists.
 	if managementCluster != nil && managementCluster.Spec.TLS != nil && !cc.MultiTenant {
 		if _, err := utils.GetSecret(cc.Ctx, cc.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
-			return rc, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
+			return cc, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
 		}
 	}
 
 	prometheusCertificate, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return rc, nil, fmt.Errorf("failed to get certificate: %w", err)
+		return cc, nil, fmt.Errorf("failed to get certificate: %w", err)
 	}
 	if prometheusCertificate != nil {
 		trustedBundle.AddCertificates(prometheusCertificate)
@@ -196,7 +195,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	if managementClusterConnection != nil {
 		voltronLinseedCert, err := cc.CertificateManager.GetCertificate(cc.Client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 		if err != nil {
-			return rc, nil, fmt.Errorf("failed to retrieve %s: %w", render.VoltronLinseedPublicCert, err)
+			return cc, nil, fmt.Errorf("failed to retrieve %s: %w", render.VoltronLinseedPublicCert, err)
 		}
 		if voltronLinseedCert != nil {
 			trustedBundle.AddCertificates(voltronLinseedCert)
@@ -208,21 +207,21 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	var keyValidatorConfig authentication.KeyValidatorConfig
 	authenticationCR, err := utils.GetAuthentication(cc.Ctx, cc.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return rc, nil, fmt.Errorf("error while fetching Authentication: %w", err)
+		return cc, nil, fmt.Errorf("error while fetching Authentication: %w", err)
 	}
 	if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
 		if utils.DexEnabled(authenticationCR) {
 			certificate, err := cc.CertificateManager.GetCertificate(cc.Client, render.DexTLSSecretName, common.OperatorNamespace())
 			if err != nil {
-				return rc, nil, fmt.Errorf("failed to retrieve %s: %w", render.DexTLSSecretName, err)
+				return cc, nil, fmt.Errorf("failed to retrieve %s: %w", render.DexTLSSecretName, err)
 			} else if certificate == nil {
-				return rc, nil, fmt.Errorf("waiting for secret %q to become available", render.DexTLSSecretName)
+				return cc, nil, fmt.Errorf("waiting for secret %q to become available", render.DexTLSSecretName)
 			}
 			trustedBundle.AddCertificates(certificate)
 		}
 		keyValidatorConfig, err = utils.GetKeyValidatorConfig(cc.Ctx, cc.Client, authenticationCR, cc.ClusterDomain)
 		if err != nil {
-			return rc, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
+			return cc, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
 		}
 	}
 
@@ -237,7 +236,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 			dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, cc.ClusterDomain),
 		)
 		if err != nil {
-			return rc, nil, fmt.Errorf("unable to get or create query server tls key pair: %w", err)
+			return cc, nil, fmt.Errorf("unable to get or create query server tls key pair: %w", err)
 		}
 	}
 
@@ -249,20 +248,20 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 		*applicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled {
 		imageSet, err := imageset.GetImageSet(cc.Ctx, cc.Client, in.Variant)
 		if err != nil {
-			return rc, nil, err
+			return cc, nil, err
 		}
 		l7EnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 		if err != nil {
-			return rc, nil, err
+			return cc, nil, err
 		}
 		dikastesImage, err = components.GetReference(components.ComponentDikastes, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 		if err != nil {
-			return rc, nil, err
+			return cc, nil, err
 		}
 	}
 
-	rc.TrustedBundle = trustedBundle
-	rc.Extension = apiServerRenderData{
+	cc.TrustedBundle = trustedBundle
+	cc.Extension = apiServerRenderData{
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		applicationLayer:            applicationLayer,
@@ -271,7 +270,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 		l7EnvoyImage:                l7EnvoyImage,
 		dikastesImage:               dikastesImage,
 	}
-	return rc, nil, nil
+	return cc, nil, nil
 }
 
 // RegisterCalicoCleanup registers, for the Calico variant, the cleanup that

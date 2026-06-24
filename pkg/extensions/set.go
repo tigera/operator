@@ -94,12 +94,12 @@ func (s *Set) Validate(cc contexts.ControllerContext) error {
 }
 
 // ExtendContext runs the cc.Controller extension for the installation's variant
-// and returns the resulting render.RenderContext plus any keypairs the extension wants
-// the controller to manage, or the base render context and no keypairs when no
+// and returns the updated ControllerContext plus any keypairs the extension wants
+// the controller to manage, or the context unchanged and no keypairs when no
 // extension is registered. Nil-safe.
-func (s *Set) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
+func (s *Set) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	if cc.Installation == nil {
-		return cc.RenderContext, nil, nil
+		return cc, nil, nil
 	}
 	return s.variant(cc.Installation.Variant).extendContext(cc)
 }

@@ -86,8 +86,7 @@ func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
 
 // ExtendContext fetches the node prometheus keypair the installation controller
 // created and stashes it in the render context for the windows modifier.
-func (windowsControllerExtension) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
-	rc := cc.RenderContext
+func (windowsControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	tls, err := cc.CertificateManager.GetKeyPair(
 		cc.Client,
 		render.NodePrometheusTLSServerSecret,
@@ -95,10 +94,10 @@ func (windowsControllerExtension) ExtendContext(cc contexts.ControllerContext) (
 		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, cc.ClusterDomain),
 	)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error getting node prometheus TLS certificate: %w", err)
+		return cc, nil, fmt.Errorf("error getting node prometheus TLS certificate: %w", err)
 	}
-	rc.Extension = windowsRenderData{prometheusServerTLS: tls}
-	return rc, nil, nil
+	cc.Extension = windowsRenderData{prometheusServerTLS: tls}
+	return cc, nil, nil
 }
 
 // modifyWindows layers Calico Enterprise behavior onto the rendered

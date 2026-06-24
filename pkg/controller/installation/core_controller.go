@@ -1168,7 +1168,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	renderCtx, managedKeyPairs, err := r.opts.Extensions.ExtendContext(cc)
+	cc, managedKeyPairs, err := r.opts.Extensions.ExtendContext(cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1192,7 +1192,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderContext(renderCtx),
+		utils.WithRenderContext(cc.RenderContext),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 

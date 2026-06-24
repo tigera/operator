@@ -66,7 +66,8 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	}
 
 	It("mounts the metrics serving TLS keypair onto the deployment", func() {
-		rc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		ecc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
@@ -85,7 +86,8 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	})
 
 	It("adds the cert-management init container when certificate management is enabled", func() {
-		rc, _, err := ext.ExtendContext(certManagementControllerContext())
+		ecc, _, err := ext.ExtendContext(certManagementControllerContext())
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
@@ -159,7 +161,8 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	}
 
 	It("layers the enterprise rules, controllers, and metrics TLS on (WAF off)", func() {
-		rc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		ecc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(newControllerContext(operatorv1.CalicoEnterprise), rc)
 
@@ -181,7 +184,8 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("layers the full WAF surface on when the GatewayAPI extension is enabled", func() {
 		cc := wafControllerContext()
-		rc, managed, err := ext.ExtendContext(cc)
+		ecc, managed, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
 		for _, kp := range managed {
@@ -218,7 +222,8 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("deletes the WAF webhook surface when the extension is disabled", func() {
 		cc := newControllerContext(operatorv1.CalicoEnterprise)
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(cc))
@@ -232,7 +237,8 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("adds the WAF webhook ingress rule to the network policy when enabled", func() {
 		cc := wafControllerContext()
-		rc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
 		comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(cc), nil)

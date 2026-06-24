@@ -146,8 +146,7 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetching the certificates that feed the trusted bundle. It returns the render
 // context carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
-func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (render.RenderContext, []certificatemanagement.KeyPairInterface, error) {
-	rc := cc.RenderContext
+func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 
 	nodePrometheusTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
 		cc.Client,
@@ -156,7 +155,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, cc.ClusterDomain),
 	)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
+		return cc, nil, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
 	}
 	if nodePrometheusTLS != nil {
 		cc.TrustedBundle.AddCertificates(nodePrometheusTLS)
@@ -172,7 +171,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, cc.ClusterDomain),
 	)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error creating kube-controllers metrics TLS certificate: %w", err)
+		return cc, nil, fmt.Errorf("error creating kube-controllers metrics TLS certificate: %w", err)
 	}
 	if kubeControllerTLS != nil {
 		cc.TrustedBundle.AddCertificates(kubeControllerTLS)
@@ -180,7 +179,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 
 	logCollector, err := utils.GetLogCollector(cc.Ctx, cc.Client)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error reading LogCollector: %w", err)
+		return cc, nil, fmt.Errorf("error reading LogCollector: %w", err)
 	}
 
 	// calico-kube-controllers enterprise additions: the WAF surface, the enterprise
@@ -188,14 +187,14 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 	// kube-controllers needs an extra license-push rule.
 	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+		return cc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
 	waf, wafWebhookTLS, err := buildWAFData(cc)
 	if err != nil {
-		return rc, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
+		return cc, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
 	}
 
-	rc.Extension = installationRenderData{
+	cc.Extension = installationRenderData{
 		nodePrometheusTLS:         nodePrometheusTLS,
 		kubeControllerTLS:         kubeControllerTLS,
 		collectProcessPath:        collectProcessPathEnabled(logCollector),
@@ -206,7 +205,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 
 	prometheusClientCert, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return rc, nil, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
+		return cc, nil, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
 	}
 	if prometheusClientCert != nil {
 		cc.TrustedBundle.AddCertificates(prometheusClientCert)
@@ -214,7 +213,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 
 	esgwCertificate, err := cc.CertificateManager.GetCertificate(cc.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
-		return rc, nil, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
+		return cc, nil, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
 	}
 	if esgwCertificate != nil {
 		cc.TrustedBundle.AddCertificates(esgwCertificate)
@@ -224,7 +223,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 	// manager internal cert.
 	managerInternalTLS, err := cc.CertificateManager.GetCertificate(cc.Client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return rc, nil, fmt.Errorf("failed to retrieve %s: %w", render.ManagerInternalTLSSecretName, err)
+		return cc, nil, fmt.Errorf("failed to retrieve %s: %w", render.ManagerInternalTLSSecretName, err)
 	}
 	if managerInternalTLS != nil {
 		cc.TrustedBundle.AddCertificates(managerInternalTLS)
@@ -240,5 +239,5 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (ren
 	if wafWebhookTLS != nil {
 		managed = append(managed, wafWebhookTLS)
 	}
-	return rc, managed, nil
+	return cc, managed, nil
 }

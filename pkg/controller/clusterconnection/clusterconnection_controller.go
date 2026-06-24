@@ -291,12 +291,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	renderCtx, _, err := r.opts.Extensions.ExtendContext(cc)
+	cc, _, err = r.opts.Extensions.ExtendContext(cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	guardianData, haveGuardianData := render.GuardianRenderDataFromContext(renderCtx)
+	guardianData, haveGuardianData := render.GuardianRenderDataFromContext(cc.RenderContext)
 
 	includeSystem := false
 	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {

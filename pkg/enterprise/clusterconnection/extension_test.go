@@ -80,7 +80,8 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	Describe("ExtendContext", func() {
 		It("reports the managed cluster CNX version", func() {
 			cli = newClient(clusterInformation())
-			rc, managed, err := ext.ExtendContext(controllerContext())
+			ecc, managed, err := ext.ExtendContext(controllerContext())
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 			Expect(managed).To(BeEmpty())
 
@@ -96,7 +97,8 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 				Status:     v3.LicenseKeyStatus{Features: []string{common.EgressAccessControlFeature}},
 			}
 			cli = newClient(clusterInformation(), license)
-			rc, _, err := ext.ExtendContext(controllerContext())
+			ecc, _, err := ext.ExtendContext(controllerContext())
+			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
 			data, ok := render.GuardianRenderDataFromContext(rc)

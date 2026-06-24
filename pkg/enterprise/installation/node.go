@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package installation
 
 import (
 	"errors"
@@ -190,7 +190,7 @@ func nodeEnterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
 	data := installationData(rc)
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort(rc.FelixConfiguration))},
+		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", NodeReporterPort(rc.FelixConfiguration))},
 		{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -232,7 +232,7 @@ func multiInterfaceModeEnv(install *operatorv1.InstallationSpec) *corev1.EnvVar 
 
 // nodeMetricsService builds the enterprise-only calico-node-metrics Service.
 func nodeMetricsService(rc render.RenderContext) *corev1.Service {
-	reporterPort := nodeReporterPort(rc.FelixConfiguration)
+	reporterPort := NodeReporterPort(rc.FelixConfiguration)
 	felixPort := felixMetricsPort(rc.FelixConfiguration)
 	felixEnabled := rc.FelixConfiguration != nil && utils.IsFelixPrometheusMetricsEnabled(rc.FelixConfiguration)
 
@@ -274,19 +274,19 @@ func nodeMetricsService(rc render.RenderContext) *corev1.Service {
 	}
 }
 
-// validateReporterPort rejects the unsupported zero prometheus reporter port.
+// ValidateReporterPort rejects the unsupported zero prometheus reporter port.
 // The node and windows controller extensions share it.
-func validateReporterPort(fc *v3.FelixConfiguration) error {
+func ValidateReporterPort(fc *v3.FelixConfiguration) error {
 	if fc != nil && fc.Spec.PrometheusReporterPort != nil && *fc.Spec.PrometheusReporterPort == 0 {
 		return errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 	}
 	return nil
 }
 
-// nodeReporterPort returns the reporter metrics port from the FelixConfiguration,
+// NodeReporterPort returns the reporter metrics port from the FelixConfiguration,
 // falling back to the default. The node-metrics Service and the
 // FELIX_PROMETHEUSREPORTERPORT env var both derive from here so they can't drift.
-func nodeReporterPort(fc *v3.FelixConfiguration) int {
+func NodeReporterPort(fc *v3.FelixConfiguration) int {
 	if fc != nil && fc.Spec.PrometheusReporterPort != nil {
 		return *fc.Spec.PrometheusReporterPort
 	}

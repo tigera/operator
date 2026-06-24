@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package installation
 
 import (
 	"fmt"
@@ -29,12 +29,21 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
+
+// Register wires the installation controller hook and the node and
+// calico-kube-controllers modifiers into the variant.
+func Register(v *extensions.Variant) {
+	v.Controller(contexts.InstallationController, coreControllerExtension{})
+	registerNode(v)
+	registerKubeControllers(v)
+}
 
 // coreControllerExtension is the Calico Enterprise controller-side hook for the
 // installation controller.
@@ -76,7 +85,7 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 
 // Validate rejects installation config Calico Enterprise does not support.
 func (coreControllerExtension) Validate(cc contexts.ControllerContext) error {
-	return validateReporterPort(cc.FelixConfiguration)
+	return ValidateReporterPort(cc.FelixConfiguration)
 }
 
 // DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package apiserver
 
 import (
 	"fmt"
@@ -89,7 +89,9 @@ type apiServer struct {
 	data        apiServerRenderData
 }
 
-func registerAPIServer(v *extensions.Variant) {
+// Register wires the API server controller hook and modifiers into the variant.
+func Register(v *extensions.Variant) {
+	v.Controller(contexts.APIServerController, apiServerControllerExtension{})
 	extensions.RegisterModifier(v, render.ComponentNameAPIServer, modifyAPIServer)
 	extensions.RegisterModifier(v, render.ComponentNameAPIServerPolicy, modifyAPIServerPolicy)
 }
@@ -272,10 +274,10 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	return rc, nil, nil
 }
 
-// registerAPIServerCleanup registers, for the Calico variant, the cleanup that
+// RegisterCalicoCleanup registers, for the Calico variant, the cleanup that
 // deletes the Enterprise API server objects left behind by a prior Enterprise
 // installation.
-func registerAPIServerCleanup(v *extensions.Variant) {
+func RegisterCalicoCleanup(v *extensions.Variant) {
 	extensions.RegisterModifier(v, render.ComponentNameAPIServer, cleanupAPIServer)
 }
 

@@ -44,7 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	"github.com/tigera/operator/pkg/enterprise"
+	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -141,7 +141,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddDeploymentWatch(c, enterprise.EsKubeController, esKubeControllersNamespace.InstallNamespace()); err != nil {
+	if err := utils.AddDeploymentWatch(c, entkubecontrollers.EsKubeController, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 
@@ -169,7 +169,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Start goroutines to establish watches against projectcalico.org/v3 resources.
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-		{Name: enterprise.EsKubeControllerNetworkPolicyName, Namespace: esKubeControllersNamespace.InstallNamespace()},
+		{Name: entkubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: esKubeControllersNamespace.InstallNamespace()},
 	})
 
 	return nil
@@ -263,7 +263,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// Get secrets needed for kube-controllers to talk to elastic. This is needed for zero-tenants and single-tenants
 	// that deploy es-kube-controllers and need to talk to es-gateway
 	var kubeControllersUserSecret *core.Secret
-	kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, enterprise.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
+	kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, entkubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
 		return reconcile.Result{}, err
@@ -344,7 +344,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		BindingNamespaces:            namespaces,
 		Tenant:                       nil,
 	}
-	esKubeControllerComponents := enterprise.NewElasticsearchKubeControllers(&kubeControllersCfg)
+	esKubeControllerComponents := entkubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
 	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
 	if err != nil {

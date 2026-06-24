@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package guardian
 
 import (
 	"net"
@@ -37,7 +37,8 @@ import (
 	operatorurl "github.com/tigera/operator/pkg/url"
 )
 
-func registerGuardian(v *extensions.Variant) {
+// Register wires the guardian extensions into the variant.
+func Register(v *extensions.Variant) {
 	extensions.RegisterModifier(v, render.GuardianName, modifyGuardian)
 	extensions.RegisterModifier(v, render.ComponentNameGuardianPolicy, modifyGuardianPolicy)
 }

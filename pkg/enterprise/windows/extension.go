@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package windows
 
 import (
 	"fmt"
@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise/installation"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -41,7 +42,9 @@ import (
 // felix env and node volume mounts, so they receive the same enterprise layering.
 var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd": true}
 
-func registerWindows(v *extensions.Variant) {
+// Register wires the windows controller hook and modifiers into the variant.
+func Register(v *extensions.Variant) {
+	v.Controller(contexts.WindowsController, windowsControllerExtension{})
 	v.Image(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
 	v.Image(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
 	v.Modify(render.ComponentNameWindows, modifyWindows)
@@ -65,7 +68,7 @@ func windowsData(rc render.RenderContext) windowsRenderData {
 
 // Validate rejects windows installation config Calico Enterprise does not support.
 func (windowsControllerExtension) Validate(cc contexts.ControllerContext) error {
-	return validateReporterPort(cc.FelixConfiguration)
+	return installation.ValidateReporterPort(cc.FelixConfiguration)
 }
 
 // Watches registers the enterprise secrets the windows controller reconciles on.
@@ -142,7 +145,7 @@ func windowsEnterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
 	tls := windowsData(rc).prometheusServerTLS
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", nodeReporterPort(rc.FelixConfiguration))},
+		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", installation.NodeReporterPort(rc.FelixConfiguration))},
 		{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -200,7 +203,7 @@ func mountWindowsPrometheusTLS(rc render.RenderContext, ds *appsv1.DaemonSet) {
 // windowsNodeMetricsService builds the enterprise-only calico-node-metrics-windows
 // Service.
 func windowsNodeMetricsService(rc render.RenderContext) *corev1.Service {
-	reporterPort := nodeReporterPort(rc.FelixConfiguration)
+	reporterPort := installation.NodeReporterPort(rc.FelixConfiguration)
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

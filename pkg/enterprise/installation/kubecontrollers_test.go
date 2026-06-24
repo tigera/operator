@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise_test
+package installation_test
 
 import (
 	"context"
@@ -36,7 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/enterprise"
+	"github.com/tigera/operator/pkg/enterprise/installation"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
@@ -202,17 +202,17 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		Expect(c.Env).To(ContainElement(corev1.EnvVar{
 			Name: "WASM_IMAGE", Value: "test-reg/tigera/envoy-proxy:" + components.ComponentGatewayAPIEnvoyProxy.Version,
 		}))
-		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: enterprise.WASMPullSecretName}))
-		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WASM_CA_CERT", Value: enterprise.WASMCACertName}))
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: installation.WASMPullSecretName}))
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WASM_CA_CERT", Value: installation.WASMCACertName}))
 		Expect(c.Env).To(ContainElement(HaveField("Name", "WAF_WEBHOOK_CERT_DIR")))
 		Expect(c.Ports).To(ContainElement(corev1.ContainerPort{Name: "waf-webhook", ContainerPort: int32(9443), Protocol: corev1.ProtocolTCP}))
 
 		// The webhook surface, the wasm pull secret, and the wasm CA bundle are rendered.
 		_, ok = extensions.FindObject[*corev1.Service](objs, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeTrue())
-		_, ok = extensions.FindObject[*corev1.Secret](objs, enterprise.WASMPullSecretName)
+		_, ok = extensions.FindObject[*corev1.Secret](objs, installation.WASMPullSecretName)
 		Expect(ok).To(BeTrue())
-		_, ok = extensions.FindObject[*corev1.ConfigMap](objs, enterprise.WASMCACertName)
+		_, ok = extensions.FindObject[*corev1.ConfigMap](objs, installation.WASMCACertName)
 		Expect(ok).To(BeTrue())
 	})
 

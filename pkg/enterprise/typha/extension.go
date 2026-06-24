@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise
+package typha
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
@@ -24,7 +24,8 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-func registerTypha(v *extensions.Variant) {
+// Register wires the typha extension into the variant.
+func Register(v *extensions.Variant) {
 	v.Modify(render.ComponentNameTypha, modifyTypha)
 }
 

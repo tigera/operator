@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package enterprise_test
+package windows_test
 
 import (
 	"testing"
@@ -28,7 +28,7 @@ import (
 // immutable once built and the specs only read it, so a single instance is safe.
 var ext *extensions.Set = enterprise.New()
 
-func TestEnterprise(t *testing.T) {
+func TestWindows(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "pkg/enterprise Suite")
+	RunSpecs(t, "pkg/enterprise/windows Suite")
 }

@@ -16,7 +16,11 @@ package enterprise
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/enterprise/apiserver"
+	"github.com/tigera/operator/pkg/enterprise/guardian"
+	"github.com/tigera/operator/pkg/enterprise/installation"
+	"github.com/tigera/operator/pkg/enterprise/typha"
+	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
@@ -24,25 +28,22 @@ import (
 // controller extension, every component modifier, and the image overrides. The
 // operator is handed this Set at startup (the core operator is handed none).
 // After the monorepo split this is what calico-private's main will construct
-// instead.
+// instead. Each per-component subpackage registers its own controller hook and
+// modifiers through its Register func.
 func New() *extensions.Set {
 	s := extensions.NewSet()
 
 	ent := s.Variant(operatorv1.CalicoEnterprise)
-	ent.Controller(contexts.InstallationController, coreControllerExtension{})
-	ent.Controller(contexts.WindowsController, windowsControllerExtension{})
-	ent.Controller(contexts.APIServerController, apiServerControllerExtension{})
-	registerTypha(ent)
-	registerNode(ent)
-	registerWindows(ent)
-	registerGuardian(ent)
-	registerAPIServer(ent)
-	registerKubeControllers(ent)
+	typha.Register(ent)
+	installation.Register(ent)
+	windows.Register(ent)
+	guardian.Register(ent)
+	apiserver.Register(ent)
 
 	// When the enterprise operator manages a Calico installation, clean up the
 	// Enterprise objects left behind by a prior Enterprise installation.
 	cal := s.Variant(operatorv1.Calico)
-	registerAPIServerCleanup(cal)
+	apiserver.RegisterCalicoCleanup(cal)
 
 	return s
 }

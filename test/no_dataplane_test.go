@@ -124,7 +124,11 @@ var _ = Describe("Dataplane-disabled installation FV tests", Label("no-dataplane
 	}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist)
+		// Register the controllers with the dataplane disabled so the no-dataplane controller set
+		// is used and the Installation controller does not reboot the operator (os.Exit) on a
+		// startup-vs-runtime dataplane-mode mismatch when the dataplane-disabled Installation is
+		// created below.
+		c, shutdownContext, cancel, mgr = setupManagerWithDataplane(ManageCRDsDisable, SingleTenant, EnterpriseCRDsExist, DataplaneDisabled)
 
 		By("Verifying the cluster has a working third-party CNI")
 		// CoreDNS can only become ready if pod networking works without Calico; this fails

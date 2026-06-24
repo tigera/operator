@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package installation_test
 
 import (
 	"context"
@@ -41,6 +41,29 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
+
+// getTyphaNodeTLS builds the node/typha TLS bundle the node render expects.
+func getTyphaNodeTLS(cli client.Client, certificateManager certificatemanager.CertificateManager) *render.TyphaNodeTLS {
+	nodeKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+	Expect(err).NotTo(HaveOccurred())
+
+	typhaKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+	Expect(err).NotTo(HaveOccurred())
+
+	typhaNonClusterHostKeyPair, err := certificateManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName+render.TyphaNonClusterHostSuffix, common.OperatorNamespace(), []string{render.FelixCommonName + render.TyphaNonClusterHostSuffix})
+	Expect(err).NotTo(HaveOccurred())
+
+	trustedBundle := certificateManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair)
+
+	return &render.TyphaNodeTLS{
+		TrustedBundle:             trustedBundle,
+		TyphaSecret:               typhaKeyPair,
+		TyphaSecretNonClusterHost: typhaNonClusterHostKeyPair,
+		TyphaCommonName:           render.TyphaCommonName,
+		NodeSecret:                nodeKeyPair,
+		NodeCommonName:            render.FelixCommonName,
+	}
+}
 
 // These tests run the real node/typha render output through the registered
 // enterprise modifiers. The render suite registers the enterprise extensions in

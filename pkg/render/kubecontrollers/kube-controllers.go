@@ -714,12 +714,6 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 	rules := render.RBACManagementEscalationRules()
 	return append(rules,
 		rbacv1.PolicyRule{
-			APIGroups:     []string{""},
-			Resources:     []string{"configmaps"},
-			ResourceNames: []string{"tigera-known-oidc-users"},
-			Verbs:         []string{"get", "list", "watch"},
-		},
-		rbacv1.PolicyRule{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"compliances"},
 			Verbs:     []string{"get", "list"},

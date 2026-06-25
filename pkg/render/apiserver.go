@@ -1783,6 +1783,19 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get"},
 		},
+		// Allow the user to view WAF policies, plugins, and validation policies.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		},
 		{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments"},
@@ -1985,6 +1998,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
+		},
+		// Allow the user to manage WAF policies, plugins, and validation policies.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		// Allow the user to read deployments to view WAF configuration.
 		{

@@ -77,6 +77,11 @@ const (
 	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
 	ManagerPortName              = "https"
 
+	// RBACManagementLDAPConfigSecretName is the RBAC-UI LDAP directory-sync config
+	// Secret (calico-system); its presence gates the manager's LDAP egress policy.
+	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
+	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
+
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
 	VoltronLinseedTLS              = "calico-voltron-linseed-tls"
@@ -214,6 +219,10 @@ type ManagerConfiguration struct {
 	Manager        *operatorv1.Manager
 	Authentication *operatorv1.Authentication
 	KibanaEnabled  bool
+
+	// RBACManagementLDAPConfigured reports whether the RBAC-UI LDAP config Secret
+	// (RBACManagementLDAPConfigSecretName) is present. It gates the LDAP egress policy.
+	RBACManagementLDAPConfigured bool
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
 	// Passed to Voltron so it can identify the correct CA issuer public key.
@@ -1243,7 +1252,7 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
-					ResourceNames: []string{"tigera-idp-ldap-config"},
+					ResourceNames: []string{RBACManagementLDAPConfigSecretName},
 					Verbs:         []string{"get", "list", "watch", "update", "delete"},
 				},
 				{
@@ -1343,10 +1352,11 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if c.cfg.Manager.RBACManagementEnabled() && c.cfg.Authentication != nil && c.cfg.Authentication.Spec.OIDC != nil {
-		// LDAP/AD egress (389, 636) for OIDC group lookup. Destination is
-		// unscoped since the directory address is customer-configured;
-		// narrowing it is tracked in EV-6665.
+	if c.cfg.Manager.RBACManagementEnabled() && c.cfg.RBACManagementLDAPConfigured {
+		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, which dials the
+		// directory from this pod. Gated on the LDAP config Secret, whose presence
+		// marks the sync as configured. Destination unscoped (customer-configured);
+		// scoping to the LDAP host is tracked in EV-6665.
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,

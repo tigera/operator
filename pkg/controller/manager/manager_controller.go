@@ -95,6 +95,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return err
 	}
 
+	// Re-render when the RBAC-UI LDAP config Secret appears/disappears: it gates
+	// the manager's LDAP egress policy.
+	if err := utils.AddSecretsWatch(c, render.RBACManagementLDAPConfigSecretName, common.CalicoNamespace); err != nil {
+		return err
+	}
+
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
 	policiesToWatch := []types.NamespacedName{
@@ -675,36 +681,45 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Presence of the LDAP config Secret (always calico-system; the feature is
+	// zero-tenant) gates the manager's LDAP egress policy below.
+	ldapConfigSecret, err := utils.GetSecret(ctx, r.client, render.RBACManagementLDAPConfigSecretName, common.CalicoNamespace)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading RBAC management LDAP config secret", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
-		VoltronRouteConfig:         routeConfig,
-		KeyValidatorConfig:         keyValidatorConfig,
-		TrustedCertBundle:          trustedBundle,
-		TLSKeyPair:                 tlsSecret,
-		VoltronLinseedKeyPair:      linseedVoltronServerCert,
-		PullSecrets:                pullSecrets,
-		OpenShift:                  r.opts.DetectedProvider.IsOpenShift(),
-		Installation:               installationSpec,
-		ManagementCluster:          managementCluster,
-		NonClusterHost:             nonclusterhost,
-		TunnelServerCert:           tunnelServerCert,
-		AdditionalTunnelServerCert: additionalTunnelServerCert,
-		InternalTLSKeyPair:         internalTrafficSecret,
-		ClusterDomain:              r.opts.ClusterDomain,
-		ESLicenseType:              elasticLicenseType,
-		Replicas:                   replicas,
-		Compliance:                 complianceCR,
-		ComplianceLicenseActive:    complianceLicenseFeatureActive,
-		ComplianceNamespace:        utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
-		Namespace:                  helper.InstallNamespace(),
-		TruthNamespace:             helper.TruthNamespace(),
-		Tenant:                     tenant,
-		ExternalElastic:            r.opts.ElasticExternal,
-		BindingNamespaces:          namespaces,
-		OSSTenantNamespaces:        ossTenantNamespaces,
-		Manager:                    instance,
-		Authentication:             authenticationCR,
-		KibanaEnabled:              kibanaEnabled,
-		CACertCommonName:           certificateManager.CACertCommonName(),
+		VoltronRouteConfig:           routeConfig,
+		KeyValidatorConfig:           keyValidatorConfig,
+		TrustedCertBundle:            trustedBundle,
+		TLSKeyPair:                   tlsSecret,
+		VoltronLinseedKeyPair:        linseedVoltronServerCert,
+		PullSecrets:                  pullSecrets,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+		Installation:                 installationSpec,
+		ManagementCluster:            managementCluster,
+		NonClusterHost:               nonclusterhost,
+		TunnelServerCert:             tunnelServerCert,
+		AdditionalTunnelServerCert:   additionalTunnelServerCert,
+		InternalTLSKeyPair:           internalTrafficSecret,
+		ClusterDomain:                r.opts.ClusterDomain,
+		ESLicenseType:                elasticLicenseType,
+		Replicas:                     replicas,
+		Compliance:                   complianceCR,
+		ComplianceLicenseActive:      complianceLicenseFeatureActive,
+		ComplianceNamespace:          utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
+		Namespace:                    helper.InstallNamespace(),
+		TruthNamespace:               helper.TruthNamespace(),
+		Tenant:                       tenant,
+		ExternalElastic:              r.opts.ElasticExternal,
+		BindingNamespaces:            namespaces,
+		OSSTenantNamespaces:          ossTenantNamespaces,
+		Manager:                      instance,
+		Authentication:               authenticationCR,
+		KibanaEnabled:                kibanaEnabled,
+		RBACManagementLDAPConfigured: ldapConfigSecret != nil,
+		CACertCommonName:             certificateManager.CACertCommonName(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.

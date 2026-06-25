@@ -169,6 +169,7 @@ type nodeComponent struct {
 	// Calculated internal fields based on the given information.
 	calicoImage      string
 	cniImage         string
+	cniPluginsImage  string
 	flexvolImage     string
 	nodeImage        string
 	useCombinedImage bool
@@ -193,6 +194,9 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.cniImage = c.calicoImage
 		c.flexvolImage = c.calicoImage
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
+		if c.installUpstreamPlugins() {
+			c.cniPluginsImage = appendIfErr(components.GetReference(components.ComponentTigeraCNIPlugins, reg, path, prefix, is))
+		}
 	default:
 		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
 		c.cniImage = appendIfErr(components.GetReference(components.ComponentCalicoCNI, reg, path, prefix, is))
@@ -1069,6 +1073,11 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 	}
 
 	if c.cfg.Installation.CNI.Type == operatorv1.PluginCalico {
+		if c.installUpstreamPlugins() {
+			// cniPluginsContainer must run before cniContainer: it populates the
+			// staging volume that install-cni reads from at /opt/cni/bin.
+			ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniPluginsContainer())
+		}
 		ds.Spec.Template.Spec.InitContainers = append(ds.Spec.Template.Spec.InitContainers, c.cniContainer())
 	}
 
@@ -1127,6 +1136,11 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 		volumes = append(volumes, corev1.Volume{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: *c.cfg.Installation.CNI.BinDir, Type: &dirOrCreate}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: *c.cfg.Installation.CNI.ConfDir}}})
 		volumes = append(volumes, corev1.Volume{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}})
+	}
+	if c.installUpstreamPlugins() {
+		// Staging volume populated by the cni-plugins init container and read
+		// by install-cni when copying upstream plugins onto the host.
+		volumes = append(volumes, corev1.Volume{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}})
 	}
 
 	// Override with Tigera-specific config.
@@ -1212,6 +1226,11 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 		{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 		{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 	}
+	if c.installUpstreamPlugins() {
+		// Upstream plugin binaries staged by the cni-plugins init container.
+		// install.go walks /opt/cni/bin to copy them onto the host.
+		cniVolumeMounts = append(cniVolumeMounts, corev1.VolumeMount{MountPath: "/opt/cni/bin", Name: "cni-plugins-stage"})
+	}
 
 	cniCommand := []string{"/opt/cni/bin/install"}
 	if c.useCombinedImage {
@@ -1225,6 +1244,41 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 		Env:             cniEnv,
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts:    cniVolumeMounts,
+	}
+}
+
+// installUpstreamPlugins reports whether the operator should stage the upstream
+// CNI plugin binaries onto the host. Gated on CNI.Type == Calico and the
+// CNI.InstallMode override (defaults to All).
+func (c *nodeComponent) installUpstreamPlugins() bool {
+	if c.cfg.Installation.CNI == nil || c.cfg.Installation.CNI.Type != operatorv1.PluginCalico {
+		return false
+	}
+	// On this release branch only Calico Enterprise (v3.24) ships the upstream plugins as a
+	// separate image. Calico OSS v3.32 still bakes them into its cni image, so OSS installs
+	// have nothing to stage and no third-party-cni-plugins image to pull.
+	if !c.cfg.Installation.Variant.IsEnterprise() {
+		return false
+	}
+	if c.cfg.Installation.CNI.InstallMode != nil && *c.cfg.Installation.CNI.InstallMode == operatorv1.CNIInstallModeCalicoOnly {
+		return false
+	}
+	return true
+}
+
+// cniPluginsContainer creates the init container that stages upstream CNI
+// plugin binaries (host-local, portmap, loopback, tuning, flannel) into a
+// shared volume read by the install-cni init container. The plugins ship as
+// a separate image rather than baked into the combined calico image so the
+// main image stays small.
+func (c *nodeComponent) cniPluginsContainer() corev1.Container {
+	return corev1.Container{
+		Name:            "cni-plugins",
+		Image:           c.cniPluginsImage,
+		SecurityContext: securitycontext.NewRootContext(true),
+		VolumeMounts: []corev1.VolumeMount{
+			{MountPath: "/stage", Name: "cni-plugins-stage"},
+		},
 	}
 }
 

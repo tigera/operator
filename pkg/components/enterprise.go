@@ -212,6 +212,14 @@ var (
 		variant:   enterpriseVariant,
 	}
 
+	ComponentTigeraCNIPlugins = Component{
+		Version:   "release-calient-v3.24-1",
+		Image:     "third-party-cni-plugins",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
 	ComponentGatewayAPIEnvoyGateway = Component{
 		Version:   "release-calient-v3.24-1",
 		Image:     "envoy-gateway",
@@ -288,6 +296,7 @@ var (
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
+		ComponentTigeraCNIPlugins,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,

@@ -61,8 +61,9 @@ type ControllerContext struct {
 	Client             client.Client
 	CertificateManager certificatemanager.CertificateManager
 
-	// MultiTenant reports whether the operator runs in multi-tenant mode. It's a
-	// controller-phase operator mode some extensions gate on (e.g. the API server's
-	// management-cluster tunnel-secret check).
-	MultiTenant bool
+	// Options carries the active variant's computed controller-phase options. The
+	// extension Set fills it before dispatching to a hook (Validate/ExtendContext).
+	// It's opaque so core never names a variant-only option; the variant's hooks
+	// assert it back out. Nil for the core operator.
+	Options any
 }

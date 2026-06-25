@@ -15,11 +15,17 @@
 package enterprise
 
 import (
+	"context"
+
+	"k8s.io/client-go/kubernetes"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/guardian"
 	"github.com/tigera/operator/pkg/enterprise/installation"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/enterprise/typha"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
@@ -33,6 +39,7 @@ import (
 // modifiers through its Register func.
 func New() *extensions.Set {
 	s := extensions.NewSet()
+	s.RegisterOptions(computeOptions)
 
 	ent := s.Variant(operatorv1.CalicoEnterprise)
 	typha.Register(ent)
@@ -48,4 +55,15 @@ func New() *extensions.Set {
 	apiserver.RegisterCalicoCleanup(cal)
 
 	return s
+}
+
+// computeOptions discovers the Calico Enterprise controller-phase options at
+// startup. extensions.Set.ComputeOptions runs it from main; the result rides on
+// each ControllerContext for the enterprise hooks to read.
+func computeOptions(ctx context.Context, cli kubernetes.Interface) (any, error) {
+	multiTenant, err := discovery.MultiTenant(ctx, cli)
+	if err != nil {
+		return nil, err
+	}
+	return eoptions.Options{MultiTenant: multiTenant}, nil
 }

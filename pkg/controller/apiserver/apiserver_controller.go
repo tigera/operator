@@ -308,7 +308,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,
-		MultiTenant:        r.opts.MultiTenant,
 	}
 	if err := r.opts.Extensions.Validate(cc); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)

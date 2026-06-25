@@ -15,6 +15,7 @@
 package apiserver
 
 import (
+	"context"
 	"testing"
 
 	uzap "go.uber.org/zap"
@@ -22,10 +23,12 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 
+	"k8s.io/client-go/kubernetes"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/tigera/operator/pkg/enterprise"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
@@ -34,6 +37,17 @@ import (
 // server, audit logging, Enterprise RBAC). Reconcilers built in these tests put
 // it on their options, mirroring how main wires it in production.
 var testExtensions *extensions.Set = enterprise.New()
+
+// multiTenantExtensions is an enterprise Set whose computed options report
+// multi-tenant mode, for the multi-tenant API server test.
+func multiTenantExtensions() *extensions.Set {
+	s := enterprise.New()
+	s.RegisterOptions(func(context.Context, kubernetes.Interface) (any, error) {
+		return eoptions.Options{MultiTenant: true}, nil
+	})
+	_ = s.ComputeOptions(context.Background(), nil)
+	return s
+}
 
 func TestStatus(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))

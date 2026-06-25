@@ -853,7 +853,7 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:          testExtensions,
+						Extensions:          multiTenantExtensions(),
 						EnterpriseCRDExists: true,
 						DetectedProvider:    operatorv1.ProviderNone,
 						MultiTenant:         true,

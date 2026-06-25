@@ -15,7 +15,10 @@
 package extensions
 
 import (
+	"context"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"k8s.io/client-go/kubernetes"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -39,6 +42,15 @@ import (
 type Set struct {
 	variants map[operatorv1.ProductVariant]*Variant
 	images   *imageoverride.Overrides
+
+	// computeOptions, registered by the extension build, discovers the variant's
+	// controller-phase options at startup. ComputeOptions runs it. The core operator
+	// registers none.
+	computeOptions func(context.Context, kubernetes.Interface) (any, error)
+
+	// options is the result of ComputeOptions, carried onto every ControllerContext
+	// so a hook can read its variant's options.
+	options any
 }
 
 // NewSet returns an empty Set ready to register variant extensions into.
@@ -47,6 +59,27 @@ func NewSet() *Set {
 		variants: map[operatorv1.ProductVariant]*Variant{},
 		images:   imageoverride.New(),
 	}
+}
+
+// RegisterOptions sets the function that computes the variant's controller-phase
+// options. The extension build registers one; the core operator registers none.
+func (s *Set) RegisterOptions(f func(context.Context, kubernetes.Interface) (any, error)) {
+	s.computeOptions = f
+}
+
+// ComputeOptions runs the registered options computer (if any) and stores the
+// result, which Validate and ExtendContext then carry onto the ControllerContext.
+// It's meant to be called once at startup, before any reconcile. Nil-safe.
+func (s *Set) ComputeOptions(ctx context.Context, cli kubernetes.Interface) error {
+	if s == nil || s.computeOptions == nil {
+		return nil
+	}
+	o, err := s.computeOptions(ctx, cli)
+	if err != nil {
+		return err
+	}
+	s.options = o
+	return nil
 }
 
 // Variant returns the extension bundle for v, creating an empty one if needed.
@@ -87,6 +120,9 @@ func (s *Set) Decorate(component render.Component, ctx render.RenderContext) ren
 // Validate runs the cc.Controller extension's validation for the installation's
 // variant, or returns nil when no extension is registered. Nil-safe.
 func (s *Set) Validate(cc contexts.ControllerContext) error {
+	if s != nil {
+		cc.Options = s.options
+	}
 	if cc.Installation == nil {
 		return nil
 	}
@@ -98,6 +134,9 @@ func (s *Set) Validate(cc contexts.ControllerContext) error {
 // the controller to manage, or the context unchanged and no keypairs when no
 // extension is registered. Nil-safe.
 func (s *Set) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+	if s != nil {
+		cc.Options = s.options
+	}
 	if cc.Installation == nil {
 		return cc, nil, nil
 	}

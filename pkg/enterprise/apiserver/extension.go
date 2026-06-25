@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -178,7 +179,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
 	// certificates for managed clusters. The manager controller writes it once
 	// ManagementCluster.Spec.TLS is defaulted; degrade until it exists.
-	if managementCluster != nil && managementCluster.Spec.TLS != nil && !cc.MultiTenant {
+	if managementCluster != nil && managementCluster.Spec.TLS != nil && !eoptions.From(cc).MultiTenant {
 		if _, err := utils.GetSecret(cc.Ctx, cc.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
 			return cc, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
 		}

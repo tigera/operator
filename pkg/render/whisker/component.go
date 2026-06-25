@@ -282,6 +282,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerPolicyName, Namespace: WhiskerNamespace},
 		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),

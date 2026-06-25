@@ -20,6 +20,14 @@ package components
 var (
 	CalicoRelease string = "master"
 
+	ComponentCalicoCNIPlugins = Component{
+		Version:   "master",
+		Image:     "third-party-cni-plugins",
+		Registry:  "",
+		imagePath: "",
+		variant:   calicoVariant,
+	}
+
 	ComponentCalicoCNIWindows = Component{
 		Version:   "master",
 		Image:     "cni-windows",
@@ -30,14 +38,6 @@ var (
 
 	ComponentCalicoNode = Component{
 		Version:   "master",
-		Image:     "node",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoNodeFIPS = Component{
-		Version:   "master-fips",
 		Image:     "node",
 		Registry:  "",
 		imagePath: "",
@@ -124,18 +124,10 @@ var (
 		variant:   calicoVariant,
 	}
 
-	ComponentCalicoFIPS = Component{
-		Version:   "master-fips",
-		Image:     "calico",
-		Registry:  "",
-		imagePath: "",
-		variant:   calicoVariant,
-	}
-
 	CalicoImages = []Component{
+		ComponentCalicoCNIPlugins,
 		ComponentCalicoCNIWindows,
 		ComponentCalicoNode,
-		ComponentCalicoNodeFIPS,
 		ComponentCalicoNodeWindows,
 		ComponentCalicoWhisker,
 		ComponentCalicoEnvoyGateway,
@@ -146,6 +138,5 @@ var (
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
 		ComponentCalico,
-		ComponentCalicoFIPS,
 	}
 )

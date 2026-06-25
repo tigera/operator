@@ -31,7 +31,6 @@ import (
 
 	"github.com/go-logr/logr"
 	configv1 "github.com/openshift/api/config/v1"
-	admissionv1beta1 "k8s.io/api/admissionregistration/v1beta1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	discoveryv1 "k8s.io/api/discovery/v1"
@@ -62,8 +61,10 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -78,6 +79,7 @@ import (
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -213,6 +215,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Watch for changes to KubeControllersConfiguration.
+	// Watch GatewayAPI: spec.extensions.waf.state gates the WAF v3 surface on
+	// calico-kube-controllers.  See design tigera/designs#25 (PMREQ-384) §Gating.
+	if err := c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{}); err != nil {
+		log.V(5).Info("Failed to create GatewayAPI watch", "err", err)
+		return fmt.Errorf("core-controller failed to watch operator GatewayAPI resource: %w", err)
+	}
+
 	err = c.WatchObject(&v3.KubeControllersConfiguration{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch KubeControllersConfiguration resource: %w", err)
@@ -345,6 +354,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		newComponentHandler:  utils.NewComponentHandler,
 		v3CRDs:               opts.UseV3CRDs,
 		kubernetesVersion:    opts.KubernetesVersion,
+		apiDiscovery:         opts.APIDiscovery,
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -403,6 +413,7 @@ type ReconcileInstallation struct {
 	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
 	kubernetesVersion             *common.VersionInfo
+	apiDiscovery                  *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -656,6 +667,10 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
 		instance.Spec.CNI.BinDir = &defaultCNIBinDir
 	}
+	if instance.Spec.CNI.InstallMode == nil {
+		mode := operatorv1.CNIInstallModeAll
+		instance.Spec.CNI.InstallMode = &mode
+	}
 
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
@@ -903,6 +918,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
+	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
+	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
+	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
+	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
 	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
 	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
@@ -931,11 +953,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
+	if err = r.updateValidatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -1002,7 +1024,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
 		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
 		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := utils.RequiresTigeraSecure(r.clientset)
+		b, err := discovery.RequiresTigeraSecure(r.clientset)
 		if b {
 			log.Info("Rebooting to enable TigeraSecure controllers")
 			os.Exit(0)
@@ -1352,18 +1374,57 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	}
 
+	// Read the GatewayAPI CR (if present) to decide whether to render the WAF
+	// v3 (Gateway API add-on) surface — env vars, RBAC, applicationlayer
+	// reconciler, and the in-process admission webhook — on
+	// calico-kube-controllers. Default-off: if no GatewayAPI CR exists or
+	// spec.extensions.waf.state != Enabled, the WAF surface is not rendered.
+	// See design tigera/designs#25 (PMREQ-384) §Gating.
+	wafGatewayExtensionEnabled := false
+	if gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client); err == nil {
+		wafGatewayExtensionEnabled = gatewayAPI.Spec.IsWAFGatewayExtensionEnabled()
+	} else if !apierrors.IsNotFound(err) {
+		// Mirrors the GatewayAPI controller's handling: a read error or a
+		// duplicate default/tigera-secure pair degrades rather than guessing.
+		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// When the WAF v3 surface is enabled, issue the serving cert for the
+	// in-process WAF admission webhook (hosted by calico-kube-controllers,
+	// fronted by the tigera-waf-webhook Service). It is materialized into
+	// calico-system alongside the other kube-controllers certs below and mounted
+	// into the Pod by the kube-controllers render.
+	var wafWebhookTLS certificatemanagement.KeyPairInterface
+	if wafGatewayExtensionEnabled {
+		wafWebhookTLS, err = certificateManager.GetOrCreateKeyPair(
+			r.client,
+			applicationlayer.WAFWebhookServerTLSSecretName,
+			common.OperatorNamespace(),
+			dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, r.clusterDomain))
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating WAF admission webhook TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	keyPairOptions := []rcertificatemanagement.KeyPairOption{
+		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
+		rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
+		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
+		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
+		rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
+		// Nil when the WAF v3 surface is disabled; the certificate-management
+		// render skips nil key pairs.
+		rcertificatemanagement.NewKeyPairOption(wafWebhookTLS, true, true),
+	}
+
 	components = append(components,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       common.CalicoNamespace,
 			ServiceAccounts: []string{render.CalicoNodeObjectName, render.TyphaServiceAccountName, kubecontrollers.KubeControllerServiceAccount},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.NodeSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(nodePrometheusTLS, true, true),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
-				rcertificatemanagement.NewKeyPairOption(kubeControllerTLS, true, true),
-			},
-			TrustedBundle: typhaNodeTLS.TrustedBundle,
+			KeyPairOptions:  keyPairOptions,
+			TrustedBundle:   typhaNodeTLS.TrustedBundle,
 		}))
 
 	// Check if non-cluster host feature is enabled.
@@ -1597,6 +1658,32 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.CSI(&csiCfg))
 
 	// Build a configuration for rendering calico/kube-controllers.
+	// Provision a dedicated WAF wasm pull secret so the WAF reconciler
+	// replicates it into tenant namespaces without clashing with the
+	// operator-managed tigera-pull-secret the GatewayAPI render also copies
+	// there (EV-6386). The EnvoyExtensionPolicy image source takes a single
+	// pullSecretRef, so the registry auths of all Installation pull secrets
+	// are merged into it rather than picking one.
+	var wasmPullSecret *corev1.Secret
+	if wafGatewayExtensionEnabled && len(pullSecrets) > 0 {
+		var skipped []string
+		wasmPullSecret, skipped = kubecontrollers.MergeWAFPullSecret(pullSecrets)
+		if len(skipped) > 0 {
+			reqLogger.Info("Skipped unparseable imagePullSecrets when building the WAF wasm pull secret", "skipped", skipped)
+		}
+	}
+	// Provision the dedicated WAF wasm CA-bundle ConfigMap as a renamed copy of
+	// the trusted CA bundle, so the WAF reconciler replicates it into tenant
+	// namespaces for the Coraza wasm OCI registry TLS check without clashing with
+	// the operator-managed tigera-ca-bundle the GatewayAPI render also copies
+	// there (EV-6386). The dedicated source was previously a TODO; the full
+	// TrustedBundle (not the RO interface the kube-controllers render sees) is
+	// available here, so build it in the core controller.
+	var wasmCACert *corev1.ConfigMap
+	if wafGatewayExtensionEnabled {
+		wasmCACert = typhaNodeTLS.TrustedBundle.ConfigMap(common.CalicoNamespace)
+		wasmCACert.Name = kubecontrollers.WASMCACertName
+	}
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
 		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
@@ -1610,6 +1697,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
+		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
+		WAFWebhookServerTLS:         wafWebhookTLS,
+		WASMPullSecret:              wasmPullSecret,
+		WASMCACert:                  wasmCACert,
+		// The webhook Service + ValidatingWebhookConfiguration are rendered by
+		// the kube-controllers component (and deleted when the WAF extension is
+		// disabled); the caBundle is the operator CA that issued the serving
+		// cert above.
+		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
@@ -2270,54 +2366,86 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 	if !r.manageCRDs || !r.v3CRDs {
 		return nil
 	}
-	if !r.kubernetesVersion.ProvidesMutatingAdmissionPolicyV1Beta1() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes version does not support MutatingAdmissionPolicy v1beta1 (requires v1.32+); policy defaulting will not be available", nil, log)
+
+	// MutatingAdmissionPolicy served version was discovered once at startup (v1 was promoted to GA
+	// in k8s 1.36 and v1beta1 (introduced in 1.32) is scheduled for removal in 1.37).
+	mapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy)
+	if mapAPIVersion == "" {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Kubernetes cluster does not serve MutatingAdmissionPolicy (requires v1.32+); policy defaulting will not be available", nil, log)
 		return nil
 	}
 
-	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs)
+	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
+	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)
+		return err
+	}
 
-	// Build a set of desired resource names for comparison.
-	desiredMAPs := map[string]bool{}
-	desiredMAPBs := map[string]bool{}
+	return r.syncManagedAdmissionPolicies(ctx, install, log, desired, existingMAPs, existingMAPBs, admission.IsPolicyKind, admission.IsBindingKind, "Error syncing MutatingAdmissionPolicy resources")
+}
+
+func (r *ReconcileInstallation) updateValidatingAdmissionPolicies(ctx context.Context, install *operatorv1.Installation, log logr.Logger) error {
+	if !r.manageCRDs || !r.v3CRDs {
+		return nil
+	}
+
+	// ValidatingAdmissionPolicy reached GA (v1) well before MutatingAdmissionPolicy, so it has its own
+	// served version and is reconciled independently of whether the cluster serves MAPs. If the cluster
+	// doesn't serve it at all there's nothing to do, so skip rather than degrade.
+	vapAPIVersion := r.apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy)
+	if vapAPIVersion == "" {
+		log.Info("Kubernetes cluster does not serve ValidatingAdmissionPolicy, skipping")
+		return nil
+	}
+
+	desired := admission.GetValidatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, vapAPIVersion)
+	existingVAPs, existingVAPBs, err := admission.ListManagedValidating(ctx, r.client, vapAPIVersion)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed ValidatingAdmissionPolicy resources", err, log)
+		return err
+	}
+
+	return r.syncManagedAdmissionPolicies(ctx, install, log, desired, existingVAPs, existingVAPBs, admission.IsValidatingPolicyKind, admission.IsValidatingBindingKind, "Error syncing ValidatingAdmissionPolicy resources")
+}
+
+// syncManagedAdmissionPolicies creates or updates the desired admission policies and bindings and
+// deletes any operator-managed ones that are no longer desired, in a single pass. isPolicy/isBinding
+// bucket the desired objects by kind so stale existing resources can be identified by name.
+func (r *ReconcileInstallation) syncManagedAdmissionPolicies(
+	ctx context.Context,
+	install *operatorv1.Installation,
+	log logr.Logger,
+	desired, existingPolicies, existingBindings []client.Object,
+	isPolicy, isBinding func(client.Object) bool,
+	degradeMsg string,
+) error {
+	desiredPolicies := map[string]bool{}
+	desiredBindings := map[string]bool{}
 	for _, obj := range desired {
-		switch obj.(type) {
-		case *admissionv1beta1.MutatingAdmissionPolicy:
-			desiredMAPs[obj.GetName()] = true
-		case *admissionv1beta1.MutatingAdmissionPolicyBinding:
-			desiredMAPBs[obj.GetName()] = true
+		switch {
+		case isPolicy(obj):
+			desiredPolicies[obj.GetName()] = true
+		case isBinding(obj):
+			desiredBindings[obj.GetName()] = true
 		}
 	}
 
-	// Find stale MAPs that are labeled as managed but no longer desired.
-	existingMAPs := &admissionv1beta1.MutatingAdmissionPolicyList{}
-	if err := r.client.List(ctx, existingMAPs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicies", err, log)
-		return err
-	}
 	var toDelete []client.Object
-	for i := range existingMAPs.Items {
-		if !desiredMAPs[existingMAPs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPs.Items[i])
+	for _, obj := range existingPolicies {
+		if !desiredPolicies[obj.GetName()] {
+			toDelete = append(toDelete, obj)
+		}
+	}
+	for _, obj := range existingBindings {
+		if !desiredBindings[obj.GetName()] {
+			toDelete = append(toDelete, obj)
 		}
 	}
 
-	// Find stale MAPBs that are labeled as managed but no longer desired.
-	existingMAPBs := &admissionv1beta1.MutatingAdmissionPolicyBindingList{}
-	if err := r.client.List(ctx, existingMAPBs, client.MatchingLabels{admission.ManagedMAPLabel: admission.ManagedMAPLabelValue}); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing MutatingAdmissionPolicyBindings", err, log)
-		return err
-	}
-	for i := range existingMAPBs.Items {
-		if !desiredMAPBs[existingMAPBs.Items[i].Name] {
-			toDelete = append(toDelete, &existingMAPBs.Items[i])
-		}
-	}
-
-	// Create or update desired MAPs/MAPBs and delete any stale ones in a single pass.
 	handler := r.newComponentHandler(log, r.client, r.scheme, install)
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.NewPassthrough(desired, toDelete), nil); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error syncing MutatingAdmissionPolicy resources", err, log)
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, degradeMsg, err, log)
 		return err
 	}
 

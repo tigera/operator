@@ -30,10 +30,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -47,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Gateway API controller tests", func() {
@@ -104,15 +107,18 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 
 		fakeComponentHandlers = nil
 		r = &ReconcileGatewayAPI{
 			client:              c,
 			scheme:              scheme,
 			status:              mockStatus,
+			tierWatchReady:      &utils.ReadyFlag{},
 			newComponentHandler: FakeComponentHandler,
 			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },
+			watchGateways:       func() error { return nil },
 		}
 	})
 
@@ -697,6 +703,77 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).ToNot(Equal(DefaultPolicySyncPrefix))
 		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal("/dev/null"))
+	})
+
+	// Legacy tigera-gateway teardown (remove with the teardown gate once 3.x upgrades are unsupported).
+	It("deletes only GatewayClass/GatewayAPI-owned legacy resources in tigera-gateway, leaving the GatewayClass and unrelated resources", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: gatewayapi.GatewayClassName}})).NotTo(HaveOccurred())
+
+		By("seeding the legacy controller + a class-owned proxy (Deployment/Service/SA/ConfigMap)")
+		Expect(c.Create(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "envoy-gateway"}})).NotTo(HaveOccurred())
+		ownedByClass := []metav1.OwnerReference{{APIVersion: "gateway.networking.k8s.io/v1", Kind: "GatewayClass", Name: gatewayapi.GatewayClassName, UID: "abc"}}
+		Expect(c.Create(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234", OwnerReferences: ownedByClass}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234", OwnerReferences: ownedByClass}})).NotTo(HaveOccurred())
+
+		By("seeding an unrelated, unowned ServiceAccount + ConfigMap a user might have placed there")
+		Expect(c.Create(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "user-sa"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "user-config"}})).NotTo(HaveOccurred())
+
+		By("first reconcile: deletes the controller alone (so it can't re-create proxies), keeps the proxy")
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gateway"}, &appsv1.Deployment{}))).To(BeTrue())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234"}, &appsv1.Deployment{})).NotTo(HaveOccurred())
+
+		By("second reconcile: controller gone, so the orphaned class-owned proxy resources are deleted")
+		result, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234"}, &appsv1.Deployment{}))).To(BeTrue())
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234"}, &corev1.ServiceAccount{}))).To(BeTrue())
+
+		By("leaving unrelated unowned resources and the GatewayClass untouched")
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-sa"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-config"}, &corev1.ConfigMap{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, &gapi.GatewayClass{})).NotTo(HaveOccurred())
+	})
+
+	It("writes per-namespace Gateway resources owned by the namespace's Gateways (Enterprise)", func() {
+		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
+		Expect(err).NotTo(HaveOccurred())
+		pullSecrets := []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}}
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw2", UID: "u2"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "other-ns", Name: "gw3", UID: "u3"}, Spec: gapi.GatewaySpec{GatewayClassName: "not-ours"}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: "gw4", UID: "u4"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+		}
+		Expect(r.reconcileGatewayNamespaceResources(ctx, bundle, pullSecrets, true, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+
+		By("creating the bundle + WAF SA/RoleBindings/pull-secret in app-ns, owned by both Gateways")
+		ownerNames := func(o client.Object) []string {
+			var n []string
+			for _, ref := range o.GetOwnerReferences() {
+				if ref.Kind == "Gateway" {
+					n = append(n, ref.Name)
+				}
+			}
+			return n
+		}
+		cm := &corev1.ConfigMap{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: certificatemanagement.TrustedCertConfigMapName}, cm)).NotTo(HaveOccurred())
+		Expect(ownerNames(cm)).To(ConsistOf("gw1", "gw2"))
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "waf-http-filter"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "waf-http-filter-gateway-resources"}, &rbacv1.RoleBinding{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-operator-secrets"}, &rbacv1.RoleBinding{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-pull-secret"}, &corev1.Secret{})).NotTo(HaveOccurred())
+
+		By("skipping namespaces whose Gateway is not ours, and reserved namespaces")
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "other-ns", Name: certificatemanagement.TrustedCertConfigMapName}, &corev1.ConfigMap{}))).To(BeTrue())
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
 	})
 })
 

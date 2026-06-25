@@ -1679,6 +1679,12 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"packetcaptures"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
+		// Allow the user to view Networks.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 		// Additional "list" requests required to view flows.
 		{
 			APIGroups: []string{""},
@@ -1777,6 +1783,19 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get"},
 		},
+		// Allow the user to view WAF policies, plugins, and validation policies.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		},
 		{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments"},
@@ -1874,6 +1893,12 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
+		},
+		// Allow the user to CRUD Networks.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		// Additional "list" requests that the Tigera Secure manager needs
 		{
@@ -1974,6 +1999,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
+		// Allow the user to manage WAF policies, plugins, and validation policies.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		},
 		// Allow the user to read deployments to view WAF configuration.
 		{
 			APIGroups: []string{"apps"},
@@ -2040,10 +2078,9 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	// kube-apiserver RBAC.
 	if !c.cfg.RequiresAggregationServer {
 		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettings"},
-			Verbs:         []string{"create", "update", "delete", "patch"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
 		})
 	}
 

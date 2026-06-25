@@ -21,7 +21,7 @@ OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/d
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.20.2
+HELM3_VERSION = v3.21.1
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -101,8 +101,8 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.2-llvm20.1.8-k8s1.35.4
-CALICO_BASE_VER ?= ubi9-1776708455
+GO_BUILD_VER?=1.26.4-llvm21.1.8-k8s1.36.2
+CALICO_BASE_VER ?= ubi9-1781568165
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -247,22 +247,14 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.2
-ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
-ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
-ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
+ENVOY_GATEWAY_VERSION ?= v1.8.0
+ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
-$(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
-	echo "---" > $@
-	echo "apiVersion: v1" >> $@
-	echo "kind: Namespace" >> $@
-	echo "metadata:" >> $@
-	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
-	$(HELM_BUILDARCH_BINARY) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+$(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
+	$(HELM_BUILDARCH_BINARY) pull $(ENVOY_GATEWAY_HELM_CHART) \
 		--version $(ENVOY_GATEWAY_VERSION) \
-		-n $(ENVOY_GATEWAY_NAMESPACE) \
-		--include-crds \
-	>> $@
+		--destination pkg/render/gatewayapi/
+	@mv pkg/render/gatewayapi/gateway-helm-$(ENVOY_GATEWAY_VERSION).tgz $@
 
 $(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
@@ -276,7 +268,7 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 
 
 build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
@@ -339,7 +331,7 @@ GINKGO_FOCUS?=.*
 ENVTEST_K8S_VERSION?=1.34.x
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
@@ -348,7 +340,7 @@ ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
@@ -420,6 +412,7 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/calico/policy.networking.k8s.io/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/v1.crd.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/policy.networking.k8s.io/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/applicationlayer.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
@@ -642,6 +635,7 @@ define prep_local_crds
 	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/policy.networking.k8s.io/
+	mkdir -p pkg/imports/crds/$(product)/applicationlayer.projectcalico.org/
 	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
@@ -670,6 +664,11 @@ define copy_k8s_policy_crds
     $(eval product := $(1))
 	@mv pkg/imports/crds/$(product)/v1.crd.projectcalico.org/policy.networking.k8s.io_* pkg/imports/crds/$(product)/policy.networking.k8s.io/ 2>/dev/null; true
 	@echo "Moved $(product) K8s policy CRDs to dedicated directory"
+endef
+define copy_applicationlayer_crds
+    $(eval product := $(1))
+	@mv pkg/imports/crds/$(product)/v3.projectcalico.org/applicationlayer.projectcalico.org_* pkg/imports/crds/$(product)/applicationlayer.projectcalico.org/ 2>/dev/null; true
+	@echo "Moved $(product) ApplicationLayer CRDs to dedicated directory"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
@@ -721,6 +720,7 @@ update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_k8s_policy_crds,"enterprise")
+	$(call copy_applicationlayer_crds,"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
@@ -942,9 +942,15 @@ hooks_installed:=$(shell ./install-git-hooks)
 install-git-hooks:
 	./install-git-hooks
 
+GIT_COMMON_DIR := $(realpath $(shell git rev-parse --git-common-dir 2>/dev/null))
+ifneq ($(GIT_COMMON_DIR),$(realpath $(CURDIR)/.git))
+# Handle worktrees where .git is a file - we need to get the actual location
+WORKTREE_GIT_MOUNT := -v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):rw
+endif
+
 .PHONY: pre-commit
 pre-commit:
-	$(CONTAINERIZED) $(foreach ALTERNATE,$(shell cat $(shell git rev-parse --git-dir)/objects/info/alternates 2>/dev/null),-v $(ALTERNATE):$(ALTERNATE):ro) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+	$(CONTAINERIZED) $(WORKTREE_GIT_MOUNT) $(foreach ALTERNATE,$(shell cat $(GIT_COMMON_DIR)/objects/info/alternates 2>/dev/null),-v $(ALTERNATE):$(ALTERNATE):ro) $(CALICO_BUILD) git-hooks/pre-commit-in-container
 
 # var-set-% checks if there is a non empty variable for the value describe by %. If FAIL_NOT_SET is set, then var-set-%
 # fails with an error message. If FAIL_NOT_SET is not set, then var-set-% appends a 1 to VARSET if the variable isn't
@@ -1026,7 +1032,6 @@ gen-enterprise-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-enterprise.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(enterprise_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1045,7 +1050,6 @@ gen-calico-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-calico.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(calico_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1054,7 +1058,7 @@ gen-calico-imageset: $(BUILD_DIR)
 	done
 ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
 	@docker run $(OPERATOR_IMAGE) --print-images=list | \
-	  grep -v -e "Failed to read" -e fips | \
+	  grep -v -e "Failed to read" | \
 	  grep -e 'tigera/key-cert-provisioner' | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \

@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -209,6 +208,12 @@ type InstallationSpec struct {
 	// +optional
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
+	// TyphaPodDisruptionBudget configures the PodDisruptionBudget for the calico-typha
+	// Deployment. Fields left unset fall back to the operator's defaults. The PDB's
+	// selector is managed by the operator and cannot be overridden.
+	// +optional
+	TyphaPodDisruptionBudget *PodDisruptionBudgetOverride `json:"typhaPodDisruptionBudget,omitempty"`
+
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
@@ -216,9 +221,8 @@ type InstallationSpec struct {
 	// CalicoNodeWindowsDaemonSet configures the calico-node-windows DaemonSet.
 	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
-	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-	// Only supported for Variant=Calico.
-	// Default: Disabled
+	// Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+	// installation degraded.
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
 	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
@@ -244,6 +248,11 @@ type InstallationSpec struct {
 	// the cluster (including the API server) are exempt from proxying.
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
+
+	// NetworkPolicy configures how the operator manages the NetworkPolicies and GlobalNetworkPolicies
+	// it installs to protect the Calico components it manages.
+	// +optional
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // BPFNetworkBootstrapType defines how the initial networking configuration is executed.
@@ -1020,7 +1029,35 @@ type CNISpec struct {
 	// +optional
 	// +kubebuilder:validation:Type=string
 	ConfDir *string `json:"confDir,omitempty"`
+
+	// InstallMode controls which CNI plugin binaries the operator installs onto each node
+	// when CNI.Type is Calico.
+	// * All (default): the operator runs a cni-plugins init container that stages upstream
+	//   CNI plugin binaries (host-local, portmap, loopback, tuning, flannel) into a shared
+	//   volume, and the install-cni init container copies them onto the host alongside
+	//   Calico's own binaries.
+	// * CalicoOnly: skip the cni-plugins init container. Only Calico's own binaries are
+	//   installed. Use this when the host already provides the upstream plugins (e.g. kind,
+	//   certain managed node images).
+	//
+	// Default: All
+	// +optional
+	// +kubebuilder:validation:Enum=All;CalicoOnly
+	InstallMode *CNIInstallMode `json:"installMode,omitempty"`
 }
+
+// CNIInstallMode controls which CNI plugin binaries the operator installs onto the host.
+type CNIInstallMode string
+
+const (
+	// CNIInstallModeAll installs Calico's own CNI binaries plus the upstream plugin set
+	// (host-local, portmap, loopback, tuning, flannel) via a dedicated init container.
+	CNIInstallModeAll CNIInstallMode = "All"
+
+	// CNIInstallModeCalicoOnly installs only Calico's own CNI binaries; the host is
+	// expected to provide any required upstream plugins.
+	CNIInstallModeCalicoOnly CNIInstallMode = "CalicoOnly"
+)
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {
@@ -1134,11 +1171,6 @@ type CertificateManagement struct {
 // IsFIPSModeEnabled is a convenience function for turning a FIPSMode reference into a bool.
 func IsFIPSModeEnabled(mode *FIPSMode) bool {
 	return mode != nil && *mode == FIPSModeEnabled
-}
-
-// IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
-func IsFIPSModeEnabledString(mode *FIPSMode) string {
-	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
 }
 
 type WindowsNodeSpec struct {

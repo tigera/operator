@@ -19,6 +19,15 @@ package components
 
 var (
 	CalicoRelease string = "{{ .Title }}"
+{{ with index .Components "third-party-cni-plugins" }}
+	ComponentCalicoCNIPlugins = Component{
+		Version:   "{{ .Version }}",
+		Image:     "{{ .Image }}",
+		Registry:  "{{ .Registry }}",
+		imagePath: "{{ .ImagePath }}",
+		variant:   calicoVariant,
+	}
+{{- end }}
 {{ with index .Components "cni-windows" }}
 	ComponentCalicoCNIWindows = Component{
 		Version:   "{{ .Version }}",
@@ -31,14 +40,6 @@ var (
 {{ with index .Components.node }}
 	ComponentCalicoNode = Component{
 		Version:   "{{ .Version }}",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   calicoVariant,
-	}
-
-	ComponentCalicoNodeFIPS = Component{
-		Version:   "{{ .Version }}-fips",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
 		imagePath: "{{ .ImagePath }}",
@@ -134,20 +135,12 @@ var (
 		imagePath: "{{ .ImagePath }}",
 		variant:   calicoVariant,
 	}
-
-	ComponentCalicoFIPS = Component{
-		Version:   "{{ .Version }}-fips",
-		Image:     "{{ .Image }}",
-		Registry:  "{{ .Registry }}",
-		imagePath: "{{ .ImagePath }}",
-		variant:   calicoVariant,
-	}
 {{- end }}
 
 	CalicoImages = []Component{
+		ComponentCalicoCNIPlugins,
 		ComponentCalicoCNIWindows,
 		ComponentCalicoNode,
-		ComponentCalicoNodeFIPS,
 		ComponentCalicoNodeWindows,
 		ComponentCalicoWhisker,
 		ComponentCalicoEnvoyGateway,
@@ -158,6 +151,5 @@ var (
 		ComponentCalicoIstioZTunnel,
 		ComponentCalicoIstioProxyv2,
 		ComponentCalico,
-		ComponentCalicoFIPS,
 	}
 )

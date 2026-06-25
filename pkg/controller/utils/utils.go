@@ -47,6 +47,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -67,6 +68,8 @@ const (
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
 )
+
+var log = logf.Log.WithName("utils")
 
 var (
 	DefaultInstanceKey           = client.ObjectKey{Name: "default"}
@@ -117,6 +120,12 @@ func V3Client(config *rest.Config) (client.Client, error) {
 	scheme := runtime.NewScheme()
 	if err := v3.AddToScheme(scheme); err != nil {
 		return nil, fmt.Errorf("failed to add projectcalico.org/v3 to scheme: %w", err)
+	}
+
+	// The component handler reads the Installation regardless of which client writes the rendered
+	// objects, so this client needs to be able to resolve operator.tigera.io types as well.
+	if err := operatorv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add operator.tigera.io to scheme: %w", err)
 	}
 
 	c, err := client.New(config, client.Options{Scheme: scheme})
@@ -461,6 +470,21 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 	}
 
 	return applicationLayer, nil
+}
+
+// Return the Istio CR if present. No error is returned if it was not found.
+func GetIstio(ctx context.Context, c client.Client) (*operatorv1.Istio, error) {
+	istio := &operatorv1.Istio{}
+
+	err := c.Get(ctx, DefaultInstanceKey, istio)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return istio, nil
 }
 
 // Return the ManagementCluster CR if present. No error is returned if it was not found.

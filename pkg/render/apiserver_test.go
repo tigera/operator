@@ -418,10 +418,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		// by kube-apiserver RBAC.
 		networkAdmin := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
-			APIGroups:     []string{"projectcalico.org"},
-			Resources:     []string{"uisettings"},
-			Verbs:         []string{"create", "update", "delete", "patch"},
-			ResourceNames: []string{"cluster-settings", "user-settings"},
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettings"},
+			Verbs:     []string{"create", "update", "delete", "patch"},
 		}))
 	})
 
@@ -1602,6 +1601,11 @@ var (
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},
@@ -1695,6 +1699,18 @@ var (
 			Verbs:     []string{"get"},
 		},
 		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		},
+		{
 			APIGroups: []string{"apps"},
 			Resources: []string{"deployments"},
 			Verbs:     []string{"get", "list", "watch"},
@@ -1756,6 +1772,11 @@ var (
 			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"packetcaptures/files"},
 			Verbs:     []string{"get", "delete"},
+		},
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"networks"},
+			Verbs:     []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{""},
@@ -1848,6 +1869,18 @@ var (
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
+		},
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		},
 		{
 			APIGroups: []string{"apps"},
@@ -2485,20 +2518,6 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				Value:    "arm64",
 				Effect:   corev1.TaintEffectNoSchedule,
 			}))
-		})
-
-		It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
-			fipsEnabled := operatorv1.FIPSModeEnabled
-			cfg.Installation.FIPSMode = &fipsEnabled
-
-			component, err := render.APIServer(cfg)
-			Expect(err).NotTo(HaveOccurred())
-
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			d := rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
-			Expect(d.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
 		})
 	})
 

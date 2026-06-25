@@ -322,6 +322,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin", Type: &dirOrCreate}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 					{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
@@ -513,6 +514,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin", Type: &dirOrCreate}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 					{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
 					{Name: "nodeproc", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/proc"}}},
@@ -912,6 +914,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin", Type: &dirOrCreate}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 					{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
@@ -1114,6 +1117,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/custom/cni/bin", Type: &dirOrCreate}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/custom/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 				}
 				Expect(ds.Spec.Template.Spec.Volumes).To(ContainElements(expectedVols))
 				verifyInitContainers(ds, cfg.Installation)
@@ -1314,6 +1318,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/opt/cni/bin", Type: &dirOrCreate}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
 					{Name: "bpffs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs/bpf", Type: &dirMustExist}}},
@@ -1560,6 +1565,7 @@ var _ = Describe("Node rendering tests", func() {
 					{Name: "cni-bin-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/lib/cni/bin", Type: &dirOrCreate}}},
 					{Name: "cni-net-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/multus/cni/net.d"}}},
 					{Name: "cni-log-dir", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico/cni"}}},
+					{Name: "cni-plugins-stage", VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{}}},
 					{Name: "policysync", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/run/nodeagent", Type: &dirOrCreate}}},
 					{Name: "flexvol-driver-host", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/etc/kubernetes/kubelet-plugins/volume/exec/nodeagent~uds", Type: &dirOrCreate}}},
 					{Name: "sys-fs", VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/sys/fs", Type: &dirOrCreate}}},
@@ -2146,6 +2152,34 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(dsResource).ToNot(BeNil())
 				ds := dsResource.(*appsv1.DaemonSet)
 				Expect(ds).ToNot(BeNil())
+				verifyInitContainers(ds, defaultInstance)
+			})
+
+			It("should omit the cni-plugins init container when CNI.InstallMode is CalicoOnly", func() {
+				mode := operatorv1.CNIInstallModeCalicoOnly
+				defaultInstance.CNI.InstallMode = &mode
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+				Expect(dsResource).ToNot(BeNil())
+				ds := dsResource.(*appsv1.DaemonSet)
+				Expect(ds).ToNot(BeNil())
+
+				// cni-plugins init container is absent and install-cni does not mount
+				// the staging volume.
+				Expect(rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "cni-plugins")).To(BeNil())
+				installCNI := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "install-cni")
+				Expect(installCNI).NotTo(BeNil())
+				for _, m := range installCNI.VolumeMounts {
+					Expect(m.Name).NotTo(Equal("cni-plugins-stage"))
+				}
+				// Pod has no cni-plugins-stage volume.
+				for _, v := range ds.Spec.Template.Spec.Volumes {
+					Expect(v.Name).NotTo(Equal("cni-plugins-stage"))
+				}
+
 				verifyInitContainers(ds, defaultInstance)
 			})
 
@@ -3087,31 +3121,6 @@ var _ = Describe("Node rendering tests", func() {
 				rtest.ExpectEnv(deploy.Spec.Template.Spec.Containers[0].Env, "CALICO_EARLY_NETWORKING", render.BGPLayoutPath)
 			})
 
-			It("should render the correct env and/or images when FIPS mode is enabled (OSS)", func() {
-				fipsEnabled := operatorv1.FIPSModeEnabled
-				cfg.Installation.FIPSMode = &fipsEnabled
-				cfg.Installation.Variant = operatorv1.Calico
-				cfg.Installation.NodeMetricsPort = ptr.To(int32(123))
-
-				certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
-				Expect(err).NotTo(HaveOccurred())
-
-				cfg.PrometheusServerTLS = certificateManager.KeyPair()
-				component := render.Node(&cfg)
-				Expect(component.ResolveImages(nil)).To(BeNil())
-
-				resources, _ := component.Objects()
-				nodeDSObj := rtest.GetResource(resources, common.NodeDaemonSetName, common.CalicoNamespace, "apps", "v1", "DaemonSet")
-				Expect(nodeDSObj).ToNot(BeNil())
-
-				nodeDS, ok := nodeDSObj.(*appsv1.DaemonSet)
-				Expect(ok).To(BeTrue())
-
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Name).To(Equal("calico-node"))
-				Expect(nodeDS.Spec.Template.Spec.Containers[0].Image).To(ContainSubstring("-fips"))
-				verifyInitContainers(nodeDS, cfg.Installation)
-			})
-
 			Context("With calico-node DaemonSet overrides", func() {
 				rr1 := corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
@@ -3209,10 +3218,11 @@ var _ = Describe("Node rendering tests", func() {
 
 					Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
-					// At runtime, the operator will also add some standard labels to the
-					// daemonset such as "k8s-app=calico-node". But the calico-node daemonset object
-					// produced by the render will have no labels so we expect just the one
-					// provided.
+					// At runtime, the operator's setStandardSelectorAndLabels helper
+					// adds standard labels such as "k8s-app=calico-node" and the
+					// host-networked marker. The daemonset object produced by the
+					// render itself only carries the override-supplied template-level
+					// label; the rest are layered on during apply.
 					Expect(ds.Spec.Template.Labels).To(HaveLen(1))
 					Expect(ds.Spec.Template.Labels["template-level"]).To(Equal("label2"))
 
@@ -3375,8 +3385,13 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 	// Validate correct number of init containers.
 	numInitContainers := 1
 	isCalicoCNI := instance.CNI != nil && instance.CNI.Type == operatorv1.PluginCalico
-	// If using Calico CNI, the CNI install container is present.
+	// Default to InstallMode=All when unset.
+	installUpstreamPlugins := isCalicoCNI &&
+		(instance.CNI.InstallMode == nil || *instance.CNI.InstallMode != operatorv1.CNIInstallModeCalicoOnly)
 	if isCalicoCNI {
+		numInitContainers++
+	}
+	if installUpstreamPlugins {
 		numInitContainers++
 	}
 	// Certificate management adds an additional key/cert init container.
@@ -3403,10 +3418,6 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		rtest.ExpectEnv(cniContainer.Env, "CNI_CONF_NAME", "10-calico.conflist")
 		rtest.ExpectEnv(cniContainer.Env, "SLEEP", "false")
 		cniImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)
-		if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
-			// Calico combined image has a -fips variant when FIPS mode is enabled.
-			cniImage = fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFIPS.Image, components.ComponentCalicoFIPS.Version)
-		}
 		if instance.Variant.IsEnterprise() {
 			cniImage = fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)
 		}
@@ -3452,19 +3463,49 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 			{MountPath: "/host/opt/cni/bin", Name: "cni-bin-dir"},
 			{MountPath: "/host/etc/cni/net.d", Name: "cni-net-dir"},
 		}
+		if installUpstreamPlugins {
+			expectedCNIVolumeMounts = append(expectedCNIVolumeMounts, corev1.VolumeMount{MountPath: "/opt/cni/bin", Name: "cni-plugins-stage"})
+		}
 		Expect(cniContainer.VolumeMounts).To(ConsistOf(expectedCNIVolumeMounts))
 	} else {
 		Expect(cniContainer).To(BeNil())
+	}
+
+	// Verify the cni-plugins init container is present and runs before
+	// install-cni when using Calico CNI with the default InstallMode.
+	cniPluginsContainer := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "cni-plugins")
+	if installUpstreamPlugins {
+		Expect(cniPluginsContainer).NotTo(BeNil())
+		expectedImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoCNIPlugins.Image, components.ComponentCalicoCNIPlugins.Version)
+		if instance.Variant.IsEnterprise() {
+			expectedImage = fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCNIPlugins.Image, components.ComponentTigeraCNIPlugins.Version)
+		}
+		Expect(cniPluginsContainer.Image).To(Equal(expectedImage))
+		Expect(cniPluginsContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
+			{MountPath: "/stage", Name: "cni-plugins-stage"},
+		}))
+		// cni-plugins must come before install-cni so it populates the staging
+		// volume before install-cni reads from it.
+		var pluginsIdx, installIdx = -1, -1
+		for i, ic := range ds.Spec.Template.Spec.InitContainers {
+			switch ic.Name {
+			case "cni-plugins":
+				pluginsIdx = i
+			case "install-cni":
+				installIdx = i
+			}
+		}
+		Expect(pluginsIdx).To(BeNumerically(">=", 0))
+		Expect(installIdx).To(BeNumerically(">=", 0))
+		Expect(pluginsIdx).To(BeNumerically("<", installIdx))
+	} else {
+		Expect(cniPluginsContainer).To(BeNil())
 	}
 
 	// Verify the ebpf-bootstrap container image and security context.
 	ebpfBootstrap := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
 	Expect(ebpfBootstrap).NotTo(BeNil())
 	ebpfImage := fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
-	if instance.FIPSMode != nil && *instance.FIPSMode == operatorv1.FIPSModeEnabled {
-		// Calico Node image should have -fips suffix when FIPS mode is enabled.
-		ebpfImage = fmt.Sprintf("quay.io/%s%s:%s-fips", components.CalicoImagePath, components.ComponentCalicoNode.Image, components.ComponentCalicoNode.Version)
-	}
 	if instance.Variant.IsEnterprise() {
 		ebpfImage = components.TigeraRegistry + "tigera/node:" + components.ComponentTigeraNode.Version
 	}
@@ -3498,8 +3539,6 @@ func verifyInitContainers(ds *appsv1.DaemonSet, instance *operatorv1.Installatio
 		Expect(flexvolContainer).NotTo(BeNil())
 		if instance.Variant.IsEnterprise() {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version)))
-		} else if operatorv1.IsFIPSModeEnabled(instance.FIPSMode) {
-			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalicoFIPS.Image, components.ComponentCalicoFIPS.Version)))
 		} else {
 			Expect(flexvolContainer.Image).To(Equal(fmt.Sprintf("quay.io/%s%s:%s", components.CalicoImagePath, components.ComponentCalico.Image, components.ComponentCalico.Version)))
 		}

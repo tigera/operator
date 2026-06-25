@@ -38,7 +38,8 @@ spec:
             spec:
               description: |-
                 NetworkSpec contains the specification for a Network resource.  Exactly one of the
-                network-type fields (vrf, l2Bridge, ...) must be set.
+                network-type fields (vrf, l2Bridge, ...) must be set.  The network type is immutable
+                after creation: a Network cannot be switched between types (e.g. vrf to l2Bridge).
               maxProperties: 1
               minProperties: 1
               properties:
@@ -151,9 +152,11 @@ spec:
                                         NativeVLAN, when set, designates one VLAN ID as the trunk's native
                                         VLAN: frames in that VLAN are sent untagged on the wire and
                                         untagged frames received on the trunk are tagged with this VLAN.
-                                        The referenced VLAN ID must appear in spec.vlans (either directly
-                                        as an id or within a range).  When unset (default) the trunk is
-                                        strictly tagged: only 802.1Q-tagged frames are accepted and
+                                        This should be one of the VLAN IDs the trunk carries (i.e. present
+                                        in spec.vlans, or in this trunk's vlans override if set); if it
+                                        names a VLAN the trunk does not carry it is ignored and the trunk
+                                        stays strictly tagged for every VLAN.  When unset (default) the
+                                        trunk is strictly tagged: only 802.1Q-tagged frames are accepted and
                                         transmitted.
                                       maximum: 4094
                                       minimum: 1
@@ -224,6 +227,7 @@ spec:
                             type: array
                             x-kubernetes-list-type: atomic
                           nodeSelector:
+                            default: ""
                             description: |-
                               NodeSelector is a Calico selector expression that determines which
                               nodes this configuration applies to.  If omitted, the entry
@@ -234,14 +238,22 @@ spec:
                         required:
                           - bridge
                         type: object
+                      maxItems: 100
                       minItems: 1
                       type: array
-                      x-kubernetes-list-type: atomic
+                      x-kubernetes-list-map-keys:
+                        - nodeSelector
+                      x-kubernetes-list-type: map
                     vlans:
                       description: |-
                         VLANs is the authoritative list of 802.1Q VLAN segments carried by
                         this network.  Each entry defines a single VLAN ID or a contiguous
                         range of VLAN IDs, plus the subnets associated with that segment.
+
+                        The set of VLAN IDs the network may carry is the union of all IDs and
+                        ranges in this list.  Entries are not required to be disjoint: if the
+                        same VLAN ID appears in more than one entry the network still simply
+                        carries that VLAN, so overlap is permitted and not validated here.
 
                         Workload attachments select a single entry via the CNI config
                         "vlan" field; if spec.vlans has exactly one entry that resolves to
@@ -253,10 +265,17 @@ spec:
                         properties:
                           subnets:
                             description: |-
-                              Subnets are the IP subnets for this VLAN segment.  Used to apply
-                              the correct prefix length to pod interfaces and to filter which
-                              IPPools the IPAM plugin considers for this VLAN.  Multiple entries
-                              support dual-stack or multi-subnet VLANs.
+                              Subnets are the IP subnets for this VLAN segment.  They filter which
+                              IPPools the IPAM plugin considers for this VLAN (only pools that fall
+                              within one of these subnets are eligible) and supply the prefix
+                              length programmed on the pod interface.  Multiple entries support
+                              dual-stack or multi-subnet VLANs.
+
+                              IPAM allocates the address from the eligible pools without preferring
+                              any particular subnet; the allocated address then falls within
+                              exactly one of these subnets, and that subnet's CIDR prefix length is
+                              the one programmed on the pod interface.  For a dual-stack VLAN this
+                              resolves independently per family (one IPv4 and one IPv6 subnet).
                             items:
                               description:
                                 L2Subnet defines an IP subnet associated
@@ -267,15 +286,47 @@ spec:
                                     CIDR is the subnet in CIDR notation (e.g. "10.100.0.0/24",
                                     "fd00::/64").
                                   type: string
-                                gateway:
+                                routes:
                                   description: |-
-                                    Gateway, if set, is the IP address of the upstream router on this
-                                    subnet (e.g. "10.100.0.1").  The CNI plugin programs a default
-                                    route via this gateway inside the pod in a per-interface routing
-                                    table, enabling the pod to reach destinations beyond the local
-                                    VLAN subnet.  The gateway must be an L2 neighbor reachable via
-                                    the bridge; the route is installed with the onlink flag.
-                                  type: string
+                                    Routes are programmed inside the pod's per-interface routing table
+                                    for workloads attached to this subnet, in addition to the connected
+                                    route for CIDR itself.  Each next hop must be an L2 neighbor on this
+                                    subnet, reachable via the bridge; routes are installed onlink.  The
+                                    common "default gateway" case is a single entry with destination
+                                    "0.0.0.0/0" (or "::/0") whose nextHop is the upstream router.
+                                  items:
+                                    description: |-
+                                      L2Route defines a route programmed in a pod's per-interface routing table
+                                      for an L2 bridge subnet.  Parallel to VRFStaticRoute, but with its own
+                                      action type so L2 and VRF route semantics can evolve independently.
+                                    properties:
+                                      action:
+                                        description: |-
+                                          Action determines how traffic matching this route is handled.
+                                          Exactly one action field must be set.
+                                        maxProperties: 1
+                                        minProperties: 1
+                                        properties:
+                                          nextHop:
+                                            description: |-
+                                              NextHop forwards matching traffic to the specified gateway IP.  The
+                                              address must be an L2 neighbor on this subnet, reachable via the
+                                              bridge; the route is installed onlink.
+                                            type: string
+                                        type: object
+                                      destination:
+                                        description: |-
+                                          Destination is the CIDR prefix for this route.  Use "0.0.0.0/0" or
+                                          "::/0" for a default route.
+                                        type: string
+                                    required:
+                                      - action
+                                      - destination
+                                    type: object
+                                  type: array
+                                  x-kubernetes-list-map-keys:
+                                    - destination
+                                  x-kubernetes-list-type: map
                               required:
                                 - cidr
                               type: object
@@ -457,6 +508,13 @@ spec:
                     - hostConfig
                   type: object
               type: object
+              x-kubernetes-validations:
+                - message: Cannot change the network type (vrf is immutable after creation)
+                  rule: has(self.vrf) == has(oldSelf.vrf)
+                - message:
+                    Cannot change the network type (l2Bridge is immutable after
+                    creation)
+                  rule: has(self.l2Bridge) == has(oldSelf.l2Bridge)
             status:
               description: NetworkStatus reports the observed state of the Network resource.
               properties:

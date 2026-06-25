@@ -433,15 +433,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			instance.Variant = operatorv1.CalicoEnterprise
 		})
 
-		// rbacSyncControllerRules emits exactly this escalate/bind rule —
-		// uniquely added by the rbacsync gate, so it's a reliable presence
-		// check that won't drift if other unrelated rules grow new verbs.
-		escalateBindRule := rbacv1.PolicyRule{
-			APIGroups: []string{"rbac.authorization.k8s.io"},
-			Resources: []string{"clusterroles", "clusterrolebindings"},
-			Verbs:     []string{"escalate", "bind"},
-		}
-
 		It("does not enable rbacsync when RBACManagementEnabled is false", func() {
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -453,8 +444,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
 			}))
 
-			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).NotTo(ContainElement(escalateBindRule), "rbacsync rules should be absent when RBACManagementEnabled is false")
+			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
 		})
 
 		It("enables rbacsync and adds the controller's RBAC when RBACManagementEnabled is true", func() {
@@ -468,9 +458,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{
 				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,rbacsync",
 			}))
-
-			role := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-			Expect(role.Rules).To(ContainElement(escalateBindRule), "expected escalate/bind rule in calico-kube-controllers role")
 
 			nsRole := rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{

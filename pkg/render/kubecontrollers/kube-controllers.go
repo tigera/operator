@@ -714,11 +714,6 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 	rules := render.RBACManagementEscalationRules()
 	return append(rules,
 		rbacv1.PolicyRule{
-			APIGroups: []string{"rbac.authorization.k8s.io"},
-			Resources: []string{"clusterroles", "clusterrolebindings"},
-			Verbs:     []string{"escalate", "bind"},
-		},
-		rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
 			ResourceNames: []string{"tigera-known-oidc-users"},

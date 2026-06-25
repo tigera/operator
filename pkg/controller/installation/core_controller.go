@@ -1080,15 +1080,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		if instance.Spec.Variant.IsEnterprise() {
-			managerCR, err = utils.GetManager(ctx, r.client, false, "")
-			if err != nil && !apierrors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			if apierrors.IsNotFound(err) {
-				managerCR = nil
-			}
+		// On Calico/OSS the Manager CRD is absent, so the read returns NoMatchError.
+		managerCR, err = utils.GetManager(ctx, r.client, false, "")
+		if err != nil && !apierrors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+			managerCR = nil
 		}
 
 		if managementClusterConnection != nil && managementCluster != nil {

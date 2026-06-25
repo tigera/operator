@@ -2060,15 +2060,23 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 	}
 
-	// Grant network-admin the role/binding access the RBAC management UI needs.
-	// bind+escalate let it assign managed roles without holding their rules, so
-	// gate on the feature to keep these verbs off non-RBAC-UI clusters.
+	// Role/binding access for the RBAC management UI. ui-apis writes these
+	// impersonating the caller, so the apiserver enforces escalation against the
+	// user's own permissions. The UI reads the role catalogue and manages group
+	// membership through both cluster- and namespace-scoped bindings.
 	if c.cfg.RBACManagementEnabled {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups: []string{"rbac.authorization.k8s.io"},
-			Resources: []string{"clusterroles", "roles", "clusterrolebindings", "rolebindings"},
-			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"},
-		})
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "roles"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterrolebindings", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+			},
+		)
 	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.

@@ -391,16 +391,20 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(err).NotTo(HaveOccurred())
 		resources, _ := component.Objects()
 		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).NotTo(ContainElement(rbacManagementNetworkAdminRule))
+		for _, rule := range rbacManagementNetworkAdminRules {
+			Expect(clusterRole.Rules).NotTo(ContainElement(rule))
+		}
 
-		// Enabled: the rule is appended.
+		// Enabled: the rules are appended.
 		cfg.RBACManagementEnabled = true
 		component, err = render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		resources, _ = component.Objects()
 		clusterRole = rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(ContainElement(rbacManagementNetworkAdminRule))
-		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRule)))
+		for _, rule := range rbacManagementNetworkAdminRules {
+			Expect(clusterRole.Rules).To(ContainElement(rule))
+		}
+		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
 	})
 
 	It("should render resources without an aggregation server", func() {
@@ -1934,12 +1938,20 @@ var (
 		},
 	}
 
-	// rbacManagementNetworkAdminRule is the extra tigera-network-admin rule
-	// rendered only when Manager.spec.rbac.ui is Enabled.
-	rbacManagementNetworkAdminRule = rbacv1.PolicyRule{
-		APIGroups: []string{"rbac.authorization.k8s.io"},
-		Resources: []string{"clusterroles", "roles", "clusterrolebindings", "rolebindings"},
-		Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete", "bind", "escalate"},
+	// rbacManagementNetworkAdminRules are the extra tigera-network-admin rules
+	// added when rbac.ui is Enabled. See tigeraNetworkAdminClusterRole for the
+	// rationale behind the verb set.
+	rbacManagementNetworkAdminRules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "roles"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+		},
 	}
 )
 

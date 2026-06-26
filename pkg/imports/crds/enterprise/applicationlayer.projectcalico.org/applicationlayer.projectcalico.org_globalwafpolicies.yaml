@@ -13,7 +13,6 @@ spec:
     shortNames:
       - gwafp
     singular: globalwafpolicy
-  preserveUnknownFields: false
   scope: Cluster
   versions:
     - additionalPrinterColumns:

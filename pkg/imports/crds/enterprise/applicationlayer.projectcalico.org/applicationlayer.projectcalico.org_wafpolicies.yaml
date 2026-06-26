@@ -13,7 +13,6 @@ spec:
     shortNames:
       - wafp
     singular: wafpolicy
-  preserveUnknownFields: false
   scope: Namespaced
   versions:
     - additionalPrinterColumns:

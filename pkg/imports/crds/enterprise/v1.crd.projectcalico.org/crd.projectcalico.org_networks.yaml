@@ -11,7 +11,6 @@ spec:
     listKind: NetworkList
     plural: networks
     singular: network
-  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v1

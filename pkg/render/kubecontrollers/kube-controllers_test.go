@@ -428,6 +428,47 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
+	Context("RBAC management UI gate", func() {
+		BeforeEach(func() {
+			instance.Variant = operatorv1.CalicoEnterprise
+		})
+
+		It("does not enable rbacsync when RBACManagementEnabled is false", func() {
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			}))
+
+			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
+		})
+
+		It("enables rbacsync and adds the controller's RBAC when RBACManagementEnabled is true", func() {
+			cfg.RBACManagementEnabled = true
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,rbacsync",
+			}))
+
+			nsRole := rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{"tigera-idp-groups"},
+				Verbs:         []string{"get", "list", "watch"},
+			}), "expected read-only access to tigera-idp-groups in calico-system")
+		})
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using CalicoEnterprise when logstorage and secrets exist", func() {
 		expectedResources := []struct {
 			name    string

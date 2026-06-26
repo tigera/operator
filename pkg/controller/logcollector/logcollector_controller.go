@@ -530,6 +530,23 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	// Surface (non-fatally) any user-provided filter content that is not valid fluent-bit YAML —
+	// e.g. a leftover fluentd <filter> block after an upgrade. The render skips such entries so
+	// logs keep flowing; raise a warning on the Available condition per key and clear it once the
+	// content parses, rather than degrading the whole LogCollector for an optional, malformed filter.
+	invalidFilters := map[string]bool{}
+	for _, key := range filters.InvalidKeys() {
+		invalidFilters[key] = true
+	}
+	for _, key := range []string{render.FluentBitFilterFlowName, render.FluentBitFilterDNSName} {
+		warningKey := "fluent-bit-filter-" + key
+		if invalidFilters[key] {
+			r.status.SetWarning(warningKey, fmt.Sprintf("Ignoring the %q entry in the %s ConfigMap: it is not valid fluent-bit YAML. Filters previously written in fluentd syntax must be rewritten as a fluent-bit YAML filter list.", key, render.FluentBitFilterConfigMapName))
+		} else {
+			r.status.ClearWarning(warningKey)
+		}
+	}
+
 	var eksConfig *render.EksCloudwatchLogConfig
 	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
 	if installationSpec.KubernetesProvider.IsEKS() {

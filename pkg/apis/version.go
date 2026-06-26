@@ -65,7 +65,13 @@ func UseV3CRDS(cfg *rest.Config) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	apiGroups, err := cs.Discovery().ServerGroups()
+	return useV3CRDsFromDiscovery(cs.Discovery())
+}
+
+// useV3CRDsFromDiscovery is the discovery-success path of UseV3CRDS, split out so it can be tested
+// with a fake discovery client.
+func useV3CRDsFromDiscovery(disco discovery.DiscoveryInterface) (bool, error) {
+	apiGroups, err := disco.ServerGroups()
 	if err != nil {
 		return false, err
 	}
@@ -80,8 +86,16 @@ func UseV3CRDS(cfg *rest.Config) (bool, error) {
 		}
 	}
 
-	log.Info("Detected API groups from API server", "v3present", v3present, "v1present", v1present)
-	return v3present && !v1present, nil
+	// Only a brand-new install (neither group present) needs the MutatingAdmissionPolicy check.
+	// Skipping it otherwise avoids an extra discovery call on existing clusters, where an unhealthy
+	// aggregated API server could make ServerGroupsAndResources return a partial error.
+	mapServed := false
+	if !v1present && !v3present {
+		mapServed = mutatingAdmissionPolicyServed(disco)
+	}
+
+	log.Info("Detected API groups from API server", "v3present", v3present, "v1present", v1present, "mapServed", mapServed)
+	return decideV3CRDs(v1present, v3present, mapServed), nil
 }
 
 // checkDatastoreMigration uses a dynamic client to look for a DatastoreMigration CR

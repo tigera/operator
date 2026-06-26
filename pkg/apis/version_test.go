@@ -44,6 +44,43 @@ func TestDecideV3CRDs(t *testing.T) {
 	}
 }
 
+func mapResourceList() *metav1.APIResourceList {
+	return &metav1.APIResourceList{
+		GroupVersion: "admissionregistration.k8s.io/v1beta1",
+		APIResources: []metav1.APIResource{{Name: "mutatingadmissionpolicies", Kind: "MutatingAdmissionPolicy"}},
+	}
+}
+
+func TestUseV3CRDsFromDiscovery(t *testing.T) {
+	v1 := &metav1.APIResourceList{GroupVersion: "crd.projectcalico.org/v1"}
+	v3 := &metav1.APIResourceList{GroupVersion: "projectcalico.org/v3"}
+
+	cases := []struct {
+		name      string
+		resources []*metav1.APIResourceList
+		want      bool
+	}{
+		{"v1 present stays v1", []*metav1.APIResourceList{v1, mapResourceList()}, false},
+		{"both present stays v1", []*metav1.APIResourceList{v1, v3, mapResourceList()}, false},
+		{"v3 only stays v3", []*metav1.APIResourceList{v3}, true},
+		{"greenfield capable goes v3", []*metav1.APIResourceList{mapResourceList()}, true},
+		{"greenfield not capable stays v1", []*metav1.APIResourceList{}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := fake.NewClientset()
+			c.Resources = tc.resources
+			got, err := useV3CRDsFromDiscovery(c.Discovery())
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("useV3CRDsFromDiscovery() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestMutatingAdmissionPolicyServed(t *testing.T) {
 	cases := []struct {
 		name      string

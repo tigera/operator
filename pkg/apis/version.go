@@ -103,3 +103,23 @@ func checkDatastoreMigration(cfg *rest.Config) (bool, error) {
 	}
 	return false, nil
 }
+
+// decideV3CRDs returns whether the operator should use the projectcalico.org/v3 API group,
+// given which Calico CRD groups are present in the cluster and whether the cluster serves
+// MutatingAdmissionPolicy. This covers the discovery-success path only; the CALICO_API_GROUP
+// override and the DatastoreMigration check are handled by the caller.
+//
+//   - If the v1 CRDs are present, the cluster is an existing/upgraded install (or has opted out
+//     by pre-installing v1 CRDs), so use v1.
+//   - If only the v3 CRDs are present, the cluster is already on v3; never downgrade it.
+//   - If neither is present, this is a brand-new install. Default to v3, but only if the cluster
+//     can serve MutatingAdmissionPolicy (needed to default policy types in v3 mode).
+func decideV3CRDs(v1present, v3present, mapServed bool) bool {
+	if v1present {
+		return false
+	}
+	if v3present {
+		return true
+	}
+	return mapServed
+}

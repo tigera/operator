@@ -892,6 +892,46 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ds.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/fluent-bit-config"))
 	})
 
+	It("flags filter ConfigMap keys that are not valid fluent-bit YAML", func() {
+		var nilFilters *render.FluentBitFilters
+		Expect(nilFilters.InvalidKeys()).To(BeNil())
+
+		Expect((&render.FluentBitFilters{}).InvalidKeys()).To(BeEmpty())
+
+		valid := &render.FluentBitFilters{
+			Flow: "- name: grep\n  exclude: dest_namespace noisy\n",
+			DNS:  "- name: grep\n  exclude: qname foo\n",
+		}
+		Expect(valid.InvalidKeys()).To(BeEmpty())
+
+		// A leftover fluentd <filter> block does not parse as a fluent-bit YAML list.
+		mixed := &render.FluentBitFilters{
+			Flow: "<filter flows>\n  @type grep\n</filter>\n",
+			DNS:  "- name: grep\n  exclude: qname foo\n",
+		}
+		Expect(mixed.InvalidKeys()).To(ConsistOf(render.FluentBitFilterFlowName))
+	})
+
+	It("skips invalid user filter content during render and still renders the daemonset", func() {
+		cfg.Filters = &render.FluentBitFilters{
+			Flow: "<filter flows>\n  @type grep\n</filter>\n", // invalid fluent-bit YAML (fluentd syntax)
+			DNS:  "- name: grep\n  exclude: qname foo\n",      // valid
+		}
+
+		component := render.FluentBit(cfg)
+		resources, _ := component.Objects()
+
+		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, "calico-system", "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		conf := cm.Data["fluent-bit.yaml"]
+		// The valid DNS filter is inlined and scoped to its tag.
+		Expect(conf).To(ContainSubstring(`"exclude": "qname foo"`))
+		Expect(conf).To(ContainSubstring(`"match": "dns"`))
+		// The invalid fluentd-syntax flow filter is dropped, not inlined.
+		Expect(conf).NotTo(ContainSubstring("@type"))
+		// The daemonset still renders despite the bad filter.
+		Expect(rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet")).NotTo(BeNil())
+	})
+
 	It("should render with EKS Cloudwatch Log", func() {
 		expectedResources := getExpectedResourcesForEKS(false)
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()

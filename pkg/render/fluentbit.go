@@ -1144,11 +1144,46 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 	return string(out)
 }
 
+// parseUserFilter parses a user-provided filter snippet (the content of a
+// fluent-bit-filters ConfigMap key) as a YAML list of fluent-bit filter maps.
+func parseUserFilter(content string) ([]map[string]interface{}, error) {
+	var filters []map[string]interface{}
+	if err := yaml.Unmarshal([]byte(content), &filters); err != nil {
+		return nil, err
+	}
+	return filters, nil
+}
+
+// InvalidKeys returns the names of the fluent-bit-filters ConfigMap keys whose
+// content is non-empty but does not parse as a fluent-bit YAML filter list — for
+// example a leftover fluentd <filter> block after an upgrade. addUserFilters skips
+// these during render so the pipeline still starts; callers use this to surface the
+// misconfiguration to the user without failing the whole LogCollector.
+func (f *FluentBitFilters) InvalidKeys() []string {
+	if f == nil {
+		return nil
+	}
+	var bad []string
+	for _, uf := range []struct{ name, content string }{
+		{FluentBitFilterFlowName, f.Flow},
+		{FluentBitFilterDNSName, f.DNS},
+	} {
+		if uf.content == "" {
+			continue
+		}
+		if _, err := parseUserFilter(uf.content); err != nil {
+			bad = append(bad, uf.name)
+		}
+	}
+	return bad
+}
+
 // addUserFilters inlines the user-provided filter snippets into the pipeline.
 // The fluent-bit-filters ConfigMap keys (flow, dns) each hold a YAML list of
 // fluent-bit filter maps; entries without an explicit match are scoped to the
 // key's log tag. Invalid YAML is skipped (and logged) rather than breaking the
-// whole pipeline.
+// whole pipeline; the controller surfaces it as a TigeraStatus warning (see
+// InvalidKeys).
 func (c *fluentBitComponent) addUserFilters(cfg *fluentBitConfig) {
 	if c.cfg.Filters == nil || c.cfg.OSType != rmeta.OSTypeLinux {
 		return
@@ -1160,8 +1195,8 @@ func (c *fluentBitComponent) addUserFilters(cfg *fluentBitConfig) {
 		if uf.content == "" {
 			continue
 		}
-		var filters []map[string]interface{}
-		if err := yaml.Unmarshal([]byte(uf.content), &filters); err != nil {
+		filters, err := parseUserFilter(uf.content)
+		if err != nil {
 			log.Error(err, "skipping invalid user filter content", "tag", uf.tag)
 			continue
 		}

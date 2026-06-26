@@ -1400,7 +1400,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-dpi",
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
-		"calico-fluent-bit",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
 		"tigera-manager",

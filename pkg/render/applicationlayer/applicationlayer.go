@@ -301,7 +301,7 @@ func (c *component) containers() []corev1.Container {
 		// Web Application Firewall (WAF) and ApplicationLayer Policies (ALP) specific container
 
 		commandArgs := []string{
-			"/dikastes",
+			components.CalicoBinaryPath, "component", "dikastes",
 			"server",
 			"--dial", "/var/run/felix/nodeagent/socket",
 			"--listen", "/var/run/dikastes/dikastes.sock",

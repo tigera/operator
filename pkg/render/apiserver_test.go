@@ -424,6 +424,24 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}))
 	})
 
+	It("should keep the apiserver deployment but drop the APIService for enterprise in v3 CRD mode", func() {
+		cfg.RequiresAggregationServer = false
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// The Deployment must still be present: in enterprise it hosts the queryserver.
+		Expect(rtest.GetResource(resources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")).ToNot(BeNil())
+
+		// The v3.projectcalico.org APIService must be absent in v3 CRD mode.
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("APIService"),
+				"unexpected APIService registered in v3 CRD mode: %s", r.GetName())
+		}
+	})
+
 	It("should grant the calico-apiserver SA write access to globalreports/status", func() {
 		component, err := render.APIServer(cfg)
 		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
@@ -2092,6 +2110,21 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectResourceInList(deleteResources, "calico-apiserver", "calico-system", "apps", "v1", "Deployment")
 		rtest.ExpectResourceInList(deleteResources, "calico-api", "calico-system", "", "v1", "Service")
 		rtest.ExpectResourceInList(deleteResources, "calico-apiserver", "calico-system", "policy", "v1", "PodDisruptionBudget")
+	})
+
+	It("should not register the aggregation APIService when not requiring the aggregation server", func() {
+		cfg.RequiresAggregationServer = false
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// The v3.projectcalico.org APIService registration must be absent in v3 CRD mode.
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("APIService"),
+				"unexpected APIService registered in v3 CRD mode: %s", r.GetName())
+		}
 	})
 
 	It("should render an API server with custom configuration", func() {

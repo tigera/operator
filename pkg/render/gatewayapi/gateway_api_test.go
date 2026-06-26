@@ -160,9 +160,12 @@ var _ = Describe("Gateway API rendering tests", func() {
 		&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: GatewayClassName}},
 	}
 
-	// V3 NetworkPolicy allowing the controller under the calico-system default-deny tier.
+	// V3 policies under the calico-system default-deny tier: the controller in
+	// calico-system, and a cluster-scoped policy for the data-plane proxies that
+	// now run in each Gateway's own namespace (deploy.type=GatewayNamespace).
 	bootstrapExpected := []client.Object{
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: common.CalicoNamespace}},
+		&v3.GlobalNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName}},
 	}
 
 	It("should render Gateway API resources from helm chart", func() {

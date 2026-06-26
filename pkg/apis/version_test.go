@@ -14,7 +14,12 @@
 
 package apis
 
-import "testing"
+import (
+	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes/fake"
+)
 
 func TestDecideV3CRDs(t *testing.T) {
 	cases := []struct {
@@ -34,6 +39,46 @@ func TestDecideV3CRDs(t *testing.T) {
 			if got != tc.want {
 				t.Errorf("decideV3CRDs(v1=%t,v3=%t,map=%t) = %t, want %t",
 					tc.v1present, tc.v3present, tc.mapServed, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestMutatingAdmissionPolicyServed(t *testing.T) {
+	cases := []struct {
+		name      string
+		resources []*metav1.APIResourceList
+		want      bool
+	}{
+		{
+			name: "served when MAP resource present",
+			resources: []*metav1.APIResourceList{{
+				GroupVersion: "admissionregistration.k8s.io/v1beta1",
+				APIResources: []metav1.APIResource{{Name: "mutatingadmissionpolicies", Kind: "MutatingAdmissionPolicy"}},
+			}},
+			want: true,
+		},
+		{
+			name: "not served when group present without MAP kind",
+			resources: []*metav1.APIResourceList{{
+				GroupVersion: "admissionregistration.k8s.io/v1",
+				APIResources: []metav1.APIResource{{Name: "validatingwebhookconfigurations", Kind: "ValidatingWebhookConfiguration"}},
+			}},
+			want: false,
+		},
+		{
+			name:      "not served on empty cluster",
+			resources: []*metav1.APIResourceList{},
+			want:      false,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := fake.NewClientset()
+			c.Resources = tc.resources
+			got := mutatingAdmissionPolicyServed(c.Discovery())
+			if got != tc.want {
+				t.Errorf("mutatingAdmissionPolicyServed() = %t, want %t", got, tc.want)
 			}
 		})
 	}

@@ -280,15 +280,15 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 		logCollectorcfg := operatorv1.LogCollector{
 			Spec: operatorv1.LogCollectorSpec{
-				CalicoFluentBitDaemonSet: &operatorv1.FluentdDaemonSet{
-					Spec: &operatorv1.FluentdDaemonSetSpec{
-						Template: &operatorv1.FluentdDaemonSetPodTemplateSpec{
-							Spec: &operatorv1.FluentdDaemonSetPodSpec{
-								InitContainers: []operatorv1.FluentdDaemonSetInitContainer{{
+				CalicoFluentBitDaemonSet: &operatorv1.FluentBitDaemonSet{
+					Spec: &operatorv1.FluentBitDaemonSetSpec{
+						Template: &operatorv1.FluentBitDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.FluentBitDaemonSetPodSpec{
+								InitContainers: []operatorv1.FluentBitDaemonSetInitContainer{{
 									Name:      "calico-fluent-bit-tls-key-cert-provisioner",
 									Resources: &fluentBitResources,
 								}},
-								Containers: []operatorv1.FluentdDaemonSetContainer{{
+								Containers: []operatorv1.FluentBitDaemonSetContainer{{
 									Name:      "calico-fluent-bit",
 									Resources: &fluentBitResources,
 								}},

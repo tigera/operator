@@ -190,25 +190,25 @@ spec:
                     semantics are unchanged from the deprecated FluentdDaemonSet field.
                   properties:
                     spec:
-                      description: Spec is the specification of the Fluentd DaemonSet.
+                      description: Spec is the specification of the Fluent Bit DaemonSet.
                       properties:
                         template:
                           description:
-                            Template describes the Fluentd DaemonSet pod
+                            Template describes the Fluent Bit DaemonSet pod
                             that will be created.
                           properties:
                             spec:
-                              description: Spec is the Fluentd DaemonSet's PodSpec.
+                              description: Spec is the Fluent Bit DaemonSet's PodSpec.
                               properties:
                                 containers:
                                   description: |-
-                                    Containers is a list of Fluentd DaemonSet containers.
-                                    If specified, this overrides the specified Fluentd DaemonSet containers.
-                                    If omitted, the Fluentd DaemonSet will use its default values for its containers.
+                                    Containers is a list of Fluent Bit DaemonSet containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its containers.
                                   items:
                                     description:
-                                      FluentdDaemonSetContainer is a Fluentd
-                                      DaemonSet container.
+                                      FluentBitDaemonSetContainer is a Fluent
+                                      Bit DaemonSet container.
                                     properties:
                                       livenessProbe:
                                         description: |-
@@ -244,9 +244,11 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Fluent Bit DaemonSet container by name.
-                                          Supported values are: calico-fluent-bit
+                                          Supported values are: calico-fluent-bit (or the deprecated alias fluentd, kept
+                                          for one release so existing FluentdDaemonSet overrides continue to validate).
                                         enum:
                                           - calico-fluent-bit
+                                          - fluentd
                                         type: string
                                       readinessProbe:
                                         description: |-
@@ -282,8 +284,8 @@ spec:
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named Fluentd DaemonSet container's resources.
-                                          If omitted, the Fluentd DaemonSet will use its default value for this container's resources.
+                                          If specified, this overrides the named Fluent Bit DaemonSet container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this container's resources.
                                         properties:
                                           claims:
                                             description: |-
@@ -347,26 +349,29 @@ spec:
                                   type: array
                                 initContainers:
                                   description: |-
-                                    InitContainers is a list of Fluentd DaemonSet init containers.
-                                    If specified, this overrides the specified Fluentd DaemonSet init containers.
-                                    If omitted, the Fluentd DaemonSet will use its default values for its init containers.
+                                    InitContainers is a list of Fluent Bit DaemonSet init containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet init containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its init containers.
                                   items:
                                     description:
-                                      FluentdDaemonSetInitContainer is a
-                                      Fluentd DaemonSet init container.
+                                      FluentBitDaemonSetInitContainer is
+                                      a Fluent Bit DaemonSet init container.
                                     properties:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Fluent Bit DaemonSet init container by name.
-                                          Supported values are: calico-fluent-bit-tls-key-cert-provisioner
+                                          Supported values are: calico-fluent-bit-tls-key-cert-provisioner (or the deprecated
+                                          alias tigera-fluentd-prometheus-tls-key-cert-provisioner, kept for one release so
+                                          existing FluentdDaemonSet overrides continue to validate).
                                         enum:
                                           - calico-fluent-bit-tls-key-cert-provisioner
+                                          - tigera-fluentd-prometheus-tls-key-cert-provisioner
                                         type: string
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named Fluentd DaemonSet init container's resources.
-                                          If omitted, the Fluentd DaemonSet will use its default value for this init container's resources.
+                                          If specified, this overrides the named Fluent Bit DaemonSet init container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this init container's resources.
                                         properties:
                                           claims:
                                             description: |-
@@ -695,31 +700,31 @@ spec:
                   type: object
                 fluentdDaemonSet:
                   description: |-
-                    FluentdDaemonSet configures the Fluentd DaemonSet.
+                    FluentdDaemonSet configures the calico-fluent-bit DaemonSet (deprecated alias).
                     Deprecated: use CalicoFluentBitDaemonSet instead. This field is retained
                     as an alias for one release during the Fluentd → Fluent Bit migration;
                     when both are set, CalicoFluentBitDaemonSet takes precedence.
                   properties:
                     spec:
-                      description: Spec is the specification of the Fluentd DaemonSet.
+                      description: Spec is the specification of the Fluent Bit DaemonSet.
                       properties:
                         template:
                           description:
-                            Template describes the Fluentd DaemonSet pod
+                            Template describes the Fluent Bit DaemonSet pod
                             that will be created.
                           properties:
                             spec:
-                              description: Spec is the Fluentd DaemonSet's PodSpec.
+                              description: Spec is the Fluent Bit DaemonSet's PodSpec.
                               properties:
                                 containers:
                                   description: |-
-                                    Containers is a list of Fluentd DaemonSet containers.
-                                    If specified, this overrides the specified Fluentd DaemonSet containers.
-                                    If omitted, the Fluentd DaemonSet will use its default values for its containers.
+                                    Containers is a list of Fluent Bit DaemonSet containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its containers.
                                   items:
                                     description:
-                                      FluentdDaemonSetContainer is a Fluentd
-                                      DaemonSet container.
+                                      FluentBitDaemonSetContainer is a Fluent
+                                      Bit DaemonSet container.
                                     properties:
                                       livenessProbe:
                                         description: |-
@@ -755,9 +760,11 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Fluent Bit DaemonSet container by name.
-                                          Supported values are: calico-fluent-bit
+                                          Supported values are: calico-fluent-bit (or the deprecated alias fluentd, kept
+                                          for one release so existing FluentdDaemonSet overrides continue to validate).
                                         enum:
                                           - calico-fluent-bit
+                                          - fluentd
                                         type: string
                                       readinessProbe:
                                         description: |-
@@ -793,8 +800,8 @@ spec:
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named Fluentd DaemonSet container's resources.
-                                          If omitted, the Fluentd DaemonSet will use its default value for this container's resources.
+                                          If specified, this overrides the named Fluent Bit DaemonSet container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this container's resources.
                                         properties:
                                           claims:
                                             description: |-
@@ -858,26 +865,29 @@ spec:
                                   type: array
                                 initContainers:
                                   description: |-
-                                    InitContainers is a list of Fluentd DaemonSet init containers.
-                                    If specified, this overrides the specified Fluentd DaemonSet init containers.
-                                    If omitted, the Fluentd DaemonSet will use its default values for its init containers.
+                                    InitContainers is a list of Fluent Bit DaemonSet init containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet init containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its init containers.
                                   items:
                                     description:
-                                      FluentdDaemonSetInitContainer is a
-                                      Fluentd DaemonSet init container.
+                                      FluentBitDaemonSetInitContainer is
+                                      a Fluent Bit DaemonSet init container.
                                     properties:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the Fluent Bit DaemonSet init container by name.
-                                          Supported values are: calico-fluent-bit-tls-key-cert-provisioner
+                                          Supported values are: calico-fluent-bit-tls-key-cert-provisioner (or the deprecated
+                                          alias tigera-fluentd-prometheus-tls-key-cert-provisioner, kept for one release so
+                                          existing FluentdDaemonSet overrides continue to validate).
                                         enum:
                                           - calico-fluent-bit-tls-key-cert-provisioner
+                                          - tigera-fluentd-prometheus-tls-key-cert-provisioner
                                         type: string
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named Fluentd DaemonSet init container's resources.
-                                          If omitted, the Fluentd DaemonSet will use its default value for this init container's resources.
+                                          If specified, this overrides the named Fluent Bit DaemonSet init container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this init container's resources.
                                         properties:
                                           claims:
                                             description: |-

@@ -701,7 +701,7 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 // onto the renamed calico-fluent-bit pod: container/init-container entries that
 // still carry fluentd-era names (stored before the CRD enum was updated) are
 // renamed so ApplyDaemonSetOverrides matches them.
-func translateLegacyFluentdOverrides(legacy *operatorv1.FluentdDaemonSet) *operatorv1.FluentdDaemonSet {
+func translateLegacyFluentdOverrides(legacy *operatorv1.FluentBitDaemonSet) *operatorv1.FluentBitDaemonSet {
 	if legacy == nil {
 		return nil
 	}

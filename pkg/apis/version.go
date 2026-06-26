@@ -21,6 +21,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -34,6 +35,11 @@ var datastoreMigrationGVR = schema.GroupVersionResource{
 	Version:  "v1beta1",
 	Resource: "datastoremigrations",
 }
+
+const (
+	mutatingAdmissionPolicyGroup = "admissionregistration.k8s.io"
+	mutatingAdmissionPolicyKind  = "MutatingAdmissionPolicy"
+)
 
 var log = ctrl.Log.WithName("apis")
 
@@ -122,4 +128,30 @@ func decideV3CRDs(v1present, v3present, mapServed bool) bool {
 		return true
 	}
 	return mapServed
+}
+
+// mutatingAdmissionPolicyServed reports whether the cluster serves the MutatingAdmissionPolicy
+// API (any version). v3 CRD mode relies on a MutatingAdmissionPolicy to default policy types, so
+// a greenfield install only defaults to v3 when this is available (k8s 1.32+).
+//
+// This is best-effort: ServerGroupsAndResources can return a partial result with an error when an
+// aggregated API is unhealthy, so we log and continue with whatever was returned rather than
+// failing. It is only called in the greenfield branch, where no aggregated APIs exist yet.
+func mutatingAdmissionPolicyServed(disco discovery.DiscoveryInterface) bool {
+	_, resourceLists, err := disco.ServerGroupsAndResources()
+	if err != nil {
+		log.Info("Partial error discovering server resources while checking for MutatingAdmissionPolicy; continuing with partial results", "error", err)
+	}
+	for _, rl := range resourceLists {
+		gv, parseErr := schema.ParseGroupVersion(rl.GroupVersion)
+		if parseErr != nil || gv.Group != mutatingAdmissionPolicyGroup {
+			continue
+		}
+		for _, r := range rl.APIResources {
+			if r.Kind == mutatingAdmissionPolicyKind {
+				return true
+			}
+		}
+	}
+	return false
 }

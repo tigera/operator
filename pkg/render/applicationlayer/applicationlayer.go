@@ -455,7 +455,7 @@ func (c *component) volumes() []corev1.Volume {
 
 		// Needed for Coraza library - contains rule set.
 		if c.config.PerHostWAFEnabled || c.config.SidecarInjectionEnabled {
-			// WAF logs need HostPath volume - logs to be consumed by fluentd.
+			// WAF logs need HostPath volume - logs to be consumed by fluent-bit.
 			volumes = append(volumes, corev1.Volume{
 				Name: CalicoLogsVolumeName,
 				VolumeSource: corev1.VolumeSource{

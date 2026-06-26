@@ -161,6 +161,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
 			{Name: "VOLTRON_URL", Value: render.ManagerService(nil)},
+			{Name: "RBAC_UI_ENABLED", Value: "false"},
 		}
 		Expect(uiAPIs.Env).To(Equal(uiAPIsExpectedEnvVars))
 
@@ -1730,6 +1731,154 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)).To(BeNil())
 		})
 	})
+
+	Context("RBAC management UI", func() {
+		var installation *operatorv1.InstallationSpec
+		BeforeEach(func() {
+			replicas := int32(1)
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.CalicoEnterprise,
+				Registry:             "testregistry.com/",
+			}
+		})
+
+		rbacUIEnabledEnv := func(d *appsv1.Deployment) corev1.EnvVar {
+			for _, c := range d.Spec.Template.Spec.Containers {
+				if c.Name == render.UIAPIsName {
+					for _, e := range c.Env {
+						if e.Name == "RBAC_UI_ENABLED" {
+							return e
+						}
+					}
+				}
+			}
+			return corev1.EnvVar{}
+		}
+
+		// Namespaced Role carries the create rule on ConfigMaps/Secrets — this
+		// is the stable presence check for the RBAC management UI gate.
+		nsCreateRule := rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"create"},
+		}
+
+		It("renders RBAC_UI_ENABLED=false and no namespaced RBAC UI role when rbac is unset", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
+
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbac.ui is Enabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "true"}))
+
+			role := rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
+			Expect(role.Rules).To(ContainElement(nsCreateRule))
+		})
+
+		It("renders RBAC_UI_ENABLED=false when rbac.ui is Disabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIDisabled},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
+		})
+
+		It("does not add the manager-side RBAC rules in multi-tenant mode", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation:      installation,
+				ns:                "tenant-a",
+				bindingNamespaces: []string{"tenant-a"},
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-a",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled},
+					},
+				},
+			})
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, "tenant-a", rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		Context("LDAP egress network policy gate", func() {
+			policyName := types.NamespacedName{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}
+			ldapEgress := v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(389, 636),
+				},
+			}
+			rbacUIManager := &operatorv1.Manager{
+				Spec: operatorv1.ManagerSpec{RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled}},
+			}
+
+			It("adds LDAP egress only when RBAC UI is enabled and the LDAP config secret is present", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, rbacManagementLDAP: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when the LDAP config secret is absent, even with RBAC UI enabled", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, rbacManagementLDAP: false,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when OIDC is configured but the LDAP config secret is absent", func() {
+				// Regression guard: the gate must key on the LDAP config secret,
+				// not on Authentication.Spec.OIDC (which never drives an LDAP dial).
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, oidc: true, rbacManagementLDAP: false,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when the LDAP secret is present but RBAC UI is disabled", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					rbacManagementLDAP: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+		})
+	})
 })
 
 type renderConfig struct {
@@ -1746,6 +1895,7 @@ type renderConfig struct {
 	tenant                  *operatorv1.Tenant
 	manager                 *operatorv1.Manager
 	externalElastic         bool
+	rbacManagementLDAP      bool
 }
 
 func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
@@ -1791,28 +1941,29 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 	}
 
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:      dexCfg,
-		TrustedCertBundle:       bundle,
-		TLSKeyPair:              managerTLS,
-		Installation:            roc.installation,
-		ManagementCluster:       roc.managementCluster,
-		NonClusterHost:          roc.nonClusterHost,
-		TunnelServerCert:        tunnelSecret,
-		VoltronLinseedKeyPair:   voltronLinseedKP,
-		InternalTLSKeyPair:      internalTraffic,
-		ClusterDomain:           dns.DefaultClusterDomain,
-		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                roc.installation.ControlPlaneReplicas,
-		Compliance:              roc.compliance,
-		ComplianceLicenseActive: roc.complianceFeatureActive,
-		OpenShift:               roc.openshift,
-		Namespace:               roc.ns,
-		BindingNamespaces:       roc.bindingNamespaces,
-		OSSTenantNamespaces:     roc.ossBindingNamespaces,
-		Tenant:                  roc.tenant,
-		Manager:                 roc.manager,
-		ExternalElastic:         roc.externalElastic,
-		CACertCommonName:        certificateManager.CACertCommonName(),
+		KeyValidatorConfig:           dexCfg,
+		TrustedCertBundle:            bundle,
+		TLSKeyPair:                   managerTLS,
+		Installation:                 roc.installation,
+		ManagementCluster:            roc.managementCluster,
+		NonClusterHost:               roc.nonClusterHost,
+		TunnelServerCert:             tunnelSecret,
+		VoltronLinseedKeyPair:        voltronLinseedKP,
+		InternalTLSKeyPair:           internalTraffic,
+		ClusterDomain:                dns.DefaultClusterDomain,
+		ESLicenseType:                render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                     roc.installation.ControlPlaneReplicas,
+		Compliance:                   roc.compliance,
+		ComplianceLicenseActive:      roc.complianceFeatureActive,
+		OpenShift:                    roc.openshift,
+		Namespace:                    roc.ns,
+		BindingNamespaces:            roc.bindingNamespaces,
+		OSSTenantNamespaces:          roc.ossBindingNamespaces,
+		Tenant:                       roc.tenant,
+		Manager:                      roc.manager,
+		ExternalElastic:              roc.externalElastic,
+		RBACManagementLDAPConfigured: roc.rbacManagementLDAP,
+		CACertCommonName:             certificateManager.CACertCommonName(),
 	}
 
 	if roc.tenant.MultiTenant() {

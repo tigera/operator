@@ -42,19 +42,19 @@ type LogCollectorSpec struct {
 	// +optional
 	MultiTenantManagementClusterNamespace string `json:"multiTenantManagementClusterNamespace,omitempty"`
 
-	// FluentdDaemonSet configures the Fluentd DaemonSet.
+	// FluentdDaemonSet configures the calico-fluent-bit DaemonSet (deprecated alias).
 	//
 	// Deprecated: use CalicoFluentBitDaemonSet instead. This field is retained
 	// as an alias for one release during the Fluentd → Fluent Bit migration;
 	// when both are set, CalicoFluentBitDaemonSet takes precedence.
 	// +optional
-	FluentdDaemonSet *FluentdDaemonSet `json:"fluentdDaemonSet,omitempty"`
+	FluentdDaemonSet *FluentBitDaemonSet `json:"fluentdDaemonSet,omitempty"`
 
 	// CalicoFluentBitDaemonSet configures the calico-fluent-bit DaemonSet, the
 	// Fluent Bit replacement for the Fluentd DaemonSet. Pod-template override
 	// semantics are unchanged from the deprecated FluentdDaemonSet field.
 	// +optional
-	CalicoFluentBitDaemonSet *FluentdDaemonSet `json:"calicoFluentBitDaemonSet,omitempty"`
+	CalicoFluentBitDaemonSet *FluentBitDaemonSet `json:"calicoFluentBitDaemonSet,omitempty"`
 
 	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
 	// +optional

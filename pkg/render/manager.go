@@ -1259,7 +1259,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 			Destination: v3.EntityRule{
 				Services: &v3.ServiceMatch{
 					Namespace: LogCollectorNamespace,
-					Name:      FluentdInputService,
+					Name:      FluentBitInputService,
 				},
 			},
 		})
@@ -1400,7 +1400,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-dpi",
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
-		"tigera-fluentd",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
 		"tigera-manager",

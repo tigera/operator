@@ -13,7 +13,6 @@ spec:
     shortNames:
       - wafplugin
     singular: wafplugin
-  preserveUnknownFields: false
   scope: Namespaced
   versions:
     - additionalPrinterColumns:

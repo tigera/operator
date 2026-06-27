@@ -11,7 +11,6 @@ spec:
     listKind: RemoteClusterConfigurationList
     plural: remoteclusterconfigurations
     singular: remoteclusterconfiguration
-  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v3

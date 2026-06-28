@@ -215,6 +215,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
 			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"},
+			{Name: "VOLTRON_LOG_COLLECTOR_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://calico-api.calico-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy/"},
 			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},

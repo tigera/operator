@@ -84,7 +84,7 @@ const (
 	MeshAlertmanagerPolicyName = AlertmanagerPolicyName + "-mesh"
 
 	ElasticsearchMetrics = "elasticsearch-metrics"
-	FluentdMetrics       = "fluentd-metrics"
+	FluentBitMetrics     = "calico-fluent-bit-metrics"
 
 	calicoNodePrometheusServiceName       = "calico-node-prometheus"
 	tigeraPrometheusServiceHealthEndpoint = "/health"
@@ -279,7 +279,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	serviceMonitors := []client.Object{
 		mc.serviceMonitorCalicoNode(),
 		mc.serviceMonitorElasticsearch(),
-		mc.serviceMonitorFluentd(),
+		mc.serviceMonitorFluentBit(),
 		mc.serviceMonitorQueryServer(),
 		mc.serviceMonitorCalicoKubeControllers(),
 	}
@@ -324,8 +324,11 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	toDelete = append(toDelete,
-		// Remove the pod monitor that existed prior to v1.25.
-		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}},
+		// Remove the pod monitor that existed prior to v1.25 and the
+		// fluentd-era monitors replaced by serviceMonitorFluentBit.
+		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}},
+		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}},
+		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}},
 		// Remove the tigera-prometheus-api deployment that was part of release-v1.23, but has been removed since.
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "tigera-prometheus-api", Namespace: common.TigeraPrometheusNamespace}},
 	)
@@ -1121,14 +1124,14 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 	}
 }
 
-// serviceMonitorFluentd creates a service monitor to make Prometheus watch Fluentd. Previously, a pod monitor was used.
+// serviceMonitorFluentBit creates a service monitor to make Prometheus watch Fluent Bit. Previously, a pod monitor was used.
 // However, the pod monitor does not have all the tls configuration options that we need, namely reading them from the
 // file system, as opposed to getting them from watching kubernetes secrets.
-func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor {
+func (mc *monitorComponent) serviceMonitorFluentBit() *monitoringv1.ServiceMonitor {
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.FluentdMetricsService,
+			Name:      render.FluentBitMetricsService,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
@@ -1137,7 +1140,7 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 					{
 						Key:      "k8s-app",
 						Operator: metav1.LabelSelectorOpIn,
-						Values:   []string{"fluentd-node", "fluentd-node-windows"},
+						Values:   []string{"calico-fluent-bit", "calico-fluent-bit-windows"},
 					},
 				},
 			},
@@ -1146,19 +1149,14 @@ func (mc *monitorComponent) serviceMonitorFluentd() *monitoringv1.ServiceMonitor
 				{
 					HonorLabels:   true,
 					Interval:      "5s",
-					Port:          render.FluentdMetricsPortName,
+					Port:          render.FluentBitMetricsPortName,
+					Path:          "/api/v2/metrics/prometheus",
 					ScrapeTimeout: "5s",
-					HTTPConfigWithProxyAndTLSFiles: monitoringv1.HTTPConfigWithProxyAndTLSFiles{
-						HTTPConfigWithTLSFiles: monitoringv1.HTTPConfigWithTLSFiles{
-							TLSConfig: mc.tlsConfig(render.FluentdPrometheusTLSSecretName),
-						},
-					},
-					RelabelConfigs: []monitoringv1.RelabelConfig{
-						{
-							TargetLabel: "__scheme__",
-							Replacement: ptr.To("https"),
-						},
-					},
+					// fluent-bit's built-in monitoring server (:2020) is plain
+					// HTTP — it has no TLS support, unlike fluentd's Ruby
+					// prometheus exporter which terminated mTLS on :9081. Access
+					// to the port is restricted by the allow-calico-fluent-bit
+					// NetworkPolicy (prometheus ingress only).
 				},
 			},
 		},

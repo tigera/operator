@@ -25,16 +25,16 @@ const (
 	httpsFQDNEndpoint = "https://tigera-secure-es-gateway-http.%s.svc.%s:9200"
 )
 
-func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string, isManagedCluster bool, isFluentd bool) string {
+func LinseedEndpoint(osType rmeta.OSType, clusterDomain, namespace string, isManagedCluster bool, isFluentBit bool) string {
 	switch {
 	// In a managed cluster, all Elasticsearch requests to Linseed are redirected via the Guardian service.
 	// Clients using the Linseed client are automatically configured with the correct SNI for certificate validation.
-	// Since Fluentd doesn't use the Linseed client, we expose an external service named "tigera-linseed" that redirects to Guardian.
+	// Since Fluent Bit doesn't use the Linseed client, we expose an external service named "tigera-linseed" that redirects to Guardian.
 	// The Linseed certificate is already configured to accept connections with SNI set to "tigera-linseed".
-	case isManagedCluster && isFluentd:
+	case isManagedCluster && isFluentBit:
 		return "https://tigera-linseed"
 
-	// Non-Fluentd components in the managed cluster forward traffic to Guardian
+	// Non-Fluent-Bit components in the managed cluster forward traffic to Guardian
 	case isManagedCluster && osType == rmeta.OSTypeWindows:
 		return fmt.Sprintf("https://guardian.calico-system.svc.%s", clusterDomain)
 	case isManagedCluster:

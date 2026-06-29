@@ -272,14 +272,6 @@ var (
 		variant:  enterpriseVariant,
 	}
 
-	ComponentOTelCollector = Component{
-		Version:   "master",
-		Image:     "otel-collector",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
@@ -312,6 +304,5 @@ var (
 		ComponentIstioInstallCNI,
 		ComponentIstioZTunnel,
 		ComponentIstioProxyv2,
-		ComponentOTelCollector,
 	}
 )

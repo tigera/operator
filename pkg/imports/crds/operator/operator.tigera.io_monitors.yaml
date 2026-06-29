@@ -49,7 +49,7 @@ spec:
                         replicas:
                           description: |-
                             Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
-                            Default: 0
+                            Default: 1
                           format: int32
                           type: integer
                         resources:
@@ -111,6 +111,80 @@ spec:
                                 More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                               type: object
                           type: object
+                      type: object
+                  type: object
+                alerts:
+                  description:
+                    Alerts enables or disables Calico Enterprise's built-in
+                    alerts. See Alerts for details.
+                  properties:
+                    deniedPackets:
+                      description: DeniedPackets fires when calico-node is denying packets.
+                      properties:
+                        status:
+                          description:
+                            Status enables or disables the alert. Defaults
+                            to Enabled when unset.
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
+                      type: object
+                    ipPoolExhaustion:
+                      description:
+                        IPPoolExhaustion fires when an IP pool is nearly
+                        (>=90%) or fully (>=100%) exhausted.
+                      properties:
+                        status:
+                          description:
+                            Status enables or disables the alert. Defaults
+                            to Enabled when unset.
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
+                      type: object
+                    licenseExpiry:
+                      description:
+                        LicenseExpiry fires when the license is close to
+                        expiry or invalid.
+                      properties:
+                        status:
+                          description:
+                            Status enables or disables the alert. Defaults
+                            to Enabled when unset.
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
+                      type: object
+                    tigeraStatus:
+                      description:
+                        TigeraStatus fires when a component stays degraded
+                        or progressing.
+                      properties:
+                        status:
+                          description:
+                            Status enables or disables the alert. Defaults
+                            to Enabled when unset.
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
+                      type: object
+                    tlsCertExpiry:
+                      description:
+                        TLSCertExpiry fires when a TLS certificate is close
+                        to expiry.
+                      properties:
+                        status:
+                          description:
+                            Status enables or disables the alert. Defaults
+                            to Enabled when unset.
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
                       type: object
                   type: object
                 externalPrometheus:

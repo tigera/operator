@@ -32,9 +32,11 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/test"
 )
 
@@ -45,6 +47,7 @@ var _ = Describe("OTelCollector controller tests", func() {
 		ctx        context.Context
 		mockStatus *status.MockStatus
 		r          *Reconciler
+		install    *operatorv1.Installation
 	)
 
 	BeforeEach(func() {
@@ -57,7 +60,7 @@ var _ = Describe("OTelCollector controller tests", func() {
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		replicas := int32(2)
-		Expect(cli.Create(ctx, &operatorv1.Installation{
+		install = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default", Generation: 2},
 			Status: operatorv1.InstallationStatus{
 				Variant:  operatorv1.CalicoEnterprise,
@@ -68,7 +71,8 @@ var _ = Describe("OTelCollector controller tests", func() {
 				Variant:              operatorv1.CalicoEnterprise,
 				Registry:             "some.registry.org/",
 			},
-		})).ToNot(HaveOccurred())
+		}
+		Expect(cli.Create(ctx, install)).ToNot(HaveOccurred())
 
 		Expect(cli.Create(ctx, &v3.LicenseKey{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -77,18 +81,22 @@ var _ = Describe("OTelCollector controller tests", func() {
 			},
 		})).ToNot(HaveOccurred())
 
+		// Create a CA secret so the certificate manager can issue keypairs.
+		cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(cli.Create(ctx, cm.KeyPair().Secret(common.OperatorNamespace()))).ShouldNot(HaveOccurred())
+
 		mockStatus = &status.MockStatus{}
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()
+		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
+		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("OnCRNotFound").Return()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
-		mockStatus.On("SetDegraded", operatorv1.ResourceReadError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
-		mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
-		mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
-		mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("SetDegraded", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
 
 		r = &Reconciler{
 			cli:    cli,
@@ -97,6 +105,7 @@ var _ = Describe("OTelCollector controller tests", func() {
 			opts: options.ControllerOptions{
 				DetectedProvider:    operatorv1.ProviderNone,
 				EnterpriseCRDExists: true,
+				ClusterDomain:      dns.DefaultClusterDomain,
 			},
 		}
 	})

@@ -51,6 +51,7 @@ const (
 	OTelCollectorContainerName      = "otel-collector"
 	OTelCollectorPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + OTelCollectorName
 	OTelCollectorClusterRoleName    = OTelCollectorName
+	OTelCollectorServerTLSSecretName = "otel-collector-tls"
 
 	OTLPGRPCPort    = 4317
 	OTLPHTTPPort    = 4318
@@ -69,6 +70,9 @@ type Configuration struct {
 	OpenShift     bool
 	Installation  *operatorv1.InstallationSpec
 	OTelCollector *operatorv1.OTelCollectorSpec
+	// ReceiverTLSSecret is the server keypair for the OTLP receiver (mTLS termination).
+	ReceiverTLSSecret    certificatemanagement.KeyPairInterface
+	// ClientTLSSecret is the client keypair for outbound prometheus scraping.
 	ClientTLSSecret      certificatemanagement.KeyPairInterface
 	TrustedCertBundle    certificatemanagement.TrustedBundleRO
 }
@@ -187,6 +191,10 @@ func (c *component) hasLogs() bool {
 
 type configTemplateData struct {
 	HasLogs        bool
+	ReceiverTLS    bool
+	ReceiverCertFile   string
+	ReceiverKeyFile    string
+	ReceiverClientCA   string
 	MetricsEnabled bool
 	MetricsCAFile     string
 	MetricsCertFile   string
@@ -213,6 +221,12 @@ var collectorConfigTmpl = template.Must(template.New("config").Parse(`receivers:
     protocols:
       http:
         endpoint: 0.0.0.0:4318
+{{- if .ReceiverTLS}}
+        tls:
+          cert_file: {{.ReceiverCertFile}}
+          key_file: {{.ReceiverKeyFile}}
+          client_ca_file: {{.ReceiverClientCA}}
+{{- end}}
 {{- end}}
 {{- if .MetricsEnabled}}
   prometheus:
@@ -315,6 +329,13 @@ func (c *component) collectorConfig() string {
 		MemorySpikeLimitMiB: DefaultMemorySpikeLimitMiB,
 	}
 
+	if c.hasLogs() && c.cfg.ReceiverTLSSecret != nil && c.cfg.TrustedCertBundle != nil {
+		data.ReceiverTLS = true
+		data.ReceiverCertFile = c.cfg.ReceiverTLSSecret.VolumeMountCertificateFilePath()
+		data.ReceiverKeyFile = c.cfg.ReceiverTLSSecret.VolumeMountKeyFilePath()
+		data.ReceiverClientCA = c.cfg.TrustedCertBundle.MountPath()
+	}
+
 	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
 		data.MetricsCAFile = c.cfg.TrustedCertBundle.MountPath()
 		data.MetricsCertFile = c.cfg.ClientTLSSecret.VolumeMountCertificateFilePath()
@@ -363,10 +384,19 @@ func (c *component) container() corev1.Container {
 		},
 	}
 
-	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
+	if c.cfg.TrustedCertBundle != nil {
 		volumeMounts = append(volumeMounts,
 			c.cfg.TrustedCertBundle.VolumeMounts(rmeta.OSTypeLinux)...,
 		)
+	}
+
+	if c.cfg.ReceiverTLSSecret != nil {
+		volumeMounts = append(volumeMounts,
+			c.cfg.ReceiverTLSSecret.VolumeMount(rmeta.OSTypeLinux),
+		)
+	}
+
+	if c.cfg.ClientTLSSecret != nil {
 		volumeMounts = append(volumeMounts,
 			c.cfg.ClientTLSSecret.VolumeMount(rmeta.OSTypeLinux),
 		)
@@ -429,11 +459,16 @@ func (c *component) statefulSet() *appsv1.StatefulSet {
 		},
 	}
 
-	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
-		volumes = append(volumes,
-			c.cfg.TrustedCertBundle.Volume(),
-			c.cfg.ClientTLSSecret.Volume(),
-		)
+	if c.cfg.TrustedCertBundle != nil {
+		volumes = append(volumes, c.cfg.TrustedCertBundle.Volume())
+	}
+
+	if c.cfg.ReceiverTLSSecret != nil {
+		volumes = append(volumes, c.cfg.ReceiverTLSSecret.Volume())
+	}
+
+	if c.cfg.ClientTLSSecret != nil {
+		volumes = append(volumes, c.cfg.ClientTLSSecret.Volume())
 	}
 
 	return &appsv1.StatefulSet{

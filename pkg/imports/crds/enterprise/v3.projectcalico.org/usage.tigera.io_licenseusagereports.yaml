@@ -11,7 +11,6 @@ spec:
     listKind: LicenseUsageReportList
     plural: licenseusagereports
     singular: licenseusagereport
-  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v1

@@ -47,4 +47,14 @@ var _ = Describe("ensureExtraArg", func() {
 		_ = ensureExtraArg(in, "--log-path", logPath)
 		Expect(in).To(Equal([]string{"--log-path", "/custom.log"}))
 	})
+
+	It("leaves a flag-looking token after a bare -- untouched", func() {
+		Expect(ensureExtraArg([]string{"--", "--log-path", "/positional"}, "--log-path", logPath)).
+			To(Equal([]string{"--log-path", logPath, "--", "--log-path", "/positional"}))
+	})
+
+	It("inserts the option before a bare -- separator", func() {
+		Expect(ensureExtraArg([]string{"--foo", "bar", "--", "x"}, "--log-path", logPath)).
+			To(Equal([]string{"--foo", "bar", "--log-path", logPath, "--", "x"}))
+	})
 })

@@ -826,21 +826,34 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 }
 
 // ensureExtraArg sets "flag value" in an Envoy Gateway ExtraArgs slice (func-e parses each token as
-// a separate element), replacing the value if flag is already present or appending the flag/value
-// pair if not. It copies the slice so it never mutates a slice backing a cached EnvoyProxy object.
+// a separate element), replacing the value if flag is already present as an option, or inserting the
+// flag/value pair if not. A bare "--" terminates option parsing, so tokens at or after it are left
+// alone: the flag is matched only before "--", and a newly inserted pair goes before it. The slice is
+// copied, so this never mutates a slice backing a cached EnvoyProxy object.
 func ensureExtraArg(args []string, flag, value string) []string {
-	out := append([]string(nil), args...)
-	for i, a := range out {
-		if a == flag {
-			if i+1 < len(out) {
-				out[i+1] = value
-			} else {
-				out = append(out, value)
-			}
-			return out
+	// Options end at the first bare "--"; anything from there on is a non-option token.
+	sep := len(args)
+	for i, a := range args {
+		if a == "--" {
+			sep = i
+			break
 		}
 	}
-	return append(out, flag, value)
+	out := make([]string, 0, len(args)+2)
+	for i := 0; i < sep; i++ {
+		if args[i] == flag {
+			out = append(out, flag, value)
+			next := i + 1
+			if next < sep { // drop the existing value, if any
+				next++
+			}
+			return append(out, args[next:]...)
+		}
+		out = append(out, args[i])
+	}
+	// flag is not present as an option: insert it just before the "--" (or at the end).
+	out = append(out, flag, value)
+	return append(out, args[sep:]...)
 }
 
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {

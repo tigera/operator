@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render_test
+package logcollector_test
 
 import (
 	"fmt"
@@ -20,8 +20,9 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"k8s.io/apimachinery/pkg/util/intstr"
+
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -44,18 +45,19 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
 
 var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
-	var cfg *render.FluentBitConfiguration
+	var cfg *logcollector.FluentBitConfiguration
 	var cli client.Client
 
-	expectedFluentBitPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentbit_unmanaged.json")
-	expectedFluentBitPolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentbit_unmanaged_ocp.json")
-	expectedFluentBitPolicyForManaged := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/fluentbit_managed.json")
+	expectedFluentBitPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/fluentbit_unmanaged.json")
+	expectedFluentBitPolicyForUnmanagedOpenshift := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/fluentbit_unmanaged_ocp.json")
+	expectedFluentBitPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/fluentbit_managed.json")
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -67,11 +69,11 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, nil, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 
-		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
+		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, logcollector.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
-		eksSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{""})
+		eksSecret, err := certificateManager.GetOrCreateKeyPair(cli, logcollector.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
-		cfg = &render.FluentBitConfiguration{
+		cfg = &logcollector.FluentBitConfiguration{
 			LogCollector:  &operatorv1.LogCollector{},
 			ClusterDomain: dns.DefaultClusterDomain,
 			OSType:        rmeta.OSTypeLinux,
@@ -86,7 +88,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -102,14 +104,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should render with a default configuration", func() {
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 		}
 
@@ -120,7 +122,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -161,7 +163,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		))
 
 		// Verify the ConfigMap contains the expected config.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		// Linseed shipping uses the built-in http output (no Go proxy
@@ -192,19 +194,19 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 		Expect(container.ReadinessProbe.HTTPGet).NotTo(BeNil())
 		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/api/v1/health"))
-		Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(render.FluentBitMetricsPort)))
+		Expect(container.ReadinessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(logcollector.FluentBitMetricsPort)))
 		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(container.LivenessProbe.HTTPGet).NotTo(BeNil())
 		Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/api/v1/health"))
-		Expect(container.LivenessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(render.FluentBitMetricsPort)))
+		Expect(container.LivenessProbe.HTTPGet.Port).To(Equal(intstr.FromInt(logcollector.FluentBitMetricsPort)))
 		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
 
 		Expect(container.StartupProbe.HTTPGet).NotTo(BeNil())
 		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/api/v1/health"))
-		Expect(container.StartupProbe.HTTPGet.Port).To(Equal(intstr.FromInt(render.FluentBitMetricsPort)))
+		Expect(container.StartupProbe.HTTPGet.Port).To(Equal(intstr.FromInt(logcollector.FluentBitMetricsPort)))
 		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
 		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(60))
 		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
@@ -224,7 +226,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 
-		podExecRole := rtest.GetResource(resources, render.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		podExecRole := rtest.GetResource(resources, logcollector.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
@@ -237,8 +239,8 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				Verbs:     []string{"list"},
 			},
 		}))
-		podExecRoleBinding := rtest.GetResource(resources, render.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(render.PacketCaptureAPIRole))
+		podExecRoleBinding := rtest.GetResource(resources, logcollector.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(logcollector.PacketCaptureAPIRole))
 		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -248,7 +250,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}))
 
 		// The metrics service should have the correct configuration.
-		ms := rtest.GetResource(resources, render.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
+		ms := rtest.GetResource(resources, logcollector.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
@@ -260,7 +262,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 
-		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
+		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, logcollector.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 
 		cfg.FluentBitKeyPair = metricsSecret
@@ -300,7 +302,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		cfg.LogCollector = &logCollectorcfg
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -318,9 +320,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should render with a configuration for a managed cluster", func() {
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
@@ -335,7 +337,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}, legacyFluentdDeleteResources()...)
 
 		// Should render the correct resources.
-		managedCfg := &render.FluentBitConfiguration{
+		managedCfg := &logcollector.FluentBitConfiguration{
 			LogCollector:     cfg.LogCollector,
 			ClusterDomain:    cfg.ClusterDomain,
 			OSType:           cfg.OSType,
@@ -344,7 +346,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			TrustedBundle:    cfg.TrustedBundle,
 			ManagedCluster:   true,
 		}
-		component := render.FluentBit(managedCfg)
+		component := logcollector.FluentBit(managedCfg)
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
 		rtest.ExpectResources(deleteResources, expectedDeleteResources)
@@ -364,7 +366,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		))
 
 		// Verify the ConfigMap contains the linseed config for the managed cluster.
-		cm := rtest.GetResource(createResources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(createResources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		Expect(fluentBitConf).To(ContainSubstring(`"name": "http"`))
@@ -418,21 +420,21 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}))
 
 		// The metrics service should have the correct configuration.
-		ms := rtest.GetResource(createResources, render.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
+		ms := rtest.GetResource(createResources, logcollector.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
 	It("should render with a configuration for a managed cluster with packet capture", func() {
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitNodeName, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitNodeName, Namespace: render.LogCollectorNamespace}},
 			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 		}
@@ -449,7 +451,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		managedCfg := &render.FluentBitConfiguration{
+		managedCfg := &logcollector.FluentBitConfiguration{
 			LogCollector:     cfg.LogCollector,
 			ClusterDomain:    cfg.ClusterDomain,
 			OSType:           cfg.OSType,
@@ -459,7 +461,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			ManagedCluster:   true,
 			PacketCapture:    pc,
 		}
-		component := render.FluentBit(managedCfg)
+		component := logcollector.FluentBit(managedCfg)
 		createResources, deleteResources := component.Objects()
 		rtest.ExpectResources(createResources, expectedResources)
 		rtest.ExpectResources(deleteResources, expectedDeleteResources)
@@ -521,7 +523,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			},
 		}))
 
-		podExecRole := rtest.GetResource(createResources, render.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		podExecRole := rtest.GetResource(createResources, logcollector.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
 		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{""},
@@ -534,8 +536,8 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				Verbs:     []string{"list"},
 			},
 		}))
-		podExecRoleBinding := rtest.GetResource(createResources, render.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(render.PacketCaptureAPIRole))
+		podExecRoleBinding := rtest.GetResource(createResources, logcollector.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(logcollector.PacketCaptureAPIRole))
 		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
@@ -545,7 +547,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}))
 
 		// The metrics service should have the correct configuration.
-		ms := rtest.GetResource(createResources, render.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
+		ms := rtest.GetResource(createResources, logcollector.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
@@ -553,7 +555,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
 
 		// Should render the correct resources.
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 
 		// Should render resource quota
@@ -562,9 +564,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should render for Windows nodes", func() {
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsServiceWindows, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName + "-windows", Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsServiceWindows, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName + "-windows", Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-windows"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-windows"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-windows", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
@@ -573,7 +575,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 		cfg.OSType = rmeta.OSTypeWindows
 		// Should render the correct resources.
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -592,7 +594,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		// Verify the ConfigMap contains expected config for Windows paths. The
 		// Windows component renders its own OS-suffixed ConfigMap so it cannot
 		// fight the Linux one on mixed clusters.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName+"-windows", render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName+"-windows", render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		// Windows ships through the built-in http output too — the image
@@ -638,7 +640,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 	})
 
 	It("should render with S3 configuration", func() {
-		cfg.S3Credential = &render.S3Credential{
+		cfg.S3Credential = &logcollector.S3Credential{
 			KeyId:     []byte("IdForTheKey"),
 			KeySecret: []byte("SecretForTheKey"),
 		}
@@ -651,9 +653,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "log-collector-s3-credentials", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -662,7 +664,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -692,7 +694,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}))
 
 		// S3 output configuration is now in the ConfigMap.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		Expect(fluentBitConf).To(ContainSubstring("s3"))
@@ -703,9 +705,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should render with Syslog configuration", func() {
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
@@ -724,7 +726,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -733,7 +735,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 
 		// Syslog configuration is now in the ConfigMap.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		Expect(fluentBitConf).To(ContainSubstring("syslog"))
@@ -756,7 +758,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -770,7 +772,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(volnames).To(ContainElement("tigera-ca-bundle"))
 
 		// Syslog TLS configuration is in the ConfigMap.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		Expect(fluentBitConf).To(ContainSubstring("syslog"))
 		Expect(fluentBitConf).To(ContainSubstring("1.2.3.4"))
@@ -792,7 +794,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -800,7 +802,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ds.Spec.Template.Spec.Volumes).To(HaveLen(4))
 
 		// Syslog TLS configuration is in the ConfigMap.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		Expect(fluentBitConf).To(ContainSubstring("syslog"))
 		Expect(fluentBitConf).To(ContainSubstring("1.2.3.4"))
@@ -808,7 +810,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 	})
 
 	It("should render with splunk configuration", func() {
-		cfg.SplkCredential = &render.SplunkCredential{
+		cfg.SplkCredential = &logcollector.SplunkCredential{
 			Token: []byte("TokenForHEC"),
 		}
 		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
@@ -818,9 +820,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "logcollector-splunk-credentials", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -829,7 +831,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -850,7 +852,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}))
 
 		// Splunk output configuration is now in the ConfigMap.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data).To(HaveKey("fluent-bit.yaml"))
 		fluentBitConf := cm.Data["fluent-bit.yaml"]
 		Expect(fluentBitConf).To(ContainSubstring("splunk"))
@@ -859,14 +861,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 	})
 
 	It("should render with filter", func() {
-		cfg.Filters = &render.FluentBitFilters{
+		cfg.Filters = &logcollector.FluentBitFilters{
 			Flow: "- name: grep\n  exclude: dest_namespace noisy\n",
 		}
 
 		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
@@ -874,14 +876,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 
 		rtest.ExpectResources(resources, expectedResources)
 
 		// User filters are inlined into the rendered config, scoped to the log
 		// type's tag, and roll the pods via the config hash annotation.
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, "calico-system", "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, "calico-system", "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		conf := cm.Data["fluent-bit.yaml"]
 		Expect(conf).To(ContainSubstring(`"name": "grep"`))
 		Expect(conf).To(ContainSubstring(`"exclude": "dest_namespace noisy"`))
@@ -893,35 +895,35 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 	})
 
 	It("flags filter ConfigMap keys that are not valid fluent-bit YAML", func() {
-		var nilFilters *render.FluentBitFilters
+		var nilFilters *logcollector.FluentBitFilters
 		Expect(nilFilters.InvalidKeys()).To(BeNil())
 
-		Expect((&render.FluentBitFilters{}).InvalidKeys()).To(BeEmpty())
+		Expect((&logcollector.FluentBitFilters{}).InvalidKeys()).To(BeEmpty())
 
-		valid := &render.FluentBitFilters{
+		valid := &logcollector.FluentBitFilters{
 			Flow: "- name: grep\n  exclude: dest_namespace noisy\n",
 			DNS:  "- name: grep\n  exclude: qname foo\n",
 		}
 		Expect(valid.InvalidKeys()).To(BeEmpty())
 
 		// A leftover fluentd <filter> block does not parse as a fluent-bit YAML list.
-		mixed := &render.FluentBitFilters{
+		mixed := &logcollector.FluentBitFilters{
 			Flow: "<filter flows>\n  @type grep\n</filter>\n",
 			DNS:  "- name: grep\n  exclude: qname foo\n",
 		}
-		Expect(mixed.InvalidKeys()).To(ConsistOf(render.FluentBitFilterFlowName))
+		Expect(mixed.InvalidKeys()).To(ConsistOf(logcollector.FluentBitFilterFlowName))
 	})
 
 	It("skips invalid user filter content during render and still renders the daemonset", func() {
-		cfg.Filters = &render.FluentBitFilters{
+		cfg.Filters = &logcollector.FluentBitFilters{
 			Flow: "<filter flows>\n  @type grep\n</filter>\n", // invalid fluent-bit YAML (fluentd syntax)
 			DNS:  "- name: grep\n  exclude: qname foo\n",      // valid
 		}
 
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 
-		cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, "calico-system", "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, "calico-system", "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		conf := cm.Data["fluent-bit.yaml"]
 		// The valid DNS filter is inlined and scoped to its tag.
 		Expect(conf).To(ContainSubstring(`"exclude": "qname foo"`))
@@ -944,7 +946,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1024,7 +1026,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 		// The rendered config wires the in_eks input into the Linseed http
 		// output.
-		cm := rtest.GetResource(resources, render.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		eksConf := cm.Data["fluent-bit.yaml"]
 		Expect(eksConf).To(ContainSubstring(`"name": "in_eks"`))
 		Expect(eksConf).To(ContainSubstring(`"plugins_file": "/etc/fluent-bit/plugins.conf"`))
@@ -1040,7 +1042,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			KubernetesProvider: operatorv1.ProviderEKS,
 		}
 
-		resources, _ := render.FluentBit(cfg).Objects()
+		resources, _ := logcollector.FluentBit(cfg).Objects()
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// The controller defaults these before render in production; this
 		// pins the render-level defense in depth — an empty prefix or "0s"
@@ -1056,7 +1058,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
 
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deploy).NotTo(BeNil())
@@ -1105,7 +1107,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		cfg.LogCollector = &logCollectorcfg
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
@@ -1138,7 +1140,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		tenant.Spec.ID = "test-tenant-id"
 		cfg.Tenant = tenant
 
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1152,7 +1154,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(envs).To(ContainElement(corev1.EnvVar{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"}))
 
 		// The tenant header rides on the http output config.
-		cm := rtest.GetResource(resources, render.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring(`"header": "x-tenant-id test-tenant-id"`))
 	})
 
@@ -1173,7 +1175,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
 		cfg.ManagedCluster = true
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		resources, _ := component.Objects()
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
@@ -1189,7 +1191,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		volumeMounts := deploy.Spec.Template.Spec.Containers[0].VolumeMounts
 		Expect(volumeMounts).To(ContainElement(corev1.VolumeMount{Name: "linseed-token", MountPath: "/var/run/secrets/tigera.io/linseed/"}))
 
-		cm := rtest.GetResource(resources, render.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		cm := rtest.GetResource(resources, logcollector.EKSLogForwarderConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 		Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring(`"bearer_token_file": "/var/run/secrets/tigera.io/linseed/token"`))
 	})
 
@@ -1200,14 +1202,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 			By("establishing the base case with no non-cluster hosts or forwarding options")
 			expectedResources := []client.Object{
-				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
-				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
+				&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
+				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
+				&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}},
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 			}
 			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
@@ -1216,11 +1218,11 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			}
 
-			resources, _ := render.FluentBit(cfg).Objects()
+			resources, _ := logcollector.FluentBit(cfg).Objects()
 			rtest.ExpectResources(resources, expectedResources)
 
 			// Base case: no additional store outputs in ConfigMap besides linseed.
-			cm := rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			baseConf := cm.Data["fluent-bit.yaml"]
 			Expect(baseConf).To(ContainSubstring("linseed"))
 			Expect(baseConf).NotTo(ContainSubstring(strings.ToLower(destination)))
@@ -1238,19 +1240,19 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			expectedResources = append(expectedResources, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitInputService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}})
 
 			// Should render the correct resources.
-			resources, _ = render.FluentBit(cfg).Objects()
+			resources, _ = logcollector.FluentBit(cfg).Objects()
 			rtest.ExpectResources(resources, expectedResources)
 
 			// Service is rendered as expected.
 			ms := rtest.GetResource(resources, render.FluentBitInputService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
 			Expect(ms.Spec.Selector).To(Equal(map[string]string{"k8s-app": render.FluentBitNodeName}))
 			Expect(ms.Spec.Ports).To(HaveLen(1))
-			Expect(ms.Spec.Ports[0].Port).To(BeNumerically("==", render.FluentBitInputPort))
-			Expect(ms.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(render.FluentBitInputPort)))
+			Expect(ms.Spec.Ports[0].Port).To(BeNumerically("==", logcollector.FluentBitInputPort))
+			Expect(ms.Spec.Ports[0].TargetPort).To(Equal(intstr.FromInt32(logcollector.FluentBitInputPort)))
 			Expect(ms.Spec.Ports[0].Protocol).To(Equal(corev1.ProtocolTCP))
 
 			// ConfigMap should contain the destination output section (all hosts scope).
-			cm = rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			cm = rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			allHostsConf := cm.Data["fluent-bit.yaml"]
 			Expect(allHostsConf).To(ContainSubstring(strings.ToLower(destination)))
 
@@ -1264,11 +1266,11 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 			By("enabling forwarding of only non-cluster logs")
 			cfg.LogCollector.Spec.AdditionalStores = additionalStoreSpecNonClusterHosts
-			resources, _ = render.FluentBit(cfg).Objects()
+			resources, _ = logcollector.FluentBit(cfg).Objects()
 			rtest.ExpectResources(resources, expectedResources)
 
 			// ConfigMap should still contain the destination output section (non-cluster scope).
-			cm = rtest.GetResource(resources, render.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			cm = rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			nonClusterConf := cm.Data["fluent-bit.yaml"]
 			Expect(nonClusterConf).To(ContainSubstring(strings.ToLower(destination)))
 		},
@@ -1296,7 +1298,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				}
 				cfg.ManagedCluster = scenario.ManagedCluster
 
-				component := render.FluentBit(cfg)
+				component := logcollector.FluentBit(cfg)
 				resources, _ := component.Objects()
 
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
@@ -1310,7 +1312,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		)
 
 		It("should render calico-system policy for the non-cluster-host scenario", func() {
-			resourcesWithoutNonClusterHosts, _ := render.FluentBit(cfg).Objects()
+			resourcesWithoutNonClusterHosts, _ := logcollector.FluentBit(cfg).Objects()
 			policyWithoutNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
 			cfg.NonClusterHost = &operatorv1.NonClusterHost{
 				ObjectMeta: metav1.ObjectMeta{
@@ -1320,7 +1322,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 					Endpoint: "https://1.2.3.4:5678",
 				},
 			}
-			resourcesWithNonClusterHosts, _ := render.FluentBit(cfg).Objects()
+			resourcesWithNonClusterHosts, _ := logcollector.FluentBit(cfg).Objects()
 			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 
 			// Validate that we have a single ingress rule added for the fluent-bit service.
@@ -1335,7 +1337,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 					NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", render.ManagerNamespace),
 				},
 				Destination: v3.EntityRule{
-					Ports: networkpolicy.Ports(render.FluentBitInputPort),
+					Ports: networkpolicy.Ports(logcollector.FluentBitInputPort),
 				},
 			}))
 		})
@@ -1343,7 +1345,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should move DaemonSet to toDelete when LicenseExpired is true", func() {
 		cfg.LicenseExpired = true
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		toCreate, toDelete := component.Objects()
 
@@ -1367,7 +1369,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should include DaemonSet in toCreate when LicenseExpired is false", func() {
 		cfg.LicenseExpired = false
-		component := render.FluentBit(cfg)
+		component := logcollector.FluentBit(cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		toCreate, _ := component.Objects()
 
@@ -1382,9 +1384,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 	})
 })
 
-func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {
+func setupEKSCloudwatchLogConfig() *logcollector.EksCloudwatchLogConfig {
 	fetchInterval := int32(900)
-	return &render.EksCloudwatchLogConfig{
+	return &logcollector.EksCloudwatchLogConfig{
 		AwsId:         []byte("aws-id"),
 		AwsKey:        []byte("aws-key"),
 		AwsRegion:     "us-west-1",
@@ -1396,19 +1398,19 @@ func setupEKSCloudwatchLogConfig() *render.EksCloudwatchLogConfig {
 func getExpectedResourcesForEKS(isManagedcluster bool) []client.Object {
 	expectedResources := []client.Object{
 		&v3.NetworkPolicy{
-			ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitPolicyName, Namespace: render.LogCollectorNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace},
 			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		},
 
-		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
+		&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: "calico-system"}},
 		&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
 		&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
 		&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}},
-		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: render.EKSLogForwarderConfConfigMapName, Namespace: render.LogCollectorNamespace}},
+		&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.EKSLogForwarderConfConfigMapName, Namespace: render.LogCollectorNamespace}},
 		&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: render.LogCollectorNamespace}},
 		&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-eks-log-forwarder-secret", Namespace: render.LogCollectorNamespace}},
 		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: render.LogCollectorNamespace}},
@@ -1472,19 +1474,19 @@ func legacyFluentdDeleteResources() []client.Object {
 		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics-windows", Namespace: ns}},
 		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-prometheus-tls", Namespace: ns}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.EKSLogForwarderTLSSecretName, Namespace: ns}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.EksLogForwarderSecret, Namespace: ns}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.S3FluentBitSecretName, Namespace: ns}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.SplunkFluentBitTokenSecretName, Namespace: ns}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.EKSLogForwarderTLSSecretName, Namespace: ns}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.EksLogForwarderSecret, Namespace: ns}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.S3FluentBitSecretName, Namespace: ns}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.SplunkFluentBitTokenSecretName, Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-tigera-linseed-token", Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder-tigera-linseed-token", Namespace: ns}},
 		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-filters", Namespace: ns}},
-		&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRole, Namespace: ns}},
-		&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureAPIRoleBinding, Namespace: ns}},
+		&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: ns}},
+		&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: ns}},
 		&corev1.ResourceQuota{TypeMeta: metav1.TypeMeta{Kind: "ResourceQuota", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: resourcequota.TigeraCriticalResourceQuotaName, Namespace: ns}},
 		&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: ns}},
 		// The rendered copy of the user filters ConfigMap is superseded by
 		// inlining the filters into the rendered config.
-		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitFilterConfigMapName, Namespace: render.LogCollectorNamespace}},
+		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitFilterConfigMapName, Namespace: render.LogCollectorNamespace}},
 	}
 }

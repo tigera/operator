@@ -47,6 +47,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -215,7 +216,7 @@ var _ = Describe("Monitor controller tests", func() {
 			keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 			Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
 			privateKeyPEM, certificatePEM := keyContent.Bytes(), crtContent.Bytes()
-			fluentBitCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
+			fluentBitCert, err := certificateManager.GetOrCreateKeyPair(cli, logcollector.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
 			fluentBitSecret := fluentBitCert.Secret(common.OperatorNamespace())
 			fluentBitSecret.Data[corev1.TLSCertKey] = certificatePEM

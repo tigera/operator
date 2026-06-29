@@ -1237,7 +1237,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 			policyWithoutNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
 
-			// Validate that we have a single egress rule added for the fluentd service.
+			// Validate that we have a single egress rule added for the fluent-bit service.
 			Expect(policyWithoutNonClusterHosts.Spec.Ingress).To(Equal(policyWithNonClusterHosts.Spec.Ingress))
 			Expect(len(policyWithoutNonClusterHosts.Spec.Egress)).To(Equal(len(policyWithNonClusterHosts.Spec.Egress) - 1))
 			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(11))
@@ -1247,7 +1247,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Destination: v3.EntityRule{
 					Services: &v3.ServiceMatch{
 						Namespace: render.LogCollectorNamespace,
-						Name:      render.FluentdInputService,
+						Name:      render.FluentBitInputService,
 					},
 				},
 			}))

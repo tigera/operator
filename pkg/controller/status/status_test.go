@@ -568,6 +568,13 @@ var _ = Describe("Status reporting tests", func() {
 					}
 				}
 
+				// withReadinessProbe returns the pod with a single container carrying
+				// the given readiness probe, so the grace period is derived from it.
+				withReadinessProbe := func(p *corev1.Pod, probe *corev1.Probe) *corev1.Pod {
+					p.Spec.Containers = []corev1.Container{{Name: "c", ReadinessProbe: probe}}
+					return p
+				}
+
 				It("should not flag a pod unready for less than the grace period", func() {
 					Expect(client.Create(ctx, notReadyPod("recently-unready", time.Now().Add(-10*time.Second)))).NotTo(HaveOccurred())
 					issues := sm.diagnosePods("Test", selector, "NS1", "")
@@ -583,6 +590,38 @@ var _ = Describe("Status reporting tests", func() {
 
 				It("should not flag a pod with an unset LastTransitionTime", func() {
 					Expect(client.Create(ctx, notReadyPod("no-transition-time", time.Time{}))).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					Expect(issues).To(BeEmpty())
+				})
+
+				It("should derive a longer grace period from the readiness probe", func() {
+					// initialDelay 300s + 3 * (10s + 1s) = 333s, far longer than the
+					// default. A pod unready for 90s is still within its startup window.
+					probe := &corev1.Probe{
+						InitialDelaySeconds: 300,
+						PeriodSeconds:       10,
+						TimeoutSeconds:      1,
+						FailureThreshold:    3,
+					}
+					pod := withReadinessProbe(notReadyPod("slow-start", time.Now().Add(-90*time.Second)), probe)
+					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					Expect(issues).To(BeEmpty())
+
+					// Once it has been unready past the derived window, it is flagged.
+					pod2 := withReadinessProbe(notReadyPod("slow-start-stuck", time.Now().Add(-400*time.Second)), probe)
+					Expect(client.Create(ctx, pod2)).NotTo(HaveOccurred())
+					issues = sm.diagnosePods("Test", selector, "NS1", "")
+					Expect(issues).To(HaveLen(1))
+					Expect(issues[0].issueType).To(Equal(issueNotReady))
+				})
+
+				It("should not derive a grace period shorter than the default floor", func() {
+					// A tight probe derives ~33s, but the default floor keeps the grace
+					// at 60s so we never flag more aggressively than the fixed default.
+					probe := &corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3}
+					pod := withReadinessProbe(notReadyPod("tight-probe", time.Now().Add(-45*time.Second)), probe)
+					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
 					issues := sm.diagnosePods("Test", selector, "NS1", "")
 					Expect(issues).To(BeEmpty())
 				})

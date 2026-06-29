@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
@@ -1131,7 +1132,7 @@ func (mc *monitorComponent) serviceMonitorFluentBit() *monitoringv1.ServiceMonit
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      render.FluentBitMetricsService,
+			Name:      logcollector.FluentBitMetricsService,
 			Namespace: common.TigeraPrometheusNamespace,
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
@@ -1149,7 +1150,7 @@ func (mc *monitorComponent) serviceMonitorFluentBit() *monitoringv1.ServiceMonit
 				{
 					HonorLabels:   true,
 					Interval:      "5s",
-					Port:          render.FluentBitMetricsPortName,
+					Port:          logcollector.FluentBitMetricsPortName,
 					Path:          "/api/v2/metrics/prometheus",
 					ScrapeTimeout: "5s",
 					// fluent-bit's built-in monitoring server (:2020) is plain

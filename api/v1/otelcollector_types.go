@@ -25,7 +25,7 @@ type OTelLogType string
 const (
 	OTelAuditLog OTelLogType = "Audit"
 	OTelDNSLog   OTelLogType = "DNS"
-	OTelFlowLog OTelLogType = "Flows"
+	OTelFlowLog  OTelLogType = "Flows"
 )
 
 // OTelLogs configures log export.

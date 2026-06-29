@@ -694,6 +694,9 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		{Name: "FLUENT_UID", Value: "0"},
 		{Name: "FLOW_LOG_FILE", Value: c.path("/var/log/calico/flowlogs/flows.log")},
 		{Name: "DNS_LOG_FILE", Value: c.path("/var/log/calico/dnslogs/dns.log")},
+		// WAF events are written by Felix (gated by FelixConfiguration.WAFEventLogsFileEnabled) and tailed by the
+		// fluentd-node WAF source. The path is always set; the file only exists when a WAF producer is enabled.
+		{Name: "WAF_LOG_FILE", Value: c.path("/var/log/calico/waf/waf.log")},
 		{Name: "FLUENTD_ES_SECURE", Value: "true"},
 		{Name: "NODENAME", ValueFrom: &corev1.EnvVarSource{FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"}}},
 		{Name: "LINSEED_TOKEN", Value: c.path(GetLinseedTokenPath(c.cfg.ManagedCluster))},

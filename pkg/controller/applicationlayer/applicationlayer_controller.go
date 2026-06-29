@@ -22,6 +22,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -137,6 +138,13 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("applicationlayer-controller failed to watch FelixConfiguration resource: %w", err)
 	}
 
+	// Watch for changes to GatewayAPI; its WAF data-plane extension shares the
+	// FelixConfiguration WAFEventLogsFileEnabled toggle, so toggling it must re-trigger this controller.
+	err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{})
+	if err != nil {
+		return fmt.Errorf("applicationlayer-controller failed to watch GatewayAPI resource: %w", err)
+	}
+
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("applicationlayer-controller failed to watch applicationlayer Tigerastatus: %w", err)
@@ -173,7 +181,10 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("ApplicationLayer object not found")
 			// Patch tproxyMode if it's  needed after crd deletion.
-			if err = r.patchFelixConfiguration(ctx, nil); err != nil {
+			gatewayWAFEnabled, gwErr := r.isGatewayWAFEnabled(ctx)
+			if gwErr != nil {
+				reqLogger.Error(gwErr, "Error checking GatewayAPI WAF state; skipping felix configuration patch")
+			} else if err = r.patchFelixConfiguration(ctx, nil, gatewayWAFEnabled); err != nil {
 				reqLogger.Error(err, "Error patching felix configuration")
 			}
 			r.status.OnCRNotFound()
@@ -237,7 +248,12 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	// Patch felix configuration if necessary.
-	if err = r.patchFelixConfiguration(ctx, instance); err != nil {
+	gatewayWAFEnabled, err := r.isGatewayWAFEnabled(ctx)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking GatewayAPI WAF state", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err = r.patchFelixConfiguration(ctx, instance, gatewayWAFEnabled); err != nil {
 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -494,7 +510,9 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 
 // patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
 // If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
-func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer) error {
+// gatewayWAFEnabled reflects the GatewayAPI WAF data-plane extension (design-25): its audit events flow through
+// Felix's WAF event log, so it shares the WAFEventLogsFileEnabled toggle with the ApplicationLayer WAF.
+func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) error {
 	// Fetch the Istio CR and Installation variant so DesiredPolicySyncPathPrefix
 	// can see whether the istio side still needs the field. Both reads tolerate
 	// NotFound — the istio side has no claim if either is absent.
@@ -515,6 +533,8 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 	istioNeeds := utils.IstioRequiresPolicySync(istioCR, variant)
 
 	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+		wafEventLogsFileEnabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
+
 		var tproxyMode string
 		if ok, v := r.getTProxyMode(al); ok {
 			tproxyMode = v
@@ -527,6 +547,14 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 				//
 				// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
 				// once we know we're only upgrading from those versions and above.
+				//
+				// WAFEventLogsFileEnabled is an independent field: still enable it when a WAF producer
+				// (ApplicationLayer or the gateway data plane) requires it, without touching TPROXYMode.
+				if wafEventLogsFileEnabled && (fc.Spec.WAFEventLogsFileEnabled == nil || !*fc.Spec.WAFEventLogsFileEnabled) {
+					fc.Spec.WAFEventLogsFileEnabled = &wafEventLogsFileEnabled
+					log.Info("Patching FelixConfiguration: ", "wafEventLogsFileEnabled", wafEventLogsFileEnabled)
+					return true, nil
+				}
 				return false, nil
 			}
 
@@ -539,8 +567,6 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al, istioNeeds)
 		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
 		tproxyModeSetDesired := fc.Spec.TPROXYMode != "" && fc.Spec.TPROXYMode == string(tproxyMode)
-		wafEventLogsFileEnabled := al != nil && ((al.Spec.SidecarInjection != nil && *al.Spec.SidecarInjection == operatorv1.SidecarEnabled) ||
-			(al.Spec.WebApplicationFirewall != nil && *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled))
 		wafEventLogsFileEnabledDesired := fc.Spec.WAFEventLogsFileEnabled != nil && *fc.Spec.WAFEventLogsFileEnabled == wafEventLogsFileEnabled
 
 		// If tproxy mode is already set to desired state return false to indicate patch not needed.
@@ -562,4 +588,26 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 	})
 
 	return err
+}
+
+// wafEventLogsFileRequired reports whether Felix should write WAF event logs to file, which is required
+// when either the ApplicationLayer WAF/sidecar or the GatewayAPI WAF data-plane extension is enabled.
+func wafEventLogsFileRequired(al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) bool {
+	return gatewayWAFEnabled ||
+		(al != nil && ((al.Spec.SidecarInjection != nil && *al.Spec.SidecarInjection == operatorv1.SidecarEnabled) ||
+			(al.Spec.WebApplicationFirewall != nil && *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled)))
+}
+
+// isGatewayWAFEnabled reports whether the GatewayAPI WAF data-plane extension is enabled. A missing
+// GatewayAPI CR is treated as disabled (no error); any other read error is returned so the caller can
+// requeue rather than spuriously treating WAF as disabled and flapping FelixConfiguration.
+func (r *ReconcileApplicationLayer) isGatewayWAFEnabled(ctx context.Context) (bool, error) {
+	gw, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s: %w", msg, err)
+	}
+	return gw.Spec.IsWAFGatewayExtensionEnabled(), nil
 }

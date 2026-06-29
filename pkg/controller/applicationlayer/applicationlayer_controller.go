@@ -181,7 +181,10 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			reqLogger.Info("ApplicationLayer object not found")
 			// Patch tproxyMode if it's  needed after crd deletion.
-			if err = r.patchFelixConfiguration(ctx, nil, r.isGatewayWAFEnabled(ctx)); err != nil {
+			gatewayWAFEnabled, gwErr := r.isGatewayWAFEnabled(ctx)
+			if gwErr != nil {
+				reqLogger.Error(gwErr, "Error checking GatewayAPI WAF state; skipping felix configuration patch")
+			} else if err = r.patchFelixConfiguration(ctx, nil, gatewayWAFEnabled); err != nil {
 				reqLogger.Error(err, "Error patching felix configuration")
 			}
 			r.status.OnCRNotFound()
@@ -245,7 +248,12 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 	}
 
 	// Patch felix configuration if necessary.
-	if err = r.patchFelixConfiguration(ctx, instance, r.isGatewayWAFEnabled(ctx)); err != nil {
+	gatewayWAFEnabled, err := r.isGatewayWAFEnabled(ctx)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking GatewayAPI WAF state", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err = r.patchFelixConfiguration(ctx, instance, gatewayWAFEnabled); err != nil {
 		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -590,12 +598,16 @@ func wafEventLogsFileRequired(al *operatorv1.ApplicationLayer, gatewayWAFEnabled
 			(al.Spec.WebApplicationFirewall != nil && *al.Spec.WebApplicationFirewall == operatorv1.WAFEnabled)))
 }
 
-// isGatewayWAFEnabled reports whether the GatewayAPI WAF data-plane extension is enabled. A missing or
-// unreadable GatewayAPI CR is treated as disabled.
-func (r *ReconcileApplicationLayer) isGatewayWAFEnabled(ctx context.Context) bool {
-	gw, _, err := gatewayapi.GetGatewayAPI(ctx, r.client)
+// isGatewayWAFEnabled reports whether the GatewayAPI WAF data-plane extension is enabled. A missing
+// GatewayAPI CR is treated as disabled (no error); any other read error is returned so the caller can
+// requeue rather than spuriously treating WAF as disabled and flapping FelixConfiguration.
+func (r *ReconcileApplicationLayer) isGatewayWAFEnabled(ctx context.Context) (bool, error) {
+	gw, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
 	if err != nil {
-		return false
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s: %w", msg, err)
 	}
-	return gw.Spec.IsWAFGatewayExtensionEnabled()
+	return gw.Spec.IsWAFGatewayExtensionEnabled(), nil
 }

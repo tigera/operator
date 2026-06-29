@@ -825,6 +825,24 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	return objs
 }
 
+// ensureExtraArg sets "flag value" in an Envoy Gateway ExtraArgs slice (func-e parses each token as
+// a separate element), replacing the value if flag is already present or appending the flag/value
+// pair if not. It copies the slice so it never mutates a slice backing a cached EnvoyProxy object.
+func ensureExtraArg(args []string, flag, value string) []string {
+	out := append([]string(nil), args...)
+	for i, a := range out {
+		if a == flag {
+			if i+1 < len(out) {
+				out[i+1] = value
+			} else {
+				out = append(out, value)
+			}
+			return out
+		}
+	}
+	return append(out, flag, value)
+}
+
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
@@ -940,16 +958,17 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 			}
 			envoyProxy.Spec.Logging.Level[wafLogComponentWasm] = envoyapi.LogLevelInfo
 
-			// Redirect Envoy's application log (where the wasm filter's "AuditLog:" lines
-			// land) to a file on the "access-logs" emptyDir so the l7-log-collector can
-			// tail it (the collector already mounts that volume). EnvoyProxy has no native
-			// log-path field, and a Patch on the envoy container's args would replace Envoy
-			// Gateway's generated args, so use ExtraArgs, which EG appends to the proxy
-			// command line. func-e parses each element as a single token, so the flag and
-			// value are separate elements. A user-supplied --log-path is left untouched.
-			if !slices.Contains(envoyProxy.Spec.ExtraArgs, "--log-path") {
-				envoyProxy.Spec.ExtraArgs = append(envoyProxy.Spec.ExtraArgs, "--log-path", wafAuditLogPath)
-			}
+			// Redirect Envoy's application log (where the wasm filter's "AuditLog:" lines land)
+			// to a file on the "access-logs" emptyDir so the l7-log-collector can tail it (the
+			// collector already mounts that volume, and can only read files under /access_logs).
+			// EnvoyProxy has no native log-path field, and a Patch on the envoy container's args
+			// would replace Envoy Gateway's generated args, so use ExtraArgs, which EG appends to
+			// the proxy command line. func-e parses each element as a single token, so the flag
+			// and value are separate elements. The operator owns --log-path whenever WAF audit
+			// capture is enabled: it must match WAF_AUDIT_LOG_PATH on the l7-log-collector and
+			// live on the shared access-logs volume, so set it to wafAuditLogPath, replacing any
+			// value carried over from a custom base EnvoyProxy.
+			envoyProxy.Spec.ExtraArgs = ensureExtraArg(envoyProxy.Spec.ExtraArgs, "--log-path", wafAuditLogPath)
 
 			l7LogCollector := corev1.Container{
 				Name:  "l7-log-collector",

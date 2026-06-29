@@ -51,6 +51,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
@@ -278,7 +279,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 		keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 		Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
 		privateKeyPEM, certificatePEM := keyContent.Bytes(), crtContent.Bytes()
-		fluentBitCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
+		fluentBitCert, err := certificateManager.GetOrCreateKeyPair(cli, logcollector.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
 		Expect(err).NotTo(HaveOccurred())
 		fluentBitSecret := fluentBitCert.Secret(common.OperatorNamespace())
 		fluentBitSecret.Data[corev1.TLSCertKey] = certificatePEM

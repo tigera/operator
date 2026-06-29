@@ -690,6 +690,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			FluentBitKeyPair:       fluentBitKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 			LicenseExpired:         licenseExpired,
+			// Must match the Linux configuration: both OS variants render the
+			// shared allow-calico-fluent-bit NetworkPolicy, whose non-cluster-host
+			// ingress rule (port 9880) is gated on NonClusterHost. If only the
+			// Linux config sets it, the two renders disagree and the operator
+			// flaps the policy on every reconcile (dropping voltron's access to
+			// the http input). The non-cluster-host input/service themselves are
+			// still Linux-only (gated on OSType), so this only affects the policy.
+			NonClusterHost: nonclusterhost,
 		}
 		comp = render.FluentBit(fluentBitCfg)
 

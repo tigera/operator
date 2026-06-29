@@ -64,10 +64,20 @@ const (
 	// does not export a constant for it.
 	deploymentRevisionAnnotation = "deployment.kubernetes.io/revision"
 
-	// readinessGracePeriod is how long a running pod may stay unready before we
-	// consider it failing. This avoids tripping Degraded for pods that are only
-	// briefly unready during a rolling update.
-	readinessGracePeriod = 60 * time.Second
+	// defaultReadinessGracePeriod is how long a running pod may stay unready
+	// before we consider it failing, used for pods whose containers define no
+	// readiness probe. It also acts as a floor for the probe-derived grace
+	// period (see readinessGracePeriod), so we never flag a pod more
+	// aggressively than this. This avoids tripping Degraded for pods that are
+	// only briefly unready during a rolling update.
+	defaultReadinessGracePeriod = 60 * time.Second
+
+	// Kubelet defaults for probe timing fields, applied when a probe leaves them
+	// unset. The API server fills these in for real pods, but we default
+	// defensively so the derivation is correct for any pod object.
+	defaultProbePeriodSeconds    = 10
+	defaultProbeTimeoutSeconds   = 1
+	defaultProbeFailureThreshold = 3
 )
 
 type podIssueSeverity int
@@ -879,8 +889,11 @@ func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSele
 
 		// Running - check if passing readiness checks. We only flag a pod once
 		// it has been unready for longer than the grace period, to minimize
-		// false positives during rolling updates.
+		// false positives during rolling updates. The grace period is derived
+		// from the pod's readiness probes so that slow-starting pods are not
+		// flagged before their probes would have had a chance to pass.
 		if p.Status.Phase == corev1.PodRunning {
+			grace := readinessGracePeriod(p)
 			for _, cond := range p.Status.Conditions {
 				if cond.Type != corev1.ContainersReady || cond.Status != corev1.ConditionFalse {
 					continue
@@ -890,7 +903,7 @@ func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSele
 				if cond.LastTransitionTime.IsZero() {
 					continue
 				}
-				if time.Since(cond.LastTransitionTime.Time) > readinessGracePeriod {
+				if time.Since(cond.LastTransitionTime.Time) > grace {
 					issues = append(issues, podIssue{
 						workload:      workload,
 						severity:      severityFailing,
@@ -904,6 +917,47 @@ func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSele
 		}
 	}
 	return issues
+}
+
+// readinessGracePeriod returns how long the given pod may remain unready before
+// we treat it as failing. It is derived from the pod's readiness probes: a pod
+// that legitimately takes a while to become ready (long initial delay, lenient
+// failure threshold, or a slow probe cadence) should not be flagged before its
+// probes would normally have settled. The value is the worst-case settling time
+// across all containers, floored at defaultReadinessGracePeriod so we never flag
+// a pod more aggressively than the fixed default and so pods without a readiness
+// probe still get a sensible grace period.
+func readinessGracePeriod(p corev1.Pod) time.Duration {
+	grace := defaultReadinessGracePeriod
+	for _, c := range p.Spec.Containers {
+		probe := c.ReadinessProbe
+		if probe == nil {
+			continue
+		}
+
+		period := probe.PeriodSeconds
+		if period <= 0 {
+			period = defaultProbePeriodSeconds
+		}
+		timeout := probe.TimeoutSeconds
+		if timeout <= 0 {
+			timeout = defaultProbeTimeoutSeconds
+		}
+		threshold := probe.FailureThreshold
+		if threshold <= 0 {
+			threshold = defaultProbeFailureThreshold
+		}
+
+		// Worst case for a slow-starting container: the initial delay before
+		// probing begins, plus a full run of failureThreshold attempts, each of
+		// which can take up to the probe period plus its timeout.
+		d := time.Duration(probe.InitialDelaySeconds)*time.Second +
+			time.Duration(threshold)*time.Duration(period+timeout)*time.Second
+		if d > grace {
+			grace = d
+		}
+	}
+	return grace
 }
 
 // diagnoseContainers checks a list of container statuses for known error states and

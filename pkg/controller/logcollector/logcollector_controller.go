@@ -158,6 +158,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
 	return nil
 }
 

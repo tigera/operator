@@ -273,6 +273,34 @@ var _ = Describe("Application layer controller tests", func() {
 			Expect(fc.Spec.TPROXYMode).To(Equal(""))
 		})
 
+		It("should enable WAFEventLogsFileEnabled when the GatewayAPI WAF extension is enabled (no ApplicationLayer CR)", func() {
+			// The gateway data-plane WAF (design-25) emits audit events that flow through Felix's WAF event
+			// log, so it requires the same FelixConfiguration toggle as the legacy ApplicationLayer WAF — even
+			// when no ApplicationLayer CR is present.
+			mockStatus.On("OnCRNotFound").Return()
+
+			By("creating a GatewayAPI CR with the WAF extension enabled")
+			wafEnabled := operatorv1.WAFExtensionStateEnabled
+			Expect(c.Create(ctx, &operatorv1.GatewayAPI{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.GatewayAPISpec{
+					Extensions: &operatorv1.GatewayAPIExtensions{
+						WAF: &operatorv1.WAFExtensionSpec{State: &wafEnabled},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			By("reconciling without an ApplicationLayer resource")
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			By("ensuring felix WAFEventLogsFileEnabled is true")
+			fc := v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			Expect(test.GetResource(c, &fc)).To(BeNil())
+			Expect(fc.Spec.WAFEventLogsFileEnabled).NotTo(BeNil())
+			Expect(*fc.Spec.WAFEventLogsFileEnabled).To(BeTrue())
+		})
+
 		It("should render accurate resources for for log collection", func() {
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
 			mockStatus.On("AddDeployments", mock.Anything).Return()

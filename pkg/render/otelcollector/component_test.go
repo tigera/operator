@@ -218,6 +218,30 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(len(statefulSet.Spec.Template.Spec.Volumes)).To(BeNumerically(">", 1))
 			Expect(len(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts)).To(BeNumerically(">", 1))
 		})
+
+		It("should include receiver TLS volumes and mounts when logs with certs are enabled", func() {
+			receiverKeyPair := certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector-tls"}}, nil, "")
+			trustedBundle := certificatemanagement.CreateTrustedBundle(nil)
+
+			cfg := &otelcollector.Configuration{
+				Installation: defaultInstallation,
+				OTelCollector: &operatorv1.OTelCollectorSpec{
+					Logs:      &operatorv1.OTelLogs{Types: []operatorv1.OTelLogType{operatorv1.OTelFlowLog}},
+					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				},
+				ReceiverTLSSecret: receiverKeyPair,
+				TrustedCertBundle: trustedBundle,
+			}
+			component := otelcollector.OTelCollector(cfg)
+			Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+			objs, _ := component.Objects()
+
+			statefulSet, err := rtest.GetResourceOfType[*appsv1.StatefulSet](objs, otelcollector.OTelCollectorStatefulSetName, otelcollector.OTelCollectorNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(len(statefulSet.Spec.Template.Spec.Volumes)).To(BeNumerically(">", 1))
+			Expect(len(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts)).To(BeNumerically(">", 1))
+		})
 	})
 
 	Context("ConfigMap content", func() {
@@ -238,6 +262,30 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(config).To(ContainSubstring("0.0.0.0:4318"))
 			Expect(config).To(ContainSubstring("logs:"))
 			Expect(config).To(ContainSubstring("receivers: [otlp]"))
+		})
+
+		It("should include receiver TLS config when logs with certs are enabled", func() {
+			receiverKeyPair := certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector-tls"}}, nil, "")
+			trustedBundle := certificatemanagement.CreateTrustedBundle(nil)
+
+			cfg := &otelcollector.Configuration{
+				Installation: defaultInstallation,
+				OTelCollector: &operatorv1.OTelCollectorSpec{
+					Logs:      &operatorv1.OTelLogs{Types: []operatorv1.OTelLogType{operatorv1.OTelFlowLog}},
+					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				},
+				ReceiverTLSSecret: receiverKeyPair,
+				TrustedCertBundle: trustedBundle,
+			}
+			objs, _ := otelcollector.OTelCollector(cfg).Objects()
+			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OTelCollectorConfigMapName, otelcollector.OTelCollectorNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			config := cm.Data["config.yaml"]
+			Expect(config).To(ContainSubstring("otlp:"))
+			Expect(config).To(ContainSubstring("cert_file:"))
+			Expect(config).To(ContainSubstring("key_file:"))
+			Expect(config).To(ContainSubstring("client_ca_file:"))
 		})
 
 		It("should include prometheus receiver when metrics are enabled", func() {

@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
@@ -471,7 +472,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 		render.ManagerInternalTLSSecretName: helper.TruthNamespace(),
 
 		// Get certificate for fluent-bit, which Linseed needs to trust in a standalone or management cluster.
-		render.FluentBitTLSSecretName: common.OperatorNamespace(),
+		logcollector.FluentBitTLSSecretName: common.OperatorNamespace(),
 
 		// Get certificate for intrusion detection controller, which Linseed needs to trust in a standalone or management cluster.
 		render.IntrusionDetectionTLSSecretName: helper.TruthNamespace(),
@@ -493,7 +494,7 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 	}
 
 	if r.isEKSLogForwardingEnabled(install) {
-		certs[render.EKSLogForwarderTLSSecretName] = common.OperatorNamespace()
+		certs[logcollector.EKSLogForwarderTLSSecretName] = common.OperatorNamespace()
 	}
 
 	if r.elasticExternal {

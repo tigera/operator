@@ -42,15 +42,15 @@ import (
 )
 
 const (
-	OTelCollectorName               = "otel-collector"
-	OTelCollectorNamespace          = common.CalicoNamespace
-	OTelCollectorServiceAccountName = OTelCollectorName
-	OTelCollectorStatefulSetName    = OTelCollectorName
-	OTelCollectorServiceName        = OTelCollectorName
-	OTelCollectorConfigMapName      = OTelCollectorName
-	OTelCollectorContainerName      = "otel-collector"
-	OTelCollectorPolicyName         = networkpolicy.CalicoComponentPolicyPrefix + OTelCollectorName
-	OTelCollectorClusterRoleName    = OTelCollectorName
+	OTelCollectorName                = "otel-collector"
+	OTelCollectorNamespace           = common.CalicoNamespace
+	OTelCollectorServiceAccountName  = OTelCollectorName
+	OTelCollectorStatefulSetName     = OTelCollectorName
+	OTelCollectorServiceName         = OTelCollectorName
+	OTelCollectorConfigMapName       = OTelCollectorName
+	OTelCollectorContainerName       = "otel-collector"
+	OTelCollectorPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + OTelCollectorName
+	OTelCollectorClusterRoleName     = OTelCollectorName
 	OTelCollectorServerTLSSecretName = "otel-collector-tls"
 
 	OTLPGRPCPort    = 4317
@@ -59,9 +59,9 @@ const (
 
 	MetricsTLSServerName = "calico-node-metrics"
 
-	DefaultMemoryLimit        = "512Mi"
-	DefaultMemoryRequest      = "128Mi"
-	DefaultMemoryLimitMiB     = 409 // 80% of 512Mi
+	DefaultMemoryLimit         = "512Mi"
+	DefaultMemoryRequest       = "128Mi"
+	DefaultMemoryLimitMiB      = 409 // 80% of 512Mi
 	DefaultMemorySpikeLimitMiB = 100 // ~25% of limit_mib
 )
 
@@ -71,10 +71,10 @@ type Configuration struct {
 	Installation  *operatorv1.InstallationSpec
 	OTelCollector *operatorv1.OTelCollectorSpec
 	// ReceiverTLSSecret is the server keypair for the OTLP receiver (mTLS termination).
-	ReceiverTLSSecret    certificatemanagement.KeyPairInterface
+	ReceiverTLSSecret certificatemanagement.KeyPairInterface
 	// ClientTLSSecret is the client keypair for outbound prometheus scraping.
-	ClientTLSSecret      certificatemanagement.KeyPairInterface
-	TrustedCertBundle    certificatemanagement.TrustedBundleRO
+	ClientTLSSecret   certificatemanagement.KeyPairInterface
+	TrustedCertBundle certificatemanagement.TrustedBundleRO
 }
 
 type component struct {
@@ -92,7 +92,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.image, err = components.GetReference(components.ComponentOTelCollector, reg, path, prefix, is)
+	c.image, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -190,22 +190,22 @@ func (c *component) hasLogs() bool {
 }
 
 type configTemplateData struct {
-	HasLogs        bool
-	ReceiverTLS    bool
-	ReceiverCertFile   string
-	ReceiverKeyFile    string
-	ReceiverClientCA   string
-	MetricsEnabled bool
-	MetricsCAFile     string
-	MetricsCertFile   string
-	MetricsKeyFile    string
-	MetricsServerName string
-	MetricsNamespace  string
-	Exporters            []exporterEntry
-	ExporterNames        string
-	HealthCheckPort      int
-	MemoryLimitMiB       int
-	MemorySpikeLimitMiB  int
+	HasLogs             bool
+	ReceiverTLS         bool
+	ReceiverCertFile    string
+	ReceiverKeyFile     string
+	ReceiverClientCA    string
+	MetricsEnabled      bool
+	MetricsCAFile       string
+	MetricsCertFile     string
+	MetricsKeyFile      string
+	MetricsServerName   string
+	MetricsNamespace    string
+	Exporters           []exporterEntry
+	ExporterNames       string
+	HealthCheckPort     int
+	MemoryLimitMiB      int
+	MemorySpikeLimitMiB int
 }
 
 type exporterEntry struct {

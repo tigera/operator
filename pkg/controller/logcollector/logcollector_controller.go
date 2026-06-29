@@ -617,8 +617,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
-		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
-		OTelLogTypes:           otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux
 	comp := rlogcollector.FluentBit(fluentBitCfg)
@@ -696,7 +694,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			LicenseExpired:         licenseExpired,
 			NonClusterHost:         nonclusterhost,
 			OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
-			OTelLogTypes:           otelLogTypes(instance),
 		}
 		comp = rlogcollector.FluentBit(fluentBitCfg)
 
@@ -881,11 +878,4 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 	syslogCert := certificatemanagement.NewCertificate(rlogcollector.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
-}
-
-func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OTelLogType {
-	if lc.Spec.OTelCollector == nil || lc.Spec.OTelCollector.Logs == nil {
-		return nil
-	}
-	return lc.Spec.OTelCollector.Logs.Types
 }

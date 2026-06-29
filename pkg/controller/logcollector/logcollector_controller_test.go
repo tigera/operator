@@ -243,6 +243,37 @@ var _ = Describe("LogCollector controller tests", func() {
 					"sha256:fluentbitwindowshash")))
 		})
 
+		It("should keep the non-cluster-host ingress rule on the fluent-bit policy when Windows nodes are present", func() {
+			// A Windows node makes the operator also render the Windows fluent-bit
+			// component, which shares the allow-calico-fluent-bit NetworkPolicy with
+			// the Linux component. The non-cluster-host ingress rule (port 9880,
+			// voltron -> http input) is gated on NonClusterHost, so if the Windows
+			// configuration does not carry NonClusterHost it overwrites the policy
+			// without that rule, making the rule flap on every reconcile.
+			Expect(c.Create(ctx, &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "windows-node",
+					Labels: map[string]string{"kubernetes.io/os": "windows"},
+				},
+			})).ToNot(HaveOccurred())
+			Expect(c.Create(ctx, &operatorv1.NonClusterHost{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec:       operatorv1.NonClusterHostSpec{Endpoint: "https://1.2.3.4:5678"},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policy := v3.NetworkPolicy{
+				TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system.allow-calico-fluent-bit", Namespace: render.LogCollectorNamespace},
+			}
+			Expect(test.GetResource(c, &policy)).To(BeNil())
+			// Metrics rule (2020) + non-cluster-host rule (9880). Without the fix the
+			// Windows render (applied last) drops the 9880 rule, leaving only one.
+			Expect(policy.Spec.Ingress).To(HaveLen(2))
+		})
+
 		Context("Forward to S3", func() {
 			s3Vars := []corev1.EnvVar{
 				{

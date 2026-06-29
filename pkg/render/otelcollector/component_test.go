@@ -42,6 +42,8 @@ var _ = Describe("OTelCollector rendering", func() {
 
 	BeforeEach(func() {
 		defaultInstallation = &operatorv1.InstallationSpec{
+			Variant:              operatorv1.CalicoEnterprise,
+			Registry:             "testregistry.com/",
 			KubernetesProvider:   operatorv1.ProviderGKE,
 			ControlPlaneReplicas: ptr.To(int32(2)),
 		}
@@ -132,7 +134,7 @@ var _ = Describe("OTelCollector rendering", func() {
 							Containers: []corev1.Container{
 								{
 									Name:    otelcollector.OTelCollectorContainerName,
-									Image:   "gcr.io/unique-caldron-775/cnx/tigera/calico:master",
+									Image:   "testregistry.com/tigera/calico:master",
 									Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 									Ports: []corev1.ContainerPort{
 										{Name: "otlp-grpc", ContainerPort: otelcollector.OTLPGRPCPort, Protocol: corev1.ProtocolTCP},

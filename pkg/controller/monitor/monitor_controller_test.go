@@ -171,7 +171,7 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, pr)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 		})
 
 		It("should create Prometheus related resources", func() {
@@ -184,7 +184,7 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 
 			// Verify the recommended labels are correct on these resources.
 			Expect(p.Labels).To(Equal(map[string]string{
@@ -207,7 +207,7 @@ var _ = Describe("Monitor controller tests", func() {
 		})
 
 		It("should create Prometheus related resources even when a cert with missing key usages is configured for other components", func() {
-			By("Creating a fluentd certificate secret without all necessary usages")
+			By("Creating a fluent-bit certificate secret without all necessary usages")
 			cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 			Expect(err).NotTo(HaveOccurred())
 			tlsCfg, err := cryptoCA.MakeServerCertForDuration(sets.New[string]("test"), tls.DefaultCertificateDuration, tls.SetServerAuth)
@@ -215,13 +215,13 @@ var _ = Describe("Monitor controller tests", func() {
 			keyContent, crtContent := &bytes.Buffer{}, &bytes.Buffer{}
 			Expect(tlsCfg.WriteCertConfig(crtContent, keyContent)).NotTo(HaveOccurred())
 			privateKeyPEM, certificatePEM := keyContent.Bytes(), crtContent.Bytes()
-			fluentdCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), []string{""})
+			fluentBitCert, err := certificateManager.GetOrCreateKeyPair(cli, render.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
 			Expect(err).NotTo(HaveOccurred())
-			fluentdSecret := fluentdCert.Secret(common.OperatorNamespace())
-			fluentdSecret.Data[corev1.TLSCertKey] = certificatePEM
-			fluentdSecret.Data[corev1.TLSPrivateKeyKey] = privateKeyPEM
+			fluentBitSecret := fluentBitCert.Secret(common.OperatorNamespace())
+			fluentBitSecret.Data[corev1.TLSCertKey] = certificatePEM
+			fluentBitSecret.Data[corev1.TLSPrivateKeyKey] = privateKeyPEM
 			Expect(err).NotTo(HaveOccurred())
-			Expect(r.client.Create(ctx, fluentdSecret)).NotTo(HaveOccurred())
+			Expect(r.client.Create(ctx, fluentBitSecret)).NotTo(HaveOccurred())
 
 			By("reconciling the controller after a bad secret was created, we expect no problems, because bad secrets should be skipped")
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -288,7 +288,7 @@ var _ = Describe("Monitor controller tests", func() {
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.TigeraPrometheusRule, Namespace: common.TigeraPrometheusNamespace}, pr)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
-				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+				Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 
 				// External Prometheus related objects should be rendered after reconciliation.
 				serviceMonitor := &monitoringv1.ServiceMonitor{}
@@ -677,7 +677,7 @@ var _ = Describe("Monitor controller tests", func() {
 			sm := &monitoringv1.ServiceMonitor{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).To(HaveOccurred())
 
 			// Grace period warning should be cleared when license is fully expired.
 			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "license-grace-period")
@@ -700,7 +700,7 @@ var _ = Describe("Monitor controller tests", func() {
 			sm := &monitoringv1.ServiceMonitor{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 		})
 
 		It("should requeue when license is in the grace period", func() {
@@ -729,7 +729,7 @@ var _ = Describe("Monitor controller tests", func() {
 			sm := &monitoringv1.ServiceMonitor{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.CalicoNodeMonitor, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.ElasticsearchMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, client.ObjectKey{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}, sm)).NotTo(HaveOccurred())
 		})
 	})
 })

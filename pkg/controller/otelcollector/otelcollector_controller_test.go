@@ -105,7 +105,7 @@ var _ = Describe("OTelCollector controller tests", func() {
 			opts: options.ControllerOptions{
 				DetectedProvider:    operatorv1.ProviderNone,
 				EnterpriseCRDExists: true,
-				ClusterDomain:      dns.DefaultClusterDomain,
+				ClusterDomain:       dns.DefaultClusterDomain,
 			},
 		}
 	})

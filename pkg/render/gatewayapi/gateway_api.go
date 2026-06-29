@@ -111,6 +111,22 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+
+	// wafLogComponentWasm is the Envoy "wasm" logger component. Envoy Gateway does not
+	// define a const for it (its enum omits wasm), but EnvoyProxy.Spec.Logging.Level
+	// passes arbitrary component keys through to Envoy's --component-log-level arg, and
+	// Envoy recognises "wasm". Setting it to info surfaces the Coraza WASM filter's
+	// "AuditLog:" lines (emitted via proxywasm.LogInfo) in Envoy's application log.
+	wafLogComponentWasm = envoyapi.ProxyLogComponent("wasm")
+
+	// wafAuditLogPath is the file that Envoy's application log is redirected to via
+	// --log-path, and that the l7-log-collector tails for Coraza "AuditLog:" lines
+	// (WAF_AUDIT_LOG_PATH). It lives on the "access-logs" emptyDir that is already
+	// mounted in both the envoy container (which writes it) and the l7-log-collector
+	// (which reads it) - so no extra volume or mount is needed. Envoy will not create
+	// parent directories for --log-path, so this is a file directly under the existing
+	// /access_logs mount, not a new subdirectory.
+	wafAuditLogPath = "/access_logs/envoy.log"
 )
 
 var (
@@ -809,6 +825,37 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	return objs
 }
 
+// ensureExtraArg sets "flag value" in an Envoy Gateway ExtraArgs slice (func-e parses each token as
+// a separate element), replacing the value if flag is already present as an option, or inserting the
+// flag/value pair if not. A bare "--" terminates option parsing, so tokens at or after it are left
+// alone: the flag is matched only before "--", and a newly inserted pair goes before it. The slice is
+// copied, so this never mutates a slice backing a cached EnvoyProxy object.
+func ensureExtraArg(args []string, flag, value string) []string {
+	// Options end at the first bare "--"; anything from there on is a non-option token.
+	sep := len(args)
+	for i, a := range args {
+		if a == "--" {
+			sep = i
+			break
+		}
+	}
+	out := make([]string, 0, len(args)+2)
+	for i := 0; i < sep; i++ {
+		if args[i] == flag {
+			out = append(out, flag, value)
+			next := i + 1
+			if next < sep { // drop the existing value, if any
+				next++
+			}
+			return append(out, args[next:]...)
+		}
+		out = append(out, args[i])
+	}
+	// flag is not present as an option: insert it just before the "--" (or at the end).
+	out = append(out, flag, value)
+	return append(out, args[sep:]...)
+}
+
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
@@ -911,6 +958,31 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
+			// Tune Envoy log levels for WAF audit capture: the wasm component logs at
+			// info so the Coraza filter's "AuditLog:" lines reach Envoy's application
+			// log, while the default stays at warn to keep the redirected log file
+			// approximately just the audit lines. A user-supplied default level (e.g.
+			// for debugging) is preserved.
+			if envoyProxy.Spec.Logging.Level == nil {
+				envoyProxy.Spec.Logging.Level = map[envoyapi.ProxyLogComponent]envoyapi.LogLevel{}
+			}
+			if _, ok := envoyProxy.Spec.Logging.Level[envoyapi.LogComponentDefault]; !ok {
+				envoyProxy.Spec.Logging.Level[envoyapi.LogComponentDefault] = envoyapi.LogLevelWarn
+			}
+			envoyProxy.Spec.Logging.Level[wafLogComponentWasm] = envoyapi.LogLevelInfo
+
+			// Redirect Envoy's application log (where the wasm filter's "AuditLog:" lines land)
+			// to a file on the "access-logs" emptyDir so the l7-log-collector can tail it (the
+			// collector already mounts that volume, and can only read files under /access_logs).
+			// EnvoyProxy has no native log-path field, and a Patch on the envoy container's args
+			// would replace Envoy Gateway's generated args, so use ExtraArgs, which EG appends to
+			// the proxy command line. func-e parses each element as a single token, so the flag
+			// and value are separate elements. The operator owns --log-path whenever WAF audit
+			// capture is enabled: it must match WAF_AUDIT_LOG_PATH on the l7-log-collector and
+			// live on the shared access-logs volume, so set it to wafAuditLogPath, replacing any
+			// value carried over from a custom base EnvoyProxy.
+			envoyProxy.Spec.ExtraArgs = ensureExtraArg(envoyProxy.Spec.ExtraArgs, "--log-path", wafAuditLogPath)
+
 			l7LogCollector := corev1.Container{
 				Name:  "l7-log-collector",
 				Image: pr.L7LogCollectorImage,
@@ -926,6 +998,12 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					{
 						Name:  "ENVOY_ACCESS_LOG_PATH",
 						Value: "/access_logs/access.log",
+					},
+					// WAF audit capture: file the collector tails for the wasm filter's
+					// Coraza "AuditLog:" lines (Envoy's app log, redirected via --log-path).
+					{
+						Name:  "WAF_AUDIT_LOG_PATH",
+						Value: wafAuditLogPath,
 					},
 					// Owning Gateway info from pod labels (set by EnvoyProxy)
 					OwningGatewayNameEnvVar,

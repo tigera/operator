@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	rlogcollector "github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
@@ -145,7 +146,7 @@ var _ = Describe("LogCollector controller tests", func() {
 
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchEksLogForwarderUserSecret,
+				Name:      rlogcollector.ElasticsearchEksLogForwarderUserSecret,
 				Namespace: "tigera-operator",
 			},
 		})).NotTo(HaveOccurred())
@@ -356,7 +357,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				// env vars.
 				cm := corev1.ConfigMap{
 					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
 				}
 				Expect(test.GetResource(c, &cm)).To(BeNil())
 				conf := cm.Data["fluent-bit.yaml"]
@@ -463,7 +464,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				// env vars.
 				cm := corev1.ConfigMap{
 					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
 				}
 				Expect(test.GetResource(c, &cm)).To(BeNil())
 				conf := cm.Data["fluent-bit.yaml"]
@@ -551,7 +552,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				// Syslog forwarding is fully config-driven (no env contract).
 				cm := corev1.ConfigMap{
 					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
 				}
 				Expect(test.GetResource(c, &cm)).To(BeNil())
 				conf := cm.Data["fluent-bit.yaml"]

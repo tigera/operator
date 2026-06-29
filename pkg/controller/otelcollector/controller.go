@@ -36,6 +36,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
+	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/otelcollector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -164,26 +167,41 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	var receiverTLSSecret certificatemanagement.KeyPairInterface
 	var clientTLSSecret certificatemanagement.KeyPairInterface
-	var trustedBundle certificatemanagement.TrustedBundleRO
+	var trustedBundle certificatemanagement.TrustedBundle
+
+	hasLogs := logCollector.Spec.OTelCollector.Logs != nil && len(logCollector.Spec.OTelCollector.Logs.Types) > 0
 	metricsEnabled := logCollector.Spec.OTelCollector.Metrics != nil &&
 		logCollector.Spec.OTelCollector.Metrics.Enabled != nil &&
 		*logCollector.Spec.OTelCollector.Metrics.Enabled == operatorv1.OTelMetricsEnable
 
-	if metricsEnabled {
+	if hasLogs || metricsEnabled {
 		certMgr, err := certificatemanager.Create(r.cli, installationSpec, r.opts.ClusterDomain, common.OperatorNamespace())
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
-		clientTLSSecret, err = certMgr.GetOrCreateKeyPair(r.cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-			return reconcile.Result{}, err
+		trustedBundle = certMgr.CreateTrustedBundle()
+
+		if hasLogs {
+			dnsNames := dns.GetServiceDNSNames(otelcollector.OTelCollectorServiceName, otelcollector.OTelCollectorNamespace, r.opts.ClusterDomain)
+			receiverTLSSecret, err = certMgr.GetOrCreateKeyPair(r.cli, otelcollector.OTelCollectorServerTLSSecretName, common.OperatorNamespace(), dnsNames)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating OTel receiver TLS certificate", err, reqLogger)
+				return reconcile.Result{}, err
+			}
 		}
 
-		trustedBundle = certMgr.CreateTrustedBundle()
+		if metricsEnabled {
+			clientTLSSecret, err = certMgr.GetOrCreateKeyPair(r.cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
 		certMgr.AddToStatusManager(r.status, otelcollector.OTelCollectorNamespace)
 	}
 
@@ -192,21 +210,42 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		OpenShift:         r.opts.DetectedProvider.IsOpenShift(),
 		Installation:      installationSpec,
 		OTelCollector:     logCollector.Spec.OTelCollector,
+		ReceiverTLSSecret: receiverTLSSecret,
 		ClientTLSSecret:   clientTLSSecret,
 		TrustedCertBundle: trustedBundle,
 	}
 
-	component := otelcollector.OTelCollector(cfg)
+	var keyPairOptions []rcertificatemanagement.KeyPairOption
+	if receiverTLSSecret != nil {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(receiverTLSSecret, true, true))
+	}
+	if clientTLSSecret != nil {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true))
+	}
+
+	components := []render.Component{
+		otelcollector.OTelCollector(cfg),
+	}
+	if len(keyPairOptions) > 0 || trustedBundle != nil {
+		components = append(components, rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+			Namespace:       otelcollector.OTelCollectorNamespace,
+			ServiceAccounts: []string{otelcollector.OTelCollectorServiceAccountName},
+			KeyPairOptions:  keyPairOptions,
+			TrustedBundle:   trustedBundle,
+		}))
+	}
 
 	ch := utils.NewComponentHandler(log, r.cli, r.scheme, logCollector)
-	if err = imageset.ApplyImageSet(ctx, r.cli, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-		return reconcile.Result{}, err
+	for _, component := range components {
+		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	r.status.ReadyToMonitor()

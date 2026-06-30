@@ -1221,14 +1221,16 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 // UI adds to calico-manager-role. Named-resource access is scoped separately
 // on rbacManagementUINamespacedRole.
 func rbacManagementUIRules() []rbacv1.PolicyRule {
-	rules := RBACManagementEscalationRules()
-	return append(rules,
-		rbacv1.PolicyRule{
+	return []rbacv1.PolicyRule{
+		{
+			// Lets ui-apis read the Compliance CR (the operator singleton) so the
+			// UI can tell whether compliance is installed before offering
+			// compliance-scoped RBAC.
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"compliances"},
 			Verbs:     []string{"get"},
 		},
-	)
+	}
 }
 
 // rbacManagementUINamespacedRole returns the Role + RoleBinding that scopes

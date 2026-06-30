@@ -298,12 +298,12 @@ spec:
                           type: object
                       type: object
                   type: object
-                rbac:
-                  description: RBAC configures the RBAC management UI feature.
+                rbacUI:
+                  description: RBACUI configures the RBAC management UI feature.
                   properties:
-                    ui:
+                    enabled:
                       description: |-
-                        UI controls whether the RBAC management UI is enabled. Defaults to
+                        Enabled controls whether the RBAC management UI is enabled. Defaults to
                         Disabled.
                       enum:
                         - Enabled

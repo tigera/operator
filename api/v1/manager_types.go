@@ -27,36 +27,36 @@ type ManagerSpec struct {
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
 
-	// RBAC configures the RBAC management UI feature.
+	// RBACUI configures the RBAC management UI feature.
 	// +optional
-	RBAC *RBAC `json:"rbac,omitempty"`
+	RBACUI *RBACUI `json:"rbacUI,omitempty"`
 }
 
-// RBAC controls the RBAC management UI feature surface.
-type RBAC struct {
-	// UI controls whether the RBAC management UI is enabled. Defaults to
+// RBACUI controls the RBAC management UI feature surface.
+type RBACUI struct {
+	// Enabled controls whether the RBAC management UI is enabled. Defaults to
 	// Disabled.
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
-	UI RBACUI `json:"ui,omitempty"`
+	Enabled RBACUIStatus `json:"enabled,omitempty"`
 }
 
-// RBACUI toggles the RBAC management UI feature.
-type RBACUI string
+// RBACUIStatus toggles the RBAC management UI feature.
+type RBACUIStatus string
 
 const (
-	RBACUIEnabled  RBACUI = "Enabled"
-	RBACUIDisabled RBACUI = "Disabled"
+	RBACUIEnabled  RBACUIStatus = "Enabled"
+	RBACUIDisabled RBACUIStatus = "Disabled"
 )
 
 // RBACManagementEnabled returns true when the Manager CR opts the cluster
 // into the RBAC management UI. Safe to call on a nil receiver; returns false
-// for either a nil Manager or any UI value other than Enabled.
+// for either a nil Manager or any value other than Enabled.
 func (m *Manager) RBACManagementEnabled() bool {
-	if m == nil || m.Spec.RBAC == nil {
+	if m == nil || m.Spec.RBACUI == nil {
 		return false
 	}
-	return m.Spec.RBAC.UI == RBACUIEnabled
+	return m.Spec.RBACUI.Enabled == RBACUIEnabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

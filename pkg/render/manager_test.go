@@ -1775,13 +1775,25 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
 		})
 
-		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbac.ui is Enabled", func() {
+		It("renders RBAC_UI_ENABLED=false and no namespaced RBAC UI role when the Manager exists but rbacUI is unset", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager:      &operatorv1.Manager{Spec: operatorv1.ManagerSpec{}},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
+
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbacUI.enabled is Enabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled},
+						RBACUI: &operatorv1.RBACUI{Enabled: operatorv1.RBACUIEnabled},
 					},
 				},
 			})
@@ -1792,13 +1804,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).To(ContainElement(nsCreateRule))
 		})
 
-		It("renders RBAC_UI_ENABLED=false when rbac.ui is Disabled", func() {
+		It("renders RBAC_UI_ENABLED=false when rbacUI.enabled is Disabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIDisabled},
+						RBACUI: &operatorv1.RBACUI{Enabled: operatorv1.RBACUIDisabled},
 					},
 				},
 			})
@@ -1820,7 +1832,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled},
+						RBACUI: &operatorv1.RBACUI{Enabled: operatorv1.RBACUIEnabled},
 					},
 				},
 			})
@@ -1837,7 +1849,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 			}
 			rbacUIManager := &operatorv1.Manager{
-				Spec: operatorv1.ManagerSpec{RBAC: &operatorv1.RBAC{UI: operatorv1.RBACUIEnabled}},
+				Spec: operatorv1.ManagerSpec{RBACUI: &operatorv1.RBACUI{Enabled: operatorv1.RBACUIEnabled}},
 			}
 
 			It("adds LDAP egress only when RBAC UI is enabled and the LDAP config secret is present", func() {

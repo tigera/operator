@@ -390,7 +390,7 @@ func (e *esGateway) esGatewayCalicoSystemPolicy() *v3.NetworkPolicy {
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.FluentdSourceEntityRule,
+					Source:      render.FluentBitSourceEntityRule,
 					Destination: esgatewayIngressDestinationEntityRule,
 				},
 				{

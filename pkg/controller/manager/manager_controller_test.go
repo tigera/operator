@@ -116,10 +116,10 @@ var _ = Describe("Manager controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should return expected error when querying namespace that does not contain a manager instance", func() {
+	It("should return a nil instance and no error when querying a namespace that does not contain a manager instance", func() {
 		nsWithoutManager := "non-manager-ns"
 		instance, err := utils.GetManager(ctx, c, true, nsWithoutManager)
-		Expect(kerror.IsNotFound(err)).To(BeTrue())
+		Expect(err).NotTo(HaveOccurred())
 		Expect(instance).To(BeNil())
 	})
 

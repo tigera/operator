@@ -378,13 +378,14 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
+		// A nil managerCR (no Manager created) means callers fall back to their
+		// defaults. A NoMatchError (Manager CRD not registered) propagates as an
+		// error: in enterprise the CRD is expected, so we requeue rather than
+		// read the Manager as absent.
 		managerCR, err = utils.GetManager(ctx, r.client, false, "")
-		if err != nil && !errors.IsNotFound(err) {
+		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-		if errors.IsNotFound(err) {
-			managerCR = nil
 		}
 
 		if managementClusterConnection != nil && managementCluster != nil {

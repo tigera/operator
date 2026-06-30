@@ -267,13 +267,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
 	instance, err := utils.GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			logc.Info("Manager object not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
-		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Manager", err, logc)
 		return reconcile.Result{}, err
+	}
+	if instance == nil {
+		logc.Info("Manager object not found")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	}
 	logc.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()

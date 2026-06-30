@@ -642,6 +642,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific

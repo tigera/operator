@@ -1241,26 +1241,24 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
 			Rules: []rbacv1.PolicyRule{
 				{
+					// create carries the object name in the request body, not the
+					// URL path, so RBAC cannot restrict it by resource name; it is
+					// scoped to this namespace instead.
 					APIGroups: []string{""},
 					Resources: []string{"configmaps", "secrets"},
 					Verbs:     []string{"create"},
 				},
 				{
-					APIGroups: []string{""},
-					Resources: []string{"secrets"},
-					Verbs:     []string{"patch"},
-				},
-				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
 					ResourceNames: []string{RBACManagementLDAPConfigSecretName},
-					Verbs:         []string{"get", "list", "watch", "update", "delete"},
+					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
 					ResourceNames: []string{"tigera-idp-groups"},
-					Verbs:         []string{"get", "list", "watch", "update", "delete"},
+					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 			},
 		},

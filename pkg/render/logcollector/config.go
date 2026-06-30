@@ -23,6 +23,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -257,6 +258,21 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 	for _, tag := range c.linseedTags() {
 		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs,
 			c.linseedHTTPOutput(tag, certPath, keyPath, linseedStorageLimit(tag)))
+	}
+
+	if c.cfg.OTelCollectorEnabled {
+		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, map[string]interface{}{
+			"name":         "opentelemetry",
+			"match":        "*",
+			"host":         fmt.Sprintf("otel-collector.%s.svc", common.CalicoNamespace),
+			"port":         4318,
+			"logs_uri":     "/v1/logs",
+			"tls":          "on",
+			"tls.verify":   "on",
+			"tls.ca_file":  caPath,
+			"tls.crt_file": certPath,
+			"tls.key_file": keyPath,
+		})
 	}
 
 	// Additional stores are Linux-only, matching the fluentd Windows variant

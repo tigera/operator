@@ -1,0 +1,269 @@
+apiVersion: argoproj.io/v1alpha1
+kind: WorkflowTemplate
+metadata:
+  name: update-cluster-with-hashrelease
+  namespace: argoci
+  labels:
+    type: update-cluster-with-hashrelease
+spec:
+  entrypoint: update-cluster-with-hashrelease
+  onExit: exit-handler
+  arguments:
+    parameters:
+      - name: hashReleaseURL
+        default: "https://hashrelease-name.docs.eng.tigera.net"
+        description: | 
+          Qualified enterprise hashrelease URL produced from the #releases slack channel 
+          (eg. https://2023-08-07-master-ducking.docs.eng.tigera.net)
+      - name: clusterId
+        default: "yjefe7y1"
+        description: | 
+          The id of the cluster to update. Leave out the -management suffix. Defaults to the bleeding edge hashrelease cluster ID. eg. yjefe7y1
+      - name: imageTag
+        description: |
+          The operator cloud image tag name to use for updating the hashrelease cluster. Check image tags in https://console.cloud.google.com/gcr/images/tigera-cc-dev/global/operator-cloud. eg. 2023-08-26-v3-18-fifty-tesla-1d5c49ad
+      - name: automaticKickOff
+        type: boolean
+        default: "true"
+        value: "true"
+        enum:
+          - true
+          - false
+        description: |
+          Selecting "true" means that automatic kickoff for next job occurs when all the steps pass.
+          Selecting "false" means that automatic kickoff for next job will not occur even when all the steps pass. 
+  workflowMetadata:
+    annotations:
+      workflows.argoproj.io/title: "Update Cluster HashRelease: {{workflow.parameters.hashReleaseURL}}"
+      workflows.argoproj.io/description: "ST Cluster: {{workflow.parameters.clusterId}} - OperatorTag: {{workflow.parameters.imageTag}}"
+    labels:
+      calicocloud.io/repository: operator
+    labelsFrom:
+      calicocloud.io/hashrelease-url:
+        expression: replace(workflow.parameters.hashReleaseURL, 'https://', '') | replace('/', '') ?? ""
+      calicocloud.io/operator-branch:
+        expression: workflow.parameters.operatorBranch ?? ""
+  templates:
+    - name: update-cluster-with-hashrelease
+      dag:
+        tasks:
+          - name: management-cluster-updates
+            template: update-management-cluster
+          - name: managed-cluster-updates
+            template: update-tds-apiserver-helm-values
+            depends: management-cluster-updates
+          - name: multi-tenant-management-cluster-updates
+            template: update-mt-management-cluster-with-hashrelease
+            depends: "management-cluster-updates.Succeeded"
+          - name:  kickoff-test-cluster-with-hashrelease-job
+            when: "'{{workflow.parameters.automaticKickOff}}' == 'true'"
+            template:  kickoff-test-cluster-with-hashrelease-job
+            depends: "management-cluster-updates.Succeeded && multi-tenant-management-cluster-updates.Succeeded && managed-cluster-updates.Succeeded"
+
+    - name: update-management-cluster
+      script:
+        image: gcr.io/tigera-cc-dev/ci-base/ubuntu-cloud-providers:v0.93
+        command: [bash]
+        workingDir: "/src"
+        env:
+          - name: CI_HOME
+            value: /src
+          - name: CI_GIT_URL
+            value: git@github.com:tigera/operator.git
+          - name: CI_GIT_DIR
+            value: operator
+          - name: ARGOCD_AUTH_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: tesla-secrets
+                key: ARGOCD_AUTH_TOKEN
+        envFrom:
+          - secretRef:
+              name: marvin-github-ssh-private-key
+        source: |
+          source checkout
+          echo "[INFO] Running unit tests"
+          pytest -v ./hack/hashrelease/management_cluster_updater_test.py --log-cli-level=INFO
+          python3 ./hack/hashrelease/management_cluster_updater.py --clusterId "{{workflow.parameters.clusterId}}" --imageTag "{{workflow.parameters.imageTag}}" --hashReleaseUrl "{{workflow.parameters.hashReleaseURL}}"
+
+    - name: update-tds-apiserver-helm-values
+      script:
+        image: gcr.io/tigera-cc-dev/ci-base/ubuntu-cloud-providers:v0.93
+        command: [bash]
+        workingDir: "/src"
+        env:
+          - name: CI_HOME
+            value: /src
+          - name: CI_GIT_URL
+            value: git@github.com:tigera/operator.git
+          - name: CI_GIT_DIR
+            value: operator
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: banzai-secrets
+                key: GITHUB_ACCESS_TOKEN
+          - name: MANAGED_VERSIONS_FILE_PATH
+            value: "/src/helm-charts/charts/tds-apiserver/values.yaml"
+        envFrom:
+          - secretRef:
+              name: marvin-github-ssh-private-key
+        source: |
+          source checkout
+          git config --global user.name "${GITHUB_USER_NAME}"
+          git config --global user.email "${GITHUB_USER_EMAIL}"
+          echo "[INFO] Running unit tests for managed cluster version changes"
+          pushd ./hack/hashrelease
+          pytest -v managed_cluster_version_updater_test.py --log-cli-level=INFO
+          popd
+          echo "[INFO] Checking out helm-charts repo to update the tds-apiserver helm values.yaml used for the managed cluster"
+          git clone git@github.com:tigera/helm-charts.git ${CI_HOME}/helm-charts
+          cd ${CI_HOME}/helm-charts
+          python3 ${CI_HOME}/operator/hack/hashrelease/managed_cluster_version_updater.py --hashReleaseUrl "{{workflow.parameters.hashReleaseURL}}"
+          
+    - name: update-mt-management-cluster-with-hashrelease
+      script:
+        image: gcr.io/tigera-cc-dev/ci-base/ubuntu-cloud-providers:v0.93
+        command: [bash]
+        workingDir: "/src"
+        env:
+          - name: CI_HOME
+            value: /src
+          - name: CI_GIT_URL
+            value: git@github.com:tigera/operator.git
+          - name: CI_GIT_DIR
+            value: operator
+          - name: GITHUB_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: banzai-secrets
+                key: GITHUB_ACCESS_TOKEN
+        envFrom:
+          - secretRef:
+              name: marvin-github-ssh-private-key
+        source: |
+          source checkout
+          git config --global user.name "${GITHUB_USER_NAME}"
+          git config --global user.email "${GITHUB_USER_EMAIL}"
+          echo "[INFO] Running unit tests for mt management cluster version changes"
+          pushd ./hack/hashrelease
+          pytest -v mt_management_cluster_updater_test.py --log-cli-level=INFO
+          popd
+          echo "[INFO] Checking out helm-charts repo to update the helm values.yaml and Chart.yaml files used for the Multi-tenant management cluster"
+          git clone git@github.com:tigera/helm-charts.git ${CI_HOME}/helm-charts
+          cd ${CI_HOME}/helm-charts
+
+          python3 ${CI_HOME}/operator/hack/hashrelease/mt_management_cluster_updater.py \
+            --hashReleaseUrl "{{workflow.parameters.hashReleaseURL}}" \
+            --imageTag "{{workflow.parameters.imageTag}}"
+
+    - name: kickoff-test-cluster-with-hashrelease-job
+      script:
+        image: gcr.io/tigera-cc-dev/ci-base/ubuntu-cloud-providers:v0.93
+        imagePullPolicy: Always
+        env:
+          - name: GCS_WEBHOOK_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: gcs-hook-token
+                key: token
+        command: [bash]
+        workingDir: "/src"
+        source: |
+          echo "[INFO] Launching job to run E2E tests on the hashrelease cluster"
+          curl -X POST https://ops-webhook.dev.calicocloud.io/test-cluster-with-hashrelease \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${GCS_WEBHOOK_TOKEN}" \
+            -d {}
+
+    - name: exit-handler
+      steps:
+        - - name: notify-bleeding-edge-slack-channel
+            continueOn:
+              failed: true
+            inline:
+              script:
+                image: gcr.io/tigera-cc-dev/ci-base/ubuntu-cloud-providers:v0.93
+                imagePullPolicy: Always
+                command: [bash]
+                workingDir: "/src"
+                env:
+                  # Slack incoming webhook URLs, sourced from a secret rather than hardcoded.
+                  - name: SLACK_WEBHOOK_URL
+                    valueFrom:
+                      secretKeyRef:
+                        name: cloud-hashrelease-slack-webhooks
+                        key: notifications-url
+                  - name: SLACK_PUBLIC_WEBHOOK_URL
+                    valueFrom:
+                      secretKeyRef:
+                        name: cloud-hashrelease-slack-webhooks
+                        key: public-url
+                source: |
+                  workflow_url="https://argoci.dev.calicocloud.io/workflows/argoci/{{workflow.name}}"
+                  hashrelease_image_url="https://console.cloud.google.com/gcr/images/tigera-cc-dev/GLOBAL/operator-cloud:{{workflow.parameters.imageTag}}/details"
+
+                  if [ "{{workflow.status}}" == "Succeeded" ]; then
+                    slackMessage=":large_green_square: Successfully updated the bleeding-edge clusters (Single and/or Multi-tenant) to use the *<${hashrelease_image_url}|{{workflow.parameters.imageTag}}>* operator-cloud hashrelease image!"
+                  else
+                    slackMessage="@cloud-hashrelease-maintainers :red_circle: There was an issue updating the bleeding-edge clusters (Single and/or Multi-tenant) to use the *<${hashrelease_image_url}|{{workflow.parameters.imageTag}}>* operator-cloud hashrelease image."
+
+                    echo "[INFO] Skipped kicking off job to build hashrelease image because workflow status={{workflow.status}}"
+
+                    echo "[INFO] Workflow Failures:"
+                    echo {{workflow.failures}} | python -m json.tool
+                    errorMessages=`echo {{workflow.failures}} | jq -r '.[] | select(.message != "") | "\t\(.displayName) - \(.message)"'`
+
+                    slackMessage+="\n*There are errors in these steps:* \n ${errorMessages}"
+                  fi
+
+                  slackTextMessage=$(cat <<EOF
+                  {
+                    "blocks": [
+                      {
+                        "type": "section",
+                        "text": {
+                          "type": "mrkdwn",
+                          "text": "${slackMessage}"
+                        }
+                      },
+                      {
+                        "type": "section",
+                        "text": {
+                          "type": "mrkdwn",
+                          "text": "See the <${workflow_url}|ArgoCI Workflow Job :rocket:> for more details."
+                        }
+                      },
+                      {
+                        "type": "divider"
+                      }
+                    ]
+                  }
+                  EOF
+                  )
+
+                  # Post job status to #bleeding-edge-notifications slack channel
+                  curl -X POST -H 'Content-type: application/json' --data "${slackTextMessage}" "${SLACK_WEBHOOK_URL}"
+
+                  # Post a more general message to #bleeding-edge channel if the promotion succeeded.
+                  if [ "{{workflow.status}}" == "Succeeded" ]; then
+                    bleedingEdgeSlackPublicMessage=":loudspeaker: The bleeding-edge clusters (Single and Multi-tenant) got successfully updated to a hashrelease based on *{{workflow.parameters.hashReleaseURL}}*. See the #bleeding-edge-notifications channel if you want more info."
+                    slackTextGeneralMessage=$(cat <<EOF
+                  {
+                      "blocks": [
+                        {
+                          "type": "section",
+                          "text": {
+                            "type": "mrkdwn",
+                            "text": "${bleedingEdgeSlackPublicMessage}"
+                          }
+                        },
+                        {
+                          "type": "divider"
+                        }
+                      ]
+                  }
+                  EOF
+                  )
+                    curl -X POST -H 'Content-type: application/json' --data "${slackTextGeneralMessage}" "${SLACK_PUBLIC_WEBHOOK_URL}"
+                  fi

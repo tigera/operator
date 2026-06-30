@@ -512,6 +512,12 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release VERSION=$(RELEASE_TAG)
 	REPO=$(REPO) $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
+## Create a Calico Cloud release for the specified RELEASE_TAG. Uses the cloud release tool
+## (-tags cloud) and the cloud image identity (VARIANT=cloud); does not create a GitHub release.
+release-tag-cloud: var-require-all-RELEASE_TAG
+	$(MAKE) release-cloud VARIANT=cloud VERSION=$(RELEASE_TAG)
+	REPO=$(REPO) $(MAKE) release-publish-cloud VARIANT=cloud VERSION=$(RELEASE_TAG)
+
 ## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes

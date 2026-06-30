@@ -27,6 +27,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -204,6 +205,71 @@ var _ = Describe("GatewayAPI tests", func() {
 		var d appsv1.Deployment
 		err := c.Get(shutdownContext, types.NamespacedName{Namespace: "tigera-gateway", Name: "envoy-gateway"}, &d)
 		Expect(kerror.IsNotFound(err)).To(BeTrue(), fmt.Sprintf("unexpected envoy-gateway in tigera-gateway: %v", err))
+	})
+
+	It("installs the Experimental channel CRDs by default", func() {
+		By("Creating Installation")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec:       operator.InstallationSpec{Variant: operator.CalicoEnterprise},
+		}
+		Expect(c.Create(shutdownContext, instance)).NotTo(HaveOccurred())
+		Expect(c.Get(shutdownContext, utils.DefaultInstanceKey, instance)).NotTo(HaveOccurred())
+		instance.Status.Variant = operator.CalicoEnterprise
+		Expect(c.Status().Update(shutdownContext, instance)).NotTo(HaveOccurred())
+
+		By("Creating a GatewayAPI without a channel (defaults to Experimental) and crdManagement Reconcile")
+		reconcile := operator.CRDManagementReconcile
+		gatewayAPI := &operator.GatewayAPI{
+			TypeMeta:   metav1.TypeMeta{Kind: "GatewayAPI", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec:       operator.GatewayAPISpec{CRDManagement: &reconcile},
+		}
+		Expect(c.Create(shutdownContext, gatewayAPI)).NotTo(HaveOccurred())
+
+		By("Checking the gateways CRD is installed on the experimental channel")
+		Eventually(func() (string, error) {
+			return gatewayCRDChannel(c, shutdownContext, "gateways.gateway.networking.k8s.io")
+		}, "60s", "2s").Should(Equal("experimental"))
+
+		By("Checking the experimental-only TCPRoute CRD is installed")
+		Eventually(func() error {
+			return gatewayCRDExists(c, shutdownContext, "tcproutes.gateway.networking.k8s.io")
+		}, "60s", "2s").ShouldNot(HaveOccurred())
+	})
+
+	It("installs the Standard channel CRDs when gatewayAPIChannel is Standard", func() {
+		By("Creating Installation")
+		instance := &operator.Installation{
+			TypeMeta:   metav1.TypeMeta{Kind: "Installation", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec:       operator.InstallationSpec{Variant: operator.CalicoEnterprise},
+		}
+		Expect(c.Create(shutdownContext, instance)).NotTo(HaveOccurred())
+		Expect(c.Get(shutdownContext, utils.DefaultInstanceKey, instance)).NotTo(HaveOccurred())
+		instance.Status.Variant = operator.CalicoEnterprise
+		Expect(c.Status().Update(shutdownContext, instance)).NotTo(HaveOccurred())
+
+		By("Creating a GatewayAPI with the Standard channel and crdManagement Reconcile")
+		standard := operator.GatewayAPIChannelStandard
+		reconcile := operator.CRDManagementReconcile
+		gatewayAPI := &operator.GatewayAPI{
+			TypeMeta:   metav1.TypeMeta{Kind: "GatewayAPI", APIVersion: "operator.tigera.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+			Spec: operator.GatewayAPISpec{
+				GatewayAPIChannel: &standard,
+				CRDManagement:     &reconcile,
+			},
+		}
+		Expect(c.Create(shutdownContext, gatewayAPI)).NotTo(HaveOccurred())
+
+		By("Checking the gateways CRD is reconciled onto the standard channel")
+		// crdManagement Reconcile overwrites the existing CRD, so the channel
+		// annotation flips from experimental (the default) to standard.
+		Eventually(func() (string, error) {
+			return gatewayCRDChannel(c, shutdownContext, "gateways.gateway.networking.k8s.io")
+		}, "60s", "2s").Should(Equal("standard"))
 	})
 
 	It("provisions and cleans up per-namespace resources for namespaced-class Gateways", func() {
@@ -635,4 +701,26 @@ func cleanupGatewayResources(c client.Client) {
 		}
 		return nil
 	}, "60s").ShouldNot(HaveOccurred())
+}
+
+// gatewayCRDChannel returns the gateway.networking.k8s.io/channel annotation of the named CRD,
+// which the upstream CRD bundle stamps as "standard" or "experimental".
+func gatewayCRDChannel(c client.Client, ctx context.Context, name string) (string, error) {
+	crd := &apiextenv1.CustomResourceDefinition{
+		TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
+	if err := c.Get(ctx, client.ObjectKey{Name: name}, crd); err != nil {
+		return "", err
+	}
+	return crd.Annotations["gateway.networking.k8s.io/channel"], nil
+}
+
+// gatewayCRDExists returns nil once the named CRD is present.
+func gatewayCRDExists(c client.Client, ctx context.Context, name string) error {
+	crd := &apiextenv1.CustomResourceDefinition{
+		TypeMeta:   metav1.TypeMeta{Kind: "CustomResourceDefinition", APIVersion: "apiextensions.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
+	return c.Get(ctx, client.ObjectKey{Name: name}, crd)
 }

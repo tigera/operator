@@ -182,9 +182,9 @@ spec:
 
 1. In `Makefile`, update `ENVOY_GATEWAY_VERSION`.
 
-1. Delete `pkg/render/gatewayapi/gateway-helm.tgz`.
+1. Delete `pkg/render/gatewayapi/gateway-helm.tgz` and `pkg/render/gatewayapi/gateway-crds-helm.tgz`.  Both are pinned to `ENVOY_GATEWAY_VERSION`: `gateway-helm` provides the controller resources, and `gateway-crds-helm` provides the Gateway API + Envoy CRDs (and is the chart that supports `GatewayAPI.spec.gatewayAPIChannel` channel selection).
 
-1. Run `make build`.  This will download the new version of the Envoy Gateway helm chart and build the operator image.  The chart is embedded in the binary and rendered at runtime using the Helm SDK.
+1. Run `make build`.  This will download the new versions of both Envoy Gateway helm charts and build the operator image.  The charts are embedded in the binary and rendered at runtime using the Helm SDK.
 
 1. Address build issues if there are any.
 

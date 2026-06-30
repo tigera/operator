@@ -43,8 +43,10 @@ var _ = Describe("Test typha autoscaler ", func() {
 	var cancel context.CancelFunc
 	var nlw, tlw cache.ListerWatcher
 	var nodeIndexInformer cache.SharedIndexInformer
+	var ta *typhaAutoscaler
 
 	BeforeEach(func() {
+		ta = nil
 		statusManager = new(status.MockStatus)
 
 		objs := []runtime.Object{
@@ -70,11 +72,17 @@ var _ = Describe("Test typha autoscaler ", func() {
 	})
 
 	AfterEach(func() {
+		// Cancel the context and wait for the autoscaler goroutine to exit before the next spec
+		// runs. Otherwise a leaked goroutine can call SetDegraded on this spec's mock after the
+		// spec has ended, panicking a later, unrelated spec.
 		cancel()
+		if ta != nil {
+			ta.waitForShutdown()
+		}
 	})
 
 	It("should initialize an autoscaler", func() {
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
 		ta.start(ctx)
 	})
 
@@ -85,7 +93,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// Don't start the autoscaler - this test only exercises getNodeCounts(), which reads
 		// from the nodeIndexInformer directly. Starting it would race with node creation,
 		// since autoscaleReplicas() can fire before the informer has picked up the new nodes.
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
 
 		Eventually(func() error {
 			schedulableNodes, linuxNodes := ta.getNodeCounts()
@@ -136,7 +144,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// For clusters smaller than 3 nodes we only expect 1 replica.
@@ -190,7 +198,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}).Should(HaveLen(5))
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		verifyTyphaReplicas(c, 3)
@@ -225,7 +233,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}).Should(HaveLen(5))
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is a virtual-kubelet,
@@ -265,13 +273,28 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}).Should(HaveLen(5))
 
 		// Create the autoscaler and run it
-		ta := newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
 		ta.start(ctx)
 
 		// This blocks until the first run is done.
 		ta.isDegraded()
 
 		statusManager.AssertExpectations(GinkgoT())
+	})
+
+	It("should not autoscale or report degraded once its context is cancelled", func() {
+		// statusManager has no SetDegraded expectation configured, so the mock panics if it's
+		// called. With zero linux nodes the startup autoscale would normally report degraded, so
+		// a cancelled autoscaler that still runs the startup autoscale would panic here.
+		cancelledCtx, cancelStart := context.WithCancel(context.Background())
+		cancelStart()
+
+		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
+		ta.start(cancelledCtx)
+
+		// The goroutine should observe the cancelled context and exit without autoscaling.
+		ta.waitForShutdown()
+		statusManager.AssertNotCalled(GinkgoT(), "SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
 })
 

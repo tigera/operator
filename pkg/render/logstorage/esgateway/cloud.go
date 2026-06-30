@@ -42,7 +42,7 @@ type CloudConfig struct {
 	Enabled              bool
 	EsAdminUserSecret    *corev1.Secret
 	ExternalCertsSecret  *corev1.Secret
-	TenantId             string
+	TenantID             string
 	EnableMTLS           bool
 	ExternalElastic      bool
 	ExternalESDomain     string
@@ -117,8 +117,8 @@ func (e *esGateway) modifyDeploymentForCloud(d *appsv1.Deployment) {
 			}...)
 	}
 
-	if e.cfg.Cloud.TenantId != "" {
-		envs = append(envs, corev1.EnvVar{Name: "ES_GATEWAY_TENANT_ID", Value: e.cfg.Cloud.TenantId})
+	if e.cfg.Cloud.TenantID != "" {
+		envs = append(envs, corev1.EnvVar{Name: "ES_GATEWAY_TENANT_ID", Value: e.cfg.Cloud.TenantID})
 	}
 
 	d.Spec.Template.Spec.Containers[0].Env = envs

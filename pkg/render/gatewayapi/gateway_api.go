@@ -60,6 +60,9 @@ var (
 	//go:embed gateway-helm.tgz
 	gatewayHelmChart []byte
 
+	//go:embed gateway-crds-helm.tgz
+	gatewayCRDsHelmChart []byte
+
 	AccessLogType envoyapi.ProxyAccessLogType = "Route"
 
 	log = logf.Log.WithName("gateway_api")
@@ -176,6 +179,26 @@ type helmDeploy struct {
 	Type string `json:"type,omitempty"`
 }
 
+// crdHelmOpts represents the helm values passed when rendering the gateway-crds-helm chart,
+// which installs the Gateway API and Envoy Gateway CRDs and supports channel selection.
+type crdHelmOpts struct {
+	Crds *crdConfig `json:"crds,omitempty"`
+}
+
+type crdConfig struct {
+	GatewayAPI   *crdGatewayAPI   `json:"gatewayAPI,omitempty"`
+	EnvoyGateway *crdEnvoyGateway `json:"envoyGateway,omitempty"`
+}
+
+type crdGatewayAPI struct {
+	Enabled bool   `json:"enabled"`
+	Channel string `json:"channel,omitempty"`
+}
+
+type crdEnvoyGateway struct {
+	Enabled bool `json:"enabled"`
+}
+
 func toMap(v any) (map[string]any, error) {
 	b, err := json.Marshal(v)
 	if err != nil {
@@ -188,8 +211,14 @@ func toMap(v any) (map[string]any, error) {
 	return out, nil
 }
 
-// Chart output is deterministic for our single render, so it's cached by
-// sync.Once. Callers must deep-copy any object they intend to mutate.
+// chartResourcesFor renders the embedded gateway-helm chart, which provides the controller
+// Deployment, RBAC, config, certgen, webhooks and the safe-upgrades ValidatingAdmissionPolicy.
+// The Gateway API / Envoy CRDs that this chart also renders are intentionally NOT applied; the
+// CRD set that gets installed comes from gateway-crds-helm via crdResourcesFor, which supports
+// channel selection.  (gateway-helm is still rendered with CRDs included because the upstream
+// chart ships the safe-upgrades policy alongside the CRD bundle, and the controller component
+// needs that policy.)  Output is deterministic, so it is cached by sync.Once.  Callers must
+// deep-copy any object they intend to mutate.
 var (
 	chartOnce    sync.Once
 	chartResults *gatewayAPIResources
@@ -203,21 +232,50 @@ func chartResourcesFor(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
 	return chartResults, chartErr
 }
 
-// renderChart renders the embedded Envoy Gateway helm chart.
-func renderChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
-	chart, err := loader.LoadArchive(bytes.NewReader(gatewayHelmChart))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load gateway-helm chart: %w", err)
+// crdResourcesFor renders the embedded gateway-crds-helm chart for the given channel, yielding
+// the Gateway API CRDs for that channel plus the Envoy Gateway CRDs.  Output depends on the
+// channel, so it is memoized per channel.  Callers must deep-copy any object they intend to
+// mutate.
+var (
+	crdCacheMu sync.Mutex
+	crdCache   = map[operatorv1.GatewayAPIChannel]*gatewayAPIResources{}
+	crdErrs    = map[operatorv1.GatewayAPIChannel]error{}
+)
+
+func crdResourcesFor(scheme *runtime.Scheme, channel operatorv1.GatewayAPIChannel) (*gatewayAPIResources, error) {
+	crdCacheMu.Lock()
+	defer crdCacheMu.Unlock()
+	if res, ok := crdCache[channel]; ok {
+		return res, crdErrs[channel]
 	}
+	res, err := renderCRDChart(scheme, channel)
+	crdCache[channel] = res
+	crdErrs[channel] = err
+	return res, err
+}
 
-	actionConfig := new(action.Configuration)
-	helmClient := action.NewInstall(actionConfig)
-	helmClient.DryRun = true
-	helmClient.ClientOnly = true
-	helmClient.IncludeCRDs = true
-	helmClient.Namespace = DeploymentNamespace
-	helmClient.ReleaseName = ReleaseName
+// ResolveChannel returns the effective Gateway API CRD channel, defaulting to Experimental
+// when the field is unset.
+func ResolveChannel(channel *operatorv1.GatewayAPIChannel) operatorv1.GatewayAPIChannel {
+	if channel == nil {
+		return operatorv1.GatewayAPIChannelExperimental
+	}
+	return *channel
+}
 
+// channelHelmValue maps the API channel enum onto the gateway-crds-helm "channel" value.
+func channelHelmValue(channel operatorv1.GatewayAPIChannel) string {
+	if channel == operatorv1.GatewayAPIChannelStandard {
+		return "standard"
+	}
+	return "experimental"
+}
+
+// renderChart renders the embedded gateway-helm chart for the controller-side resources.  It is
+// rendered with IncludeCRDs=true so that the safe-upgrades ValidatingAdmissionPolicy (shipped in
+// the chart's CRD bundle) is captured; the CRD objects it produces are not applied (the installed
+// CRD set comes from gateway-crds-helm via crdResourcesFor - see chartResourcesFor).
+func renderChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
 	opts := &helmOpts{
 		Config: &helmConfig{EnvoyGateway: &helmEnvoyGateway{
 			Provider: &helmProvider{
@@ -227,15 +285,48 @@ func renderChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
 			},
 		}},
 	}
-
 	values, err := toMap(opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert helm values: %w", err)
 	}
+	return renderHelmChart(scheme, gatewayHelmChart, "gateway-helm", values, true)
+}
+
+// renderCRDChart renders the embedded gateway-crds-helm chart, installing the Gateway API CRDs
+// for the requested channel plus the Envoy Gateway CRDs.
+func renderCRDChart(scheme *runtime.Scheme, channel operatorv1.GatewayAPIChannel) (*gatewayAPIResources, error) {
+	opts := &crdHelmOpts{
+		Crds: &crdConfig{
+			GatewayAPI:   &crdGatewayAPI{Enabled: true, Channel: channelHelmValue(channel)},
+			EnvoyGateway: &crdEnvoyGateway{Enabled: true},
+		},
+	}
+	values, err := toMap(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert helm values: %w", err)
+	}
+	return renderHelmChart(scheme, gatewayCRDsHelmChart, "gateway-crds-helm", values, true)
+}
+
+// renderHelmChart loads and renders an embedded helm chart, combining the main and hook
+// manifests and parsing them into typed gatewayAPIResources.
+func renderHelmChart(scheme *runtime.Scheme, chartBytes []byte, chartName string, values map[string]any, includeCRDs bool) (*gatewayAPIResources, error) {
+	chart, err := loader.LoadArchive(bytes.NewReader(chartBytes))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load %s chart: %w", chartName, err)
+	}
+
+	actionConfig := new(action.Configuration)
+	helmClient := action.NewInstall(actionConfig)
+	helmClient.DryRun = true
+	helmClient.ClientOnly = true
+	helmClient.IncludeCRDs = includeCRDs
+	helmClient.Namespace = DeploymentNamespace
+	helmClient.ReleaseName = ReleaseName
 
 	rel, err := helmClient.Run(chart, values)
 	if err != nil {
-		return nil, fmt.Errorf("failed to render gateway-helm chart: %w", err)
+		return nil, fmt.Errorf("failed to render %s chart: %w", chartName, err)
 	}
 
 	// Combine the main manifest with hook manifests (certgen, webhooks, etc.).
@@ -248,7 +339,7 @@ func renderChart(scheme *runtime.Scheme) (*gatewayAPIResources, error) {
 
 	resources, err := parseManifest(scheme, allManifests.String())
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse rendered manifest: %w", err)
+		return nil, fmt.Errorf("failed to parse rendered %s manifest: %w", chartName, err)
 	}
 	return resources, nil
 }
@@ -341,15 +432,15 @@ func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResource
 		default:
 			// Fail loudly so a chart bump that adds a new kind we don't handle
 			// trips CI rather than silently dropping the object at runtime.
-			return nil, fmt.Errorf("unhandled object kind %T in rendered gateway-helm manifest", typedObj)
+			return nil, fmt.Errorf("unhandled object kind %T in rendered gateway helm manifest", typedObj)
 		}
 	}
 
 	return resources, nil
 }
 
-func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
-	resources, err := chartResourcesFor(scheme)
+func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme, channel operatorv1.GatewayAPIChannel) (essentialCRDs, optionalCRDs []client.Object, err error) {
+	resources, err := crdResourcesFor(scheme, channel)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
 	}
@@ -374,12 +465,12 @@ func K8SGatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (es
 
 // GatewayAPICRDs returns the k8s GatewayAPI CRDs and the Envoy CRDs together,
 // necessary for the deployment of Calico Gateway API.
-func GatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme) (essentialCRDs, optionalCRDs []client.Object, err error) {
-	resources, err := chartResourcesFor(scheme)
+func GatewayAPICRDs(provider operatorv1.Provider, scheme *runtime.Scheme, channel operatorv1.GatewayAPIChannel) (essentialCRDs, optionalCRDs []client.Object, err error) {
+	resources, err := crdResourcesFor(scheme, channel)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to render chart for CRDs: %w", err)
 	}
-	essentialCRDs, optionalCRDs, err = K8SGatewayAPICRDs(provider, scheme)
+	essentialCRDs, optionalCRDs, err = K8SGatewayAPICRDs(provider, scheme, channel)
 	if err != nil {
 		return nil, nil, err
 	}

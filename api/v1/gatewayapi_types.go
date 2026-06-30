@@ -80,12 +80,36 @@ type GatewayAPISpec struct {
 	// +optional
 	CRDManagement *CRDManagement `json:"crdManagement,omitempty"`
 
+	// Configures which channel of the upstream Gateway API CRDs the operator installs.
+	// The "Experimental" channel - which is the default, used when this field is not set -
+	// includes the standard CRDs plus the experimental-only resources, notably TCPRoute and
+	// UDPRoute, that Envoy Gateway relies on.  The "Standard" channel installs only the
+	// standard-channel CRDs and therefore omits those experimental route types.  Most
+	// installations should keep the default; choose "Standard" only if you do not need the
+	// experimental route types and prefer the smaller, stable CRD set.  This setting is
+	// independent of crdManagement, which governs whether the operator creates or overwrites
+	// the CRDs at all.
+	// +kubebuilder:default=Experimental
+	// +optional
+	GatewayAPIChannel *GatewayAPIChannel `json:"gatewayAPIChannel,omitempty"`
+
 	// Extensions enables and configures Tigera-built add-ons that sit on top of the
 	// Gateway API data plane.  Each add-on is opt-in: an unset Extensions, an unset
 	// add-on field, and an empty add-on object all leave the add-on disabled.
 	// +optional
 	Extensions *GatewayAPIExtensions `json:"extensions,omitempty"`
 }
+
+// GatewayAPIChannel selects which release channel of the upstream Gateway API CRDs the
+// operator installs.  "Experimental" includes the experimental-only route types (TCPRoute,
+// UDPRoute) that Envoy Gateway needs; "Standard" installs only the standard-channel CRDs.
+// +kubebuilder:validation:Enum=Standard;Experimental
+type GatewayAPIChannel string
+
+const (
+	GatewayAPIChannelStandard     GatewayAPIChannel = "Standard"
+	GatewayAPIChannelExperimental GatewayAPIChannel = "Experimental"
+)
 
 // GatewayAPIExtensions enables and configures Tigera-built Gateway API add-ons.
 type GatewayAPIExtensions struct {

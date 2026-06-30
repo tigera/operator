@@ -198,8 +198,9 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	// Get the Kubernetes Gateway API CRDs.
-	essentialCRDs, optionalCRDs, err := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	// Get the Kubernetes Gateway API CRDs.  Istio uses the experimental channel (matching the
+	// historical CRD set); channel selection is exposed only on the GatewayAPI CR.
+	essentialCRDs, optionalCRDs, err := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme, operatorv1.GatewayAPIChannelExperimental)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
 		return reconcile.Result{}, err

@@ -1176,8 +1176,9 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 		},
 	}
 
-	// Zero-tenant-only. Must match the rbacManagementUINamespacedRole gate so
-	// the SA never gets these cluster rules without the namespaced grant.
+	// Not rendered on multi-tenant management clusters. Keep this condition in
+	// sync with the rbacManagementUINamespacedRole gate; the cluster rules and
+	// the namespaced grant are rendered together.
 	if rbacManagementEnabled && !tenant.MultiTenant() {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}

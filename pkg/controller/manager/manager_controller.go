@@ -682,7 +682,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Presence of the LDAP config Secret (always calico-system; the feature is
-	// zero-tenant) gates the manager's LDAP egress policy below.
+	// not supported on multi-tenant clusters) gates the manager's LDAP egress
+	// policy.
 	ldapConfigSecret, err := utils.GetSecret(ctx, r.client, render.RBACManagementLDAPConfigSecretName, common.CalicoNamespace)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading RBAC management LDAP config secret", err, logc)

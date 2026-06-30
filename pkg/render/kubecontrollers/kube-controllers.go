@@ -673,7 +673,8 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 }
 
 // rbacSyncIDPGroupsRole returns the Role + RoleBinding that grants rbacsync
-// read on the tigera-idp-groups ConfigMap in calico-system.
+// read access to the tigera-idp-groups ConfigMap in calico-system, its only
+// namespaced dependency.
 func (c *kubeControllersComponent) rbacSyncIDPGroupsRole() []client.Object {
 	name := "calico-kube-controllers-rbac-sync"
 	return []client.Object{
@@ -708,22 +709,24 @@ func (c *kubeControllersComponent) rbacSyncIDPGroupsRole() []client.Object {
 	}
 }
 
-// rbacSyncControllerRules returns the extra rules the rbacsync controller
-// needs on top of render.RBACManagementEscalationRules.
+// rbacSyncControllerRules returns the cluster-scoped rules the rbacsync
+// controller holds. The rbacsync controller writes the managed RBAC roles as
+// its own ServiceAccount, and Kubernetes rejects a write to a Role or
+// ClusterRole as privilege escalation unless the writer already holds every
+// permission that role grants. The shared RBACManagementEscalationRules supply
+// most of that coverage; the rules appended here cover the rest of what the
+// managed roles grant.
 func rbacSyncControllerRules() []rbacv1.PolicyRule {
 	rules := render.RBACManagementEscalationRules()
 	return append(rules,
 		rbacv1.PolicyRule{
+			// Held to cover the compliances:get the managed roles grant.
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"compliances"},
 			Verbs:     []string{"get", "list"},
 		},
 		rbacv1.PolicyRule{
-			APIGroups: []string{""},
-			Resources: []string{"secrets"},
-			Verbs:     []string{"get", "create", "patch"},
-		},
-		rbacv1.PolicyRule{
+			// Held to cover the pods:list the managed roles grant.
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},

@@ -16,10 +16,13 @@ package render
 
 import rbacv1 "k8s.io/api/rbac/v1"
 
-// RBACManagementEscalationRules returns the rules shared by the calico-manager
-// and calico-kube-controllers roles for the RBAC management UI. The SA writing
-// a managed role must already hold every permission it grants, else K8s rejects
-// the write as privilege escalation; keep this aligned with the managed roles.
+// RBACManagementEscalationRules returns the permission set the rbacsync
+// controller (in calico-kube-controllers) holds so it can write the RBAC
+// management UI's managed roles. The rbacsync controller acts as its own
+// ServiceAccount, and Kubernetes rejects a write to a Role or ClusterRole as
+// privilege escalation unless the writer already holds every permission that
+// role grants. This set is therefore a superset of the rules in those managed
+// roles; the managed roles themselves are defined in calico/kube-controllers.
 func RBACManagementEscalationRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		// Full CRUD on the RBAC objects the feature writes.
@@ -80,6 +83,21 @@ func RBACManagementEscalationRules() []rbacv1.PolicyRule {
 				"securityeventwebhooks",
 			},
 			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// The managed Webhooks role grants creating the webhook backing Secret and
+		// patching webhooks-secret, so the writer must hold the same to pass the
+		// escalation check. create cannot be name-scoped (the name is in the
+		// request body, not the URL path), so it is cluster-wide here.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{"webhooks-secret"},
+			Verbs:         []string{"patch"},
 		},
 		// LMA log roles' scope verb (per-cluster log access roles).
 		{

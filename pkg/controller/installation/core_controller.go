@@ -252,6 +252,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the Manager CR so changes to spec.rbac re-run the installation
+		// reconcile (the rbacsync controller in calico-kube-controllers is
+		// gated on it).
+		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
+		}
+
 		// watch for change to primary resource LogCollector
 		err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -1049,6 +1057,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	var managerCR *operatorv1.Manager
 	var logCollector *operatorv1.LogCollector
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
@@ -1068,6 +1077,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		// We are in enterprise, so the Manager CRD is expected. A nil managerCR
+		// (no Manager created) means callers fall back to their defaults. A
+		// NoMatchError (Manager CRD not registered yet) is treated as an error:
+		// we don't know the user's intent until the CRD loads, so we requeue
+		// rather than read the Manager as absent.
+		managerCR, err = utils.GetManager(ctx, r.client, false, "")
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1705,7 +1725,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// the kube-controllers component (and deleted when the WAF extension is
 		// disabled); the caBundle is the operator CA that issued the serving
 		// cert above.
-		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
+		WAFWebhookCABundle:    certificateManager.KeyPair().GetCertificatePEM(),
+		RBACManagementEnabled: managerCR.RBACManagementEnabled(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

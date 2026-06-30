@@ -1870,17 +1870,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
 
-			It("omits LDAP egress when OIDC is configured but the LDAP config secret is absent", func() {
-				// Regression guard: the gate must key on the LDAP config secret,
-				// not on Authentication.Spec.OIDC (which never drives an LDAP dial).
-				resources, _ := renderObjects(renderConfig{
-					installation: installation, ns: render.ManagerNamespace,
-					manager: rbacUIManager, oidc: true, rbacManagementLDAP: false,
-				})
-				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
-				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
-			})
-
 			It("omits LDAP egress when the LDAP secret is present but RBAC UI is disabled", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,

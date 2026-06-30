@@ -613,6 +613,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
 	}
 	// Render the fluent-bit component for Linux
 	comp := rlogcollector.FluentBit(fluentBitCfg)

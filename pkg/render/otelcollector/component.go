@@ -17,6 +17,8 @@ package otelcollector
 import (
 	"bytes"
 	"fmt"
+	"net/url"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -53,9 +55,10 @@ const (
 	OTelCollectorClusterRoleName     = OTelCollectorName
 	OTelCollectorServerTLSSecretName = "otel-collector-tls"
 
-	OTLPGRPCPort    = 4317
-	OTLPHTTPPort    = 4318
-	HealthCheckPort = 13133
+	OTLPGRPCPort        = 4317
+	OTLPHTTPPort        = 4318
+	HealthCheckPort     = 13133
+	InternalMetricsPort = 8888
 
 	MetricsTLSServerName = "calico-node-metrics"
 
@@ -204,6 +207,7 @@ type configTemplateData struct {
 	Exporters           []exporterEntry
 	ExporterNames       string
 	HealthCheckPort     int
+	InternalMetricsPort int
 	MemoryLimitMiB      int
 	MemorySpikeLimitMiB int
 }
@@ -284,6 +288,14 @@ extensions:
     endpoint: 0.0.0.0:{{.HealthCheckPort}}
 
 service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: {{.InternalMetricsPort}}
   extensions: [health_check]
   pipelines:
 {{- if .HasLogs}}
@@ -325,6 +337,7 @@ func (c *component) collectorConfig() string {
 		Exporters:           exporters,
 		ExporterNames:       strings.Join(exporterNames, ", "),
 		HealthCheckPort:     HealthCheckPort,
+		InternalMetricsPort: InternalMetricsPort,
 		MemoryLimitMiB:      DefaultMemoryLimitMiB,
 		MemorySpikeLimitMiB: DefaultMemorySpikeLimitMiB,
 	}
@@ -357,6 +370,12 @@ func (c *component) service() *corev1.Service {
 			Name:       "otlp-http",
 			Port:       OTLPHTTPPort,
 			TargetPort: intstr.FromInt32(OTLPHTTPPort),
+			Protocol:   corev1.ProtocolTCP,
+		},
+		{
+			Name:       "metrics",
+			Port:       InternalMetricsPort,
+			TargetPort: intstr.FromInt32(InternalMetricsPort),
 			Protocol:   corev1.ProtocolTCP,
 		},
 	}
@@ -410,6 +429,7 @@ func (c *component) container() corev1.Container {
 			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 			{Name: "otlp-http", ContainerPort: OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 			{Name: "health", ContainerPort: HealthCheckPort, Protocol: corev1.ProtocolTCP},
+			{Name: "metrics", ContainerPort: InternalMetricsPort, Protocol: corev1.ProtocolTCP},
 		},
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
@@ -510,6 +530,13 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 				Ports: networkpolicy.Ports(OTLPHTTPPort),
 			},
 		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(InternalMetricsPort),
+			},
+		},
 	}
 
 	egressRules := []v3.Rule{
@@ -520,6 +547,28 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 				Ports: networkpolicy.Ports(OTLPGRPCPort, OTLPHTTPPort),
 			},
 		},
+	}
+
+	for _, exp := range c.cfg.OTelCollector.Exporters {
+		if u, err := url.Parse(exp.Endpoint); err == nil {
+			portStr := u.Port()
+			if portStr == "" {
+				if u.Scheme == "https" {
+					portStr = "443"
+				} else {
+					portStr = "80"
+				}
+			}
+			if p, err := strconv.Atoi(portStr); err == nil {
+				egressRules = append(egressRules, v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(uint16(p)),
+					},
+				})
+			}
+		}
 	}
 
 	if c.metricsEnabled() {

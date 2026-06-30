@@ -147,8 +147,7 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 			}
 		}
 
-		// If we were cancelled while waiting for the informers to sync, don't autoscale or
-		// report degraded - we're shutting down.
+		// Don't autoscale or report degraded if the context has been cancelled - we're shutting down.
 		if ctx.Err() != nil {
 			typhaLog.Info("typha autoscaler shutting down")
 			return

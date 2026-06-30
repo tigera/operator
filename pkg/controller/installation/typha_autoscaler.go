@@ -57,6 +57,9 @@ type typhaAutoscaler struct {
 	typhaIndexer   cache.Store
 	nonClusterHost bool
 
+	// done is closed when the autoscaler goroutine exits, so callers can wait for shutdown.
+	done chan struct{}
+
 	// Number of currently running replicas.
 	activeReplicas int32
 }
@@ -124,7 +127,9 @@ func newTyphaAutoscaler(cs kubernetes.Interface, indexInformer cache.SharedIndex
 // can be used to trigger an auto scale run immediately, while the isDegradedChan can be used to get the degraded status
 // of the last run. The triggerRun and isDegraded functions should be used instead of instead of access these channels directly.
 func (t *typhaAutoscaler) start(ctx context.Context) {
+	t.done = make(chan struct{})
 	go func() {
+		defer close(t.done)
 		degraded := false
 		ticker := time.NewTicker(t.syncPeriod)
 		defer ticker.Stop()
@@ -132,9 +137,21 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 
 		// Start the informer.
 		go t.typhaInformer.Run(ctx.Done())
-		// Wait for the informers to sync.
+		// Wait for the informers to sync, bailing out if we're asked to shut down first.
 		for !t.indexInformer.HasSynced() || !t.typhaInformer.HasSynced() {
-			time.Sleep(100 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				typhaLog.Info("typha autoscaler shutting down")
+				return
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+
+		// If we were cancelled while waiting for the informers to sync, don't autoscale or
+		// report degraded - we're shutting down.
+		if ctx.Err() != nil {
+			typhaLog.Info("typha autoscaler shutting down")
+			return
 		}
 
 		// Autoscale on start up then do it again every tick.
@@ -179,6 +196,14 @@ func (t *typhaAutoscaler) start(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// waitForShutdown blocks until the autoscaler goroutine started by start() has exited. It is a no-op
+// if the autoscaler was never started. Cancel the context passed to start() to trigger shutdown.
+func (t *typhaAutoscaler) waitForShutdown() {
+	if t.done != nil {
+		<-t.done
+	}
 }
 
 func (t *typhaAutoscaler) triggerRun() error {

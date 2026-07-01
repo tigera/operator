@@ -1447,6 +1447,30 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(exited).Should(BeFalse(), "expected no reboot when the dataplane mode is unchanged")
 			})
 
+			It("should reboot the operator when the dataplane is re-enabled, before the IP pool gate", func() {
+				// The operator started with the dataplane disabled (r.dataplaneDisabled == true from the
+				// BeforeEach) but the live Installation now enables it with Calico networking. Re-enabling
+				// requires the IP pool controller, which is not registered in a dataplane-disabled operator, so
+				// no default pools exist. The reboot must fire before the "waiting for enabled IP pools" gate,
+				// otherwise the reconcile would return early there and the operator could never restart itself
+				// out of the disabled controller set.
+				dpIptables := operator.LinuxDataplaneIptables
+				cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{
+					LinuxDataplane: &dpIptables,
+				}
+				cr.Spec.CNI = nil
+				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+				exited := false
+				origExit := osExitOverride
+				osExitOverride = func(_ int) { exited = true }
+				defer func() { osExitOverride = origExit }()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(exited).Should(BeTrue(), "expected the operator to reboot when the dataplane is re-enabled")
+			})
+
 			It("should not render the dataplane components and should not seed FelixConfiguration", func() {
 				Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 				result, err := r.Reconcile(ctx, reconcile.Request{})

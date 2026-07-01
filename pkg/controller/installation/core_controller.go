@@ -1010,6 +1010,25 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// the FelixConfiguration/BGPConfiguration defaults are not seeded.
 	dataplaneDisabled := instance.Spec.DataplaneDisabled()
 
+	// An install with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None) runs a different set of
+	// controllers than a normal install (see internal/controller.AddToManager), and that set is
+	// fixed when the manager starts. If the dataplane mode has changed since the operator
+	// started, reboot so the correct controllers are (de)registered. This mirrors the enterprise
+	// switch below; controller-runtime cannot add or remove controllers from a running manager.
+	//
+	// This must happen before the CNI and IP pool gates below. When switching from disabled back
+	// to enabled the IP pool controller is not registered (we booted with the dataplane off), so
+	// nothing would create the default pools and the "waiting for enabled IP pools" gate would
+	// return early, preventing us from ever reaching this reboot and wedging the operator.
+	if instance.DeletionTimestamp.IsZero() && r.dataplaneDisabled != dataplaneDisabled {
+		reqLogger.Info("Linux dataplane mode changed since startup; rebooting operator to apply controller set",
+			"startupDataplaneDisabled", r.dataplaneDisabled, "currentDataplaneDisabled", dataplaneDisabled)
+		osExitOverride(0)
+		// osExitOverride is a no-op in tests; os.Exit(0) never returns in production. Return here so
+		// the test path does not fall through and continue reconciling with a stale controller set.
+		return reconcile.Result{}, nil
+	}
+
 	// Make sure CNI is configured before continuing. In an install with the dataplane disabled spec.cni is omitted
 	// (validation rejects it being set), so this check only applies when a dataplane runs.
 	if !dataplaneDisabled && (instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil) {
@@ -1047,17 +1066,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 		}
-	}
-
-	// An install with the dataplane disabled (spec.calicoNetwork.linuxDataplane: None) runs a different set of
-	// controllers than a normal install (see internal/controller.AddToManager), and that set is
-	// fixed when the manager starts. If the dataplane mode has changed since the operator
-	// started, reboot so the correct controllers are (de)registered. This mirrors the enterprise
-	// switch below; controller-runtime cannot add or remove controllers from a running manager.
-	if instance.DeletionTimestamp.IsZero() && r.dataplaneDisabled != instance.Spec.DataplaneDisabled() {
-		reqLogger.Info("Linux dataplane mode changed since startup; rebooting operator to apply controller set",
-			"startupDataplaneDisabled", r.dataplaneDisabled, "currentDataplaneDisabled", instance.Spec.DataplaneDisabled())
-		osExitOverride(0)
 	}
 
 	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.

@@ -240,6 +240,17 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.NetworkPolicy = override.NetworkPolicy
 	}
 
+	// If the effective dataplane is disabled (spec.calicoNetwork.linuxDataplane: None), there is no
+	// Calico dataplane for the operator to integrate a CNI with, so spec.cni must be omitted
+	// (validation rejects it being set). The base Installation defaults spec.cni when its own
+	// dataplane is enabled, and the overlay only sets linuxDataplane: None without clearing CNI
+	// (compareFields reports AOnlySet, which the merge above leaves untouched). Clear it here so the
+	// computed spec is internally consistent and passes validation when the mode comes in via the
+	// overlay.
+	if inst.DataplaneDisabled() {
+		inst.CNI = nil
+	}
+
 	return inst
 }
 

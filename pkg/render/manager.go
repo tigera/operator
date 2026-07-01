@@ -1353,11 +1353,12 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if c.cfg.Manager.RBACManagementEnabled() && c.cfg.RBACManagementLDAPConfigured {
+	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() && c.cfg.RBACManagementLDAPConfigured {
 		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, which dials the
-		// directory from this pod. Gated on the LDAP config Secret, whose presence
-		// marks the sync as configured. Destination unscoped (customer-configured);
-		// scoping to the LDAP host is tracked in EV-6665.
+		// directory from this pod. Gated on !MultiTenant() to match the rest of the
+		// RBAC UI (unsupported on multi-tenant clusters), and on the LDAP config
+		// Secret, whose presence marks the sync as configured. Destination unscoped
+		// (customer-configured); scoping to the LDAP host is tracked in EV-6665.
 		egressRules = append(egressRules, v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,

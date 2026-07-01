@@ -1879,6 +1879,26 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
+
+			It("omits LDAP egress in multi-tenant mode even with RBAC UI enabled and the LDAP secret present", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation:      installation,
+					ns:                "tenant-a",
+					bindingNamespaces: []string{"tenant-a"},
+					tenant: &operatorv1.Tenant{
+						ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+						Spec: operatorv1.TenantSpec{
+							ID:                    "tenant-a",
+							ManagedClusterVariant: &operatorv1.Calico,
+						},
+					},
+					manager:            rbacUIManager,
+					rbacManagementLDAP: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(
+					types.NamespacedName{Name: "calico-system.manager-access", Namespace: "tenant-a"}, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
 		})
 	})
 })

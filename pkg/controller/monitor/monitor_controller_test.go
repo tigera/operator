@@ -207,7 +207,10 @@ var _ = Describe("Monitor controller tests", func() {
 
 		})
 
-		It("should create Prometheus related resources even when a cert with missing key usages is configured for other components", func() {
+		It("should create Prometheus related resources even when a bad cert is configured for another component", func() {
+			// fluent-bit metrics are scraped over plain HTTP, so the monitor
+			// controller no longer reads the fluent-bit certificate at all; even
+			// a key-usage-invalid fluent-bit secret must not affect Prometheus.
 			By("Creating a fluent-bit certificate secret without all necessary usages")
 			cryptoCA, err := tls.MakeCA(rmeta.TigeraOperatorCAIssuerPrefix)
 			Expect(err).NotTo(HaveOccurred())
@@ -224,7 +227,7 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(r.client.Create(ctx, fluentBitSecret)).NotTo(HaveOccurred())
 
-			By("reconciling the controller after a bad secret was created, we expect no problems, because bad secrets should be skipped")
+			By("reconciling the controller after a bad secret was created, we expect no problems, because the secret is not read by this controller")
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
 		})

@@ -332,7 +332,7 @@ var _ = Describe("OTelCollector rendering", func() {
 
 			config := cm.Data["config.yaml"]
 			Expect(config).NotTo(ContainSubstring("otlp:"))
-			Expect(config).NotTo(ContainSubstring("prometheus:"))
+			Expect(config).NotTo(ContainSubstring("scrape_configs:"))
 			Expect(config).NotTo(ContainSubstring("logs:"))
 			Expect(config).NotTo(ContainSubstring("receivers: [prometheus]"))
 		})

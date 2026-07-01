@@ -140,6 +140,7 @@ var _ = Describe("OTelCollector rendering", func() {
 										{Name: "otlp-grpc", ContainerPort: otelcollector.OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 										{Name: "otlp-http", ContainerPort: otelcollector.OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 										{Name: "health", ContainerPort: otelcollector.HealthCheckPort, Protocol: corev1.ProtocolTCP},
+										{Name: "metrics", ContainerPort: otelcollector.InternalMetricsPort, Protocol: corev1.ProtocolTCP},
 									},
 									Resources: corev1.ResourceRequirements{
 										Limits: corev1.ResourceList{
@@ -333,7 +334,7 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(config).NotTo(ContainSubstring("otlp:"))
 			Expect(config).NotTo(ContainSubstring("prometheus:"))
 			Expect(config).NotTo(ContainSubstring("logs:"))
-			Expect(config).NotTo(ContainSubstring("metrics:"))
+			Expect(config).NotTo(ContainSubstring("receivers: [prometheus]"))
 		})
 
 		It("should use otlphttp prefix for HTTP exporters", func() {
@@ -423,9 +424,11 @@ var _ = Describe("OTelCollector rendering", func() {
 			objs, _ := otelcollector.OTelCollector(cfg).Objects()
 			svc, err := rtest.GetResourceOfType[*corev1.Service](objs, otelcollector.OTelCollectorServiceName, otelcollector.OTelCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(svc.Spec.Ports).To(HaveLen(1))
+			Expect(svc.Spec.Ports).To(HaveLen(2))
 			Expect(svc.Spec.Ports[0].Port).To(Equal(int32(otelcollector.OTLPHTTPPort)))
 			Expect(svc.Spec.Ports[0].Name).To(Equal("otlp-http"))
+			Expect(svc.Spec.Ports[1].Port).To(Equal(int32(otelcollector.InternalMetricsPort)))
+			Expect(svc.Spec.Ports[1].Name).To(Equal("metrics"))
 			Expect(svc.Spec.Selector).To(Equal(map[string]string{"k8s-app": otelcollector.OTelCollectorStatefulSetName}))
 		})
 	})
@@ -469,8 +472,9 @@ var _ = Describe("OTelCollector rendering", func() {
 
 			np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objs, otelcollector.OTelCollectorPolicyName, otelcollector.OTelCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(np.Spec.Ingress).To(HaveLen(1))
+			Expect(np.Spec.Ingress).To(HaveLen(2))
 			Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow))
+			Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Allow))
 			Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
 		})
 

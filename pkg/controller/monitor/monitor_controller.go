@@ -50,7 +50,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -150,10 +149,8 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		monitor.PrometheusServerTLSSecretName,
-		logcollector.FluentBitTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
-		logcollector.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
@@ -336,10 +333,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Note: fluent-bit is not in this list — its metrics endpoint is scraped
+	// over plain HTTP (fluent-bit's monitoring server has no TLS support), so
+	// Prometheus has no need to trust the fluent-bit certificate.
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, certificateName := range []string{
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		logcollector.FluentBitTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		render.CalicoAPIServerTLSSecretName,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,

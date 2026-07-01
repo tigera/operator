@@ -1125,9 +1125,10 @@ func (mc *monitorComponent) serviceMonitorElasticsearch() *monitoringv1.ServiceM
 	}
 }
 
-// serviceMonitorFluentBit creates a service monitor to make Prometheus watch Fluent Bit. Previously, a pod monitor was used.
-// However, the pod monitor does not have all the tls configuration options that we need, namely reading them from the
-// file system, as opposed to getting them from watching kubernetes secrets.
+// serviceMonitorFluentBit creates a service monitor to make Prometheus scrape
+// Fluent Bit's built-in monitoring server. The endpoint is plain HTTP (the
+// server has no TLS support); access to the port is restricted by the
+// allow-calico-fluent-bit NetworkPolicy instead.
 func (mc *monitorComponent) serviceMonitorFluentBit() *monitoringv1.ServiceMonitor {
 	return &monitoringv1.ServiceMonitor{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
@@ -1406,8 +1407,17 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: v3.EntityRule{
-				// Egress access for Felix metrics
+				// Egress access for Elasticsearch (9081) and Felix (9091) metrics
 				Ports: networkpolicy.Ports(9081, 9091),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				// Egress access for fluent-bit metrics, scraped over plain HTTP
+				// from fluent-bit's built-in monitoring server.
+				Ports: networkpolicy.Ports(logcollector.FluentBitMetricsPort),
 			},
 		},
 		{

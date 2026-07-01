@@ -32,31 +32,23 @@ type ManagerSpec struct {
 	RBACUI *RBACUI `json:"rbacUI,omitempty"`
 }
 
-// RBACUI controls the RBAC management UI feature surface.
+// RBACUI configures the RBAC management UI. This is a separate control plane
+// for Calico Enterprise RBAC that lives alongside, and does not replace, the
+// user's ability to configure RBAC themselves.
 type RBACUI struct {
-	// Enabled controls whether the RBAC management UI is enabled. Defaults to
-	// Disabled.
+	// Enabled turns the RBAC management UI on or off. Defaults to false.
 	// +optional
-	// +kubebuilder:validation:Enum=Enabled;Disabled
-	Enabled RBACUIStatus `json:"enabled,omitempty"`
+	Enabled *bool `json:"enabled,omitempty"`
 }
 
-// RBACUIStatus toggles the RBAC management UI feature.
-type RBACUIStatus string
-
-const (
-	RBACUIEnabled  RBACUIStatus = "Enabled"
-	RBACUIDisabled RBACUIStatus = "Disabled"
-)
-
-// RBACManagementEnabled returns true when the Manager CR opts the cluster
-// into the RBAC management UI. Safe to call on a nil receiver; returns false
-// for either a nil Manager or any value other than Enabled.
+// RBACManagementEnabled returns true when the Manager CR enables the RBAC
+// management UI. Safe to call on a nil receiver; returns false for a nil
+// Manager, an unset RBACUI, or an unset/false toggle.
 func (m *Manager) RBACManagementEnabled() bool {
-	if m == nil || m.Spec.RBACUI == nil {
+	if m == nil || m.Spec.RBACUI == nil || m.Spec.RBACUI.Enabled == nil {
 		return false
 	}
-	return m.Spec.RBACUI.Enabled == RBACUIEnabled
+	return *m.Spec.RBACUI.Enabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

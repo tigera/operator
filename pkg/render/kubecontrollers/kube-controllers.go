@@ -151,8 +151,8 @@ type KubeControllersConfiguration struct {
 	// Only consulted when WAFGatewayExtensionEnabled is true.
 	WAFWebhookCABundle []byte
 
-	// RBACManagementEnabled mirrors Manager.spec.rbac.ui == Enabled and gates
-	// the rbacsync controller in calico-kube-controllers.
+	// RBACManagementEnabled mirrors Manager.spec.rbacUI.enabled and gates the
+	// rbacsync controller in calico-kube-controllers.
 	RBACManagementEnabled bool
 }
 

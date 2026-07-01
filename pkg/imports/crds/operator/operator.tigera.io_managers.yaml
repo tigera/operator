@@ -302,13 +302,10 @@ spec:
                   description: RBACUI configures the RBAC management UI feature.
                   properties:
                     enabled:
-                      description: |-
-                        Enabled controls whether the RBAC management UI is enabled. Defaults to
-                        Disabled.
-                      enum:
-                        - Enabled
-                        - Disabled
-                      type: string
+                      description:
+                        Enabled turns the RBAC management UI on or off. Defaults
+                        to false.
+                      type: boolean
                   type: object
               type: object
             status:

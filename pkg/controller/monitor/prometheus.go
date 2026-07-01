@@ -103,7 +103,7 @@ func addWatch(c ctrlruntime.Controller) error {
 	}
 
 	if err = addServiceMonitorFluentBitWatch(c); err != nil {
-		return fmt.Errorf("failed to watch ServiceMonitor fluent-bit-metrics resource: %w", err)
+		return fmt.Errorf("failed to watch ServiceMonitor %s resource: %w", monitor.FluentBitMetrics, err)
 	}
 
 	if err = addServiceMonitorKubeControllerWatch(c); err != nil {

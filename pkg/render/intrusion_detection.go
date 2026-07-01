@@ -579,7 +579,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		c.cfg.IntrusionDetectionCertSecret.Volume(),
 	}
 	// If syslog forwarding is enabled then set the necessary hostpath volume to write
-	// logs for Fluentd to access.
+	// logs for Fluent Bit to access.
 	if c.cfg.SyslogForwardingIsEnabled {
 		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, corev1.Volume{
@@ -741,7 +741,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	sc := securitycontext.NewNonRootContext()
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
-	// write logs for Fluentd.
+	// write logs for Fluent Bit.
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	volumeMounts = append(volumeMounts, c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()))
 	if c.cfg.SyslogForwardingIsEnabled {

@@ -566,6 +566,11 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		// Voltron verifies the in-cluster fluent-bit http input (non-cluster-host
+		// log ingestion) against the same trusted bundle. Without this the config
+		// default (/etc/pki/tls/certs/ca.crt) is used, which is not mounted, so the
+		// mTLS handshake to calico-fluent-bit-http-input fails.
+		{Name: "VOLTRON_LOG_COLLECTOR_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -1259,7 +1264,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 			Destination: v3.EntityRule{
 				Services: &v3.ServiceMatch{
 					Namespace: LogCollectorNamespace,
-					Name:      FluentdInputService,
+					Name:      FluentBitInputService,
 				},
 			},
 		})
@@ -1400,7 +1405,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-dpi",
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
-		"tigera-fluentd",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
 		"tigera-manager",

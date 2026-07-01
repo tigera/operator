@@ -28,6 +28,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -45,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	rlogcollector "github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
@@ -77,6 +79,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
@@ -143,7 +146,7 @@ var _ = Describe("LogCollector controller tests", func() {
 
 		Expect(c.Create(ctx, &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchEksLogForwarderUserSecret,
+				Name:      rlogcollector.ElasticsearchEksLogForwarderUserSecret,
 				Namespace: "tigera-operator",
 			},
 		})).NotTo(HaveOccurred())
@@ -174,7 +177,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -185,16 +188,16 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentFluentd.Image,
-					components.ComponentFluentd.Version)))
+					components.ComponentFluentBit.Image,
+					components.ComponentFluentBit.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/fluentd", Digest: "sha256:fluentdhash"},
-						{Image: "tigera/fluentd-windows", Digest: "sha256:fluentdwindowshash"},
+						{Image: "tigera/fluent-bit", Digest: "sha256:fluentbithash"},
+						{Image: "tigera/fluent-bit-windows", Digest: "sha256:fluentbitwindowshash"},
 						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
@@ -215,7 +218,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -226,10 +229,10 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentFluentd.Image,
-					"sha256:fluentdhash")))
+					components.ComponentFluentBit.Image,
+					"sha256:fluentbithash")))
 
-			ds.Name = "fluentd-node-windows"
+			ds.Name = "calico-fluent-bit-windows"
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 			node = ds.Spec.Template.Spec.Containers[0]
@@ -237,14 +240,45 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentFluentdWindows.Image,
-					"sha256:fluentdwindowshash")))
+					components.ComponentFluentBitWindows.Image,
+					"sha256:fluentbitwindowshash")))
+		})
+
+		It("should keep the non-cluster-host ingress rule on the fluent-bit policy when Windows nodes are present", func() {
+			// A Windows node makes the operator also render the Windows fluent-bit
+			// component, which shares the allow-calico-fluent-bit NetworkPolicy with
+			// the Linux component. The non-cluster-host ingress rule (port 9880,
+			// voltron -> http input) is gated on NonClusterHost, so if the Windows
+			// configuration does not carry NonClusterHost it overwrites the policy
+			// without that rule, making the rule flap on every reconcile.
+			Expect(c.Create(ctx, &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "windows-node",
+					Labels: map[string]string{"kubernetes.io/os": "windows"},
+				},
+			})).ToNot(HaveOccurred())
+			Expect(c.Create(ctx, &operatorv1.NonClusterHost{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec:       operatorv1.NonClusterHostSpec{Endpoint: "https://1.2.3.4:5678"},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policy := v3.NetworkPolicy{
+				TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system.allow-calico-fluent-bit", Namespace: render.LogCollectorNamespace},
+			}
+			Expect(test.GetResource(c, &policy)).To(BeNil())
+			// Metrics rule (2020) + non-cluster-host rule (9880). Without the fix the
+			// Windows render (applied last) drops the 9880 rule, leaving only one.
+			Expect(policy.Spec.Ingress).To(HaveLen(2))
 		})
 
 		Context("Forward to S3", func() {
 			s3Vars := []corev1.EnvVar{
 				{
-					Name:  "AWS_KEY_ID",
+					Name:  "AWS_ACCESS_KEY_ID",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -256,7 +290,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					},
 				},
 				{
-					Name:  "AWS_SECRET_KEY",
+					Name:  "AWS_SECRET_ACCESS_KEY",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -267,11 +301,6 @@ var _ = Describe("LogCollector controller tests", func() {
 						},
 					},
 				},
-				{Name: "S3_STORAGE", Value: "true"},
-				{Name: "S3_BUCKET_NAME", Value: "s3Bucket"},
-				{Name: "AWS_REGION", Value: "s3Region"},
-				{Name: "S3_BUCKET_PATH", Value: "s3Path"},
-				{Name: "S3_FLUSH_INTERVAL", Value: "5s"},
 			}
 
 			BeforeEach(func() {
@@ -314,7 +343,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "fluentd-node",
+						Name:      "calico-fluent-bit",
 						Namespace: render.LogCollectorNamespace,
 					},
 				}
@@ -323,6 +352,18 @@ var _ = Describe("LogCollector controller tests", func() {
 				node := ds.Spec.Template.Spec.Containers[0]
 				Expect(node).ToNot(BeNil())
 				Expect(node.Env).To(ContainElements(s3Vars))
+
+				// The bucket settings live in the rendered config rather than
+				// env vars.
+				cm := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &cm)).To(BeNil())
+				conf := cm.Data["fluent-bit.yaml"]
+				Expect(conf).To(ContainSubstring(`"name": "s3"`))
+				Expect(conf).To(ContainSubstring(`"bucket": "s3Bucket"`))
+				Expect(conf).To(ContainSubstring(`"region": "s3Region"`))
 			})
 
 			Context("Disable feature via license", func() {
@@ -341,7 +382,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					ds := appsv1.DaemonSet{
 						TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "fluentd-node",
+							Name:      "calico-fluent-bit",
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
@@ -370,13 +411,6 @@ var _ = Describe("LogCollector controller tests", func() {
 						},
 					},
 				},
-				{Name: "SPLUNK_FLOW_LOG", Value: "true"},
-				{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
-				{Name: "SPLUNK_DNS_LOG", Value: "true"},
-				{Name: "SPLUNK_HEC_HOST", Value: "localhost"},
-				{Name: "SPLUNK_HEC_PORT", Value: "1234"},
-				{Name: "SPLUNK_PROTOCOL", Value: "https"},
-				{Name: "SPLUNK_FLUSH_INTERVAL", Value: "5s"},
 			}
 
 			BeforeEach(func() {
@@ -416,7 +450,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "fluentd-node",
+						Name:      "calico-fluent-bit",
 						Namespace: render.LogCollectorNamespace,
 					},
 				}
@@ -425,6 +459,18 @@ var _ = Describe("LogCollector controller tests", func() {
 				node := ds.Spec.Template.Spec.Containers[0]
 				Expect(node).ToNot(BeNil())
 				Expect(node.Env).To(ContainElements(splunkVars))
+
+				// The endpoint settings live in the rendered config rather than
+				// env vars.
+				cm := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &cm)).To(BeNil())
+				conf := cm.Data["fluent-bit.yaml"]
+				Expect(conf).To(ContainSubstring(`"name": "splunk"`))
+				Expect(conf).To(ContainSubstring(`"host": "localhost"`))
+				Expect(conf).To(ContainSubstring(`"splunk_token": "${SPLUNK_HEC_TOKEN}"`))
 			})
 
 			Context("Disable feature via license", func() {
@@ -444,7 +490,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					ds := appsv1.DaemonSet{
 						TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "fluentd-node",
+							Name:      "calico-fluent-bit",
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
@@ -461,30 +507,6 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		Context("Forward to Syslog", func() {
-			syslogVars := []corev1.EnvVar{
-				{Name: "SYSLOG_HOST", Value: "localhost"},
-				{Name: "SYSLOG_PORT", Value: "1234"},
-				{Name: "SYSLOG_PROTOCOL", Value: "https"},
-				{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s"},
-				{
-					Name: "SYSLOG_HOSTNAME",
-					ValueFrom: &corev1.EnvVarSource{
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: "spec.nodeName",
-						},
-					},
-				},
-				{
-					Name:  "SYSLOG_PACKET_SIZE",
-					Value: "0",
-				},
-				{Name: "SYSLOG_AUDIT_EE_LOG", Value: "true"},
-				{Name: "SYSLOG_AUDIT_KUBE_LOG", Value: "true"},
-				{Name: "SYSLOG_DNS_LOG", Value: "true"},
-				{Name: "SYSLOG_FLOW_LOG", Value: "true"},
-				{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true"},
-			}
-
 			BeforeEach(func() {
 				By("Specify splunk log storage")
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
@@ -495,7 +517,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					Spec: operatorv1.LogCollectorSpec{
 						AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
 							Syslog: &operatorv1.SyslogStoreSpec{
-								Endpoint:   "https://localhost:1234",
+								Endpoint:   "tcp://localhost:1234",
 								PacketSize: new(int32),
 								LogTypes: []operatorv1.SyslogLogType{
 									operatorv1.SyslogLogAudit,
@@ -520,15 +542,25 @@ var _ = Describe("LogCollector controller tests", func() {
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "fluentd-node",
+						Name:      "calico-fluent-bit",
 						Namespace: render.LogCollectorNamespace,
 					},
 				}
 				Expect(test.GetResource(c, &ds)).To(BeNil())
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-				node := ds.Spec.Template.Spec.Containers[0]
-				Expect(node).ToNot(BeNil())
-				Expect(node.Env).To(ContainElements(syslogVars))
+
+				// Syslog forwarding is fully config-driven (no env contract).
+				cm := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &cm)).To(BeNil())
+				conf := cm.Data["fluent-bit.yaml"]
+				Expect(conf).To(ContainSubstring(`"name": "syslog"`))
+				Expect(conf).To(ContainSubstring(`"host": "localhost"`))
+				Expect(conf).To(ContainSubstring(`"mode": "tcp"`))
+				// The whole record ships as one JSON MSG via the lua packer.
+				Expect(conf).To(ContainSubstring(`"call": "syslog_pack"`))
 			})
 
 			Context("Disable feature via license", func() {
@@ -548,7 +580,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					ds := appsv1.DaemonSet{
 						TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "fluentd-node",
+							Name:      "calico-fluent-bit",
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
@@ -812,15 +844,16 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
-			// Expect namespace to be created
+			// The calico-system namespace is created and owned by the core
+			// Installation controller, NOT this reconciler — owning it here would
+			// let `kubectl delete logcollector` garbage-collect the whole
+			// namespace.
 			namespace := corev1.Namespace{
 				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			}
-			Expect(c.Get(ctx, client.ObjectKey{
+			Expect(errors.IsNotFound(c.Get(ctx, client.ObjectKey{
 				Name: render.LogCollectorNamespace,
-			}, &namespace)).NotTo(HaveOccurred())
-			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+			}, &namespace))).To(BeTrue())
 
 			// Expect operator rolebinding to be created
 			rb := rbacv1.RoleBinding{
@@ -849,8 +882,8 @@ var _ = Describe("LogCollector controller tests", func() {
 	})
 
 	Context("License expiry", func() {
-		It("should set degraded status and delete fluentd DaemonSet when license is expired", func() {
-			// First reconcile to create fluentd resources.
+		It("should set degraded status and delete fluent-bit DaemonSet when license is expired", func() {
+			// First reconcile to create fluent-bit resources.
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -858,7 +891,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -884,7 +917,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds = appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -892,7 +925,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		It("should requeue when license is in the grace period", func() {
-			// First reconcile to create fluentd resources.
+			// First reconcile to create fluent-bit resources.
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -918,7 +951,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}

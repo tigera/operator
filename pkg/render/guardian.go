@@ -711,7 +711,7 @@ func guardianCalicoSystemPolicy(cfg *GuardianConfiguration) (*v3.NetworkPolicy, 
 			{
 				Action:      v3.Allow,
 				Protocol:    &networkpolicy.TCPProtocol,
-				Source:      FluentdSourceEntityRule,
+				Source:      FluentBitSourceEntityRule,
 				Destination: guardianIngressDestinationEntityRule,
 			},
 			{

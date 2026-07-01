@@ -207,6 +207,37 @@ var _ = Describe("API server enterprise modifier", func() {
 			Expect(ok).To(BeTrue(), "expected ClusterRole %q", name)
 		}
 
+		// The user and network-admin roles grant access to WAF policy resources.
+		uiUser, found := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
+		Expect(found).To(BeTrue())
+		Expect(uiUser.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"get", "watch", "list"},
+		}))
+
+		networkAdmin, found := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+		Expect(found).To(BeTrue())
+		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
+		}))
+
 		// Audit policy configmap.
 		_, ok := extensions.FindObject[*corev1.ConfigMap](objs, "calico-audit-policy")
 		Expect(ok).To(BeTrue())

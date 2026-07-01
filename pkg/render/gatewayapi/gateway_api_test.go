@@ -175,7 +175,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should report UDPRoute as required when platform is not OpenShift", func() {
 		s := testScheme()
-		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderAKS, s)
+		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderAKS, s, operatorv1.GatewayAPIChannelExperimental)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(essentialCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 		Expect(optionalCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
@@ -183,10 +183,40 @@ var _ = Describe("Gateway API rendering tests", func() {
 
 	It("should report UDPRoute as optional when platform is OpenShift", func() {
 		s := testScheme()
-		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderOpenShift, s)
+		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderOpenShift, s, operatorv1.GatewayAPIChannelExperimental)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(essentialCRDs).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
 		Expect(optionalCRDs).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+	})
+
+	It("should install the experimental route types and GA ListenerSet on the Experimental channel", func() {
+		s := testScheme()
+		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderAKS, s, operatorv1.GatewayAPIChannelExperimental)
+		Expect(err).ShouldNot(HaveOccurred())
+		all := append(append([]client.Object{}, essentialCRDs...), optionalCRDs...)
+		// Experimental-only route types are present.
+		Expect(all).To(ContainElement(&matchObject{name: "tcproutes.gateway.networking.k8s.io"}))
+		Expect(all).To(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+		// GA ListenerSet (group gateway.networking.k8s.io) is present in both channels.
+		Expect(all).To(ContainElement(&matchObject{name: "listenersets.gateway.networking.k8s.io"}))
+		// Envoy Gateway CRDs are always installed.
+		Expect(all).To(ContainElement(&matchObject{name: "envoyproxies.gateway.envoyproxy.io"}))
+	})
+
+	It("should omit the experimental route types on the Standard channel", func() {
+		s := testScheme()
+		essentialCRDs, optionalCRDs, err := GatewayAPICRDs(operatorv1.ProviderAKS, s, operatorv1.GatewayAPIChannelStandard)
+		Expect(err).ShouldNot(HaveOccurred())
+		all := append(append([]client.Object{}, essentialCRDs...), optionalCRDs...)
+		// Experimental-only route types are absent on the standard channel.
+		Expect(all).NotTo(ContainElement(&matchObject{name: "tcproutes.gateway.networking.k8s.io"}))
+		Expect(all).NotTo(ContainElement(&matchObject{name: "udproutes.gateway.networking.k8s.io"}))
+		// Standard CRDs, including the GA ListenerSet, are present.
+		Expect(all).To(ContainElement(&matchObject{name: "gateways.gateway.networking.k8s.io"}))
+		Expect(all).To(ContainElement(&matchObject{name: "httproutes.gateway.networking.k8s.io"}))
+		Expect(all).To(ContainElement(&matchObject{name: "listenersets.gateway.networking.k8s.io"}))
+		// Envoy Gateway CRDs are installed regardless of channel.
+		Expect(all).To(ContainElement(&matchObject{name: "envoyproxies.gateway.envoyproxy.io"}))
 	})
 
 	It("should apply overrides from GatewayAPI CR", func() {

@@ -4449,6 +4449,11 @@ func (in *GatewayAPISpec) DeepCopyInto(out *GatewayAPISpec) {
 		*out = new(CRDManagement)
 		**out = **in
 	}
+	if in.GatewayAPIChannel != nil {
+		in, out := &in.GatewayAPIChannel, &out.GatewayAPIChannel
+		*out = new(GatewayAPIChannel)
+		**out = **in
+	}
 	if in.Extensions != nil {
 		in, out := &in.Extensions, &out.Extensions
 		*out = new(GatewayAPIExtensions)

@@ -759,10 +759,6 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
-		// The RBAC management UI is not supported on multi-tenant management
-		// clusters, matching the gate on its supporting RBAC (see
-		// managerClusterRole / rbacManagementUINamespacedRole), so the backing
-		// resources exist whenever ui-apis advertises the feature.
 		{Name: "RBAC_UI_ENABLED", Value: strconv.FormatBool(c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant())},
 	}
 

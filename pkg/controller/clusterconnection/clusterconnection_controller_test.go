@@ -83,6 +83,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 		c = ctrlrfake.DefaultFakeClientBuilder(clientScheme).WithObjectTracker(&objTrackerWithCalls).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("Run").Return()
 		mockStatus.On("AddDaemonsets", mock.Anything)
 		mockStatus.On("AddDeployments", mock.Anything)
@@ -326,6 +328,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 			It("should degrade and wait when tier is ready, but tier watch is not ready", func() {
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -377,6 +381,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 			It("should degrade and wait when tier and license are ready, but tier watch is not ready", func() {
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 				mockStatus.On("OnCRFound").Return()
 				mockStatus.On("SetMetaData", mock.Anything).Return()

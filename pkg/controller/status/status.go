@@ -78,7 +78,23 @@ const (
 	defaultProbePeriodSeconds    = 10
 	defaultProbeTimeoutSeconds   = 1
 	defaultProbeFailureThreshold = 3
+
+	customOverridesAnnotation = "operator.tigera.io/custom-overrides"
 )
+
+// hasOverride checks if the workload has a specific override type configured.
+func hasOverride(annotations map[string]string, overrideType string) bool {
+	val, ok := annotations[customOverridesAnnotation]
+	if !ok {
+		return false
+	}
+	for _, t := range strings.Split(val, ",") {
+		if t == overrideType {
+			return true
+		}
+	}
+	return false
+}
 
 type podIssueSeverity int
 
@@ -669,7 +685,7 @@ func (m *statusManager) syncState() {
 		}
 
 		revision := m.currentDaemonSetRevision(ds)
-		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("DaemonSet %q", dsnn.String()), ds.Spec.Selector, ds.Namespace, revision)...)
+		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("DaemonSet %q", dsnn.String()), ds.Spec.Selector, ds.Namespace, revision, ds.Annotations)...)
 	}
 
 	for _, depnn := range m.deployments {
@@ -706,7 +722,7 @@ func (m *statusManager) syncState() {
 		}
 
 		revision := m.currentDeploymentRevision(dep)
-		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("Deployment %q", depnn.String()), dep.Spec.Selector, dep.Namespace, revision)...)
+		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("Deployment %q", depnn.String()), dep.Spec.Selector, dep.Namespace, revision, dep.Annotations)...)
 	}
 
 	for _, depnn := range m.statefulsets {
@@ -740,7 +756,7 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("StatefulSet %q", depnn.String()), ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision)...)
+		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("StatefulSet %q", depnn.String()), ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision, ss.Annotations)...)
 	}
 
 	for _, depnn := range m.cronjobs {
@@ -822,8 +838,10 @@ func (m *statusManager) removeTigeraStatus() {
 // diagnosePods lists pods matching the selector and returns a podIssue for each
 // unhealthy pod found. Each issue is stamped with the given workload identifier
 // for downstream grouping. If currentRevision is non-empty, pods not matching
-// that revision are marked as old-revision.
-func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSelector, namespace string, currentRevision string) []podIssue {
+// that revision are marked as old-revision. workloadAnnotations carries the
+// owning workload's annotations so override hints can be correlated with pod
+// failures.
+func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSelector, namespace string, currentRevision string, workloadAnnotations map[string]string) []podIssue {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
@@ -851,14 +869,14 @@ func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSele
 		}
 
 		// Check init and regular container statuses for errors.
-		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, isOldRevision); len(iss) > 0 {
+		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, isOldRevision, workloadAnnotations); len(iss) > 0 {
 			for i := range iss {
 				iss[i].workload = workload
 			}
 			issues = append(issues, iss...)
 			continue
 		}
-		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, isOldRevision); len(iss) > 0 {
+		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, isOldRevision, workloadAnnotations); len(iss) > 0 {
 			for i := range iss {
 				iss[i].workload = workload
 			}
@@ -904,11 +922,15 @@ func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSele
 					continue
 				}
 				if time.Since(cond.LastTransitionTime.Time) > grace {
+					msg := fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name)
+					if hasOverride(workloadAnnotations, "readinessProbe") {
+						msg += "; custom readiness probe configuration is in effect"
+					}
 					issues = append(issues, podIssue{
 						workload:      workload,
 						severity:      severityFailing,
 						issueType:     issueNotReady,
-						message:       fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name),
+						message:       msg,
 						isOldRevision: isOldRevision,
 					})
 					break
@@ -962,7 +984,7 @@ func readinessGracePeriod(p corev1.Pod) time.Duration {
 
 // diagnoseContainers checks a list of container statuses for known error states and
 // returns a podIssue for each one found.
-func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, isOldRevision bool) []podIssue {
+func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, isOldRevision bool, workloadAnnotations map[string]string) []podIssue {
 	var issues []podIssue
 	for _, c := range statuses {
 		if c.State.Waiting != nil {
@@ -976,8 +998,14 @@ func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, isOldRe
 					exitCode = lt.ExitCode
 					if lt.Reason == terminationReasonError && lt.ExitCode == exitCodeSIGKILL {
 						msg += " (exit code 137, possible liveness probe failure)"
+						if hasOverride(workloadAnnotations, "livenessProbe") {
+							msg += "; custom liveness probe configuration is in effect"
+						}
 					} else {
 						msg += fmt.Sprintf(" (%s, exit code %d)", lt.Reason, lt.ExitCode)
+						if lt.Reason == "OOMKilled" && hasOverride(workloadAnnotations, "resources") {
+							msg += "; custom resource limits are in effect"
+						}
 					}
 				}
 				issues = append(issues, podIssue{

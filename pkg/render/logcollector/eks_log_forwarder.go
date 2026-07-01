@@ -28,7 +28,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (c *fluentBitComponent) eksLogForwarderServiceAccount() *corev1.ServiceAccount {
@@ -205,10 +204,6 @@ func (c *fluentBitComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 
 func (c *fluentBitComponent) eksLogForwarderVolumeMounts() []corev1.VolumeMount {
 	volumeMounts := []corev1.VolumeMount{
-		{
-			Name:      certificatemanagement.TrustedCertConfigMapName,
-			MountPath: c.path("/etc/fluent-bit/certs/"),
-		},
 		// Mount only the rendered config file (SubPath) so it does not shadow
 		// the image's /etc/fluent-bit directory (plugins.conf etc.).
 		{

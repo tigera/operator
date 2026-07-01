@@ -44,7 +44,6 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rlogcollector "github.com/tigera/operator/pkg/render/logcollector"
@@ -130,7 +129,6 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		rlogcollector.ElasticsearchEksLogForwarderUserSecret,
 		rlogcollector.S3FluentBitSecretName, rlogcollector.EksLogForwarderSecret,
 		rlogcollector.SplunkFluentBitTokenSecretName, monitor.PrometheusClientTLSSecretName,
 		rlogcollector.FluentBitTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, rlogcollector.EKSLogForwarderTLSSecretName,
@@ -140,10 +138,8 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		}
 	}
 
-	for _, configMapName := range []string{rlogcollector.FluentBitFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
-		}
+	if err = utils.AddConfigMapWatch(c, rlogcollector.FluentBitFilterConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", rlogcollector.FluentBitFilterConfigMapName, err)
 	}
 
 	err = c.WatchObject(&corev1.Node{}, &handler.EnqueueRequestForObject{})
@@ -693,12 +689,17 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			LicenseExpired:         licenseExpired,
 			// Must match the Linux configuration: both OS variants render the
 			// shared allow-calico-fluent-bit NetworkPolicy, whose non-cluster-host
-			// ingress rule (port 9880) is gated on NonClusterHost. If only the
-			// Linux config sets it, the two renders disagree and the operator
-			// flaps the policy on every reconcile (dropping voltron's access to
-			// the http input). The non-cluster-host input/service themselves are
-			// still Linux-only (gated on OSType), so this only affects the policy.
-			NonClusterHost: nonclusterhost,
+			// ingress rule (port 9880) is gated on NonClusterHost and whose
+			// manager source selector is tenant-aware. If only the Linux config
+			// sets these, the two renders disagree and the operator flaps the
+			// policy on every reconcile (dropping voltron's access to the http
+			// input). The non-cluster-host input/service themselves are still
+			// Linux-only (gated on OSType), so NonClusterHost only affects the
+			// policy; Tenant/ExternalElastic additionally select the Linseed
+			// endpoint and x-tenant-id header in the Windows rendered config.
+			NonClusterHost:  nonclusterhost,
+			Tenant:          tenant,
+			ExternalElastic: r.opts.ElasticExternal,
 		}
 		comp = rlogcollector.FluentBit(fluentBitCfg)
 

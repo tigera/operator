@@ -16,20 +16,17 @@ package logcollector
 
 import (
 	"fmt"
-	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 func (c *fluentBitComponent) healthProbeHandler() corev1.ProbeHandler {
@@ -144,9 +141,10 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 		if overrides == nil {
 			// Deprecated alias: fluentdDaemonSet is honored for one release when
 			// the new field is unset, per the API contract. Container entries
-			// stored under the legacy "fluentd" name are translated to the
-			// renamed container so resource overrides keep applying.
-			overrides = translateLegacyFluentdOverrides(c.cfg.LogCollector.Spec.FluentdDaemonSet) //nolint:staticcheck // deliberate use of the deprecated alias field
+			// stored under the legacy fluentd-era names are matched against the
+			// renamed containers via the shared containerNameAliases mechanism
+			// in pkg/render/common/components.
+			overrides = c.cfg.LogCollector.Spec.FluentdDaemonSet //nolint:staticcheck // deliberate use of the deprecated alias field
 		}
 		if overrides != nil {
 			rcomponents.ApplyDaemonSetOverrides(ds, overrides)
@@ -156,34 +154,10 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 	return ds
 }
 
-// translateLegacyFluentdOverrides maps a deprecated fluentdDaemonSet override
-// onto the renamed calico-fluent-bit pod: container/init-container entries that
-// still carry fluentd-era names (stored before the CRD enum was updated) are
-// renamed so ApplyDaemonSetOverrides matches them.
-func translateLegacyFluentdOverrides(legacy *operatorv1.FluentBitDaemonSet) *operatorv1.FluentBitDaemonSet {
-	if legacy == nil {
-		return nil
-	}
-	translated := legacy.DeepCopy()
-	if translated.Spec == nil || translated.Spec.Template == nil || translated.Spec.Template.Spec == nil {
-		return translated
-	}
-	for i, container := range translated.Spec.Template.Spec.Containers {
-		if container.Name == "fluentd" {
-			translated.Spec.Template.Spec.Containers[i].Name = "calico-fluent-bit"
-		}
-	}
-	for i, container := range translated.Spec.Template.Spec.InitContainers {
-		translated.Spec.Template.Spec.InitContainers[i].Name = strings.Replace(container.Name, "tigera-fluentd-prometheus-tls", FluentBitTLSSecretName, 1)
-	}
-	return translated
-}
-
 func (c *fluentBitComponent) container() corev1.Container {
 	envs := c.envvars()
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
-		{MountPath: c.path("/etc/fluent-bit/certs"), Name: certificatemanagement.TrustedCertConfigMapName},
 	}
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		// Windows containers cannot mount a single file (no subPath file

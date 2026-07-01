@@ -65,7 +65,6 @@ const (
 	splunkCredentialHashAnnotation           = "hash.operator.tigera.io/splunk-credentials"
 	eksCloudwatchLogCredentialHashAnnotation = "hash.operator.tigera.io/eks-cloudwatch-log-credentials"
 	fluentBitDefaultFlush                    = "5s"
-	ElasticsearchEksLogForwarderUserSecret   = "tigera-eks-log-forwarder-elasticsearch-access"
 	EksLogForwarderSecret                    = "tigera-eks-log-forwarder-secret"
 	EksLogForwarderAwsId                     = "aws-id"
 	EksLogForwarderAwsKey                    = "aws-key"
@@ -311,7 +310,11 @@ func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
 		&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
 		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
 		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
-		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
+		// Note: the eks-log-forwarder ClusterRole/ClusterRoleBinding are NOT
+		// deleted here — they are cluster-scoped, keep their fluentd-era names,
+		// and are reused (updated in place) by the fluent-bit EKS forwarder
+		// render. Deleting them would fight the create processed earlier in the
+		// same reconcile and leave the forwarder without Linseed RBAC.
 		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics-windows", Namespace: legacyFluentdNamespace}},
 		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: legacyFluentdNamespace}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-prometheus-tls", Namespace: legacyFluentdNamespace}},
@@ -320,6 +323,7 @@ func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: S3FluentBitSecretName, Namespace: legacyFluentdNamespace}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: SplunkFluentBitTokenSecretName, Namespace: legacyFluentdNamespace}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf(LinseedTokenSecret, "fluentd-node"), Namespace: legacyFluentdNamespace}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf(LinseedTokenSecret, "fluentd-node-windows"), Namespace: legacyFluentdNamespace}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf(LinseedTokenSecret, "eks-log-forwarder"), Namespace: legacyFluentdNamespace}},
 		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-filters", Namespace: legacyFluentdNamespace}},
 		&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: PacketCaptureAPIRole, Namespace: legacyFluentdNamespace}},
@@ -431,11 +435,11 @@ var linuxLogInputs = []logInput{
 	{"l7", "/var/log/calico/l7logs/l7.log", "json"},
 	{"waf", "/var/log/calico/waf/waf.log", "json"},
 	{"runtime", "/var/log/calico/runtime-security/report.log", "json"},
-	{"audit.tsee", "/var/log/calico/audit/tsee-audit.log", "json"},
-	{"audit.kube", "/var/log/calico/audit/kube-audit.log", "json"},
+	{"audit.tsee", "/var/log/calico/audit/tsee-audit.log", "json_audit"},
+	{"audit.kube", "/var/log/calico/audit/kube-audit.log", "json_audit"},
 	{"bird", "/var/log/calico/bird/current", "bird_regex"},
 	{"bird6", "/var/log/calico/bird6/current", "bird_regex"},
-	{"ids.events", "/var/log/calico/ids/events.log", "json"},
+	{"ids.events", "/var/log/calico/ids/events.log", "json_ids_events"},
 	{"compliance.reports", "/var/log/calico/compliance/compliance.*.reports.log", "json"},
 	{"policy_activity", "/var/log/calico/policy/policy_activity.log", "json"},
 }
@@ -445,6 +449,6 @@ var linuxLogInputs = []logInput{
 // logs.
 var windowsLogInputs = []logInput{
 	{"flows", "/var/log/calico/flowlogs/flows.log", "json"},
-	{"audit.tsee", "/var/log/calico/audit/tsee-audit.log", "json"},
-	{"audit.kube", "/var/log/calico/audit/kube-audit.log", "json"},
+	{"audit.tsee", "/var/log/calico/audit/tsee-audit.log", "json_audit"},
+	{"audit.kube", "/var/log/calico/audit/kube-audit.log", "json_audit"},
 }

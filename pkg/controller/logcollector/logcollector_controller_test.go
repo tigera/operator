@@ -144,13 +144,6 @@ var _ = Describe("LogCollector controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      rlogcollector.ElasticsearchEksLogForwarderUserSecret,
-				Namespace: "tigera-operator",
-			},
-		})).NotTo(HaveOccurred())
-
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -798,6 +791,49 @@ var _ = Describe("LogCollector controller tests", func() {
 		It("should wait if tier watch is not ready", func() {
 			r.tierWatchReady = &utils.ReadyFlag{}
 			test.ExpectWaitForTierWatch(ctx, &r, mockStatus)
+		})
+	})
+
+	Context("user filters validation", func() {
+		It("should warn (not degrade) on unparseable filter content and clear the warning once fixed", func() {
+			filtersCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlogcollector.FluentBitFilterConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					// A leftover fluentd-syntax filter: not a fluent-bit YAML list.
+					"flow": "<filter flows>\n  @type grep\n</filter>",
+					// A valid fluent-bit YAML filter list.
+					"dns": "- name: grep\n  exclude: qname noisy.example.com",
+				},
+			}
+			Expect(c.Create(ctx, filtersCM)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "fluent-bit-filter-flow", mock.Anything)
+			mockStatus.AssertNotCalled(GinkgoT(), "SetWarning", "fluent-bit-filter-dns", mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "fluent-bit-filter-dns")
+
+			// Rendering continued: the valid dns filter is inlined into the
+			// config while the invalid flow filter is skipped.
+			cm := corev1.ConfigMap{
+				TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring("noisy.example.com"))
+			Expect(cm.Data["fluent-bit.yaml"]).NotTo(ContainSubstring("<filter"))
+
+			// Rewriting the filter as fluent-bit YAML clears the warning.
+			filtersCM.Data["flow"] = "- name: grep\n  exclude: action allow"
+			Expect(c.Update(ctx, filtersCM)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "fluent-bit-filter-flow")
 		})
 	})
 

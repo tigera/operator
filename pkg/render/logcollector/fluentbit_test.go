@@ -15,6 +15,7 @@
 package logcollector_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -316,6 +317,91 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		initContainer := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "calico-fluent-bit-tls-key-cert-provisioner")
 		Expect(initContainer).NotTo(BeNil())
 		Expect(initContainer.Resources).To(Equal(fluentBitResources))
+	})
+
+	It("should honor the deprecated fluentdDaemonSet override alias, including legacy container names", func() {
+		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
+		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
+		cfg.Installation.CertificateManagement = &operatorv1.CertificateManagement{CACert: cert}
+
+		certificateManager, err := certificatemanager.Create(cli, cfg.Installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		metricsSecret, err := certificateManager.GetOrCreateKeyPair(cli, logcollector.FluentBitTLSSecretName, common.OperatorNamespace(), []string{""})
+		Expect(err).NotTo(HaveOccurred())
+
+		cfg.FluentBitKeyPair = metricsSecret
+
+		legacyResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("2"),
+				"memory": resource.MustParse("300Mi"),
+			},
+			Requests: corev1.ResourceList{
+				"cpu":    resource.MustParse("1"),
+				"memory": resource.MustParse("150Mi"),
+			},
+		}
+
+		// A pre-migration LogCollector: overrides stored under the deprecated
+		// fluentdDaemonSet field, using the fluentd-era container names.
+		cfg.LogCollector = &operatorv1.LogCollector{
+			Spec: operatorv1.LogCollectorSpec{
+				FluentdDaemonSet: &operatorv1.FluentBitDaemonSet{
+					Spec: &operatorv1.FluentBitDaemonSetSpec{
+						Template: &operatorv1.FluentBitDaemonSetPodTemplateSpec{
+							Spec: &operatorv1.FluentBitDaemonSetPodSpec{
+								InitContainers: []operatorv1.FluentBitDaemonSetInitContainer{{
+									Name:      "tigera-fluentd-prometheus-tls-key-cert-provisioner",
+									Resources: &legacyResources,
+								}},
+								Containers: []operatorv1.FluentBitDaemonSetContainer{{
+									Name:      "fluentd",
+									Resources: &legacyResources,
+								}},
+							},
+						},
+					},
+				},
+			},
+		}
+		component := logcollector.FluentBit(cfg)
+		resources, _ := component.Objects()
+
+		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		container := test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-fluent-bit")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(legacyResources))
+
+		initContainer := test.GetContainer(ds.Spec.Template.Spec.InitContainers, "calico-fluent-bit-tls-key-cert-provisioner")
+		Expect(initContainer).NotTo(BeNil())
+		Expect(initContainer.Resources).To(Equal(legacyResources))
+
+		// When both the deprecated alias and the new field are set, the new
+		// field takes precedence.
+		newResources := corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				"cpu":    resource.MustParse("4"),
+				"memory": resource.MustParse("600Mi"),
+			},
+		}
+		cfg.LogCollector.Spec.CalicoFluentBitDaemonSet = &operatorv1.FluentBitDaemonSet{
+			Spec: &operatorv1.FluentBitDaemonSetSpec{
+				Template: &operatorv1.FluentBitDaemonSetPodTemplateSpec{
+					Spec: &operatorv1.FluentBitDaemonSetPodSpec{
+						Containers: []operatorv1.FluentBitDaemonSetContainer{{
+							Name:      "calico-fluent-bit",
+							Resources: &newResources,
+						}},
+					},
+				},
+			},
+		}
+		resources, _ = logcollector.FluentBit(cfg).Objects()
+		ds = rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-fluent-bit")
+		Expect(container).NotTo(BeNil())
+		Expect(container.Resources).To(Equal(newResources))
 	})
 
 	It("should render with a configuration for a managed cluster", func() {
@@ -858,6 +944,87 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(fluentBitConf).To(ContainSubstring("splunk"))
 		Expect(fluentBitConf).To(ContainSubstring("1.2.3.4"))
 		Expect(fluentBitConf).To(ContainSubstring("8088"))
+	})
+
+	It("should honor hostScope and preserve legacy store semantics for the additional stores", func() {
+		// Parses the rendered config and returns the match tags per output
+		// plugin, plus the raw output maps for property assertions.
+		renderOutputs := func() map[string][]map[string]interface{} {
+			resources, _ := logcollector.FluentBit(cfg).Objects()
+			cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			var conf struct {
+				Pipeline struct {
+					Outputs []map[string]interface{} `json:"outputs"`
+				} `json:"pipeline"`
+			}
+			Expect(json.Unmarshal([]byte(cm.Data["fluent-bit.yaml"]), &conf)).NotTo(HaveOccurred())
+			byName := map[string][]map[string]interface{}{}
+			for _, out := range conf.Pipeline.Outputs {
+				name := out["name"].(string)
+				byName[name] = append(byName[name], out)
+			}
+			return byName
+		}
+		matchTags := func(outs []map[string]interface{}) []string {
+			var tags []string
+			for _, out := range outs {
+				tags = append(tags, out["match"].(string))
+			}
+			return tags
+		}
+
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			S3: &operatorv1.S3StoreSpec{Region: "anyplace", BucketName: "thebucket", BucketPath: "bucketpath"},
+			Syslog: &operatorv1.SyslogStoreSpec{
+				Endpoint: "tcp://1.2.3.4:80",
+				LogTypes: []operatorv1.SyslogLogType{operatorv1.SyslogLogFlows, operatorv1.SyslogLogDNS},
+			},
+			Splunk: &operatorv1.SplunkStoreSpec{Endpoint: "https://1.2.3.4:8088"},
+		}
+
+		// Default (hostScope All): cluster logs plus non-cluster flows.
+		byName := renderOutputs()
+
+		// S3 archives the fluentd set — never WAF, BGP, IDS events or policy
+		// activity — and non-cluster flows ship alongside cluster logs.
+		Expect(matchTags(byName["s3"])).To(ConsistOf(
+			"flows", "dns", "l7", "runtime", "audit.tsee", "audit.kube", "compliance.reports", "non_cluster_flows"))
+		for _, out := range byName["s3"] {
+			// Legacy archives were gzipped (fluent-plugin-s3 default store_as).
+			Expect(out).To(HaveKeyWithValue("compression", "gzip"), "s3 output %v", out["match"])
+		}
+		// The S3 prefixes preserve fluentd's archive layout (audit_tsee, not the
+		// audit.tsee tag).
+		for _, out := range byName["s3"] {
+			if out["match"] == "audit.tsee" {
+				Expect(out["s3_key_format"]).To(HavePrefix("bucketpath/audit_tsee/"))
+			}
+		}
+
+		Expect(matchTags(byName["syslog"])).To(ConsistOf("flows", "non_cluster_flows", "dns"))
+		for _, out := range byName["syslog"] {
+			// syslog_severity_preset is an integer property; rendering "info"
+			// would atoi to 0/Emergency. The default (6) already is info.
+			Expect(out).NotTo(HaveKey("syslog_severity_preset"))
+			// Node-name fallback for tags whose records carry no host key.
+			Expect(out).To(HaveKeyWithValue("syslog_hostname_preset", "${NODENAME}"))
+		}
+
+		Expect(matchTags(byName["splunk"])).To(ConsistOf(
+			"flows", "dns", "l7", "audit.tsee", "audit.kube", "non_cluster_flows"))
+
+		// NonClusterOnly: cluster *flows* are the only type the scope gates —
+		// the other cluster types keep shipping, and non-cluster flows always do.
+		nonClusterOnly := operatorv1.HostScopeNonClusterOnly
+		cfg.LogCollector.Spec.AdditionalStores.S3.HostScope = &nonClusterOnly
+		cfg.LogCollector.Spec.AdditionalStores.Syslog.HostScope = &nonClusterOnly
+		cfg.LogCollector.Spec.AdditionalStores.Splunk.HostScope = &nonClusterOnly
+		byName = renderOutputs()
+		Expect(matchTags(byName["s3"])).To(ConsistOf(
+			"dns", "l7", "runtime", "audit.tsee", "audit.kube", "compliance.reports", "non_cluster_flows"))
+		Expect(matchTags(byName["syslog"])).To(ConsistOf("non_cluster_flows", "dns"))
+		Expect(matchTags(byName["splunk"])).To(ConsistOf(
+			"dns", "l7", "audit.tsee", "audit.kube", "non_cluster_flows"))
 	})
 
 	It("should render with filter", func() {
@@ -1470,7 +1637,6 @@ func legacyFluentdDeleteResources() []client.Object {
 		&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
 		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
 		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
-		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder"}},
 		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics-windows", Namespace: ns}},
 		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-prometheus-tls", Namespace: ns}},
@@ -1479,6 +1645,7 @@ func legacyFluentdDeleteResources() []client.Object {
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.S3FluentBitSecretName, Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.SplunkFluentBitTokenSecretName, Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-tigera-linseed-token", Namespace: ns}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-windows-tigera-linseed-token", Namespace: ns}},
 		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder-tigera-linseed-token", Namespace: ns}},
 		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-filters", Namespace: ns}},
 		&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: ns}},

@@ -2,13 +2,13 @@
   "apiVersion": "projectcalico.org/v3",
   "kind": "NetworkPolicy",
   "metadata": {
-    "name": "calico-system.allow-fluentd-node",
-    "namespace": "tigera-fluentd"
+    "name": "calico-system.allow-calico-fluent-bit",
+    "namespace": "calico-system"
   },
   "spec": {
     "tier": "calico-system",
     "order": 1,
-    "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'",
+    "selector": "k8s-app == 'calico-fluent-bit' || k8s-app == 'calico-fluent-bit-windows'",
     "types": [
       "Ingress",
       "Egress"
@@ -23,7 +23,7 @@
         },
         "destination": {
           "ports": [
-            "9081"
+            "2020"
           ]
         }
       }

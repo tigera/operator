@@ -152,6 +152,15 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			i++
 		}
 
+		// The tier controller patches tiers to add and remove its finalizer, so
+		// the role must grant patch in addition to update.
+		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"create", "update", "patch", "get", "list", "watch"},
+		}))
+
 		// The Deployment should have the correct configuration.
 		ds := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))

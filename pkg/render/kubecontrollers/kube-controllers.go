@@ -334,10 +334,11 @@ func KubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.
 		},
 		{
 			// calico-kube-controllers requires tiers create to create the default tiers,
-			// and get permissions to access network policies in those tiers.
+			// and get permissions to access network policies in those tiers. It also
+			// patches tiers to add and remove its finalizer.
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{"tiers"},
-			Verbs:     []string{"create", "update", "get", "list", "watch"},
+			Verbs:     []string{"create", "update", "patch", "get", "list", "watch"},
 		},
 		{
 			// Namespaces are watched for LoadBalancer IP allocation with namespace selector support

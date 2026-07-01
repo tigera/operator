@@ -11,7 +11,6 @@ spec:
     listKind: SecurityEventWebhookList
     plural: securityeventwebhooks
     singular: securityeventwebhook
-  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v1

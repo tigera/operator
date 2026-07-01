@@ -11,7 +11,6 @@ spec:
     listKind: FelixConfigurationList
     plural: felixconfigurations
     singular: felixconfiguration
-  preserveUnknownFields: false
   scope: Cluster
   versions:
     - name: v1
@@ -1397,12 +1396,14 @@ spec:
                     - Disabled
                   type: string
                 istioDSCPMark:
+                  anyOf:
+                    - type: integer
+                    - type: string
                   description: |-
                     IstioDSCPMark sets the value to use when directing traffic to Istio ZTunnel, when Istio is enabled. The mark is set only on
                     SYN packets at the final hop to avoid interference with other protocols. This value is reserved by Calico and must not be used
                     with other Istio installation. [Default: 23]
                   pattern: ^.*
-                  type: integer
                   x-kubernetes-int-or-string: true
                 kubeMasqueradeBit:
                   description: |-

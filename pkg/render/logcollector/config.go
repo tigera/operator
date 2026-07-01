@@ -196,6 +196,14 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 		// self-contained and does not depend on the image's parsers.conf.
 		Parsers: []map[string]interface{}{
 			{"name": "json", "format": "json"},
+			// Audit events carry their event time in the `time` key; parse it so
+			// time-partitioned sinks (S3 day keys, syslog timestamps) use event
+			// time, matching fluentd's `time_key time` on the audit sources. Like
+			// fluentd (no keep_time_key), the key is consumed by the parser.
+			{"name": "json_audit", "format": "json", "time_key": "time", "time_format": "%Y-%m-%dT%H:%M:%S.%L%z"},
+			// IDS events carry a unix-seconds `time` key; fluentd parsed it with
+			// `time_type unixtime` and kept the key in the record.
+			{"name": "json_ids_events", "format": "json", "time_key": "time", "time_format": "%s", "time_keep": true},
 			{"name": "bird_regex", "format": "regex", "regex": `^(?<logtime>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\.\d{5} bird: (?<message>.*)`},
 		},
 	}

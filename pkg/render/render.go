@@ -37,7 +37,7 @@ func SetTestLogger(l logr.Logger) {
 	log = l
 }
 
-func setNodeCriticalPod(t *corev1.PodTemplateSpec) {
+func SetNodeCriticalPod(t *corev1.PodTemplateSpec) {
 	t.Spec.PriorityClassName = NodePriorityClassName
 }
 

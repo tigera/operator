@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -149,10 +150,10 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		monitor.PrometheusServerTLSSecretName,
-		render.FluentdPrometheusTLSSecretName,
+		logcollector.FluentBitTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
-		render.EKSLogForwarderTLSSecretName,
+		logcollector.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
@@ -338,7 +339,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, certificateName := range []string{
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.FluentdPrometheusTLSSecretName,
+		logcollector.FluentBitTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		render.CalicoAPIServerTLSSecretName,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,

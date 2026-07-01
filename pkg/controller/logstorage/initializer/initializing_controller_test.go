@@ -121,6 +121,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run")
 			mockStatus.On("OnCRFound")
 			mockStatus.On("SetMetaData", mock.Anything)

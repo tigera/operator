@@ -198,6 +198,8 @@ var _ = Describe("LogStorage controller", func() {
 					})).NotTo(HaveOccurred())
 
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 			})
 
@@ -317,6 +319,8 @@ var _ = Describe("LogStorage controller", func() {
 					})).NotTo(HaveOccurred())
 
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -1148,6 +1152,8 @@ var _ = Describe("LogStorage controller", func() {
 					})).ShouldNot(HaveOccurred())
 
 					mockStatus = &status.MockStatus{}
+					mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+					mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 					mockStatus.On("Run").Return()
 					mockStatus.On("OnCRFound").Return()
 					// mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -1206,6 +1212,8 @@ var _ = Describe("LogStorage controller", func() {
 				setUpLogStorageComponents(cli, ctx, "", certificateManager)
 
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)

@@ -83,6 +83,8 @@ var _ = Describe("Application layer controller tests", func() {
 			}
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("OnCRFound").Return()
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return()
+			mockStatus.On("ClearWarning", mock.Anything).Return()
 
 			r = ReconcileApplicationLayer{
 				client:          c,

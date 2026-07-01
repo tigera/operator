@@ -720,13 +720,15 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 	rules := render.RBACManagementEscalationRules()
 	return append(rules,
 		rbacv1.PolicyRule{
-			// Held to cover the compliances:get the managed roles grant.
+			// Covers the compliances:get,list granted by the managed
+			// tigera-network-admin ClusterRole.
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"compliances"},
 			Verbs:     []string{"get", "list"},
 		},
 		rbacv1.PolicyRule{
-			// Held to cover the pods:list the managed roles grant.
+			// Covers the pods:list granted by the managed per-cluster
+			// log-access ClusterRoles that rbacsync maintains.
 			APIGroups: []string{""},
 			Resources: []string{"pods"},
 			Verbs:     []string{"list"},

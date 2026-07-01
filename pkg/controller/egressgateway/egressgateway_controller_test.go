@@ -87,6 +87,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				},
 			}
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("OnCRFound").Return()
 
 			r = ReconcileEgressGateway{

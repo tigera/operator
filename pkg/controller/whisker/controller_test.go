@@ -105,6 +105,8 @@ var _ = Describe("whisker controller tests", func() {
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Return()

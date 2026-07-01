@@ -105,6 +105,8 @@ var _ = Describe("Goldmane controller tests", func() {
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("OnCRNotFound").Return().Maybe()
 		mockStatus.On("SetMetaData", mock.Anything).Return()

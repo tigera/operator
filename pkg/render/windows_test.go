@@ -2633,8 +2633,10 @@ var _ = Describe("Windows rendering tests", func() {
 
 			Expect(ds.Labels).To(HaveLen(1))
 			Expect(ds.Labels["top-level"]).To(Equal("label1"))
-			Expect(ds.Annotations).To(HaveLen(1))
+			Expect(ds.Annotations).To(HaveLen(2))
 			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
+			// The render package records the applied resource override in an annotation.
+			Expect(ds.Annotations["operator.tigera.io/custom-overrides"]).To(Equal("resources"))
 
 			Expect(ds.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 

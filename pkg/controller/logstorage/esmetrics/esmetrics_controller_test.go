@@ -97,6 +97,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("Run").Return()
 		mockStatus.On("AddDeployments", mock.Anything)
 		mockStatus.On("ReadyToMonitor")

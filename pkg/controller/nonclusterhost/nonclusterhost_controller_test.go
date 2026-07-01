@@ -56,6 +56,8 @@ var _ = Describe("NonClusterHost controller tests", func() {
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()

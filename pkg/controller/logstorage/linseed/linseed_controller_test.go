@@ -158,6 +158,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 	Context("Single tenant", func() {
 		BeforeEach(func() {
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run").Return()
 			mockStatus.On("AddDaemonsets", mock.Anything)
 			mockStatus.On("AddDeployments", mock.Anything)
@@ -316,6 +318,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run").Return()
 			mockStatus.On("AddDaemonsets", mock.Anything)
 			mockStatus.On("AddDeployments", mock.Anything)

@@ -1080,11 +1080,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 
-		// We are in enterprise, so the Manager CRD is expected. A nil managerCR
-		// (no Manager created) means callers fall back to their defaults. A
-		// NoMatchError (Manager CRD not registered yet) is treated as an error:
-		// we don't know the user's intent until the CRD loads, so we requeue
-		// rather than read the Manager as absent.
 		managerCR, err = utils.GetManager(ctx, r.client, false, "")
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)

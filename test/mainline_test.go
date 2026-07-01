@@ -33,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -63,6 +64,9 @@ const (
 
 	MultiTenant  = true
 	SingleTenant = false
+
+	DataplaneDisabled = true
+	DataplaneEnabled  = false
 )
 
 var _ = Describe("Mainline component function tests", func() {
@@ -303,8 +307,11 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 	v3CRDs, err := apis.UseV3CRDS(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Create a scheme to use.
+	// Create a scheme to use. Mirror the production scheme set up in cmd/main.go: the
+	// client-go scheme registers core types like autoscaling/v2 that some renders (e.g.
+	// the Istio helm charts, which contain a HorizontalPodAutoscaler) depend on.
 	s := runtime.NewScheme()
+	Expect(clientgoscheme.AddToScheme(s)).NotTo(HaveOccurred())
 	err = apis.AddToScheme(s, v3CRDs)
 	Expect(err).NotTo(HaveOccurred())
 
@@ -333,6 +340,18 @@ func setupManagerNoControllers() (client.Client, *kubernetes.Clientset, manager.
 }
 
 func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
+	return setupManagerWithDataplane(manageCRDs, multiTenant, enterpriseCRDsExist, DataplaneEnabled)
+}
+
+// setupManagerWithDataplane is setupManager with explicit control over whether the controllers are
+// registered with the Linux dataplane disabled. The dataplane-disabled FV passes DataplaneDisabled so
+// that (a) only the dataplane-independent controller set is registered — matching how the real operator
+// starts against a dataplane-disabled Installation (see internal/controller.AddToManager) — and (b) the
+// Installation controller's startup-vs-runtime dataplane-mode comparison matches, so it does not call
+// os.Exit(0) to reboot. Without this the registered set defaults to dataplane-enabled, the first reconcile
+// of a dataplane-disabled Installation sees a mismatch, and the real os.Exit(0) path terminates the test
+// binary instead of exercising the no-dataplane controllers.
+func setupManagerWithDataplane(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool, dataplaneDisabled bool) (client.Client, context.Context, context.CancelFunc, manager.Manager) {
 	client, clientset, mgr := setupManagerNoControllers()
 
 	// Setup all Controllers
@@ -344,6 +363,7 @@ func setupManager(manageCRDs bool, multiTenant bool, enterpriseCRDsExist bool) (
 		ShutdownContext:     ctx,
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
+		DataplaneDisabled:   dataplaneDisabled,
 	})
 	Expect(err).NotTo(HaveOccurred())
 

@@ -19,9 +19,12 @@ import (
 	"fmt"
 	"strconv"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -41,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/render/istio"
 )
@@ -66,6 +70,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err != nil {
 		return fmt.Errorf("failed to create istio-controller: %w", err)
 	}
+
+	// Lazy tier watch; the Calico NetworkPolicies for the Istio components only render
+	// when the calico-system Tier exists.
+	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, IstioName); err != nil {
@@ -106,10 +114,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *ReconcileIstio {
 	r := &ReconcileIstio{
-		Client:   mgr.GetClient(),
-		scheme:   mgr.GetScheme(),
-		status:   status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
-		provider: opts.DetectedProvider,
+		Client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		status:         status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
+		provider:       opts.DetectedProvider,
+		tierWatchReady: &utils.ReadyFlag{},
+		recorder:       mgr.GetEventRecorderFor("istio-controller"), //nolint:staticcheck // record.EventRecorder is still used throughout the operator; GetEventRecorder returns the newer events.EventRecorder API
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -119,9 +129,11 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *Reconci
 // ReconcileIstio reconciles a Istio object
 type ReconcileIstio struct {
 	client.Client
-	scheme   *runtime.Scheme
-	status   status.StatusManager
-	provider operatorv1.Provider
+	scheme         *runtime.Scheme
+	status         status.StatusManager
+	provider       operatorv1.Provider
+	tierWatchReady *utils.ReadyFlag
+	recorder       record.EventRecorder
 }
 
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -137,7 +149,8 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 			r.status.OnCRNotFound()
 			return reconcile.Result{}, nil
 		}
-		r.status.SetDegraded(operatorv1.ResourceReadError,
+		r.status.SetDegraded(
+			operatorv1.ResourceReadError,
 			fmt.Sprintf("Error querying for Istio CR: failed to get Istio %q", utils.DefaultInstanceKey),
 			err,
 			reqLogger,
@@ -218,13 +231,30 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		reqLogger.Info("Could not render all optional gateway API CRDs", "err", err)
 	}
 
+	// Render the Calico NetworkPolicies for the Istio components only when the
+	// calico-system Tier exists — the same pattern as the other controllers. This
+	// tolerates clusters where the projectcalico.org/v3 API is not (yet) served, such as
+	// installs with the dataplane disabled or clusters where the Calico API server is still coming up.
+	includeV3NetworkPolicy := false
+	if r.tierWatchReady.IsReady() {
+		if err := r.Get(ctx, types.NamespacedName{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+			if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying calico-system tier", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		} else {
+			includeV3NetworkPolicy = true
+		}
+	}
+
 	// Render resources for Istio support
 	istioCfg := &istio.Configuration{
-		Installation:   installationSpec,
-		PullSecrets:    pullSecrets,
-		Istio:          instance,
-		IstioNamespace: istio.IstioNamespace,
-		Scheme:         r.scheme,
+		Installation:           installationSpec,
+		PullSecrets:            pullSecrets,
+		Istio:                  instance,
+		IstioNamespace:         istio.IstioNamespace,
+		Scheme:                 r.scheme,
+		IncludeV3NetworkPolicy: includeV3NetworkPolicy,
 	}
 	istioComponentCRDs, istioComponent, err := istio.Istio(istioCfg)
 	if err != nil {
@@ -252,12 +282,30 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
-		return r.setIstioFelixConfiguration(ctx, instance, fc, false)
-	})
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
-		return reconcile.Result{}, err
+	// Patch FelixConfiguration with the Istio integration settings (ambient mode, DSCP).
+	// When the Linux dataplane is disabled (spec.calicoNetwork.linuxDataplane: None) there is no Felix,
+	// so the Calico dataplane integration is unavailable and the patch is skipped.
+	if installationSpec.LinuxDataplaneEnabled() {
+		_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
+			return r.setIstioFelixConfiguration(ctx, instance, fc, false)
+		})
+		if err != nil {
+			if meta.IsNoMatchError(err) {
+				// The projectcalico.org/v3 API is not served yet (e.g. the API server or v3 CRDs
+				// are still coming up). Wait for it rather than degrading hard.
+				r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the projectcalico.org/v3 API to be available before patching felix configuration", err, log)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
+			return reconcile.Result{}, err
+		}
+	} else {
+		// Running without the Calico dataplane integration is an expected
+		// configuration, not an error: do not set TigeraStatus Degraded. Surface it via a log
+		// line and a Normal Event on the Istio resource so it is visible in `kubectl describe`.
+		reqLogger.Info("Linux dataplane is disabled; Istio is installed without the Calico dataplane integration (IstioAmbientMode, DSCP)")
+		r.recorder.Event(instance, corev1.EventTypeNormal, "CalicoDataplaneIntegrationDisabled",
+			"Linux dataplane is disabled (spec.calicoNetwork.linuxDataplane: None); Istio is installed without the Calico dataplane integration (IstioAmbientMode, DSCP)")
 	}
 
 	// Clear the degraded bit if we've reached this far.
@@ -410,11 +458,32 @@ func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, inst
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !instance.DeletionTimestamp.IsZero() {
-		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
-			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
-		}); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
+		// Determine whether the Calico dataplane integration was active. When the Linux
+		// dataplane is disabled (or if the Installation is already gone) there is no Felix and
+		// nothing to clean up in FelixConfiguration; only the finalizer must be removed.
+		dataplaneEnabled := false
+		if _, installationSpec, getErr := utils.GetInstallationSpec(ctx, r); getErr == nil {
+			dataplaneEnabled = installationSpec.LinuxDataplaneEnabled()
+		} else if !errors.IsNotFound(getErr) {
+			err = getErr
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 			return
+		}
+
+		if dataplaneEnabled {
+			if _, patchErr := utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
+				return r.setIstioFelixConfiguration(ctx, instance, fc, true)
+			}); patchErr != nil {
+				if meta.IsNoMatchError(patchErr) {
+					// The projectcalico.org/v3 API is not served, so there is no
+					// FelixConfiguration to clean up; allow deletion to proceed.
+					reqLogger.Info("projectcalico.org/v3 API is not available; skipping felix configuration cleanup")
+				} else {
+					err = patchErr
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
+					return
+				}
+			}
 		}
 		patchFrom := client.MergeFrom(instance.DeepCopy())
 		instance.Finalizers = stringsutil.RemoveStringInSlice(istio.IstioFinalizer, instance.Finalizers)

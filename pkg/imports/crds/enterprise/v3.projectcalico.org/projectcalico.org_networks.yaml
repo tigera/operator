@@ -157,67 +157,13 @@ spec:
                                         VLAN: frames in that VLAN are sent untagged on the wire and
                                         untagged frames received on the trunk are tagged with this VLAN.
                                         This should be one of the VLAN IDs the trunk carries (i.e. present
-                                        in spec.vlans, or in this trunk's vlans override if set); if it
-                                        names a VLAN the trunk does not carry it is ignored and the trunk
-                                        stays strictly tagged for every VLAN.  When unset (default) the
-                                        trunk is strictly tagged: only 802.1Q-tagged frames are accepted and
-                                        transmitted.
+                                        in spec.vlans); if it names a VLAN the trunk does not carry it is
+                                        ignored and the trunk stays strictly tagged for every VLAN.  When
+                                        unset (default) the trunk is strictly tagged: only 802.1Q-tagged
+                                        frames are accepted and transmitted.
                                       maximum: 4094
                                       minimum: 1
                                       type: integer
-                                    vlans:
-                                      description: |-
-                                        VLANs restricts which VLANs this trunk carries.  Defaults to all
-                                        VLANs defined in spec.vlans when omitted.
-
-                                        When reconciling a pre-existing trunk port on a BYO bridge, Calico
-                                        adds these VLANs to the port's VLAN membership but does not
-                                        remove other VLAN memberships or change the port's PVID.  This
-                                        preserves untagged traffic (e.g. the host's primary IP on the
-                                        bridge) that is not managed by Calico.
-                                      items:
-                                        description:
-                                          L2VLANMatch identifies a VLAN segment.  Exactly
-                                          one field must be set.
-                                        maxProperties: 1
-                                        minProperties: 1
-                                        properties:
-                                          id:
-                                            description:
-                                              ID selects a single 802.1Q
-                                              VLAN (1-4094).
-                                            maximum: 4094
-                                            minimum: 1
-                                            type: integer
-                                          range:
-                                            description:
-                                              Range selects a contiguous
-                                              range of VLAN IDs (inclusive).
-                                            properties:
-                                              end:
-                                                description:
-                                                  End is the last VLAN ID
-                                                  in the range (1-4094, must be ≥ Start).
-                                                maximum: 4094
-                                                minimum: 1
-                                                type: integer
-                                              start:
-                                                description:
-                                                  Start is the first VLAN
-                                                  ID in the range (1-4094).
-                                                maximum: 4094
-                                                minimum: 1
-                                                type: integer
-                                            required:
-                                              - end
-                                              - start
-                                            type: object
-                                            x-kubernetes-validations:
-                                              - message: start must be <= end
-                                                rule: self.start <= self.end
-                                        type: object
-                                      type: array
-                                      x-kubernetes-list-type: atomic
                                   required:
                                     - interface
                                   type: object

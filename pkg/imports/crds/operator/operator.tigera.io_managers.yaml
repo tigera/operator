@@ -298,6 +298,15 @@ spec:
                           type: object
                       type: object
                   type: object
+                rbacUI:
+                  description: RBACUI configures the RBAC management UI feature.
+                  properties:
+                    enabled:
+                      description:
+                        Enabled turns the RBAC management UI on or off. Defaults
+                        to false.
+                      type: boolean
+                  type: object
               type: object
             status:
               description: Most recently observed state for the Calico Enterprise manager.

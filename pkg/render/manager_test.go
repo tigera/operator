@@ -1842,6 +1842,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Context("LDAP egress network policy gate", func() {
 			policyName := types.NamespacedName{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}
+			// ldapEgress is the fallback rule shape rendered when the LDAP config
+			// Secret is present but no host could be parsed from its url: ports
+			// open, destination unscoped.
 			ldapEgress := v3.Rule{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
@@ -1853,13 +1856,70 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Spec: operatorv1.ManagerSpec{RBACUI: &operatorv1.RBACUI{Enabled: ptr.To(true)}},
 			}
 
-			It("adds LDAP egress only when RBAC UI is enabled and the LDAP config secret is present", func() {
+			It("adds an unscoped LDAP egress when RBAC UI and the secret are present but no host is known", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
 					manager: rbacUIManager, rbacManagementLDAP: true,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a Domains match when the LDAP host is a hostname", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, rbacManagementLDAP: true,
+					rbacManagementLDAPHost: "ad.example.com",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Domains: []string{"ad.example.com"},
+						Ports:   networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a /32 Nets match when the LDAP host is an IPv4 address", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, rbacManagementLDAP: true,
+					rbacManagementLDAPHost: "10.20.30.40",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets:  []string{"10.20.30.40/32"},
+						Ports: networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a /128 Nets match when the LDAP host is an IPv6 address", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, rbacManagementLDAP: true,
+					rbacManagementLDAPHost: "2001:db8::1",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets:  []string{"2001:db8::1/128"},
+						Ports: networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
 
 			It("omits LDAP egress when the LDAP config secret is absent, even with RBAC UI enabled", func() {
@@ -1918,6 +1978,7 @@ type renderConfig struct {
 	manager                 *operatorv1.Manager
 	externalElastic         bool
 	rbacManagementLDAP      bool
+	rbacManagementLDAPHost  string
 }
 
 func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
@@ -1985,6 +2046,7 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 		Manager:                      roc.manager,
 		ExternalElastic:              roc.externalElastic,
 		RBACManagementLDAPConfigured: roc.rbacManagementLDAP,
+		RBACManagementLDAPHost:       roc.rbacManagementLDAPHost,
 		CACertCommonName:             certificateManager.CACertCommonName(),
 	}
 

@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	neturl "net/url"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -683,12 +684,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	// Presence of the LDAP config Secret (always calico-system; the feature is
 	// not supported on multi-tenant clusters) gates the manager's LDAP egress
-	// policy.
+	// policy, and its url field scopes that policy to the LDAP host.
 	ldapConfigSecret, err := utils.GetSecret(ctx, r.client, render.RBACManagementLDAPConfigSecretName, common.CalicoNamespace)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading RBAC management LDAP config secret", err, logc)
 		return reconcile.Result{}, err
 	}
+	ldapHost := ldapEgressHost(ldapConfigSecret)
 
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:           routeConfig,
@@ -720,6 +722,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Authentication:               authenticationCR,
 		KibanaEnabled:                kibanaEnabled,
 		RBACManagementLDAPConfigured: ldapConfigSecret != nil,
+		RBACManagementLDAPHost:       ldapHost,
 		CACertCommonName:             certificateManager.CACertCommonName(),
 	}
 
@@ -869,4 +872,25 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 		return nil, nil
 	}
 	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
+}
+
+// ldapEgressHost returns the host (IP or hostname, no port) parsed from the
+// url field of the RBAC-UI LDAP config Secret, used to scope the manager's LDAP
+// egress policy. It returns "" when the Secret is absent or its url is missing
+// or unparseable; the caller leaves the egress destination unscoped in that
+// case rather than failing the reconcile, since a malformed url should not gate
+// the rest of the Manager.
+func ldapEgressHost(ldapConfigSecret *corev1.Secret) string {
+	if ldapConfigSecret == nil {
+		return ""
+	}
+	raw := string(ldapConfigSecret.Data[render.RBACManagementLDAPConfigSecretURLKey])
+	if raw == "" {
+		return ""
+	}
+	parsed, err := neturl.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }

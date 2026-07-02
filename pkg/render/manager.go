@@ -17,6 +17,7 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -81,6 +82,12 @@ const (
 	// Secret (calico-system); its presence gates the manager's LDAP egress policy.
 	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
 	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
+
+	// RBACManagementLDAPConfigSecretURLKey is the key in the LDAP config Secret
+	// holding the endpoint (e.g. "ldaps://ad.example.com:636"); its host scopes
+	// the LDAP egress policy. Keep in sync with ui-apis rbacmanagement/idp
+	// SecretFieldURL.
+	RBACManagementLDAPConfigSecretURLKey = "url"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -223,6 +230,13 @@ type ManagerConfiguration struct {
 	// RBACManagementLDAPConfigured reports whether the RBAC-UI LDAP config Secret
 	// (RBACManagementLDAPConfigSecretName) is present. It gates the LDAP egress policy.
 	RBACManagementLDAPConfigured bool
+
+	// RBACManagementLDAPHost is the host parsed from the RBAC-UI LDAP config
+	// Secret's url field (an IP or a hostname, without port). When set, the LDAP
+	// egress policy is scoped to it instead of being left open. Empty when the
+	// Secret is absent or its url is missing/unparseable, in which case the
+	// egress rule falls back to an unscoped destination.
+	RBACManagementLDAPHost string
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
 	// Passed to Voltron so it can identify the correct CA issuer public key.
@@ -1354,17 +1368,28 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 	}
 
 	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() && c.cfg.RBACManagementLDAPConfigured {
-		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, which dials the
-		// directory from this pod. Gated on !MultiTenant() to match the rest of the
-		// RBAC UI (unsupported on multi-tenant clusters), and on the LDAP config
-		// Secret, whose presence marks the sync as configured. Destination unscoped
-		// (customer-configured); scoping to the LDAP host is tracked in EV-6665.
+		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on the
+		// LDAP config Secret whose presence marks the sync as configured. The
+		// destination is scoped to the host parsed from that Secret's url — as a
+		// domain match for a hostname or a /32/128 for a literal IP. Both standard
+		// ports stay open (the url may dial a non-standard port; scoping the port
+		// too would risk denying a valid config), so only the host is narrowed.
+		dest := v3.EntityRule{Ports: networkpolicy.Ports(389, 636)}
+		if host := c.cfg.RBACManagementLDAPHost; host != "" {
+			if ip := net.ParseIP(host); ip != nil {
+				suffix := "/32"
+				if ip.To4() == nil {
+					suffix = "/128"
+				}
+				dest.Nets = []string{ip.String() + suffix}
+			} else {
+				dest.Domains = []string{host}
+			}
+		}
 		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(389, 636),
-			},
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: dest,
 		})
 	}
 

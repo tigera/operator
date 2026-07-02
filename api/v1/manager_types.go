@@ -26,6 +26,29 @@ type ManagerSpec struct {
 	// ManagerDeployment configures the Manager Deployment.
 	// +optional
 	ManagerDeployment *ManagerDeployment `json:"managerDeployment,omitempty"`
+
+	// RBACUI configures the RBAC management UI feature.
+	// +optional
+	RBACUI *RBACUI `json:"rbacUI,omitempty"`
+}
+
+// RBACUI configures the RBAC management UI. This is a separate control plane
+// for Calico Enterprise RBAC that lives alongside, and does not replace, the
+// user's ability to configure RBAC themselves.
+type RBACUI struct {
+	// Enabled turns the RBAC management UI on or off. Defaults to false.
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// RBACManagementEnabled returns true when the Manager CR enables the RBAC
+// management UI. Safe to call on a nil receiver; returns false for a nil
+// Manager, an unset RBACUI, or an unset/false toggle.
+func (m *Manager) RBACManagementEnabled() bool {
+	if m == nil || m.Spec.RBACUI == nil || m.Spec.RBACUI.Enabled == nil {
+		return false
+	}
+	return *m.Spec.RBACUI.Enabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

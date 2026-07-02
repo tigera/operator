@@ -35,7 +35,7 @@ type MonitorSpec struct {
 
 	// Alertmanager is the configuration for the Alertmanager.
 	// +optional
-	Alertmanager *Alertmanager `json:"alertmanager,omitempty"`
+	Alertmanager *Alertmanager `json:"alertManager,omitempty"`
 }
 
 type ExternalPrometheus struct {

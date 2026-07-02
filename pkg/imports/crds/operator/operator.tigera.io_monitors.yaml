@@ -40,7 +40,7 @@ spec:
             spec:
               description: MonitorSpec defines the desired state of Tigera monitor.
               properties:
-                alertmanager:
+                alertManager:
                   description: Alertmanager is the configuration for the Alertmanager.
                   properties:
                     spec:

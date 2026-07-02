@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -42,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/test"
@@ -130,10 +132,12 @@ var _ = Describe("Istio controller tests", func() {
 			createResources()
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -149,10 +153,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -165,10 +171,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -184,10 +192,12 @@ var _ = Describe("Istio controller tests", func() {
 
 			It("should handle basic Istio spec configuration", func() {
 				r := &ReconcileIstio{
-					Client:   cli,
-					scheme:   scheme,
-					provider: operatorv1.ProviderNone,
-					status:   mockStatus,
+					Client:         cli,
+					scheme:         scheme,
+					provider:       operatorv1.ProviderNone,
+					status:         mockStatus,
+					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -214,10 +224,12 @@ var _ = Describe("Istio controller tests", func() {
 				Expect(cli.Update(ctx, istioCR)).NotTo(HaveOccurred())
 
 				r := &ReconcileIstio{
-					Client:   cli,
-					scheme:   scheme,
-					provider: operatorv1.ProviderNone,
-					status:   mockStatus,
+					Client:         cli,
+					scheme:         scheme,
+					provider:       operatorv1.ProviderNone,
+					status:         mockStatus,
+					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -240,10 +252,12 @@ var _ = Describe("Istio controller tests", func() {
 				Expect(cli.Update(ctx, istioCR)).NotTo(HaveOccurred())
 
 				r := &ReconcileIstio{
-					Client:   cli,
-					scheme:   scheme,
-					provider: operatorv1.ProviderNone,
-					status:   mockStatus,
+					Client:         cli,
+					scheme:         scheme,
+					provider:       operatorv1.ProviderNone,
+					status:         mockStatus,
+					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -260,10 +274,12 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should update status when reconciliation is successful", func() {
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -275,10 +291,12 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should handle reconciliation without errors", func() {
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -293,10 +311,12 @@ var _ = Describe("Istio controller tests", func() {
 				createResources()
 
 				r := &ReconcileIstio{
-					Client:   cli,
-					scheme:   scheme,
-					provider: provider,
-					status:   mockStatus,
+					Client:         cli,
+					scheme:         scheme,
+					provider:       provider,
+					status:         mockStatus,
+					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
 				}
 
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -326,10 +346,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			// First reconcile to add finalizer
@@ -369,10 +391,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, istioNoDSCP)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -412,10 +436,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, istioCustomDSCP)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -462,10 +488,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -512,10 +540,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -541,7 +571,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -557,7 +587,7 @@ var _ = Describe("Istio controller tests", func() {
 				}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -582,7 +612,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -611,7 +641,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -633,7 +663,7 @@ var _ = Describe("Istio controller tests", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
-				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: &utils.ReadyFlag{}}
 				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 				Expect(err).ShouldNot(HaveOccurred())
 
@@ -662,10 +692,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			// First reconcile to add finalizer and set FelixConfiguration values
@@ -705,6 +737,149 @@ var _ = Describe("Istio controller tests", func() {
 		})
 	})
 
+	Context("Dataplane-disabled mode tests (linuxDataplane: None)", Label("no-dataplane"), func() {
+		BeforeEach(func() {
+			dpNone := operatorv1.LinuxDataplaneNone
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+			createResources()
+		})
+
+		It("should install Istio components without patching FelixConfiguration", func() {
+			// Create an empty FelixConfiguration so we can verify it is left untouched.
+			fc := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			r := &ReconcileIstio{
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The upstream Istio components are still rendered.
+			Expect(cli.Get(ctx, types.NamespacedName{Name: istio.IstioIstiodDeploymentName, Namespace: istio.IstioNamespace}, &appsv1.Deployment{})).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, types.NamespacedName{Name: istio.IstioCNIDaemonSetName, Namespace: istio.IstioNamespace}, &appsv1.DaemonSet{})).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, types.NamespacedName{Name: istio.IstioZTunnelDaemonSetName, Namespace: istio.IstioNamespace}, &appsv1.DaemonSet{})).NotTo(HaveOccurred())
+
+			// But FelixConfiguration is untouched - no Calico dataplane integration.
+			untouchedFC := &v3.FelixConfiguration{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, untouchedFC)).NotTo(HaveOccurred())
+			Expect(untouchedFC.Spec.IstioAmbientMode).To(BeNil())
+			Expect(untouchedFC.Spec.IstioDSCPMark).To(BeNil())
+			Expect(untouchedFC.Annotations).NotTo(HaveKey(istio.IstioOperatorAnnotationMode))
+			Expect(untouchedFC.Annotations).NotTo(HaveKey(istio.IstioOperatorAnnotationDSCP))
+
+			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
+		})
+
+		It("should surface the disabled Calico dataplane integration via a Normal event (not Degraded)", func() {
+			// The disabled integration is an expected configuration, not an error, so the
+			// controller must announce it with a Normal Kubernetes Event on the Istio resource
+			// (reason CalicoDataplaneIntegrationDisabled) rather than setting TigeraStatus Degraded.
+			recorder := record.NewFakeRecorder(100)
+			r := &ReconcileIstio{
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       recorder,
+			}
+
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Drain the recorder and look for the integration-disabled event.
+			var events []string
+			close(recorder.Events)
+			for e := range recorder.Events {
+				events = append(events, e)
+			}
+			Expect(events).To(ContainElement(SatisfyAll(
+				ContainSubstring("Normal"),
+				ContainSubstring("CalicoDataplaneIntegrationDisabled"),
+				ContainSubstring("Linux dataplane is disabled"),
+			)), "expected a Normal CalicoDataplaneIntegrationDisabled event when the dataplane is disabled")
+
+			// The integration being off is expected, so the controller must not degrade.
+			mockStatus.AssertCalled(GinkgoT(), "ClearDegraded")
+			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		})
+
+		It("should remove the finalizer on deletion without patching FelixConfiguration", func() {
+			r := &ReconcileIstio{
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
+			}
+
+			// First reconcile adds the finalizer.
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			updatedIstio := &operatorv1.Istio{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedIstio)).NotTo(HaveOccurred())
+			Expect(updatedIstio.Finalizers).To(ContainElement(istio.IstioFinalizer))
+
+			// Delete the Istio CR - this will set DeletionTimestamp.
+			Expect(cli.Delete(ctx, updatedIstio)).NotTo(HaveOccurred())
+
+			// Reconcile again; even with no FelixConfiguration (and no v3 patching),
+			// the finalizer must still be removed so deletion completes.
+			_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The CR should now be fully deleted.
+			err = cli.Get(ctx, types.NamespacedName{Name: "default"}, &operatorv1.Istio{})
+			Expect(errors.IsNotFound(err)).To(BeTrue(), "expected the Istio CR to be deleted")
+		})
+	})
+
+	Context("Policy-only mode tests (calico-node over a recognized third-party CNI)", func() {
+		DescribeTable("should patch FelixConfiguration when the Calico dataplane runs for policy only",
+			func(dataplane operatorv1.LinuxDataplaneOption, cniType operatorv1.CNIPluginType) {
+				// Policy-only runs calico-node (and Felix) over a third-party CNI, so the
+				// Calico dataplane integration must be applied exactly as in a full install.
+				installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+				installation.Spec.CNI = &operatorv1.CNISpec{Type: cniType}
+				createResources()
+
+				r := &ReconcileIstio{
+					Client:         cli,
+					scheme:         scheme,
+					provider:       operatorv1.ProviderNone,
+					status:         mockStatus,
+					tierWatchReady: &utils.ReadyFlag{},
+					recorder:       record.NewFakeRecorder(100),
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				updatedFC := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
+				Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
+				Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal(v3.IstioAmbientModeEnabled))
+				Expect(updatedFC.Spec.IstioDSCPMark).NotTo(BeNil())
+				Expect(updatedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
+				Expect(updatedFC.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationMode, "Enabled"))
+				Expect(updatedFC.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationDSCP, "23"))
+			},
+			Entry("Nftables over AmazonVPC", operatorv1.LinuxDataplaneNftables, operatorv1.PluginAmazonVPC),
+			Entry("BPF over GKE", operatorv1.LinuxDataplaneBPF, operatorv1.PluginGKE),
+		)
+	})
+
 	Context("Error handling tests", func() {
 		It("should handle missing variant gracefully", func() {
 			// Create installation without variant
@@ -720,10 +895,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -751,10 +928,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: IstioName}})
@@ -789,10 +968,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -822,10 +1003,12 @@ var _ = Describe("Istio controller tests", func() {
 
 		It("should create expected Istio resources", func() {
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -865,10 +1048,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, imageSet)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -902,10 +1087,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
@@ -951,10 +1138,12 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Create(ctx, imageSet)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
-				Client:   cli,
-				scheme:   scheme,
-				provider: operatorv1.ProviderNone,
-				status:   mockStatus,
+				Client:         cli,
+				scheme:         scheme,
+				provider:       operatorv1.ProviderNone,
+				status:         mockStatus,
+				tierWatchReady: &utils.ReadyFlag{},
+				recorder:       record.NewFakeRecorder(100),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})

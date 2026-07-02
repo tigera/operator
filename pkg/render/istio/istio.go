@@ -43,6 +43,13 @@ type Configuration struct {
 	Istio          *operatorv1.Istio
 	IstioNamespace string
 	Scheme         *runtime.Scheme
+
+	// IncludeV3NetworkPolicy is true when the projectcalico.org/v3 API is available (the
+	// calico-system Tier exists), in which case the Calico NetworkPolicies protecting the
+	// Istio components are rendered. When the v3 API is not served (e.g. before the Calico
+	// API server is up, or when the Linux dataplane is disabled), they are omitted so that the rest
+	// of the Istio components can still be applied.
+	IncludeV3NetworkPolicy bool
 }
 
 var _ render.Component = &IstioComponent{}
@@ -256,17 +263,20 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	res := c.resources
 
 	var objs, toDelete []client.Object
-	objs = append(objs,
-		c.istiodCalicoSystemPolicy(),
-		c.istioCNICalicoSystemPolicy(),
-		c.ztunnelCalicoSystemPolicy(),
-	)
-	// allow-tigera Tier was renamed to calico-system
-	toDelete = append(toDelete,
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
-		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
-	)
+	// v3 NetworkPolicies can only be applied when the projectcalico.org/v3 API is served.
+	if c.cfg.IncludeV3NetworkPolicy {
+		objs = append(objs,
+			c.istiodCalicoSystemPolicy(),
+			c.istioCNICalicoSystemPolicy(),
+			c.ztunnelCalicoSystemPolicy(),
+		)
+		// allow-tigera Tier was renamed to calico-system
+		toDelete = append(toDelete,
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istiod", IstioNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("istio-cni-node", IstioNamespace),
+			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("ztunnel", IstioNamespace),
+		)
+	}
 
 	if overrides := c.cfg.Istio.Spec.IstiodDeployment; overrides != nil {
 		rcomp.ApplyDeploymentOverrides(res.IstiodDeployment, overrides)
@@ -280,24 +290,32 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 		rcomp.ApplyDaemonSetOverrides(res.ZTunnelDaemonSet, overrides)
 	}
 
-	// Set required configs
-	for i := range res.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
-		cont := &res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
-		if cont.Name == "istio-proxy" {
-			cont.Env = append(cont.Env, corev1.EnvVar{
-				Name:  "TRANSPARENT_NETWORK_POLICIES",
-				Value: "true",
-			})
-			break
+	// Enable the Transparent Network Policies datapath only when the Calico dataplane is
+	// running. With TRANSPARENT_NETWORK_POLICIES, ztunnel sends HBONE to the original
+	// destination port and relies on Felix to DSCP-mark those packets so that the
+	// istio-cni in-pod rule (matching MAGIC_DSCP_MARK) can steer them to the HBONE
+	// listener. When the Linux dataplane is disabled there is no Felix to apply the mark, which
+	// would leave HBONE traffic misclassified as plaintext and break all in-mesh
+	// traffic, so ztunnel is left in its default (port 15008) mode instead.
+	if c.cfg.Installation.LinuxDataplaneEnabled() {
+		for i := range res.ZTunnelDaemonSet.Spec.Template.Spec.Containers {
+			cont := &res.ZTunnelDaemonSet.Spec.Template.Spec.Containers[i]
+			if cont.Name == "istio-proxy" {
+				cont.Env = append(cont.Env, corev1.EnvVar{
+					Name:  "TRANSPARENT_NETWORK_POLICIES",
+					Value: "true",
+				})
+				break
+			}
 		}
-	}
-	for i := range res.CNIDaemonSet.Spec.Template.Spec.Containers {
-		cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
-		if cont.Name == "install-cni" {
-			cont.Env = append(cont.Env, corev1.EnvVar{
-				Name:  "MAGIC_DSCP_MARK",
-				Value: strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10),
-			})
+		for i := range res.CNIDaemonSet.Spec.Template.Spec.Containers {
+			cont := &res.CNIDaemonSet.Spec.Template.Spec.Containers[i]
+			if cont.Name == "install-cni" {
+				cont.Env = append(cont.Env, corev1.EnvVar{
+					Name:  "MAGIC_DSCP_MARK",
+					Value: strconv.FormatInt(int64(c.cfg.Istio.Spec.DSCPMark.ToUint8()), 10),
+				})
+			}
 		}
 	}
 

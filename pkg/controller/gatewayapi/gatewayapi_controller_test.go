@@ -31,9 +31,12 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
@@ -776,6 +779,98 @@ var _ = Describe("Gateway API controller tests", func() {
 		By("skipping namespaces whose Gateway is not ours, and reserved namespaces")
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "other-ns", Name: certificatemanagement.TrustedCertConfigMapName}, &corev1.ConfigMap{}))).To(BeTrue())
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
+	})
+
+	DescribeTable("patches felix configuration for an explicit (non-None) linuxDataplane",
+		func(dataplane operatorv1.LinuxDataplaneOption) {
+			By("configuring an install with the Calico dataplane enabled (counterpart to the dataplane-disabled-skip case)")
+			installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dataplane}
+			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+			felixConfig := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				// PolicySyncPathPrefix is not set.
+			}
+			Expect(c.Create(ctx, felixConfig)).NotTo(HaveOccurred())
+
+			gwapi := &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			actualFelixConfig := &v3.FelixConfiguration{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)).NotTo(HaveOccurred())
+			Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal(DefaultPolicySyncPrefix))
+		},
+		Entry("Nftables dataplane", operatorv1.LinuxDataplaneNftables),
+		Entry("BPF (eBPF) dataplane", operatorv1.LinuxDataplaneBPF),
+	)
+
+	It("does not patch felix configuration in an install with the dataplane disabled", Label("no-dataplane"), func() {
+		By("configuring an install with the dataplane disabled (no cni, linuxDataplane None)")
+		dpNone := operatorv1.LinuxDataplaneNone
+		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{LinuxDataplane: &dpNone}
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+
+		felixConfig := &v3.FelixConfiguration{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec:       v3.FelixConfigurationSpec{
+				// PolicySyncPathPrefix is not set.
+			},
+		}
+		Expect(c.Create(ctx, felixConfig)).NotTo(HaveOccurred())
+
+		By("applying the GatewayAPI CR to the fake cluster")
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		By("triggering a reconcile")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		By("checking felix configuration has not been patched")
+		actualFelixConfig := &v3.FelixConfiguration{}
+		err = c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(BeEmpty())
+	})
+
+	It("degrades gracefully and requeues when the projectcalico.org/v3 API is not served", Label("no-dataplane"), func() {
+		By("building a client that returns NoKindMatchError for FelixConfiguration")
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).
+			WithInterceptorFuncs(interceptor.Funcs{
+				Get: func(ctx context.Context, withWatch client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*v3.FelixConfiguration); ok {
+						return &meta.NoKindMatchError{
+							GroupKind: schema.GroupKind{Group: "projectcalico.org", Kind: "FelixConfiguration"},
+						}
+					}
+					return withWatch.Get(ctx, key, obj, opts...)
+				},
+			}).
+			Build()
+		r.client = c
+
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+		gwapi := &operatorv1.GatewayAPI{
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+		}
+		Expect(c.Create(ctx, gwapi)).NotTo(HaveOccurred())
+
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		By("triggering a reconcile")
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(utils.StandardRetry))
+		mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
 	})
 })
 

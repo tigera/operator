@@ -200,6 +200,22 @@ var _ = Describe("Installation merge tests", func() {
 			&opv1.CNISpec{Type: opv1.PluginAmazonVPC, IPAM: &opv1.IPAMSpec{Type: opv1.IPAMPluginAmazonVPC}}),
 	)
 
+	It("clears CNI when the overlay disables the dataplane", func() {
+		// The base Installation defaults spec.cni (its own dataplane is enabled) and the overlay only
+		// sets linuxDataplane: None. Without clearing, the merged spec would carry both cni and None,
+		// which validation rejects. The computed spec must drop cni so the overlay path is valid.
+		dpNone := opv1.LinuxDataplaneNone
+		base := opv1.InstallationSpec{
+			CNI: &opv1.CNISpec{Type: opv1.PluginCalico, IPAM: &opv1.IPAMSpec{Type: opv1.IPAMPluginCalico}},
+		}
+		overlay := opv1.InstallationSpec{
+			CalicoNetwork: &opv1.CalicoNetworkSpec{LinuxDataplane: &dpNone},
+		}
+		inst := OverrideInstallationSpec(base, overlay)
+		Expect(inst.CNI).To(BeNil(), "expected spec.cni to be cleared when the effective dataplane is disabled")
+		Expect(inst.DataplaneDisabled()).To(BeTrue())
+	})
+
 	Context("test CalicoNetwork merge", func() {
 		_BGPE := opv1.BGPEnabled
 		_BGPD := opv1.BGPDisabled

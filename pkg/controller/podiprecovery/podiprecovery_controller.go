@@ -33,6 +33,15 @@
 // spec.hostNetwork == true as a side effect of the normal apply path.
 // The controller additionally verifies spec.hostNetwork == true on each
 // candidate as a safety net before deleting.
+//
+// Recovery is triggered by two watches so it stays level-triggered rather
+// than reacting to a single node event: a Node watch (fires when a node's
+// host IPs change) and a Pod watch (fires when a host-networked pod finishes
+// (re)starting). The Pod watch is what catches a pod that was still
+// restarting at the moment its node's IP changed and only later comes back
+// reporting its old, stale IP — after which no further Node event would
+// fire. Both watches enqueue the same Node key and share one idempotent
+// Reconcile.
 package podiprecovery
 
 import (
@@ -41,6 +50,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -83,7 +93,32 @@ func Add(mgr manager.Manager, _ options.ControllerOptions) error {
 		return fmt.Errorf("podiprecovery-controller failed to watch Nodes: %w", err)
 	}
 
+	// Watch host-networked pods too, and re-enqueue the pod's node when one
+	// settles into a Running-with-IPs state. The Node watch catches the
+	// instant a node's IP changes, but a pod that is still restarting at
+	// that instant has no status.podIPs yet and is skipped by Reconcile;
+	// when the kubelet finishes (re)starting it, the surviving pod reports
+	// its old (now stale) IP and no further Node event ever fires. Without
+	// this second watch that late-settling pod would never be re-evaluated
+	// (the recovery would be edge-triggered on the node event alone). The
+	// map function keys back to the Node, and Reconcile is idempotent, so
+	// the extra enqueues for already-healthy pods are cheap no-ops.
+	if err := c.WatchObject(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(podToNode), hostNetPodSettledPredicate()); err != nil {
+		return fmt.Errorf("podiprecovery-controller failed to watch Pods: %w", err)
+	}
+
 	return nil
+}
+
+// podToNode maps a Pod event to a reconcile request for the Node the pod
+// runs on. Recovery is keyed on the Node, so a settling pod triggers a full
+// re-evaluation of every host-networked pod on its node.
+func podToNode(_ context.Context, obj client.Object) []reconcile.Request {
+	pod, ok := obj.(*corev1.Pod)
+	if !ok || pod.Spec.NodeName == "" {
+		return nil
+	}
+	return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: pod.Spec.NodeName}}}
 }
 
 // hostIPsChangedPredicate filters Node events so reconciles only fire when
@@ -110,6 +145,73 @@ func hostIPsChangedPredicate() predicate.Predicate {
 			return false
 		},
 	}
+}
+
+// hostNetPodSettledPredicate filters Pod events down to operator-managed
+// hostNetwork pods that have just settled into a state where their
+// status.podIPs can be meaningfully compared against their node's host IPs.
+//
+// This is the second half of the recovery trigger (see the Pod watch in
+// Add). It fires when such a pod finishes (re)starting — either its reported
+// IPs change, or it transitions to Ready — which is the moment a pod that
+// survived a node-IP change comes back reporting its old, now-stale IP.
+func hostNetPodSettledPredicate() predicate.Predicate {
+	return predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			pod, ok := e.Object.(*corev1.Pod)
+			// An already-running host-net pod observed on (re)start of the
+			// controller: evaluate it if it already reports IPs.
+			return ok && isManagedHostNetPod(pod) && len(pod.Status.PodIPs) > 0
+		},
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			oldPod, oldOK := e.ObjectOld.(*corev1.Pod)
+			newPod, newOK := e.ObjectNew.(*corev1.Pod)
+			if !oldOK || !newOK {
+				return false
+			}
+			if !isManagedHostNetPod(newPod) || len(newPod.Status.PodIPs) == 0 {
+				return false
+			}
+			// Re-evaluate when the pod's reported IPs change or when it
+			// transitions to Ready — both mark the point at which a
+			// (re)started pod's final status.podIPs becomes observable.
+			if !podIPSet(oldPod).Equal(podIPSet(newPod)) {
+				return true
+			}
+			return !podReady(oldPod) && podReady(newPod)
+		},
+		DeleteFunc: func(e event.DeleteEvent) bool {
+			return false
+		},
+		GenericFunc: func(e event.GenericEvent) bool {
+			return false
+		},
+	}
+}
+
+// isManagedHostNetPod reports whether the pod is an operator-managed
+// hostNetwork pod — the only kind the recovery controller acts on.
+func isManagedHostNetPod(pod *corev1.Pod) bool {
+	return pod.Spec.HostNetwork && pod.Labels[common.HostNetworkedPodLabel] == "true"
+}
+
+// podIPSet returns the set of IPs reported in the pod's status.podIPs.
+func podIPSet(pod *corev1.Pod) sets.Set[string] {
+	out := sets.New[string]()
+	for _, pip := range pod.Status.PodIPs {
+		out.Insert(pip.IP)
+	}
+	return out
+}
+
+// podReady reports whether the pod's Ready condition is currently True.
+func podReady(pod *corev1.Pod) bool {
+	for _, c := range pod.Status.Conditions {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionTrue
+		}
+	}
+	return false
 }
 
 // nodeHostIPSet returns the set of addresses that the kubelet would use to

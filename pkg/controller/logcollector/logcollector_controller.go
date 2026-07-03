@@ -609,6 +609,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		Cloud:                  r.opts.Cloud,
 	}
 	// Render the fluentd component for Linux
 	comp := render.Fluentd(fluentdCfg)
@@ -681,6 +682,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			FluentdKeyPair:         fluentdKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 			LicenseExpired:         licenseExpired,
+			Cloud:                  r.opts.Cloud,
 		}
 		comp = render.Fluentd(fluentdCfg)
 

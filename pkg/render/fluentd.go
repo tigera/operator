@@ -188,6 +188,10 @@ type FluentdConfiguration struct {
 
 	// LicenseExpired indicates the license has expired and fluentd DaemonSet should be removed.
 	LicenseExpired bool
+
+	// Cloud indicates fluentd is being rendered for a Calico Cloud install. When false the cloud
+	// env vars below are not added and enterprise behavior is unchanged.
+	Cloud bool
 }
 
 type fluentdComponent struct {
@@ -856,8 +860,28 @@ func (c *fluentdComponent) envvars() []corev1.EnvVar {
 		}
 	}
 
+	if c.cfg.Cloud {
+		envs = setFluentdCloudEnvs(envs, c.cfg.Tenant.MultiTenant())
+	}
+
 	envs = append(envs, corev1.EnvVar{Name: "CA_CRT_PATH", Value: c.trustedBundlePath()})
 
+	return envs
+}
+
+// setFluentdCloudEnvs adds the Calico Cloud specific fluentd env vars. Done as a separate function
+// to make future updates easier. Only called for cloud installs.
+func setFluentdCloudEnvs(envs []corev1.EnvVar, multiTenant bool) []corev1.EnvVar {
+	envs = append(envs,
+		corev1.EnvVar{Name: "DISABLE_ES_DNS_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_EE_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_AUDIT_KUBE_LOG", Value: "true"},
+		corev1.EnvVar{Name: "DISABLE_ES_BGP_LOG", Value: "true"},
+	)
+
+	if !multiTenant {
+		envs = append(envs, corev1.EnvVar{Name: "DISABLE_ES_FLOW_LOG", Value: "true"})
+	}
 	return envs
 }
 

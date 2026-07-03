@@ -1788,13 +1788,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
 		})
 
-		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbacUI.enabled is true", func() {
+		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbacUI.state is Enabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBACUI: &operatorv1.RBACUI{Enabled: ptr.To(true)},
+						RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)},
 					},
 				},
 			})
@@ -1805,13 +1805,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).To(ContainElement(nsCreateRule))
 		})
 
-		It("renders RBAC_UI_ENABLED=false when rbacUI.enabled is false", func() {
+		It("renders RBAC_UI_ENABLED=false when rbacUI.state is Disabled", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBACUI: &operatorv1.RBACUI{Enabled: ptr.To(false)},
+						RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIDisabled)},
 					},
 				},
 			})
@@ -1833,7 +1833,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 				manager: &operatorv1.Manager{
 					Spec: operatorv1.ManagerSpec{
-						RBACUI: &operatorv1.RBACUI{Enabled: ptr.To(true)},
+						RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)},
 					},
 				},
 			})
@@ -1853,7 +1853,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 			}
 			rbacUIManager := &operatorv1.Manager{
-				Spec: operatorv1.ManagerSpec{RBACUI: &operatorv1.RBACUI{Enabled: ptr.To(true)}},
+				Spec: operatorv1.ManagerSpec{RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)}},
 			}
 
 			It("adds an unscoped LDAP egress when RBAC UI and the secret are present but no host is known", func() {

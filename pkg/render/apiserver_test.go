@@ -384,6 +384,29 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
+	It("should gate the RBAC management UI rule on RBACManagementEnabled", func() {
+		// Disabled (default): tigera-network-admin must not carry the
+		// escalation-capable RBAC management rule.
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		for _, rule := range rbacManagementNetworkAdminRules {
+			Expect(clusterRole.Rules).NotTo(ContainElement(rule))
+		}
+
+		// Enabled: the rules are appended.
+		cfg.RBACManagementEnabled = true
+		component, err = render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ = component.Objects()
+		clusterRole = rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		for _, rule := range rbacManagementNetworkAdminRules {
+			Expect(clusterRole.Rules).To(ContainElement(rule))
+		}
+		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
+	})
+
 	It("should render resources without an aggregation server", func() {
 		cfg.RequiresAggregationServer = false
 
@@ -1914,6 +1937,22 @@ var (
 			Resources:     []string{"secrets"},
 			ResourceNames: []string{"webhooks-secret"},
 			Verbs:         []string{"patch"},
+		},
+	}
+
+	// rbacManagementNetworkAdminRules are the extra tigera-network-admin rules
+	// added when rbac.ui is Enabled. See tigeraNetworkAdminClusterRole for the
+	// rationale behind the verb set.
+	rbacManagementNetworkAdminRules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "roles"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
 		},
 	}
 )

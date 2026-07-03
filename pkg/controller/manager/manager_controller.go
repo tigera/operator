@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	neturl "net/url"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -92,6 +93,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
 	if err := utils.AddSecretsWatch(c, render.VoltronLinseedTLS, helper.InstallNamespace()); err != nil {
+		return err
+	}
+
+	// Re-render when the RBAC-UI LDAP config Secret appears/disappears: it gates
+	// the manager's LDAP egress policy.
+	if err := utils.AddSecretsWatch(c, render.RBACManagementLDAPConfigSecretName, common.CalicoNamespace); err != nil {
 		return err
 	}
 
@@ -233,23 +240,6 @@ type ReconcileManager struct {
 	opts            options.ControllerOptions
 }
 
-// GetManager returns the default manager instance with defaults populated.
-func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Manager, error) {
-	key := client.ObjectKey{Name: "tigera-secure"}
-	if mt {
-		key.Namespace = ns
-	}
-
-	// Fetch the manager instance. We only support a single instance named "tigera-secure".
-	instance := &operatorv1.Manager{}
-	err := cli.Get(ctx, key, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
 // and what is in the Manager.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
@@ -276,15 +266,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
-	instance, err := GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
+	instance, err := utils.GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			logc.Info("Manager object not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
-		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Manager", err, logc)
 		return reconcile.Result{}, err
+	}
+	if instance == nil {
+		logc.Info("Manager object not found")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	}
 	logc.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
@@ -692,35 +682,48 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Presence of the LDAP config Secret (always calico-system; the feature is
+	// not supported on multi-tenant clusters) gates the manager's LDAP egress
+	// policy, and its url field scopes that policy to the LDAP host.
+	ldapConfigSecret, err := utils.GetSecret(ctx, r.client, render.RBACManagementLDAPConfigSecretName, common.CalicoNamespace)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading RBAC management LDAP config secret", err, logc)
+		return reconcile.Result{}, err
+	}
+	ldapHost := ldapEgressHost(ldapConfigSecret)
+
 	managerCfg := &render.ManagerConfiguration{
-		VoltronRouteConfig:         routeConfig,
-		KeyValidatorConfig:         keyValidatorConfig,
-		TrustedCertBundle:          trustedBundle,
-		TLSKeyPair:                 tlsSecret,
-		VoltronLinseedKeyPair:      linseedVoltronServerCert,
-		PullSecrets:                pullSecrets,
-		OpenShift:                  r.opts.DetectedProvider.IsOpenShift(),
-		Installation:               installationSpec,
-		ManagementCluster:          managementCluster,
-		NonClusterHost:             nonclusterhost,
-		TunnelServerCert:           tunnelServerCert,
-		AdditionalTunnelServerCert: additionalTunnelServerCert,
-		InternalTLSKeyPair:         internalTrafficSecret,
-		ClusterDomain:              r.opts.ClusterDomain,
-		ESLicenseType:              elasticLicenseType,
-		Replicas:                   replicas,
-		Compliance:                 complianceCR,
-		ComplianceLicenseActive:    complianceLicenseFeatureActive,
-		ComplianceNamespace:        utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
-		Namespace:                  helper.InstallNamespace(),
-		TruthNamespace:             helper.TruthNamespace(),
-		Tenant:                     tenant,
-		ExternalElastic:            r.opts.ElasticExternal,
-		BindingNamespaces:          namespaces,
-		OSSTenantNamespaces:        ossTenantNamespaces,
-		Manager:                    instance,
-		KibanaEnabled:              kibanaEnabled,
-		CACertCommonName:           certificateManager.CACertCommonName(),
+		VoltronRouteConfig:           routeConfig,
+		KeyValidatorConfig:           keyValidatorConfig,
+		TrustedCertBundle:            trustedBundle,
+		TLSKeyPair:                   tlsSecret,
+		VoltronLinseedKeyPair:        linseedVoltronServerCert,
+		PullSecrets:                  pullSecrets,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+		Installation:                 installationSpec,
+		ManagementCluster:            managementCluster,
+		NonClusterHost:               nonclusterhost,
+		TunnelServerCert:             tunnelServerCert,
+		AdditionalTunnelServerCert:   additionalTunnelServerCert,
+		InternalTLSKeyPair:           internalTrafficSecret,
+		ClusterDomain:                r.opts.ClusterDomain,
+		ESLicenseType:                elasticLicenseType,
+		Replicas:                     replicas,
+		Compliance:                   complianceCR,
+		ComplianceLicenseActive:      complianceLicenseFeatureActive,
+		ComplianceNamespace:          utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
+		Namespace:                    helper.InstallNamespace(),
+		TruthNamespace:               helper.TruthNamespace(),
+		Tenant:                       tenant,
+		ExternalElastic:              r.opts.ElasticExternal,
+		BindingNamespaces:            namespaces,
+		OSSTenantNamespaces:          ossTenantNamespaces,
+		Manager:                      instance,
+		Authentication:               authenticationCR,
+		KibanaEnabled:                kibanaEnabled,
+		RBACManagementLDAPConfigured: ldapConfigSecret != nil,
+		RBACManagementLDAPHost:       ldapHost,
+		CACertCommonName:             certificateManager.CACertCommonName(),
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -869,4 +872,25 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 		return nil, nil
 	}
 	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
+}
+
+// ldapEgressHost returns the host (IP or hostname, no port) parsed from the
+// url field of the RBAC-UI LDAP config Secret, used to scope the manager's LDAP
+// egress policy. It returns "" when the Secret is absent or its url is missing
+// or unparseable; the caller leaves the egress destination unscoped in that
+// case rather than failing the reconcile, since a malformed url should not gate
+// the rest of the Manager.
+func ldapEgressHost(ldapConfigSecret *corev1.Secret) string {
+	if ldapConfigSecret == nil {
+		return ""
+	}
+	raw := string(ldapConfigSecret.Data[render.RBACManagementLDAPConfigSecretURLKey])
+	if raw == "" {
+		return ""
+	}
+	parsed, err := neturl.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
 }

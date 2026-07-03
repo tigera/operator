@@ -487,6 +487,27 @@ func GetIstio(ctx context.Context, c client.Client) (*operatorv1.Istio, error) {
 	return istio, nil
 }
 
+// GetManager returns the Manager CR, or nil if it is not found. When
+// multiTenant is true the tenant-scoped instance is read from ns; otherwise the
+// cluster-scoped instance is read and ns is ignored. A NoMatchError (the
+// Manager CRD is not registered) is returned to the caller rather than treated
+// as not-found: absence of the CRD is distinct from the user not having created
+// a Manager, and the caller decides how to handle it.
+func GetManager(ctx context.Context, cli client.Client, multiTenant bool, ns string) (*operatorv1.Manager, error) {
+	key := DefaultEnterpriseInstanceKey
+	if multiTenant {
+		key.Namespace = ns
+	}
+	instance := &operatorv1.Manager{}
+	if err := cli.Get(ctx, key, instance); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return instance, nil
+}
+
 // Return the ManagementCluster CR if present. No error is returned if it was not found.
 func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
 	managementCluster := &operatorv1.ManagementCluster{}

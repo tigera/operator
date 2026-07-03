@@ -150,6 +150,10 @@ type KubeControllersConfiguration struct {
 	// caBundle so the apiserver can verify the in-process webhook endpoint.
 	// Only consulted when WAFGatewayExtensionEnabled is true.
 	WAFWebhookCABundle []byte
+
+	// RBACManagementEnabled mirrors Manager.spec.rbacUI.enabled and gates the
+	// rbacsync controller in calico-kube-controllers.
+	RBACManagementEnabled bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -199,6 +203,13 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
 		if cfg.WAFGatewayExtensionEnabled {
 			enabledControllers = append(enabledControllers, "applicationlayer")
+		}
+
+		// Runs the rbacsync controller to reconcile managed ClusterRoles and
+		// bindings against the tigera-idp-groups ConfigMap.
+		if cfg.RBACManagementEnabled {
+			enabledControllers = append(enabledControllers, "rbacsync")
+			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)
 		}
 	}
 
@@ -330,6 +341,9 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersClusterRoleBinding(),
 	)
 	objectsToCreate = append(objectsToCreate, c.managedClusterRoleBindings()...)
+	if c.cfg.RBACManagementEnabled {
+		objectsToCreate = append(objectsToCreate, c.rbacSyncIDPGroupsRole()...)
+	}
 
 	if len(c.enabledControllers) > 0 {
 		// There's something to run, so create the deployment.
@@ -657,6 +671,229 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	}
 
 	return rules
+}
+
+// rbacSyncIDPGroupsRole returns the Role + RoleBinding that grants rbacsync
+// read access to the tigera-idp-groups ConfigMap in calico-system, its only
+// namespaced dependency.
+func (c *kubeControllersComponent) rbacSyncIDPGroupsRole() []client.Object {
+	name := "calico-kube-controllers-rbac-sync"
+	return []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: common.CalicoNamespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{"tigera-idp-groups"},
+					Verbs:         []string{"get", "list", "watch"},
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: common.CalicoNamespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     name,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      c.kubeControllerServiceAccountName,
+					Namespace: c.cfg.Namespace,
+				},
+			},
+		},
+	}
+}
+
+// rbacSyncControllerRules returns the cluster-scoped rules the rbacsync
+// controller holds. The controller reconciles the ClusterRoles that back the
+// Manager UI's RBAC management feature, and each rule below lets it manage the
+// access one Calico Enterprise UI feature (and its view or modify state)
+// requires. The controller runs only when RBAC management is enabled.
+//
+// Under Kubernetes' privilege-escalation guard the controller can only grant
+// permissions it already holds, so each rule mirrors a grant made by one of the
+// managed calico-ui-* ClusterRoles the rbacsync controller generates in
+// calico-private (kube-controllers/pkg/controllers/rbacsync: resourceroles.go
+// defines the calico-ui-<feature>-{view,mod} and calico-ui-logs-view-* roles,
+// tierroles.go the calico-ui-{np,gnp}-{view,mod}-<tier> and calico-ui-cluster-
+// context roles). The comment on each rule names the managed role(s) it covers.
+//
+// Only the grants unique to the managed roles live here. Core resources those
+// roles also grant (namespaces, nodes, services, pods, clusterinformations,
+// hostendpoints, serviceaccounts, tiers) are already held by the common
+// kube-controllers rules above, which satisfy the escalation guard for them.
+func rbacSyncControllerRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		// RBAC management: the ClusterRoles and bindings the controller
+		// reconciles for the feature. Not a mirrored grant — this is the
+		// controller's own reconcile target for every managed calico-ui-* role.
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Network Policy tiers, view and modify: the per-tier and all-tiers
+		// Policies and Global Policies roles cover the tiers and tier-scoped
+		// (tier.*) policy resources. The plain networkpolicies and
+		// stagednetworkpolicies come from Policy Recommendations, which
+		// references them directly. Mirrors calico-ui-{np,gnp}-{view,mod}-<tier>
+		// (and -all), calico-ui-get-tier-* and calico-ui-policy-recommendations-
+		// {view,mod}.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"tiers",
+				"tier.networkpolicies",
+				"tier.stagednetworkpolicies",
+				"tier.globalnetworkpolicies",
+				"tier.stagedglobalnetworkpolicies",
+				"stagedkubernetesnetworkpolicies",
+				"networkpolicies",
+				"stagednetworkpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Network Policy tiers, view and modify: Kubernetes network policies
+		// within a tier. Mirrors calico-ui-np-{view,mod}-<tier> (and -all).
+		{
+			APIGroups: []string{"networking.k8s.io"},
+			Resources: []string{"networkpolicies"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// The per-feature pages, view and modify: Dashboards, Managed Clusters,
+		// Global Network Sets, Network Sets, Policy Recommendations, Packet
+		// Captures, Alerts and Security Events, Threat Feeds, Compliance
+		// Reports, Webhooks, Deep Packet Inspection, and Egress Gateways.
+		// Mirrors the matching calico-ui-<feature>-{view,mod} roles
+		// (e.g. calico-ui-managed-clusters-{view,mod}, calico-ui-alerts-
+		// {view,mod}, calico-ui-egress-gateways-{view,mod}).
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{
+				"uisettings",
+				"uisettingsgroups",
+				"globalnetworksets",
+				"networksets",
+				"managedclusters",
+				"policyrecommendationscopes",
+				"policyrecommendationscopes/status",
+				"deeppacketinspections",
+				"deeppacketinspections/status",
+				"egressgatewaypolicies",
+				"externalnetworks",
+				"globalalerts",
+				"globalalerts/status",
+				"globalalerttemplates",
+				"alertexceptions",
+				"globalthreatfeeds",
+				"globalthreatfeeds/status",
+				"globalreports",
+				"globalreports/status",
+				"globalreporttypes",
+				"packetcaptures",
+				"packetcaptures/files",
+				"securityeventwebhooks",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Dashboards, view and modify: the cluster-settings and user-settings
+		// dashboard layouts stored on the UISettingsGroups data subresource.
+		// Mirrors calico-ui-dashboards-{view,mod}.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"uisettingsgroups/data"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Manager UI load: the authorization self-check the UI runs on load.
+		// Packet Captures: authenticating a capture-file download. Mirrors the
+		// authorizationreviews grant on calico-ui-cluster-context and the
+		// authenticationreviews grant on calico-ui-packet-captures-{view,mod}.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"authorizationreviews", "authenticationreviews"},
+			Verbs:     []string{"create"},
+		},
+		// Manager UI load: Felix configuration read for cluster-wide settings.
+		// Mirrors calico-ui-cluster-context.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"felixconfigurations"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		// Webhooks, modify: creating and updating the Secret that stores the
+		// webhook credentials. Mirrors calico-ui-webhooks-mod.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"secrets"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"secrets"},
+			ResourceNames: []string{"webhooks-secret"},
+			Verbs:         []string{"patch"},
+		},
+		// Logs, view: Flow, DNS, Audit, L7, and Events log access, per managed
+		// cluster and for the management cluster. Mirrors calico-ui-logs-view-*
+		// (all/audit/dns/events/flows/l7, plus their per-cluster and
+		// all-clusters variants).
+		{
+			APIGroups: []string{"lma.tigera.io"},
+			Resources: []string{"cluster"},
+			Verbs:     []string{"get"},
+		},
+		// Manager UI load: the Compliance feature-enabled check. Mirrors the
+		// unscoped compliances grant on calico-ui-cluster-context. (The
+		// calico-ui-compliance-reports-{view,mod} roles also read compliances
+		// but scope it to the tigera-secure CR; this rule must stay unscoped to
+		// cover cluster-context, whose feature check is not resource-scoped.)
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get"},
+		},
+		// Manager UI load: feature-enabled checks for Application Layer / WAF,
+		// Packet Capture, and Intrusion Detection. Mirrors calico-ui-cluster-
+		// context (which bundles the compliances check above into the same rule).
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"applicationlayers", "packetcaptureapis", "intrusiondetections"},
+			Verbs:     []string{"get"},
+		},
+		// Global Network Sets and Network Sets, view and modify: listing the
+		// pods a network set selects. Mirrors the pods grant on calico-ui-
+		// {global-network-sets,network-sets}-{view,mod} and calico-ui-service-
+		// graph-{view,mod}. (The common kube-controllers rules above already
+		// grant pods get/list/watch for IPAM GC, so this is also covered there.)
+		{
+			APIGroups: []string{""},
+			Resources: []string{"pods"},
+			Verbs:     []string{"list"},
+		},
+		// Service Graph: the service accounts the flow view references. The only
+		// managed role granting serviceaccounts, so mirrors calico-ui-service-
+		// graph-{view,mod}. (That role also grants services, namespaces and
+		// hostendpoints, all covered by the common kube-controllers rules above.)
+		{
+			APIGroups: []string{""},
+			Resources: []string{"serviceaccounts"},
+			Verbs:     []string{"get", "list"},
+		},
+		// Manager UI load: the statistics proxy to the Calico API server and
+		// the node Prometheus. Mirrors calico-ui-cluster-context.
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"services/proxy"},
+			ResourceNames: []string{"https:calico-api:8080", "calico-node-prometheus:9090"},
+			Verbs:         []string{"get", "create"},
+		},
+	}
 }
 
 func (c *kubeControllersComponent) controllersServiceAccount() *corev1.ServiceAccount {

@@ -1842,9 +1842,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		Context("LDAP egress network policy gate", func() {
 			policyName := types.NamespacedName{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}
-			// ldapEgress is the fallback rule shape rendered when the LDAP config
-			// Secret is present but no host could be parsed from its url: ports
-			// open, destination unscoped.
+			// ldapEgress is the fallback rule shape rendered when LDAP is configured
+			// on the Authentication CR but its host is empty: ports open, destination
+			// unscoped.
 			ldapEgress := v3.Rule{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
@@ -1856,10 +1856,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Spec: operatorv1.ManagerSpec{RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)}},
 			}
 
-			It("adds an unscoped LDAP egress when RBAC UI and the secret are present but no host is known", func() {
+			It("adds an unscoped LDAP egress when RBAC UI and LDAP auth are configured but no host is set", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					manager: rbacUIManager, rbacManagementLDAP: true,
+					manager: rbacUIManager, ldapConfigured: true,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(ldapEgress))
@@ -1868,8 +1868,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("scopes LDAP egress to a Domains match when the LDAP host is a hostname", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					manager: rbacUIManager, rbacManagementLDAP: true,
-					rbacManagementLDAPHost: "ad.example.com",
+					manager: rbacUIManager, ldapConfigured: true,
+					ldapHost: "ad.example.com:636",
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
@@ -1887,8 +1887,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("scopes LDAP egress to a /32 Nets match when the LDAP host is an IPv4 address", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					manager: rbacUIManager, rbacManagementLDAP: true,
-					rbacManagementLDAPHost: "10.20.30.40",
+					manager: rbacUIManager, ldapConfigured: true,
+					ldapHost: "10.20.30.40:389",
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
@@ -1906,8 +1906,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("scopes LDAP egress to a /128 Nets match when the LDAP host is an IPv6 address", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					manager: rbacUIManager, rbacManagementLDAP: true,
-					rbacManagementLDAPHost: "2001:db8::1",
+					manager: rbacUIManager, ldapConfigured: true,
+					ldapHost: "[2001:db8::1]:636",
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
@@ -1922,25 +1922,25 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
 
-			It("omits LDAP egress when the LDAP config secret is absent, even with RBAC UI enabled", func() {
+			It("omits LDAP egress when LDAP auth is not configured, even with RBAC UI enabled", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					manager: rbacUIManager, rbacManagementLDAP: false,
+					manager: rbacUIManager, ldapConfigured: false,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
 
-			It("omits LDAP egress when the LDAP secret is present but RBAC UI is disabled", func() {
+			It("omits LDAP egress when LDAP auth is configured but RBAC UI is disabled", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					rbacManagementLDAP: true,
+					ldapConfigured: true,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
 
-			It("omits LDAP egress in multi-tenant mode even with RBAC UI enabled and the LDAP secret present", func() {
+			It("omits LDAP egress in multi-tenant mode even with RBAC UI enabled and LDAP auth configured", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation:      installation,
 					ns:                "tenant-a",
@@ -1952,8 +1952,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 							ManagedClusterVariant: &operatorv1.Calico,
 						},
 					},
-					manager:            rbacUIManager,
-					rbacManagementLDAP: true,
+					manager:        rbacUIManager,
+					ldapConfigured: true,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(
 					types.NamespacedName{Name: "calico-system.manager-access", Namespace: "tenant-a"}, resources)
@@ -1977,8 +1977,10 @@ type renderConfig struct {
 	tenant                  *operatorv1.Tenant
 	manager                 *operatorv1.Manager
 	externalElastic         bool
-	rbacManagementLDAP      bool
-	rbacManagementLDAPHost  string
+	// ldapConfigured, when true, sets Authentication.spec.ldap (gating the RBAC-UI
+	// LDAP egress rule); ldapHost sets Authentication.spec.ldap.host (scoping it).
+	ldapConfigured bool
+	ldapHost       string
 }
 
 func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
@@ -2024,30 +2026,34 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 	}
 
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:           dexCfg,
-		TrustedCertBundle:            bundle,
-		TLSKeyPair:                   managerTLS,
-		Installation:                 roc.installation,
-		ManagementCluster:            roc.managementCluster,
-		NonClusterHost:               roc.nonClusterHost,
-		TunnelServerCert:             tunnelSecret,
-		VoltronLinseedKeyPair:        voltronLinseedKP,
-		InternalTLSKeyPair:           internalTraffic,
-		ClusterDomain:                dns.DefaultClusterDomain,
-		ESLicenseType:                render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                     roc.installation.ControlPlaneReplicas,
-		Compliance:                   roc.compliance,
-		ComplianceLicenseActive:      roc.complianceFeatureActive,
-		OpenShift:                    roc.openshift,
-		Namespace:                    roc.ns,
-		BindingNamespaces:            roc.bindingNamespaces,
-		OSSTenantNamespaces:          roc.ossBindingNamespaces,
-		Tenant:                       roc.tenant,
-		Manager:                      roc.manager,
-		ExternalElastic:              roc.externalElastic,
-		RBACManagementLDAPConfigured: roc.rbacManagementLDAP,
-		RBACManagementLDAPHost:       roc.rbacManagementLDAPHost,
-		CACertCommonName:             certificateManager.CACertCommonName(),
+		KeyValidatorConfig:      dexCfg,
+		TrustedCertBundle:       bundle,
+		TLSKeyPair:              managerTLS,
+		Installation:            roc.installation,
+		ManagementCluster:       roc.managementCluster,
+		NonClusterHost:          roc.nonClusterHost,
+		TunnelServerCert:        tunnelSecret,
+		VoltronLinseedKeyPair:   voltronLinseedKP,
+		InternalTLSKeyPair:      internalTraffic,
+		ClusterDomain:           dns.DefaultClusterDomain,
+		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:                roc.installation.ControlPlaneReplicas,
+		Compliance:              roc.compliance,
+		ComplianceLicenseActive: roc.complianceFeatureActive,
+		OpenShift:               roc.openshift,
+		Namespace:               roc.ns,
+		BindingNamespaces:       roc.bindingNamespaces,
+		OSSTenantNamespaces:     roc.ossBindingNamespaces,
+		Tenant:                  roc.tenant,
+		Manager:                 roc.manager,
+		ExternalElastic:         roc.externalElastic,
+		CACertCommonName:        certificateManager.CACertCommonName(),
+	}
+
+	if roc.ldapConfigured {
+		cfg.Authentication = &operatorv1.Authentication{
+			Spec: operatorv1.AuthenticationSpec{LDAP: &operatorv1.AuthenticationLDAP{Host: roc.ldapHost}},
+		}
 	}
 
 	if roc.tenant.MultiTenant() {

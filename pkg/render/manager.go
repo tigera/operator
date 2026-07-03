@@ -79,15 +79,9 @@ const (
 	ManagerPortName              = "https"
 
 	// RBACManagementLDAPConfigSecretName is the RBAC-UI LDAP directory-sync config
-	// Secret (calico-system); its presence gates the manager's LDAP egress policy.
+	// Secret (calico-system) the rbacsync process reads to perform the sync.
 	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
 	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
-
-	// RBACManagementLDAPConfigSecretURLKey is the key in the LDAP config Secret
-	// holding the endpoint (e.g. "ldaps://ad.example.com:636"); its host scopes
-	// the LDAP egress policy. Keep in sync with ui-apis rbacmanagement/idp
-	// SecretFieldURL.
-	RBACManagementLDAPConfigSecretURLKey = "url"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -226,17 +220,6 @@ type ManagerConfiguration struct {
 	Manager        *operatorv1.Manager
 	Authentication *operatorv1.Authentication
 	KibanaEnabled  bool
-
-	// RBACManagementLDAPConfigured reports whether the RBAC-UI LDAP config Secret
-	// (RBACManagementLDAPConfigSecretName) is present. It gates the LDAP egress policy.
-	RBACManagementLDAPConfigured bool
-
-	// RBACManagementLDAPHost is the host parsed from the RBAC-UI LDAP config
-	// Secret's url field (an IP or a hostname, without port). When set, the LDAP
-	// egress policy is scoped to it instead of being left open. Empty when the
-	// Secret is absent or its url is missing/unparseable, in which case the
-	// egress rule falls back to an unscoped destination.
-	RBACManagementLDAPHost string
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
 	// Passed to Voltron so it can identify the correct CA issuer public key.
@@ -1367,15 +1350,16 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() && c.cfg.RBACManagementLDAPConfigured {
-		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on the
-		// LDAP config Secret whose presence marks the sync as configured. The
-		// destination is scoped to the host parsed from that Secret's url — as a
-		// domain match for a hostname or a /32/128 for a literal IP. Both standard
-		// ports stay open (the url may dial a non-standard port; scoping the port
-		// too would risk denying a valid config), so only the host is narrowed.
+	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() &&
+		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
+		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
+		// being configured on the Authentication CR. The destination is scoped to
+		// Authentication.spec.ldap.host — a domain match for a hostname or a
+		// /32/128 for a literal IP. Both standard ports stay open (the host may
+		// specify a non-standard port; scoping the port too would risk denying a
+		// valid config), so only the host is narrowed.
 		dest := v3.EntityRule{Ports: networkpolicy.Ports(389, 636)}
-		if host := c.cfg.RBACManagementLDAPHost; host != "" {
+		if host := ldapEgressHost(c.cfg.Authentication.Spec.LDAP.Host); host != "" {
 			if ip := net.ParseIP(host); ip != nil {
 				suffix := "/32"
 				if ip.To4() == nil {
@@ -1455,6 +1439,18 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 			Egress:   egressRules,
 		},
 	}
+}
+
+// ldapEgressHost returns the host (without port) from an
+// Authentication.spec.ldap.host value, used to scope the manager's LDAP egress
+// policy. The value carries an optional port (e.g. "ad.example.com:636"); when
+// no port is present the value is already the host. IPv6 literals are returned
+// unbracketed so the caller can parse them with net.ParseIP.
+func ldapEgressHost(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 }
 
 func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {

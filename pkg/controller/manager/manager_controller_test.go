@@ -1496,39 +1496,3 @@ func assertSANs(secret *corev1.Secret, expectedSAN string) {
 
 	Expect(cert.DNSNames).To(Equal([]string{expectedSAN}))
 }
-
-var _ = Describe("ldapEgressHost", func() {
-	secretWithURL := func(url string) *corev1.Secret {
-		return &corev1.Secret{
-			Data: map[string][]byte{render.RBACManagementLDAPConfigSecretURLKey: []byte(url)},
-		}
-	}
-
-	It("returns \"\" for a nil secret", func() {
-		Expect(ldapEgressHost(nil)).To(Equal(""))
-	})
-
-	DescribeTable("parses the host from the url field",
-		func(secret *corev1.Secret, expected string) {
-			Expect(ldapEgressHost(secret)).To(Equal(expected))
-		},
-		Entry("ldaps host with explicit port", secretWithURL("ldaps://ad.example.com:636"), "ad.example.com"),
-		Entry("ldap host without a port", secretWithURL("ldap://openldap.test.svc"), "openldap.test.svc"),
-		Entry("literal IPv4 host", secretWithURL("ldap://10.20.30.40:389"), "10.20.30.40"),
-		Entry("literal IPv6 host", secretWithURL("ldaps://[2001:db8::1]:636"), "2001:db8::1"),
-		Entry("strips credentials from the url", secretWithURL("ldap://cn=admin:secret@ad.example.com:389"), "ad.example.com"),
-		Entry("keeps a path/base-DN after the host", secretWithURL("ldaps://ad.example.com:636/ou=users,dc=example,dc=com"), "ad.example.com"),
-		Entry("preserves host casing (Domains match is case-insensitive)", secretWithURL("ldaps://AD.Example.COM"), "AD.Example.COM"),
-		Entry("missing url key falls back to empty", &corev1.Secret{Data: map[string][]byte{}}, ""),
-		Entry("empty url falls back to empty", secretWithURL(""), ""),
-		Entry("unparseable url falls back to empty", secretWithURL("://not a url"), ""),
-		// A url without an ldap:// / ldaps:// scheme is not something ui-apis
-		// writes, but url.Parse can't recover the host from "host:port" (it reads
-		// "host" as the scheme) or a bare "host", so both degrade to empty — which
-		// the caller renders as an unscoped (ports-only) egress rule rather than
-		// failing. These pin that fallback so a future parser change is a conscious
-		// one.
-		Entry("scheme-less host:port degrades to empty (host read as scheme)", secretWithURL("ad.example.com:636"), ""),
-		Entry("scheme-less bare host degrades to empty", secretWithURL("ad.example.com"), ""),
-	)
-})

@@ -2620,5 +2620,55 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			}
 			Expect(managedClusterAccessRole.Rules).To(ContainElements(expectedManagedClusterAccessRules))
 		})
+
+		It("should bind the calico-apiserver ClusterRole only to the calico-system service account", func() {
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, _ := component.Objects()
+			crb := rtest.GetResource(resources,
+				render.APIServerName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.RoleRef.Name).To(Equal(render.APIServerName))
+			// The aggregated API server always runs in calico-system, even in multi-tenant mode - its
+			// full-privilege ClusterRole must not be bound to tenant service accounts.
+			Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.APIServerServiceAccountName,
+				Namespace: render.APIServerNamespace,
+			}))
+			// The Linseed-access RBAC is not part of the cluster-scoped API server component; it is
+			// rendered per tenant by render.TenantAPIServerRBAC.
+			Expect(rtest.GetResource(resources,
+				render.APIServerLinseedAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole")).To(BeNil())
+		})
+
+		It("should render per-tenant calico-apiserver Linseed RBAC scoped to a single tenant namespace", func() {
+			const tenantNS = "tenant-a"
+			resources, _ := render.TenantAPIServerRBAC(tenantNS).Objects()
+
+			// The calico-apiserver ServiceAccount is created in the tenant namespace so the identity exists.
+			sa := rtest.GetResource(resources,
+				render.APIServerServiceAccountName, tenantNS, "", "v1", "ServiceAccount").(*corev1.ServiceAccount)
+			Expect(sa.Namespace).To(Equal(tenantNS))
+
+			// A dedicated, Linseed-only ClusterRole, named per tenant so tenants do not collide.
+			roleName := fmt.Sprintf("%s-%s", render.APIServerLinseedAccessClusterRoleName, tenantNS)
+			role := rtest.GetResource(resources,
+				roleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ConsistOf(rbacv1.PolicyRule{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"policyactivity"},
+				Verbs:     []string{"get"},
+			}))
+
+			// A per-tenant ClusterRoleBinding with a single tenant-namespaced subject. Linseed authorizes with a
+			// cluster-scoped SubjectAccessReview, so this must be a ClusterRoleBinding rather than a RoleBinding.
+			crb := rtest.GetResource(resources,
+				roleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.RoleRef.Name).To(Equal(roleName))
+			Expect(crb.Subjects).To(ConsistOf(
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: tenantNS},
+			))
+		})
 	})
 })

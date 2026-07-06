@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
+
 	v1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -188,6 +190,33 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	if opts.MultiTenant {
+		// In multi-tenant mode the apiserver controller has two responsibilities: the cluster-scoped
+		// reconcile (request with an empty namespace) installs the aggregated API server in calico-system,
+		// while a per-tenant reconcile (request scoped to a tenant namespace) creates the calico-apiserver
+		// ServiceAccount in that tenant namespace so it can be authorized against Linseed.
+		//
+		// A Tenant change enqueues both the tenant's own namespace (to create/refresh its ServiceAccount)
+		// and the cluster-scoped request (to refresh the shared ClusterRoleBinding's subject list, which
+		// enumerates all tenant namespaces).
+		tenantHandler := handler.EnqueueRequestsFromMapFunc(func(_ context.Context, obj client.Object) []reconcile.Request {
+			return []reconcile.Request{
+				{NamespacedName: types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}},
+				{NamespacedName: types.NamespacedName{Name: ResourceName}},
+			}
+		})
+		if err = c.WatchObject(&operatorv1.Tenant{}, tenantHandler); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch Tenant resource: %w", err)
+		}
+
+		// Periodically re-reconcile every tenant namespace as a backstop so a tenant's ServiceAccount
+		// self-heals if it is deleted out-of-band. The existing periodic reconcile above only drives the
+		// cluster-scoped (empty-namespace) reconcile.
+		if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, utils.EnqueueAllTenants(mgr.GetClient())); err != nil {
+			return fmt.Errorf("apiserver-controller failed to create per-tenant periodic reconcile watch: %w", err)
+		}
+	}
+
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
@@ -225,6 +254,16 @@ type ReconcileAPIServer struct {
 func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(2).Info("Reconciling APIServer")
+
+	// In multi-tenant mode a request scoped to a tenant namespace is handled by the per-tenant path: the
+	// aggregated API server itself is a cluster-scoped, calico-system component (reconciled by the
+	// empty-namespace request), so all a tenant namespace needs is the calico-apiserver ServiceAccount.
+	// That ServiceAccount is the subject the shared calico-apiserver ClusterRoleBinding grants Linseed
+	// access to, allowing this tenant's managed clusters to reach Linseed. We short-circuit here to avoid
+	// running any of the cluster-scoped API server setup (certificates, deployment, etc.) for tenants.
+	if r.opts.MultiTenant && request.Namespace != "" {
+		return r.reconcileTenant(ctx, request.Namespace, reqLogger)
+	}
 
 	// Check if a datastore migration is in progress. If so, the migration controller
 	// owns the APIService and we should not reconcile to avoid fighting over it.
@@ -476,6 +515,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	// Determine the namespaces whose calico-apiserver service account should be bound to the calico-apiserver
+	// ClusterRole. For zero/single-tenant clusters this is calico-system; for multi-tenant management clusters it is
+	// every tenant namespace, so each tenant's calico-apiserver identity is authorized against Linseed.
+	nsHelper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.APIServerNamespace, "")
+	bindingNamespaces, err := nsHelper.TenantNamespaces(r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading tenant namespaces", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
@@ -493,6 +542,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 		TrustedBundle:                trustedBundle,
 		MultiTenant:                  r.opts.MultiTenant,
+		BindingNamespaces:            bindingNamespaces,
 		KeyValidatorConfig:           keyValidatorConfig,
 		KubernetesVersion:            r.opts.KubernetesVersion,
 		ClusterDomain:                r.opts.ClusterDomain,
@@ -603,6 +653,31 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
+	return reconcile.Result{}, nil
+}
+
+// reconcileTenant handles a reconcile request scoped to a single tenant namespace in multi-tenant mode.
+// The aggregated API server is a cluster-scoped calico-system component; the only thing a tenant
+// namespace needs is the calico-apiserver ServiceAccount, which is the subject the shared
+// calico-apiserver ClusterRoleBinding authorizes against Linseed. We create just that ServiceAccount,
+// owned by the Tenant so it is garbage collected when the tenant namespace is torn down.
+func (r *ReconcileAPIServer) reconcileTenant(ctx context.Context, namespace string, reqLogger logr.Logger) (reconcile.Result, error) {
+	tenant, _, err := utils.GetTenant(ctx, true, r.client, namespace)
+	if errors.IsNotFound(err) {
+		reqLogger.V(1).Info("No Tenant in this namespace, skipping")
+		return reconcile.Result{}, nil
+	} else if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	handler := utils.NewComponentHandler(log, r.client, r.scheme, tenant)
+	component := render.NewCreationPassthrough(render.APIServerServiceAccount(namespace))
+	if err := handler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating tenant API server RBAC", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	return reconcile.Result{}, nil
 }
 

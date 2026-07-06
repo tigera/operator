@@ -314,6 +314,7 @@ $(BINDIR)/kind:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(ISTIO_CHART_FILES)
+	rm -rf $(ENVOY_GATEWAY_CHART)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache

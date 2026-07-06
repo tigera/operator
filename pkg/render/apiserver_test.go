@@ -2620,5 +2620,49 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			}
 			Expect(managedClusterAccessRole.Rules).To(ContainElements(expectedManagedClusterAccessRules))
 		})
+
+		It("should bind the calico-apiserver ClusterRole only to the calico-system service account", func() {
+			cfg.BindingNamespaces = []string{"tenant-a", "tenant-b"}
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, _ := component.Objects()
+			crb := rtest.GetResource(resources,
+				render.APIServerName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.RoleRef.Name).To(Equal(render.APIServerName))
+			// The aggregated API server always runs in calico-system, even in multi-tenant mode - its
+			// full-privilege ClusterRole must not be bound to tenant service accounts.
+			Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.APIServerServiceAccountName,
+				Namespace: render.APIServerNamespace,
+			}))
+		})
+
+		It("should grant each tenant's calico-apiserver service account least-privilege Linseed access", func() {
+			cfg.BindingNamespaces = []string{"tenant-a", "tenant-b"}
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, _ := component.Objects()
+
+			// A dedicated, Linseed-only ClusterRole.
+			role := rtest.GetResource(resources,
+				render.APIServerLinseedAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ConsistOf(rbacv1.PolicyRule{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"policyactivity"},
+				Verbs:     []string{"get"},
+			}))
+
+			// A single ClusterRoleBinding with one subject per tenant namespace.
+			crb := rtest.GetResource(resources,
+				render.APIServerLinseedAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.RoleRef.Name).To(Equal(render.APIServerLinseedAccessClusterRoleName))
+			Expect(crb.Subjects).To(ConsistOf(
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-a"},
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-b"},
+			))
+		})
 	})
 })

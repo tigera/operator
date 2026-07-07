@@ -195,6 +195,18 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	if opts.MultiTenant {
+		// On a multi-tenant management cluster the aggregated API server remains a single cluster-scoped
+		// component in calico-system, but each tenant's calico-apiserver identity must be granted Linseed
+		// access via a ClusterRoleBinding with one subject per tenant namespace. That binding is rendered by
+		// the (cluster-scoped) reconcile over the current set of tenant namespaces, so a Tenant change just
+		// needs to trigger a reconcile; the binding is then re-rendered with the up-to-date namespace set,
+		// which also drops a deleted tenant's subject.
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
@@ -490,6 +502,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
+	// Determine the tenant namespaces whose calico-apiserver ServiceAccount should be granted Linseed access.
+	// For zero/single-tenant clusters this is empty (the calico-system API server is covered by its own
+	// ClusterRoleBinding); for multi-tenant management clusters it is every tenant namespace, so each tenant's
+	// calico-apiserver identity is authorized against Linseed.
+	var bindingNamespaces []string
+	if r.opts.MultiTenant {
+		bindingNamespaces, err = utils.TenantNamespaces(ctx, r.client, nil)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading tenant namespaces", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
@@ -507,6 +532,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 		TrustedBundle:                trustedBundle,
 		MultiTenant:                  r.opts.MultiTenant,
+		BindingNamespaces:            bindingNamespaces,
 		KeyValidatorConfig:           keyValidatorConfig,
 		KubernetesVersion:            r.opts.KubernetesVersion,
 		ClusterDomain:                r.opts.ClusterDomain,

@@ -869,6 +869,45 @@ var _ = Describe("apiserver controller tests", func() {
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 			})
+
+			It("Should grant each tenant's calico-apiserver ServiceAccount Linseed access via one ClusterRoleBinding", func() {
+				Expect(cli.Create(ctx, &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "tenant-a"},
+					Spec:       operatorv1.TenantSpec{ID: "tenant-a-id"},
+				})).NotTo(HaveOccurred())
+				Expect(cli.Create(ctx, &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "tenant-b"},
+					Spec:       operatorv1.TenantSpec{ID: "tenant-b-id"},
+				})).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					migrationWatchReady: &utils.ReadyFlag{},
+					opts: options.ControllerOptions{
+						EnterpriseCRDExists: true,
+						DetectedProvider:    operatorv1.ProviderNone,
+						MultiTenant:         true,
+					},
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// A single Linseed-access ClusterRoleBinding with one calico-apiserver ServiceAccount subject
+				// per tenant namespace.
+				crb := rbacv1.ClusterRoleBinding{
+					TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: render.APIServerLinseedAccessClusterRoleName},
+				}
+				Expect(test.GetResource(cli, &crb)).To(BeNil())
+				Expect(crb.Subjects).To(ConsistOf(
+					rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-a"},
+					rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-b"},
+				))
+			})
 		})
 	})
 

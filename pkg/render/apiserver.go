@@ -140,9 +140,17 @@ type APIServerConfiguration struct {
 	OpenShift                    bool
 	TrustedBundle                certificatemanagement.TrustedBundle
 	MultiTenant                  bool
-	KeyValidatorConfig           authentication.KeyValidatorConfig
-	KubernetesVersion            *common.VersionInfo
-	ClusterDomain                string
+
+	// BindingNamespaces are the tenant namespaces whose calico-apiserver ServiceAccount should be granted
+	// Linseed access on a multi-tenant management cluster. Each managed cluster's calico-apiserver
+	// authenticates to Linseed with a token whose identity is namespace-overridden to its tenant namespace
+	// (system:serviceaccount:<tenant-namespace>:calico-apiserver), so a ClusterRoleBinding with one subject
+	// per tenant namespace is required. Empty on zero/single-tenant clusters.
+	BindingNamespaces []string
+
+	KeyValidatorConfig authentication.KeyValidatorConfig
+	KubernetesVersion  *common.VersionInfo
+	ClusterDomain      string
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
@@ -270,12 +278,25 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 		c.tigeraAPIServerClusterRoleBinding(),
 	}
 
-	if !c.cfg.MultiTenant {
+	if c.cfg.MultiTenant {
+		// On a multi-tenant management cluster, each tenant's calico-apiserver identity needs read access to
+		// Linseed. A single least-privilege ClusterRole is bound to the calico-apiserver ServiceAccount in
+		// every tenant namespace via one ClusterRoleBinding (see linseedAccessClusterRoleBinding).
+		globalEnterpriseObjects = append(globalEnterpriseObjects,
+			c.linseedAccessClusterRole(),
+			c.linseedAccessClusterRoleBinding(),
+		)
+	} else {
 		// These resources are only installed in zero-tenant clusters. Multi-tenant clusters don't use the default
 		// RBAC resources.
 		globalEnterpriseObjects = append(globalEnterpriseObjects,
 			c.tigeraUserClusterRole(),
 			c.tigeraNetworkAdminClusterRole(),
+		)
+		// The Linseed-access RBAC is multi-tenant only; ensure it is cleaned up on zero/single-tenant clusters.
+		objsToDelete = append(objsToDelete,
+			c.linseedAccessClusterRoleBinding(),
+			c.linseedAccessClusterRole(),
 		)
 	}
 
@@ -476,42 +497,17 @@ func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// TenantAPIServerRBAC renders the per-tenant calico-apiserver RBAC installed on a multi-tenant management
-// cluster, and is reconciled per tenant (see the apiserver controller's reconcileTenant). Each tenant's
-// aggregated-API-server identity (system:serviceaccount:<tenant-namespace>:calico-apiserver) must be
-// authorized against Linseed, which authorizes with a cluster-scoped SubjectAccessReview. That requires a
-// ClusterRoleBinding - a namespaced RoleBinding would not satisfy a cluster-scoped review - so the binding and
-// the least-privilege ClusterRole it references are named per tenant to avoid collisions between tenants.
-//
-// The tenant's calico-apiserver ServiceAccount is provisioned as part of tenant setup, so it is not rendered
-// here. Both objects returned are cluster-scoped and therefore cannot carry an owner reference to the
-// (namespaced) Tenant - the component handler skips owner references in that owner/owned combination - so they
-// are NOT garbage-collected automatically when the tenant is removed. They are named per tenant so they do not
-// collide, but tearing them down when a tenant is deleted is not yet handled here.
+// linseedAccessClusterRole is a minimal, least-privilege ClusterRole granting the calico-apiserver identity
+// read access to Linseed policy activity data (for queryserver enrichment). On a multi-tenant management
+// cluster it is bound to each tenant's calico-apiserver ServiceAccount so that tenant's managed clusters can
+// reach Linseed. The full backing-storage/queryserver rules live on the calico-apiserver ClusterRole, which is
+// bound only to the calico-system API server itself.
 //
 // Calico Enterprise, multi-tenant only.
-func TenantAPIServerRBAC(namespace string) Component {
-	return NewCreationPassthrough(
-		tenantLinseedAccessClusterRole(namespace),
-		tenantLinseedAccessClusterRoleBinding(namespace),
-	)
-}
-
-// tenantLinseedAccessName returns the per-tenant name for a tenant's calico-apiserver Linseed-access
-// ClusterRole and ClusterRoleBinding. The tenant namespace is embedded so each tenant owns a distinct pair of
-// cluster-scoped objects that do not collide with other tenants'.
-func tenantLinseedAccessName(namespace string) string {
-	return fmt.Sprintf("%s-%s", APIServerLinseedAccessClusterRoleName, namespace)
-}
-
-// tenantLinseedAccessClusterRole is a minimal ClusterRole granting a tenant's calico-apiserver read access to
-// Linseed policy activity data (for queryserver enrichment). It is deliberately least-privilege - the full
-// backing-storage/queryserver rules live on the calico-apiserver ClusterRole, which is bound only to the
-// calico-system API server itself.
-func tenantLinseedAccessClusterRole(namespace string) *rbacv1.ClusterRole {
+func (c *apiServerComponent) linseedAccessClusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: tenantLinseedAccessName(namespace)},
+		ObjectMeta: metav1.ObjectMeta{Name: APIServerLinseedAccessClusterRoleName},
 		Rules: []rbacv1.PolicyRule{
 			{
 				// Read access to Linseed policy activity data for queryserver enrichment.
@@ -523,11 +519,14 @@ func tenantLinseedAccessClusterRole(namespace string) *rbacv1.ClusterRole {
 	}
 }
 
-// tenantLinseedAccessClusterRoleBinding binds a tenant's Linseed-access ClusterRole to that tenant's
-// calico-apiserver ServiceAccount. Linseed authorizes with a cluster-scoped SubjectAccessReview, so this is a
-// ClusterRoleBinding (with a single tenant-namespaced subject) rather than a namespaced RoleBinding.
-func tenantLinseedAccessClusterRoleBinding(namespace string) *rbacv1.ClusterRoleBinding {
-	return rcomp.ClusterRoleBinding(tenantLinseedAccessName(namespace), tenantLinseedAccessName(namespace), APIServerServiceAccountName, []string{namespace})
+// linseedAccessClusterRoleBinding binds the Linseed-access ClusterRole to the calico-apiserver ServiceAccount
+// in each tenant namespace. Linseed authorizes with a cluster-scoped SubjectAccessReview, so this is a single
+// ClusterRoleBinding with one ServiceAccount subject per tenant namespace - mirroring how compliance,
+// intrusion-detection, and the manager grant their managed-cluster components Linseed access.
+//
+// Calico Enterprise, multi-tenant only.
+func (c *apiServerComponent) linseedAccessClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return rcomp.ClusterRoleBinding(APIServerLinseedAccessClusterRoleName, APIServerLinseedAccessClusterRoleName, APIServerServiceAccountName, c.cfg.BindingNamespaces)
 }
 
 func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {

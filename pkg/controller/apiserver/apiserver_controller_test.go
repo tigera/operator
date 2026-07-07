@@ -870,42 +870,14 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 			})
 
-			It("Should not swallow non-tenant namespaced events in multi-tenant mode", func() {
-				r := ReconcileAPIServer{
-					client:              cli,
-					scheme:              scheme,
-					status:              mockStatus,
-					tierWatchReady:      ready,
-					migrationWatchReady: &utils.ReadyFlag{},
-					opts: options.ControllerOptions{
-						EnterpriseCRDExists: true,
-						DetectedProvider:    operatorv1.ProviderNone,
-						MultiTenant:         true,
-					},
-				}
-
-				// Many of this controller's watches (e.g. secrets in the operator namespace) enqueue requests
-				// carrying a non-empty, non-tenant namespace. These must fall through to the cluster-scoped
-				// reconcile rather than being diverted to (and dropped by) the per-tenant path.
-				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-					Namespace: common.OperatorNamespace(),
-					Name:      "calico-apiserver-certs",
-				}})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				// The cluster-scoped reconcile ran: the API server deployment exists.
-				deployment := appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
-				}
-				Expect(kerror.IsNotFound(test.GetResource(cli, &deployment))).Should(BeFalse())
-			})
-
-			It("Should provision per-tenant Linseed RBAC for a tenant-namespace request", func() {
-				const tenantNS = "tenant-a"
+			It("Should grant each tenant's calico-apiserver ServiceAccount Linseed access via one ClusterRoleBinding", func() {
 				Expect(cli.Create(ctx, &operatorv1.Tenant{
-					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: tenantNS},
+					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "tenant-a"},
 					Spec:       operatorv1.TenantSpec{ID: "tenant-a-id"},
+				})).NotTo(HaveOccurred())
+				Expect(cli.Create(ctx, &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: "tenant-b"},
+					Spec:       operatorv1.TenantSpec{ID: "tenant-b-id"},
 				})).NotTo(HaveOccurred())
 
 				r := ReconcileAPIServer{
@@ -921,25 +893,20 @@ var _ = Describe("apiserver controller tests", func() {
 					},
 				}
 
-				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
-					Namespace: tenantNS,
-					Name:      "default",
-				}})
+				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				// The per-tenant Linseed-access ClusterRole was created, named for the tenant namespace.
-				role := rbacv1.ClusterRole{
-					TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%s", render.APIServerLinseedAccessClusterRoleName, tenantNS)},
+				// A single Linseed-access ClusterRoleBinding with one calico-apiserver ServiceAccount subject
+				// per tenant namespace.
+				crb := rbacv1.ClusterRoleBinding{
+					TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: render.APIServerLinseedAccessClusterRoleName},
 				}
-				Expect(test.GetResource(cli, &role)).To(BeNil())
-
-				// The per-tenant path short-circuits: it must not install the cluster-scoped API server.
-				deployment := appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
-				}
-				Expect(kerror.IsNotFound(test.GetResource(cli, &deployment))).Should(BeTrue())
+				Expect(test.GetResource(cli, &crb)).To(BeNil())
+				Expect(crb.Subjects).To(ConsistOf(
+					rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-a"},
+					rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-b"},
+				))
 			})
 		})
 	})

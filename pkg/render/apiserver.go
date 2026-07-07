@@ -1452,6 +1452,8 @@ func (c *apiServerComponent) tigeraAPIServerClusterRole() *rbacv1.ClusterRole {
 				"globalreporttypes",
 				"globalthreatfeeds",
 				"globalthreatfeeds/status",
+				"hostqospolicies",
+				"hostqospolicies/status",
 				"licensekeys",
 				"managedclusters",
 				"managedclusters/status",

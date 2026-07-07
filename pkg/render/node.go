@@ -476,7 +476,6 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"globalnetworkpolicies",
 					"globalnetworksets",
 					"hostendpoints",
-					"hostqospolicies",
 					"ipamblocks",
 					"ippools",
 					"ipreservations",
@@ -576,6 +575,7 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"bfdconfigurations",
 					"egressgatewaypolicies",
 					"externalnetworks",
+					"hostqospolicies",
 					"licensekeys",
 					"networks",
 					"packetcaptures",
@@ -591,6 +591,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 					"packetcaptures/status",
 				},
 				Verbs: []string{"update"},
+			},
+			{
+				// Felix writes its own per-node entry in HostQoSPolicy status.nodes[]
+				// via Server-Side Apply (FieldManager: felix-<node-name>). SSA is an
+				// HTTP PATCH, so patch is required rather than update.
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{"hostqospolicies/status"},
+				Verbs:     []string{"patch"},
 			},
 		}
 		role.Rules = append(role.Rules, extraRules...)

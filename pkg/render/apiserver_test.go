@@ -407,6 +407,28 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
 	})
 
+	It("should grant the calico-apiserver access to hostqospolicies backing storage", func() {
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		clusterRole := rtest.GetResource(resources, "calico-apiserver", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+
+		var backingRule *rbacv1.PolicyRule
+		for i := range clusterRole.Rules {
+			r := &clusterRole.Rules[i]
+			if len(r.APIGroups) == 2 && r.APIGroups[0] == "projectcalico.org" && r.APIGroups[1] == "crd.projectcalico.org" {
+				for _, res := range r.Resources {
+					if res == "alertexceptions" {
+						backingRule = r
+					}
+				}
+			}
+		}
+		Expect(backingRule).NotTo(BeNil(), "expected the Enterprise backing-storage rule")
+		Expect(backingRule.Resources).To(ContainElements("hostqospolicies", "hostqospolicies/status"))
+	})
+
 	It("should render resources without an aggregation server", func() {
 		cfg.RequiresAggregationServer = false
 

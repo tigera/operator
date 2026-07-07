@@ -741,6 +741,44 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, false, true)
 			})
 
+			It("should grant calico-node HostQoSPolicy RBAC only for Enterprise", func() {
+				// Enterprise: read access plus patch on the status subresource, which
+				// Felix writes via Server-Side Apply.
+				defaultInstance.Variant = operatorv1.CalicoEnterprise
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+				role := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+
+				Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+					Resources: []string{"hostqospolicies/status"},
+					Verbs:     []string{"patch"},
+				}))
+				var readsHostQoS bool
+				for _, rule := range role.Rules {
+					for _, res := range rule.Resources {
+						if res == "hostqospolicies" {
+							readsHostQoS = true
+						}
+					}
+				}
+				Expect(readsHostQoS).To(BeTrue(), "Enterprise calico-node should read hostqospolicies")
+
+				// Calico (OSS): the CRD does not exist, so neither grant is rendered.
+				defaultInstance.Variant = operatorv1.Calico
+				component = render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ = component.Objects()
+				role = rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				for _, rule := range role.Rules {
+					for _, res := range rule.Resources {
+						Expect(res).NotTo(Equal("hostqospolicies"))
+						Expect(res).NotTo(Equal("hostqospolicies/status"))
+					}
+				}
+			})
+
 			It("should render felix service metric with FelixPrometheusMetricPort when FelixPrometheusMetricsEnabled is true", func() {
 				defaultInstance.Variant = operatorv1.CalicoEnterprise
 				cfg.NodeReporterMetricsPort = 9081

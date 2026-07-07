@@ -116,6 +116,14 @@ type KubeControllersConfiguration struct {
 	WASMCACert                   *corev1.ConfigMap
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
+	// Calico Cloud additions. TenantID is only set by the cloud-gated controller path; when empty
+	// (regular Calico/Calico Enterprise) no cloud env is emitted.
+	TenantID string
+
+	// Cloud indicates kube-controllers is being rendered for a Calico Cloud install. When false the
+	// cloud-specific RBAC below is not granted and enterprise RBAC is unchanged.
+	Cloud bool
+
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 
 	// Namespace to be installed into.
@@ -232,6 +240,14 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 
 	if cfg.Installation.Variant.IsEnterprise() {
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, kubeControllersRoleEnterpriseCommonRules(cfg)...)
+
+		// Calico Cloud's es-kube-controllers provisions RBAC for managed-cluster access, so it needs
+		// to create/update cluster roles and bindings. Enterprise only needs read access.
+		clusterRoleVerbs := []string{"watch", "list", "get"}
+		if cfg.Cloud {
+			clusterRoleVerbs = append(clusterRoleVerbs, "create", "update")
+		}
+
 		kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules,
 			rbacv1.PolicyRule{
 				APIGroups: []string{"elasticsearch.k8s.elastic.co"},
@@ -241,7 +257,7 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 			rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings"},
-				Verbs:     []string{"watch", "list", "get"},
+				Verbs:     clusterRoleVerbs,
 			},
 		)
 
@@ -949,6 +965,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.enabledControllers, ",")},
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant() && c.kubeControllerConfigName == "elasticsearch")},
+	}
+
+	if c.cfg.TenantID != "" {
+		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.TenantID})
 	}
 
 	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)

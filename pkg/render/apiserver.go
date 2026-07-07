@@ -476,20 +476,11 @@ func (c *apiServerComponent) authReaderRoleBinding() client.Object {
 //
 // Both Calico and Calico Enterprise, but in different namespaces.
 func (c *apiServerComponent) apiServerServiceAccount() *corev1.ServiceAccount {
-	return APIServerServiceAccount(APIServerNamespace)
-}
-
-// APIServerServiceAccount returns the calico-apiserver ServiceAccount for the given namespace. In
-// zero/single-tenant clusters this is calico-system. In multi-tenant management clusters the apiserver
-// controller also creates this ServiceAccount in every tenant namespace (see TenantAPIServerRBAC), so that
-// each tenant's calico-apiserver identity (system:serviceaccount:<tenant-namespace>:calico-apiserver) exists
-// and can be authorized against Linseed.
-func APIServerServiceAccount(namespace string) *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      APIServerServiceAccountName,
-			Namespace: namespace,
+			Namespace: APIServerNamespace,
 		},
 	}
 }
@@ -499,14 +490,17 @@ func APIServerServiceAccount(namespace string) *corev1.ServiceAccount {
 // aggregated-API-server identity (system:serviceaccount:<tenant-namespace>:calico-apiserver) must be
 // authorized against Linseed, which authorizes with a cluster-scoped SubjectAccessReview. That requires a
 // ClusterRoleBinding - a namespaced RoleBinding would not satisfy a cluster-scoped review - so the binding and
-// the least-privilege ClusterRole it references are named per tenant to avoid collisions between tenants. All
-// three objects are owned by the Tenant (via the reconcile handler) so they are garbage-collected when the
-// tenant is torn down.
+// the least-privilege ClusterRole it references are named per tenant to avoid collisions between tenants.
+//
+// The tenant's calico-apiserver ServiceAccount is provisioned as part of tenant setup, so it is not rendered
+// here. Both objects returned are cluster-scoped and therefore cannot carry an owner reference to the
+// (namespaced) Tenant - the component handler skips owner references in that owner/owned combination - so they
+// are NOT garbage-collected automatically when the tenant is removed. They are named per tenant so they do not
+// collide, but tearing them down when a tenant is deleted is not yet handled here.
 //
 // Calico Enterprise, multi-tenant only.
 func TenantAPIServerRBAC(namespace string) Component {
 	return NewCreationPassthrough(
-		APIServerServiceAccount(namespace),
 		tenantLinseedAccessClusterRole(namespace),
 		tenantLinseedAccessClusterRoleBinding(namespace),
 	)

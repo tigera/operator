@@ -2603,10 +2603,9 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			const tenantNS = "tenant-a"
 			resources, _ := render.TenantAPIServerRBAC(tenantNS).Objects()
 
-			// The calico-apiserver ServiceAccount is created in the tenant namespace so the identity exists.
-			sa := rtest.GetResource(resources,
-				render.APIServerServiceAccountName, tenantNS, "", "v1", "ServiceAccount").(*corev1.ServiceAccount)
-			Expect(sa.Namespace).To(Equal(tenantNS))
+			// The tenant's calico-apiserver ServiceAccount is provisioned by tenant setup, not here.
+			Expect(rtest.GetResource(resources,
+				render.APIServerServiceAccountName, tenantNS, "", "v1", "ServiceAccount")).To(BeNil())
 
 			// A dedicated, Linseed-only ClusterRole, named per tenant so tenants do not collide.
 			roleName := fmt.Sprintf("%s-%s", render.APIServerLinseedAccessClusterRoleName, tenantNS)

@@ -492,10 +492,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// For zero/single-tenant clusters this is empty (the calico-system API server is covered by its own
 	// ClusterRoleBinding); for multi-tenant management clusters it is every tenant namespace, so each tenant's
 	// calico-apiserver identity is authorized against Linseed.
-	nsHelper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.APIServerNamespace, "")
 	var bindingNamespaces []string
 	if r.opts.MultiTenant {
-		bindingNamespaces, err = nsHelper.TenantNamespaces(r.client)
+		bindingNamespaces, err = utils.TenantNamespaces(ctx, r.client, nil)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading tenant namespaces", err, reqLogger)
 			return reconcile.Result{}, err

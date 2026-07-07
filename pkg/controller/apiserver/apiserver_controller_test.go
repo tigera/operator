@@ -869,6 +869,78 @@ var _ = Describe("apiserver controller tests", func() {
 				err = test.GetResource(cli, &clusterConnectionInAppNs)
 				Expect(kerror.IsNotFound(err)).Should(BeTrue())
 			})
+
+			It("Should not swallow non-tenant namespaced events in multi-tenant mode", func() {
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					migrationWatchReady: &utils.ReadyFlag{},
+					opts: options.ControllerOptions{
+						EnterpriseCRDExists: true,
+						DetectedProvider:    operatorv1.ProviderNone,
+						MultiTenant:         true,
+					},
+				}
+
+				// Many of this controller's watches (e.g. secrets in the operator namespace) enqueue requests
+				// carrying a non-empty, non-tenant namespace. These must fall through to the cluster-scoped
+				// reconcile rather than being diverted to (and dropped by) the per-tenant path.
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: common.OperatorNamespace(),
+					Name:      "calico-apiserver-certs",
+				}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The cluster-scoped reconcile ran: the API server deployment exists.
+				deployment := appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+				}
+				Expect(kerror.IsNotFound(test.GetResource(cli, &deployment))).Should(BeFalse())
+			})
+
+			It("Should provision per-tenant Linseed RBAC for a tenant-namespace request", func() {
+				const tenantNS = "tenant-a"
+				Expect(cli.Create(ctx, &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: tenantNS},
+					Spec:       operatorv1.TenantSpec{ID: "tenant-a-id"},
+				})).NotTo(HaveOccurred())
+
+				r := ReconcileAPIServer{
+					client:              cli,
+					scheme:              scheme,
+					status:              mockStatus,
+					tierWatchReady:      ready,
+					migrationWatchReady: &utils.ReadyFlag{},
+					opts: options.ControllerOptions{
+						EnterpriseCRDExists: true,
+						DetectedProvider:    operatorv1.ProviderNone,
+						MultiTenant:         true,
+					},
+				}
+
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
+					Namespace: tenantNS,
+					Name:      "default",
+				}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The per-tenant Linseed-access ClusterRole was created, named for the tenant namespace.
+				role := rbacv1.ClusterRole{
+					TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("%s-%s", render.APIServerLinseedAccessClusterRoleName, tenantNS)},
+				}
+				Expect(test.GetResource(cli, &role)).To(BeNil())
+
+				// The per-tenant path short-circuits: it must not install the cluster-scoped API server.
+				deployment := appsv1.Deployment{
+					TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+				}
+				Expect(kerror.IsNotFound(test.GetResource(cli, &deployment))).Should(BeTrue())
+			})
 		})
 	})
 

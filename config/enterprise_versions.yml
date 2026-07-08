@@ -2,7 +2,7 @@
 title: master
 components:
   libcalico-go:
-    version: wt-l2-prod-cni
+    version: master
   manager:
     image: manager
     version: master

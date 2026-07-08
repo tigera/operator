@@ -254,6 +254,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 		cfg.WAFWebhookCABundle = []byte("fake-ca-bundle")
 		// core_controller provisions a dedicated WAF wasm pull secret (a renamed
 		// copy of the install pull secret) so the reconciler can replicate it into
@@ -450,6 +451,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -521,6 +523,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -651,6 +654,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 		cfg.WAFWebhookServerTLS = wafTLS
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -684,6 +688,41 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 	})
 
+	It("should keep the WAF controller wired for teardown but render no active WAF surface when WAF is disabled (EV-6751)", func() {
+		instance.Variant = operatorv1.CalicoEnterprise
+		// GatewayAPI present but WAF turned off: the applicationlayer controller
+		// must stay wired (with its EnvoyExtensionPolicy delete RBAC) so it can
+		// tear down the EEPs it generated, and be told it is disabled via the env.
+		cfg.GatewayAPIPresent = true
+		cfg.WAFGatewayExtensionEnabled = false
+
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		c := dp.Spec.Template.Spec.Containers[0]
+
+		// Controller stays wired.
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{
+			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
+		}))
+		// Told it is disabled → the reconciler de-programs rather than attaches.
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WAF_GATEWAY_EXTENSION_ENABLED", Value: "false"}))
+		// No active WAF surface: no WASM image env, no webhook cert dir.
+		for _, e := range c.Env {
+			Expect(e.Name).NotTo(Equal("WASM_IMAGE"))
+			Expect(e.Name).NotTo(Equal("WAF_WEBHOOK_CERT_DIR"))
+		}
+		// But it keeps the EnvoyExtensionPolicy delete RBAC to run the teardown.
+		clusterRole := rtest.GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"gateway.envoyproxy.io"},
+			Resources: []string{"envoyextensionpolicies"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		}))
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
 		expectedResources := []struct {
 			name    string
@@ -710,6 +749,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

@@ -1381,7 +1381,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// spec.extensions.waf.state != Enabled, the WAF surface is not rendered.
 	// See design tigera/designs#25 (PMREQ-384) §Gating.
 	wafGatewayExtensionEnabled := false
+	// gatewayAPIPresent means the GatewayAPI CR exists (regardless of waf.state),
+	// so the operator manages the Gateway API + Envoy Gateway CRDs the WAF
+	// reconcilers watch. It keeps the applicationlayer controller wired (with
+	// EnvoyExtensionPolicy delete RBAC) even while WAF is disabled, so the
+	// controller can tear down the EEPs it generated instead of being removed in
+	// the same reconcile that disables WAF (EV-6751).
+	gatewayAPIPresent := false
 	if gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client); err == nil {
+		gatewayAPIPresent = true
 		wafGatewayExtensionEnabled = gatewayAPI.Spec.IsWAFGatewayExtensionEnabled()
 	} else if !apierrors.IsNotFound(err) {
 		// Mirrors the GatewayAPI controller's handling: a read error or a
@@ -1698,6 +1706,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
 		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
+		GatewayAPIPresent:           gatewayAPIPresent,
 		WAFWebhookServerTLS:         wafWebhookTLS,
 		WASMPullSecret:              wasmPullSecret,
 		WASMCACert:                  wasmCACert,

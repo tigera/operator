@@ -97,6 +97,7 @@ var _ = Describe("OTelCollector controller tests", func() {
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("SetDegraded", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.AnythingOfType("string")).Return().Maybe()
 
 		r = &Reconciler{
 			cli:    cli,

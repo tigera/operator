@@ -188,6 +188,15 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			i++
 		}
 
+		// The tier controller patches tiers to add and remove its finalizer, so
+		// the role must grant patch in addition to update.
+		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"tiers"},
+			Verbs:     []string{"create", "update", "patch", "get", "list", "watch"},
+		}))
+
 		// The Deployment should have the correct configuration.
 		ds := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
@@ -255,6 +264,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 		cfg.WAFWebhookCABundle = []byte("fake-ca-bundle")
 		// core_controller provisions a dedicated WAF wasm pull secret (a renamed
 		// copy of the install pull secret) so the reconciler can replicate it into
@@ -428,6 +438,47 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
+	Context("RBAC management UI gate", func() {
+		BeforeEach(func() {
+			instance.Variant = operatorv1.CalicoEnterprise
+		})
+
+		It("does not enable rbacsync when RBACManagementEnabled is false", func() {
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
+			}))
+
+			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
+		})
+
+		It("enables rbacsync and adds the controller's RBAC when RBACManagementEnabled is true", func() {
+			cfg.RBACManagementEnabled = true
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,rbacsync",
+			}))
+
+			nsRole := rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{"tigera-idp-groups"},
+				Verbs:         []string{"get", "list", "watch"},
+			}), "expected read-only access to tigera-idp-groups in calico-system")
+		})
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration (standalone) using CalicoEnterprise when logstorage and secrets exist", func() {
 		expectedResources := []struct {
 			name    string
@@ -451,6 +502,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -522,6 +574,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -652,6 +705,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 		cfg.WAFWebhookServerTLS = wafTLS
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -685,6 +739,41 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 	})
 
+	It("should keep the WAF controller wired for teardown but render no active WAF surface when WAF is disabled (EV-6751)", func() {
+		instance.Variant = operatorv1.CalicoEnterprise
+		// GatewayAPI present but WAF turned off: the applicationlayer controller
+		// must stay wired (with its EnvoyExtensionPolicy delete RBAC) so it can
+		// tear down the EEPs it generated, and be told it is disabled via the env.
+		cfg.GatewayAPIPresent = true
+		cfg.WAFGatewayExtensionEnabled = false
+
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		c := dp.Spec.Template.Spec.Containers[0]
+
+		// Controller stays wired.
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{
+			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
+		}))
+		// Told it is disabled → the reconciler de-programs rather than attaches.
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WAF_GATEWAY_EXTENSION_ENABLED", Value: "false"}))
+		// No active WAF surface: no WASM image env, no webhook cert dir.
+		for _, e := range c.Env {
+			Expect(e.Name).NotTo(Equal("WASM_IMAGE"))
+			Expect(e.Name).NotTo(Equal("WAF_WEBHOOK_CERT_DIR"))
+		}
+		// But it keeps the EnvoyExtensionPolicy delete RBAC to run the teardown.
+		clusterRole := rtest.GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"gateway.envoyproxy.io"},
+			Resources: []string{"envoyextensionpolicies"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		}))
+	})
+
 	It("should render all es-calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
 		expectedResources := []struct {
 			name    string
@@ -711,6 +800,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cfg.MetricsPort = 9094
 		// Opt in to the WAF Gateway API add-on so the WAF env vars + RBAC are rendered.
 		cfg.WAFGatewayExtensionEnabled = true
+		cfg.GatewayAPIPresent = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -985,8 +1075,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 			Expect(d.Labels).To(HaveLen(1))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
-			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations).To(HaveLen(2))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+			// The render package records the applied resource override in an annotation.
+			Expect(d.Annotations["operator.tigera.io/custom-overrides"]).To(Equal("resources"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 

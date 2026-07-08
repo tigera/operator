@@ -75,6 +75,8 @@ var _ = Describe("Istio controller tests", func() {
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("AddDaemonsets", mock.Anything).Maybe().Return()
 		mockStatus.On("AddDeployments", mock.Anything).Maybe().Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Maybe().Return()

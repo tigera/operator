@@ -384,6 +384,29 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
+	It("should gate the RBAC management UI rule on RBACManagementEnabled", func() {
+		// Disabled (default): tigera-network-admin must not carry the
+		// escalation-capable RBAC management rule.
+		component, err := render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		for _, rule := range rbacManagementNetworkAdminRules {
+			Expect(clusterRole.Rules).NotTo(ContainElement(rule))
+		}
+
+		// Enabled: the rules are appended.
+		cfg.RBACManagementEnabled = true
+		component, err = render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ = component.Objects()
+		clusterRole = rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		for _, rule := range rbacManagementNetworkAdminRules {
+			Expect(clusterRole.Rules).To(ContainElement(rule))
+		}
+		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
+	})
+
 	It("should render resources without an aggregation server", func() {
 		cfg.RequiresAggregationServer = false
 
@@ -1334,8 +1357,10 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(d.Labels).To(HaveLen(2))
 			Expect(d.Labels["apiserver"]).To(Equal("true"))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
-			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations).To(HaveLen(2))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+			// The render package records the applied resource override in an annotation.
+			Expect(d.Annotations["operator.tigera.io/custom-overrides"]).To(Equal("resources"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
@@ -1914,6 +1939,22 @@ var (
 			Verbs:         []string{"patch"},
 		},
 	}
+
+	// rbacManagementNetworkAdminRules are the extra tigera-network-admin rules
+	// added when rbac.ui is Enabled. See tigeraNetworkAdminClusterRole for the
+	// rationale behind the verb set.
+	rbacManagementNetworkAdminRules = []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "roles"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+		},
+	}
 )
 
 var _ = Describe("API server rendering tests (Calico)", func() {
@@ -2402,8 +2443,10 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 			Expect(d.Labels).To(HaveLen(2))
 			Expect(d.Labels["apiserver"]).To(Equal("true"))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
-			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations).To(HaveLen(2))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+			// The render package records the applied resource override in an annotation.
+			Expect(d.Annotations["operator.tigera.io/custom-overrides"]).To(Equal("resources"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 
@@ -2576,6 +2619,50 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 				},
 			}
 			Expect(managedClusterAccessRole.Rules).To(ContainElements(expectedManagedClusterAccessRules))
+		})
+
+		It("should bind the calico-apiserver ClusterRole only to the calico-system service account", func() {
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, _ := component.Objects()
+			crb := rtest.GetResource(resources,
+				render.APIServerName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.RoleRef.Name).To(Equal(render.APIServerName))
+			// The aggregated API server always runs in calico-system, even in multi-tenant mode - its
+			// full-privilege ClusterRole must not be bound to tenant service accounts.
+			Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      render.APIServerServiceAccountName,
+				Namespace: render.APIServerNamespace,
+			}))
+		})
+
+		It("should grant each tenant's calico-apiserver service account least-privilege Linseed access", func() {
+			cfg.BindingNamespaces = []string{"tenant-a", "tenant-b"}
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+
+			resources, _ := component.Objects()
+
+			// A dedicated, Linseed-only ClusterRole.
+			role := rtest.GetResource(resources,
+				render.APIServerLinseedAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(role.Rules).To(ConsistOf(rbacv1.PolicyRule{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"policyactivity"},
+				Verbs:     []string{"get"},
+			}))
+
+			// A single ClusterRoleBinding with one calico-apiserver ServiceAccount subject per tenant namespace.
+			// Linseed authorizes with a cluster-scoped SubjectAccessReview, so this must be a ClusterRoleBinding.
+			crb := rtest.GetResource(resources,
+				render.APIServerLinseedAccessClusterRoleName, "", rbacv1.GroupName, "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+			Expect(crb.RoleRef.Name).To(Equal(render.APIServerLinseedAccessClusterRoleName))
+			Expect(crb.Subjects).To(ConsistOf(
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-a"},
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-b"},
+			))
 		})
 	})
 })

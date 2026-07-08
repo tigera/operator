@@ -271,8 +271,10 @@ var _ = Describe("CSI rendering tests", func() {
 
 			Expect(ds.Labels).To(HaveLen(1))
 			Expect(ds.Labels["top-level"]).To(Equal("label1"))
-			Expect(ds.Annotations).To(HaveLen(1))
+			Expect(ds.Annotations).To(HaveLen(2))
 			Expect(ds.Annotations["top-level"]).To(Equal("annot1"))
+			// The render package records the applied resource override in an annotation.
+			Expect(ds.Annotations["operator.tigera.io/custom-overrides"]).To(Equal("resources"))
 			// At runtime, the operator will also add some standard labels to the
 			// daemonset such as "k8s-app=csi-node-driver". But the csi-node-driver daemonset object
 			// produced by the render will have 1 label (name) so we expect one plus the one

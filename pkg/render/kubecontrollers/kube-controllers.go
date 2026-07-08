@@ -128,14 +128,25 @@ type KubeControllersConfiguration struct {
 	// If this is nil, then we should run in zero-tenant mode.
 	Tenant *operatorv1.Tenant
 
-	// WAFGatewayExtensionEnabled gates the WAF v3 (Gateway API add-on) surface
-	// on calico-kube-controllers: the applicationlayer controller enablement,
-	// the WAF / Gateway-API / EnvoyExtensionPolicy / event / secret-replication
-	// RBAC, the WASM_IMAGE / WASM_PULL_SECRET / WASM_CA_CERT env vars, and the
-	// gateway envoy-proxy wasm image resolution.  Sourced from
+	// WAFGatewayExtensionEnabled gates the ACTIVE WAF v3 (Gateway API add-on)
+	// surface on calico-kube-controllers: the WASM_IMAGE / WASM_PULL_SECRET /
+	// WASM_CA_CERT env vars, the in-process admission webhook, and the gateway
+	// envoy-proxy wasm image resolution. Sourced from
 	// `GatewayAPI.spec.extensions.waf.state == Enabled` (default off).
 	// See design `tigera/designs#25` (PMREQ-384).
 	WAFGatewayExtensionEnabled bool
+
+	// GatewayAPIPresent is true when the GatewayAPI CR exists (regardless of
+	// waf.state), so the operator manages the Gateway API + Envoy Gateway CRDs the
+	// WAF reconcilers watch. It gates the applicationlayer controller enablement,
+	// its WAF / Gateway-API / EnvoyExtensionPolicy / event / secret RBAC, and the
+	// WAF_GATEWAY_EXTENSION_ENABLED signal env — a superset of
+	// WAFGatewayExtensionEnabled. The WAF controller stays wired (and keeps its
+	// envoyextensionpolicies delete RBAC) while WAF is disabled precisely so it can
+	// tear down the EnvoyExtensionPolicies it generated, instead of being removed
+	// in the same reconcile that disables WAF and never getting the chance
+	// (EV-6751). It de-programs on WAF_GATEWAY_EXTENSION_ENABLED=false.
+	GatewayAPIPresent bool
 
 	// WAFWebhookServerTLS is the serving certificate for the in-process WAF
 	// SecLang validating admission webhook hosted by calico-kube-controllers.
@@ -201,7 +212,11 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 			},
 		)
 		enabledControllers = append(enabledControllers, "service", "federatedservices", "usage")
-		if cfg.WAFGatewayExtensionEnabled {
+		// Wire the applicationlayer WAF controller whenever Gateway API is present,
+		// not only when WAF is enabled, so it stays running (and can tear down its
+		// generated EnvoyExtensionPolicies) when WAF is disabled. It de-programs vs
+		// programs based on WAF_GATEWAY_EXTENSION_ENABLED (EV-6751).
+		if cfg.GatewayAPIPresent {
 			enabledControllers = append(enabledControllers, "applicationlayer")
 		}
 
@@ -574,9 +589,12 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 		},
 	}
 
-	if cfg.WAFGatewayExtensionEnabled {
-		// WAF v3 (Gateway API add-on) RBAC. Gated by
-		// GatewayAPI.spec.extensions.waf.state == Enabled.
+	if cfg.GatewayAPIPresent {
+		// WAF v3 (Gateway API add-on) RBAC. Gated by GatewayAPIPresent, not
+		// waf.state==Enabled, so the applicationlayer controller keeps the RBAC it
+		// needs to watch targets and DELETE the EnvoyExtensionPolicies it generated
+		// while WAF is disabled (EV-6751). The rule set is identical enabled vs
+		// disabled, so toggling waf.state causes no ClusterRole churn.
 		rules = append(rules,
 			// Application-layer (gateway-addons) reconcilers reconcile WAF resources
 			// against Gateway API targetRefs and emit events on the policy objects.
@@ -979,11 +997,20 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 			env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 		}
 
-		// Application-layer (gateway-addons / WAF v3) env vars, gated by
+		// The WAF reconcilers are wired whenever Gateway API is present (see the
+		// applicationlayer entry in enabledControllers), so they can tear down the
+		// EnvoyExtensionPolicies they generated when WAF is disabled.
+		// WAF_GATEWAY_EXTENSION_ENABLED tells them whether to program (enabled) or
+		// de-program (disabled) — EV-6751. Absent ⇒ the reconciler defaults to
+		// enabled, so an older operator that predates this var is unaffected.
+		if c.cfg.GatewayAPIPresent {
+			env = append(env, corev1.EnvVar{Name: "WAF_GATEWAY_EXTENSION_ENABLED", Value: strconv.FormatBool(c.cfg.WAFGatewayExtensionEnabled)})
+		}
+
+		// Application-layer (gateway-addons / WAF v3) WASM env vars, gated by
 		// GatewayAPI.spec.extensions.waf.state == Enabled. When the gate is
 		// off (default), none of the WASM_* env vars are rendered and the
-		// kube-controllers binary skips the WAF reconcilers entirely (see the
-		// applicationlayer entry in enabledControllers).
+		// WAF reconcilers de-program rather than attach a filter.
 		if c.cfg.WAFGatewayExtensionEnabled {
 			// Application-layer (gateway-addons) reconcilers consume the Coraza WAF
 			// wasm OCI reference from this env var to program WAF policy attachments.

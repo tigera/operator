@@ -94,7 +94,11 @@ spec:
                       type: string
                   type: object
                 plugins:
-                  description: Plugins references WAFPlugins in this namespace
+                  description: |-
+                    Plugins references WAFPlugins in this namespace. Cross-scope references
+                    (kind: GlobalWAFPlugin) are not yet resolved by the reconciler, so the
+                    CEL rule rejects them at admission as a backstop to the validating
+                    webhook — see EV-6753 and the PluginRef doc above.
                   items:
                     description: |-
                       PluginRef references a plugin by kind + name. Kind makes the
@@ -128,6 +132,11 @@ spec:
                     type: object
                   maxItems: 64
                   type: array
+                  x-kubernetes-validations:
+                    - message:
+                        "cross-scope plugin references are not yet supported: a
+                        namespaced WAFPolicy cannot reference a GlobalWAFPlugin"
+                      rule: self.all(p, !has(p.kind) || p.kind != 'GlobalWAFPlugin')
                 targetRefs:
                   description:
                     TargetRefs specifies Gateway API references (Gateway,

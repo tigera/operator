@@ -51,7 +51,9 @@ const (
 	WhiskerContainerName        = "whisker"
 	WhiskerBackendContainerName = "whisker-backend"
 
+	WhiskerKeyPairSecret        = "whisker-key-pair"
 	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
+	WhiskerServicePort          = 8443
 	GoldmaneDeploymentName      = "goldmane"
 	GoldmaneServicePort         = 7443
 	GoldmaneNamespace           = common.CalicoNamespace
@@ -82,6 +84,7 @@ type Configuration struct {
 	OpenShift             bool
 	Installation          *operatorv1.InstallationSpec
 	TrustedCertBundle     certificatemanagement.TrustedBundleRO
+	WhiskerKeyPair        certificatemanagement.KeyPairInterface
 	WhiskerBackendKeyPair certificatemanagement.KeyPairInterface
 	Whisker               *operatorv1.Whisker
 	ClusterID             string
@@ -173,6 +176,7 @@ func (c *Component) whiskerContainer() corev1.Container {
 				MountPath: configMountPath,
 				ReadOnly:  true,
 			},
+			c.cfg.WhiskerKeyPair.VolumeMount(c.SupportedOSType()),
 		},
 	}
 }
@@ -184,7 +188,7 @@ func (c *Component) whiskerService() *corev1.Service {
 			Namespace: WhiskerNamespace,
 		},
 		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{{Port: 8081}},
+			Ports: []corev1.ServicePort{{Port: WhiskerServicePort}},
 			Selector: map[string]string{
 				"k8s-app": WhiskerDeploymentName,
 			},
@@ -195,7 +199,7 @@ func (c *Component) whiskerService() *corev1.Service {
 func (c *Component) whiskerBackendContainer() corev1.Container {
 	return corev1.Container{
 		Name:    WhiskerBackendContainerName,
-		Image:   c.calicoImage,
+		Image:   "gcr.io/tigera-dev/cnx/tigera/calico:vara-whisker-https",
 		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
@@ -222,6 +226,9 @@ func (c *Component) deployment() *appsv1.Deployment {
 	volumes := []corev1.Volume{
 		// Add the trusted cert bundle volume to the pod.
 		c.cfg.TrustedCertBundle.Volume(),
+
+		// Add the whisker TLS key pair volume (used by nginx for HTTPS).
+		c.cfg.WhiskerKeyPair.Volume(),
 
 		// Add the whisker backend key pair volume to the pod.
 		c.cfg.WhiskerBackendKeyPair.Volume(),
@@ -266,6 +273,25 @@ func (c *Component) deployment() *appsv1.Deployment {
 }
 
 func (c *Component) networkPolicy() *v3.NetworkPolicy {
+	ingressRules := []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(WhiskerServicePort),
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{Nets: []string{"::/0"}},
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(WhiskerServicePort),
+			},
+		},
+	}
+
 	egressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,
@@ -286,6 +312,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			Tier:     networkpolicy.CalicoTierName,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
+			Ingress:  ingressRules,
 			Egress:   egressRules,
 		},
 	}

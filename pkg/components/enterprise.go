@@ -111,7 +111,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.4.0",
 		variant: enterpriseVariant,
 	}
 

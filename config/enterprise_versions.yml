@@ -2,7 +2,7 @@
 title: v3.22.6
 components:
   libcalico-go:
-    version: v3.22.6
+    version: release-calient-v3.22
   manager:
     image: tigera/manager
     version: v3.22.6

@@ -310,6 +310,21 @@ spec:
                         - Disabled
                       type: string
                   type: object
+                wafUI:
+                  description: |-
+                    WAFUI configures the WAF management UI feature. This controls visibility of
+                    the WAF management UI only; it does not enable WAF enforcement on traffic
+                    (that is configured separately via GatewayAPI.spec.extensions.waf).
+                  properties:
+                    state:
+                      description:
+                        State turns the WAF management UI on or off. Defaults
+                        to Disabled.
+                      enum:
+                        - Enabled
+                        - Disabled
+                      type: string
+                  type: object
               type: object
             status:
               description: Most recently observed state for the Calico Enterprise manager.

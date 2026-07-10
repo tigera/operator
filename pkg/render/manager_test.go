@@ -163,6 +163,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
 			{Name: "VOLTRON_URL", Value: render.ManagerService(nil)},
 			{Name: "RBAC_UI_ENABLED", Value: "false"},
+			{Name: "WAF_UI_ENABLED", Value: "false"},
 		}
 		Expect(uiAPIs.Env).To(Equal(uiAPIsExpectedEnvVars))
 
@@ -1959,6 +1960,100 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					types.NamespacedName{Name: "calico-system.manager-access", Namespace: "tenant-a"}, resources)
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
 			})
+		})
+	})
+
+	Context("WAF management UI", func() {
+		var installation *operatorv1.InstallationSpec
+		BeforeEach(func() {
+			replicas := int32(1)
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.CalicoEnterprise,
+				Registry:             "testregistry.com/",
+			}
+		})
+
+		wafUIEnabledEnv := func(d *appsv1.Deployment) corev1.EnvVar {
+			for _, c := range d.Spec.Template.Spec.Containers {
+				if c.Name == render.UIAPIsName {
+					for _, e := range c.Env {
+						if e.Name == "WAF_UI_ENABLED" {
+							return e
+						}
+					}
+				}
+			}
+			return corev1.EnvVar{}
+		}
+
+		It("renders WAF_UI_ENABLED=false when the Manager is unset", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(wafUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "WAF_UI_ENABLED", Value: "false"}))
+		})
+
+		It("renders WAF_UI_ENABLED=false when the Manager exists but wafUI is unset", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager:      &operatorv1.Manager{Spec: operatorv1.ManagerSpec{}},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(wafUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "WAF_UI_ENABLED", Value: "false"}))
+		})
+
+		It("renders WAF_UI_ENABLED=true when wafUI.state is Enabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						WAFUI: &operatorv1.WAFUI{State: ptr.To(operatorv1.WAFUIEnabled)},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(wafUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "WAF_UI_ENABLED", Value: "true"}))
+		})
+
+		It("renders WAF_UI_ENABLED=false when wafUI.state is Disabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						WAFUI: &operatorv1.WAFUI{State: ptr.To(operatorv1.WAFUIDisabled)},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(wafUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "WAF_UI_ENABLED", Value: "false"}))
+		})
+
+		It("renders WAF_UI_ENABLED=false in multi-tenant mode even when wafUI.state is Enabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation:      installation,
+				ns:                "tenant-a",
+				bindingNamespaces: []string{"tenant-a"},
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-a",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						WAFUI: &operatorv1.WAFUI{State: ptr.To(operatorv1.WAFUIEnabled)},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, "tenant-a", appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(wafUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "WAF_UI_ENABLED", Value: "false"}))
 		})
 	})
 })

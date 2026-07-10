@@ -18,32 +18,6 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'calico-fluent-bit' || k8s-app == 'calico-fluent-bit-windows'",
-          "namespaceSelector": "name == 'calico-system'"
-        },
-        "destination": {
-          "ports": [
-            5554
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "source": {
-          "selector": "k8s-app == 'eks-log-forwarder'",
-          "namespaceSelector": "projectcalico.org/name == 'calico-system'"
-        },
-        "destination": {
-          "ports": [
-            5554
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "source": {
           "selector": "job-name == 'intrusion-detection-es-job-installer'",
           "namespaceSelector": "projectcalico.org/name == 'tigera-intrusion-detection'"
         },

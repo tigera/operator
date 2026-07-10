@@ -16,10 +16,14 @@ package logcollector
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/render"
+	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/url"
 )
@@ -91,6 +95,136 @@ func (c *fluentBitComponent) addUserFilters(cfg *fluentBitConfig) {
 	}
 }
 
+// addOutputs wires one Linseed http output per Linseed-bound tag, plus the
+// user-enabled additional stores.
+func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
+	// One built-in http output per Linseed-bound tag: chunks are per-tag, so
+	// an exact match per block routes every record to its bulk endpoint.
+	for _, tag := range c.linseedTags() {
+		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs,
+			c.linseedHTTPOutput(tag, c.certPath(), c.keyPath(), linseedStorageLimit(tag)))
+	}
+
+	// Additional stores are Linux-only, matching the fluentd Windows variant
+	// (Linseed only).
+	if c.cfg.LogCollector.Spec.AdditionalStores != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+		c.addS3Outputs(cfg)
+		c.addSyslogOutputs(cfg)
+		c.addSplunkOutputs(cfg)
+	}
+}
+
+// linseedTags lists the tags shipped to Linseed: every tailed tag except
+// ids.events and compliance.reports — those are deliberately not
+// Linseed-bound (IDS events use a different ingestion path; compliance
+// reports are S3-only). The non_cluster_* tags are produced by the
+// voltron-facing http input relaying non-cluster host posts; hosts ship
+// flow, DNS and policy activity logs.
+func (c *fluentBitComponent) linseedTags() []string {
+	var tags []string
+	for _, in := range c.logInputs() {
+		if in.tag == "ids.events" || in.tag == "compliance.reports" {
+			continue
+		}
+		tags = append(tags, in.tag)
+	}
+	if c.cfg.NonClusterHost != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+		tags = append(tags, "non_cluster_flows", "non_cluster_dns", "non_cluster_policy_activity")
+	}
+	return tags
+}
+
+// linseedBulkURI maps a tag to its Linseed bulk-ingestion URI. Voltron-relayed
+// non_cluster_* tags post to the same path as their base tag.
+func linseedBulkURI(tag string) string {
+	tag = strings.TrimPrefix(tag, "non_cluster_")
+	switch tag {
+	case "runtime":
+		return "/api/v1/runtime/reports/bulk"
+	case "audit.tsee":
+		return "/api/v1/audit/logs/ee/bulk"
+	case "audit.kube":
+		return "/api/v1/audit/logs/kube/bulk"
+	case "bird", "bird6":
+		return "/api/v1/bgp/logs/bulk"
+	default:
+		// flows, dns, l7, waf, policy_activity
+		return fmt.Sprintf("/api/v1/%s/logs/bulk", tag)
+	}
+}
+
+// splitEndpoint splits an https:// endpoint into the host and port fields
+// fluent-bit's native net layer expects (the port defaults to 443). Plain
+// string handling: pkg/url's ParseEndpoint rejects endpoints without an
+// explicit port, and Linseed endpoints usually carry none.
+func splitEndpoint(endpoint string) (string, int) {
+	host := strings.TrimPrefix(endpoint, "https://")
+	host = strings.TrimSuffix(host, "/")
+	port := 443
+	if i := strings.LastIndex(host, ":"); i >= 0 {
+		if n, err := strconv.Atoi(host[i+1:]); err == nil {
+			host, port = host[:i], n
+		}
+	}
+	return host, port
+}
+
+// linseedHTTPOutput renders one built-in http output block shipping a tag's
+// chunks to its Linseed bulk endpoint. The http output is plain C compiled
+// into fluent-bit — no Go proxy plugin is involved — and `format json_lines`
+// with the date key disabled produces exactly the NDJSON body Linseed's bulk
+// APIs expect. The bearer token file is re-read on every request (a Tigera
+// patch carried by the fluent-bit base build), so kubelet-rotated
+// ServiceAccount tokens and operator-refreshed managed-cluster tokens are
+// picked up without a restart. certPath/keyPath are the mTLS client keypair;
+// storageLimit, when non-empty, caps this output's filesystem buffer.
+func (c *fluentBitComponent) linseedHTTPOutput(tag, certPath, keyPath, storageLimit string) map[string]interface{} {
+	host, port := splitEndpoint(relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true))
+	out := map[string]interface{}{
+		"name":   "http",
+		"match":  tag,
+		"host":   host,
+		"port":   port,
+		"uri":    linseedBulkURI(tag),
+		"format": "json_lines",
+		// One record per line, nothing else: Linseed parses each line as the
+		// log document itself, so no synthetic date field is added.
+		"json_date_key": false,
+		"tls":           "on",
+		"tls.verify":    "on",
+		// tls.verify only checks the chain; hostname/SAN verification is a
+		// separate knob that defaults off in fluent-bit. The Go plugin this
+		// replaces verified hostnames (crypto/tls default), so keep parity.
+		"tls.verify_hostname": "on",
+		"tls.ca_file":         c.trustedBundlePath(),
+		"tls.crt_file":        certPath,
+		"tls.key_file":        keyPath,
+		"bearer_token_file":   c.path(render.GetLinseedTokenPath(c.cfg.ManagedCluster)),
+		// Retry failed chunks until they send instead of dropping them after
+		// the default single retry; the filesystem storage bounds what can
+		// accumulate during a Linseed outage.
+		"retry_limit": "no_limits",
+	}
+	if storageLimit != "" {
+		out["storage.total_limit_size"] = storageLimit
+	}
+	if c.cfg.Tenant != nil && c.cfg.ExternalElastic {
+		out["header"] = fmt.Sprintf("x-tenant-id %s", c.cfg.Tenant.Spec.ID)
+	}
+	return out
+}
+
+// linseedStorageLimit caps a tag's filesystem buffer — storage.total_limit_size
+// bounds all of an output's buffered chunks, first-try and retries alike. Flow
+// logs are the dominant volume and keep the budget the single shared output
+// used to have; everything else is low-volume.
+func linseedStorageLimit(tag string) string {
+	if tag == "flows" || tag == "non_cluster_flows" {
+		return "500M"
+	}
+	return "100M"
+}
+
 // hostScopeIncludesCluster reports whether a store's hostScope includes
 // cluster logs. Fluentd's envVarsForHostScope semantics: cluster *flow* logs
 // are the only cluster type the scope gates (FORWARD_CLUSTER_LOGS_TO_<STORE>),
@@ -106,13 +240,20 @@ func (c *fluentBitComponent) addS3Outputs(cfg *fluentBitConfig) {
 	if s3 == nil {
 		return
 	}
-	// tag → S3 path segment. The segments preserve fluentd's archive layout
-	// (the `path` directives in fluentd/outputs/out-s3-*.conf) so existing
-	// downstream consumers keep reading the same prefixes. The cluster types
-	// below always shipped when S3 was enabled — ee_entrypoint.sh copied their
-	// output confs unconditionally under S3_STORAGE=true; only cluster *flows*
-	// honored the hostScope gate. WAF, BGP, IDS events and policy activity were
-	// never S3-archived (out-s3-waf.conf existed but was never copied).
+	// tag → S3 key directory. This is a deliberate, documented layout change
+	// from fluentd (release-noted): fluentd's fluent-plugin-s3 default object
+	// key format produced flat keys with the date concatenated straight onto
+	// the type segment (`<bucketPath>/flows20260101_<n>.gz`); the keys are now
+	// directory-style, one directory per log type, and non-cluster flows get
+	// their own directory instead of being mixed into flows/. Anything
+	// downstream anchored to the old flat patterns must be updated once.
+	//
+	// The type set is unchanged from fluentd: the cluster types below always
+	// shipped when S3 was enabled — ee_entrypoint.sh copied their output confs
+	// unconditionally under S3_STORAGE=true; only cluster *flows* honored the
+	// hostScope gate, and non-cluster flows ship whatever the hostScope. WAF,
+	// BGP, IDS events and policy activity were never S3-archived
+	// (out-s3-waf.conf existed but was never copied).
 	type s3Output struct{ tag, path string }
 	outputs := []s3Output{
 		{"dns", "dns"},
@@ -121,12 +262,6 @@ func (c *fluentBitComponent) addS3Outputs(cfg *fluentBitConfig) {
 		{"audit.tsee", "audit_tsee"},
 		{"audit.kube", "audit_kube"},
 		{"compliance.reports", "compliance_reports"},
-		// Non-cluster flows ship whatever the hostScope. Deliberate delta from
-		// fluentd: they land under their own non_cluster_flows/ prefix instead
-		// of sharing flows/ — fluent-bit's $INDEX is tracked per output, so two
-		// outputs writing one prefix would overwrite each other's objects
-		// (fluent-plugin-s3 checked object existence before upload; out_s3
-		// does not).
 		{"non_cluster_flows", "non_cluster_flows"},
 	}
 	if hostScopeIncludesCluster(s3.HostScope) {
@@ -134,11 +269,16 @@ func (c *fluentBitComponent) addS3Outputs(cfg *fluentBitConfig) {
 	}
 	for _, o := range outputs {
 		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, map[string]interface{}{
-			"name":          "s3",
-			"match":         o.tag,
-			"bucket":        s3.BucketName,
-			"region":        s3.Region,
-			"s3_key_format": fmt.Sprintf("%s/%s/%%Y%%m%%d_$INDEX.gz", s3.BucketPath, o.path),
+			"name":   "s3",
+			"match":  o.tag,
+			"bucket": s3.BucketName,
+			"region": s3.Region,
+			// $UUID rather than fluentd's `_<index>` object names: out_s3
+			// tracks $INDEX in its store_dir, which is not persisted across
+			// pod restarts, so a restarted pod would silently overwrite the
+			// day's earlier objects (fluent-plugin-s3 avoided collisions by
+			// checking object existence before upload; out_s3 does not).
+			"s3_key_format": fmt.Sprintf("%s/%s/%%Y%%m%%d_$UUID.gz", s3.BucketPath, o.path),
 			// fluent-plugin-s3's default store_as was gzip, so the legacy
 			// archives were gzipped; keep the objects compressed to match
 			// their .gz suffix.
@@ -239,11 +379,12 @@ func (c *fluentBitComponent) addSplunkOutputs(cfg *fluentBitConfig) {
 		return
 	}
 	proto, host, port, _ := url.ParseEndpoint(splunk.Endpoint)
-	// The log types forwarded to Splunk HEC per the design's mapping table:
-	// flows, dns, l7, audit.tsee, audit.kube. As with the other stores,
-	// cluster flows are the only type the hostScope gates
+	// The log types deployed fluentd forwarded to Splunk HEC: the operator only
+	// ever enabled SPLUNK_FLOW_LOG, SPLUNK_AUDIT_LOG and SPLUNK_DNS_LOG (the
+	// l7/waf/runtime output templates existed but were never wired in). As with
+	// the other stores, cluster flows are the only type the hostScope gates
 	// (FORWARD_CLUSTER_LOGS_TO_SPLUNK), and non-cluster flows always ship.
-	tags := []string{"dns", "l7", "audit.tsee", "audit.kube", "non_cluster_flows"}
+	tags := []string{"dns", "audit.tsee", "audit.kube", "non_cluster_flows"}
 	if hostScopeIncludesCluster(splunk.HostScope) {
 		tags = append([]string{"flows"}, tags...)
 	}

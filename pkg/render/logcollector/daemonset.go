@@ -29,6 +29,25 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 )
 
+// uptimeProbeHandler asserts only that the fluent-bit process is alive:
+// /api/v1/uptime answers 200 whenever the monitoring server is up. The
+// startup and liveness probes use it because /api/v1/health flips unhealthy
+// on sustained delivery errors, and a liveness-triggered restart would drop
+// any in-memory buffered chunks — an output outage must not crashloop the
+// collector.
+func (c *fluentBitComponent) uptimeProbeHandler() corev1.ProbeHandler {
+	return corev1.ProbeHandler{
+		HTTPGet: &corev1.HTTPGetAction{
+			Path: "/api/v1/uptime",
+			Port: intstr.FromInt(FluentBitMetricsPort),
+		},
+	}
+}
+
+// healthProbeHandler is error-aware (the config enables health_check, which
+// reports unhealthy on sustained delivery errors). Only the readiness probe
+// uses it, so an erroring instance is taken out of Ready without being
+// restarted.
 func (c *fluentBitComponent) healthProbeHandler() corev1.ProbeHandler {
 	return corev1.ProbeHandler{
 		HTTPGet: &corev1.HTTPGetAction{
@@ -46,13 +65,17 @@ func (c *fluentBitComponent) securityContext(privileged bool) *corev1.SecurityCo
 }
 
 func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
-	var terminationGracePeriod int64 = 0
+	// Give fluent-bit time to flush on the way down: the engine flushes
+	// in-flight chunks for up to its 5s shutdown grace on SIGTERM (and
+	// filesystem-buffered chunks survive a kill either way), so an immediate
+	// SIGKILL (grace 0) would guarantee losing whatever is only in memory on
+	// every roll.
+	var terminationGracePeriod int64 = 30
 	// The rationale for this setting is that while there is no need for fluent-bit to be available, we want to avoid
 	// potentially negative consequences of an immediate roll-out on huge clusters.
 	maxUnavailable := intstr.FromInt(10)
 
 	annots := c.cfg.TrustedBundle.HashAnnotations()
-
 	if c.cfg.FluentBitKeyPair != nil {
 		annots[c.cfg.FluentBitKeyPair.HashAnnotationKey()] = c.cfg.FluentBitKeyPair.HashAnnotationValue()
 	}
@@ -67,40 +90,34 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 	// rendered config into the pod template to force a rollout on change. This
 	// also covers user filters, which are inlined into the config.
 	annots[configHashAnnotation] = rmeta.AnnotationHash(c.renderFluentBitConf())
-	var initContainers []corev1.Container
-	if c.cfg.OSType == rmeta.OSTypeLinux {
-		initContainers = append(initContainers, corev1.Container{
-			Name:    "pos-migrator",
-			Image:   c.image,
-			Command: []string{"/usr/bin/pos-migrator"},
-			Env: []corev1.EnvVar{
-				{Name: "LOG_DIRS", Value: c.logDirsCSV()},
-			},
-			SecurityContext: c.securityContext(false),
-			VolumeMounts: []corev1.VolumeMount{
-				{MountPath: "/var/log/calico", Name: "var-log-calico"},
-			},
-		})
-	} else {
-		// Windows fluentd also kept tail positions (.pos files under the same
-		// mounted log dir), so the cutover migration applies there too. The
-		// Windows image ships the cross-compiled migrator; env overrides point
-		// it at the c:-prefixed mounts.
-		initContainers = append(initContainers, corev1.Container{
-			Name:    "pos-migrator",
-			Image:   c.image,
-			Command: []string{c.path("/fluent-bit/pos-migrator.exe")},
-			Env: []corev1.EnvVar{
-				{Name: "POS_DIR", Value: c.path("/var/log/calico")},
-				{Name: "DB_DIR", Value: c.path("/var/log/calico/calico-fluent-bit")},
-				{Name: "LOG_DIRS", Value: c.logDirsCSV()},
-			},
-			SecurityContext: c.securityContext(false),
-			VolumeMounts: []corev1.VolumeMount{
-				{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
-			},
-		})
+
+	// The pos-migrator init container seeds fluent-bit's tail-offset DBs from
+	// the legacy fluentd .pos files at cutover and pre-creates the tailed log
+	// directories. Windows fluentd kept tail positions under the same mounted
+	// log dir, so the migration applies there too — the Windows image ships
+	// the cross-compiled migrator, with env overrides pointing it at the
+	// c:-prefixed mounts.
+	migratorCommand := "/usr/bin/pos-migrator"
+	migratorEnv := []corev1.EnvVar{
+		{Name: "LOG_DIRS", Value: c.logDirsCSV()},
 	}
+	if c.cfg.OSType == rmeta.OSTypeWindows {
+		migratorCommand = c.path("/fluent-bit/pos-migrator.exe")
+		migratorEnv = append([]corev1.EnvVar{
+			{Name: "POS_DIR", Value: c.path("/var/log/calico")},
+			{Name: "DB_DIR", Value: c.path("/var/log/calico/calico-fluent-bit")},
+		}, migratorEnv...)
+	}
+	initContainers := []corev1.Container{{
+		Name:            "pos-migrator",
+		Image:           c.image,
+		Command:         []string{migratorCommand},
+		Env:             migratorEnv,
+		SecurityContext: c.securityContext(false),
+		VolumeMounts: []corev1.VolumeMount{
+			{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
+		},
+	}}
 	if c.cfg.FluentBitKeyPair != nil && c.cfg.FluentBitKeyPair.UseCertificateManagement() {
 		initContainers = append(initContainers, c.cfg.FluentBitKeyPair.InitContainer(LogCollectorNamespace, c.container().SecurityContext))
 	}
@@ -289,7 +306,7 @@ func (c *fluentBitComponent) envvars() []corev1.EnvVar {
 // networks.
 func (c *fluentBitComponent) startup() *corev1.Probe {
 	return &corev1.Probe{
-		ProbeHandler:     c.healthProbeHandler(),
+		ProbeHandler:     c.uptimeProbeHandler(),
 		TimeoutSeconds:   c.probeTimeout,
 		PeriodSeconds:    c.probePeriod,
 		FailureThreshold: 10,
@@ -298,7 +315,7 @@ func (c *fluentBitComponent) startup() *corev1.Probe {
 
 func (c *fluentBitComponent) liveness() *corev1.Probe {
 	return &corev1.Probe{
-		ProbeHandler:   c.healthProbeHandler(),
+		ProbeHandler:   c.uptimeProbeHandler(),
 		TimeoutSeconds: c.probeTimeout,
 		PeriodSeconds:  c.probePeriod,
 	}

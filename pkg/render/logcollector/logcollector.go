@@ -16,9 +16,7 @@ package logcollector
 
 import (
 	"crypto/x509"
-	"fmt"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,11 +24,11 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
@@ -203,6 +201,134 @@ func (c *fluentBitComponent) SupportedOSType() rmeta.OSType {
 	return c.cfg.OSType
 }
 
+func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
+	var objs, toDelete []client.Object
+	objs = append(objs, c.metricsService())
+	objs = append(objs, c.fluentBitConfigMap())
+
+	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+		objs = append(objs,
+			c.eksLogForwarderClusterRole(),
+			c.eksLogForwarderClusterRoleBinding())
+
+		objs = append(objs, c.eksLogForwarderServiceAccount(),
+			c.eksLogForwarderSecret(),
+			c.eksConfigMap(),
+			c.eksLogForwarderDeployment())
+	}
+
+	// Add in the cluster role and binding.
+	objs = append(objs,
+		c.fluentBitClusterRole(),
+		c.fluentBitClusterRoleBinding(),
+	)
+
+	objs = append(objs, c.fluentBitServiceAccount())
+
+	if c.cfg.LicenseExpired {
+		toDelete = append(toDelete, c.daemonset())
+	} else {
+		objs = append(objs, c.daemonset())
+	}
+
+	if c.cfg.OSType == rmeta.OSTypeLinux {
+		if c.cfg.NonClusterHost != nil {
+			objs = append(objs, c.nonClusterHostInputService())
+		} else {
+			// Clean up the input service when the NonClusterHost resource is
+			// removed; the rendered config drops the http input at the same time.
+			toDelete = append(toDelete, c.nonClusterHostInputService())
+		}
+	}
+
+	return objs, toDelete
+}
+
+func (c *fluentBitComponent) Ready() bool {
+	return true
+}
+
+// FluentBitShared renders the resources shared by the Linux and Windows
+// fluent-bit installations: the NetworkPolicy, store credential copies, the
+// PacketCapture RBAC, the managed-cluster Linseed plumbing, the GKE
+// ResourceQuota and the legacy fluentd cleanup. Rendering them exactly once,
+// from a single configuration, keeps the two OS components from contending
+// over the same object with divergent definitions.
+func FluentBitShared(cfg *FluentBitConfiguration) render.Component {
+	return &fluentBitSharedComponent{c: fluentBitComponent{cfg: cfg}}
+}
+
+type fluentBitSharedComponent struct {
+	c fluentBitComponent
+}
+
+// ResolveImages is a no-op: the shared resources reference no images.
+func (s *fluentBitSharedComponent) ResolveImages(is *operatorv1.ImageSet) error {
+	return nil
+}
+
+func (s *fluentBitSharedComponent) SupportedOSType() rmeta.OSType {
+	return rmeta.OSTypeAny
+}
+
+func (s *fluentBitSharedComponent) Objects() ([]client.Object, []client.Object) {
+	c := &s.c
+	var objs, toDelete []client.Object
+
+	objs = append(objs, c.calicoSystemPolicy())
+
+	if c.cfg.Installation.KubernetesProvider.IsGKE() {
+		// We do this only for GKE as other providers don't (yet?)
+		// automatically add resource quota that constrains whether
+		// components that are marked cluster or node critical
+		// can be scheduled.
+		objs = append(objs, c.fluentBitResourceQuota())
+	}
+	if c.cfg.S3Credential != nil {
+		objs = append(objs, c.s3CredentialSecret())
+	}
+	if c.cfg.SplkCredential != nil {
+		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.splunkCredentialSecret()...)...)...)
+	}
+	if c.cfg.ManagedCluster {
+		objs = append(objs, c.externalLinseedService())
+		objs = append(objs, c.externalLinseedRoleBinding())
+	} else {
+		toDelete = append(toDelete, c.externalLinseedService())
+		toDelete = append(toDelete, c.externalLinseedRoleBinding())
+	}
+	if c.cfg.PacketCapture != nil {
+		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
+	}
+
+	// Clean up the legacy fluentd installation on upgrade. Deleting the
+	// tigera-fluentd Namespace cascades to everything namespaced in it — the
+	// same pattern the guardian, apiserver and policy-recommendation
+	// calico-system migrations used — so only cluster-scoped resources and
+	// the operator-namespace copy of the fluentd certificate need explicit
+	// entries.
+	//
+	// Note: the eks-log-forwarder ClusterRole/ClusterRoleBinding are NOT
+	// deleted here — they keep their fluentd-era names and are reused
+	// (updated in place) by the fluent-bit EKS forwarder render. Deleting
+	// them would fight the create processed earlier in the same reconcile
+	// and leave the forwarder without Linseed RBAC.
+	toDelete = append(toDelete,
+		&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: legacyFluentdNamespace}},
+		&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
+		&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
+		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
+		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
+		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-prometheus-tls", Namespace: common.OperatorNamespace()}},
+	)
+
+	return objs, toDelete
+}
+
+func (s *fluentBitSharedComponent) Ready() bool {
+	return true
+}
+
 func (c *fluentBitComponent) fluentBitName() string {
 	if c.cfg.OSType == rmeta.OSTypeWindows {
 		return fluentBitWindowsName
@@ -285,124 +411,6 @@ func (c *fluentBitComponent) fluentBitConfConfigMapName() string {
 		return FluentBitConfConfigMapName + "-windows"
 	}
 	return FluentBitConfConfigMapName
-}
-
-func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
-	var objs, toDelete []client.Object
-	objs = append(objs, c.calicoSystemPolicy())
-	objs = append(objs, c.metricsService())
-	objs = append(objs, c.fluentBitConfigMap())
-
-	// allow-tigera Tier was renamed to calico-system
-	toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("allow-calico-fluent-bit", LogCollectorNamespace))
-
-	// Clean up legacy fluentd resources from the old namespace.
-	toDelete = append(toDelete,
-		&appsv1.DaemonSet{TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: legacyFluentdNamespace}},
-		&appsv1.DaemonSet{TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-windows", Namespace: legacyFluentdNamespace}},
-		&appsv1.Deployment{TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: legacyFluentdNamespace}},
-		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: legacyFluentdNamespace}},
-		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-http-input", Namespace: legacyFluentdNamespace}},
-		&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node", Namespace: legacyFluentdNamespace}},
-		&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-node-windows", Namespace: legacyFluentdNamespace}},
-		&corev1.ServiceAccount{TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "eks-log-forwarder", Namespace: legacyFluentdNamespace}},
-		&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
-		&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
-		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd"}},
-		&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-windows"}},
-		// Note: the eks-log-forwarder ClusterRole/ClusterRoleBinding are NOT
-		// deleted here — they are cluster-scoped, keep their fluentd-era names,
-		// and are reused (updated in place) by the fluent-bit EKS forwarder
-		// render. Deleting them would fight the create processed earlier in the
-		// same reconcile and leave the forwarder without Linseed RBAC.
-		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics-windows", Namespace: legacyFluentdNamespace}},
-		&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-fluentd-prometheus-tls", Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: EKSLogForwarderTLSSecretName, Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: EksLogForwarderSecret, Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: S3FluentBitSecretName, Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: SplunkFluentBitTokenSecretName, Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf(LinseedTokenSecret, "fluentd-node"), Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf(LinseedTokenSecret, "fluentd-node-windows"), Namespace: legacyFluentdNamespace}},
-		&corev1.Secret{TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf(LinseedTokenSecret, "eks-log-forwarder"), Namespace: legacyFluentdNamespace}},
-		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "fluentd-filters", Namespace: legacyFluentdNamespace}},
-		&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: PacketCaptureAPIRole, Namespace: legacyFluentdNamespace}},
-		&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: PacketCaptureAPIRoleBinding, Namespace: legacyFluentdNamespace}},
-		&corev1.ResourceQuota{TypeMeta: metav1.TypeMeta{Kind: "ResourceQuota", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: resourcequota.TigeraCriticalResourceQuotaName, Namespace: legacyFluentdNamespace}},
-		// The namespace itself goes last so the resources above are removed
-		// individually first (no finalizer surprises) on clusters upgrading from
-		// the fluentd era.
-		&corev1.Namespace{TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: legacyFluentdNamespace}},
-	)
-
-	if c.cfg.Installation.KubernetesProvider.IsGKE() {
-		// We do this only for GKE as other providers don't (yet?)
-		// automatically add resource quota that constrains whether
-		// components that are marked cluster or node critical
-		// can be scheduled.
-		objs = append(objs, c.fluentBitResourceQuota())
-	}
-	if c.cfg.S3Credential != nil {
-		objs = append(objs, c.s3CredentialSecret())
-	}
-	if c.cfg.SplkCredential != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(LogCollectorNamespace, c.splunkCredentialSecret()...)...)...)
-	}
-	// User filters are inlined into the rendered config (addUserFilters); the
-	// copy of the filters ConfigMap an earlier iteration rendered into
-	// calico-system is no longer used.
-	toDelete = append(toDelete,
-		&corev1.ConfigMap{TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: FluentBitFilterConfigMapName, Namespace: LogCollectorNamespace}})
-	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
-		objs = append(objs,
-			c.eksLogForwarderClusterRole(),
-			c.eksLogForwarderClusterRoleBinding())
-
-		objs = append(objs, c.eksLogForwarderServiceAccount(),
-			c.eksLogForwarderSecret(),
-			c.eksConfigMap(),
-			c.eksLogForwarderDeployment())
-	}
-
-	// Add in the cluster role and binding.
-	objs = append(objs,
-		c.fluentBitClusterRole(),
-		c.fluentBitClusterRoleBinding(),
-	)
-	if c.cfg.ManagedCluster {
-		objs = append(objs, c.externalLinseedService())
-		objs = append(objs, c.externalLinseedRoleBinding())
-	} else {
-		toDelete = append(toDelete, c.externalLinseedService())
-		toDelete = append(toDelete, c.externalLinseedRoleBinding())
-	}
-
-	objs = append(objs, c.fluentBitServiceAccount())
-	if c.cfg.PacketCapture != nil {
-		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
-	}
-
-	if c.cfg.LicenseExpired {
-		toDelete = append(toDelete, c.daemonset())
-	} else {
-		objs = append(objs, c.daemonset())
-	}
-
-	if c.cfg.OSType == rmeta.OSTypeLinux {
-		if c.cfg.NonClusterHost != nil {
-			objs = append(objs, c.nonClusterHostInputService())
-		} else {
-			// Clean up the input service when the NonClusterHost resource is
-			// removed; the rendered config drops the http input at the same time.
-			toDelete = append(toDelete, c.nonClusterHostInputService())
-		}
-	}
-
-	return objs, toDelete
-}
-
-func (c *fluentBitComponent) Ready() bool {
-	return true
 }
 
 type fluentBitConfig struct {

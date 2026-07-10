@@ -47,6 +47,7 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	uigateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -148,6 +149,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	if err = c.WatchObject(&operatorv1.Authentication{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
+	}
+	if err = c.WatchObject(&operatorv1.GatewayAPI{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch GatewayAPI resource: %w", err)
 	}
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("manager-controller failed to watch manager Tigerastatus: %w", err)
@@ -750,6 +754,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// Render gateway resources if spec.gateway is configured.
+	if instance.Spec.Gateway != nil {
+		gwResult, gwErr := r.reconcileGateway(ctx, instance, authenticationCR, certificateManager, helper, defaultHandler)
+		if gwErr != nil {
+			return gwResult, gwErr
+		}
+	}
+
 	// Check BYO certificate expiry warnings.
 	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
 		render.ManagerTLSSecretName:         tlsSecret,
@@ -853,4 +865,70 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 		return nil, nil
 	}
 	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
+}
+
+// reconcileGateway handles Gateway API resource rendering for spec.gateway on the Manager CR.
+func (r *ReconcileManager) reconcileGateway(
+	ctx context.Context,
+	instance *operatorv1.Manager,
+	authenticationCR *operatorv1.Authentication,
+	certManager certificatemanager.CertificateManager,
+	helper utils.NamespaceHelper,
+	handler utils.ComponentHandler,
+) (reconcile.Result, error) {
+	logc := log.WithValues("manager", instance.Name)
+	gw := instance.Spec.Gateway
+
+	// Validate GatewayAPI CR exists.
+	gatewayAPI := &operatorv1.GatewayAPI{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, gatewayAPI)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetWarning("gatewayapi-missing", "GatewayAPI CR not found; gateway resources will not be rendered. Create the GatewayAPI CR to enable CIG infrastructure.")
+			logc.Info("GatewayAPI CR not found, skipping gateway rendering")
+			return reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying GatewayAPI CR", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	// Validate hostname matches managerDomain if OIDC is configured.
+	if authenticationCR != nil && authenticationCR.Spec.ManagerDomain != "" {
+		if gw.Hostname != authenticationCR.Spec.ManagerDomain {
+			r.status.SetWarning("gateway-hostname-mismatch", fmt.Sprintf(
+				"spec.gateway.hostname (%s) does not match Authentication.spec.managerDomain (%s) — OIDC redirects will fail",
+				gw.Hostname, authenticationCR.Spec.ManagerDomain,
+			))
+			logc.Info("Hostname mismatch with managerDomain, skipping gateway rendering",
+				"hostname", gw.Hostname, "managerDomain", authenticationCR.Spec.ManagerDomain)
+			return reconcile.Result{}, nil
+		}
+	}
+
+	// Generate TLS certificate for the Gateway listener.
+	gwNamespace := gw.GetGatewayNamespace()
+	gwTLSCertNames := []string{gw.Hostname}
+	gwTLSKeyPair, err := certManager.GetOrCreateKeyPair(
+		r.client,
+		gw.Hostname+"-gateway-tls",
+		helper.TruthNamespace(),
+		gwTLSCertNames,
+	)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting or creating gateway TLS certificate", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	// Build gateway configuration and render objects.
+	gwCfg := uigateway.ManagerConfig(gw.Hostname, gw.GetPort(), gwNamespace, gwTLSKeyPair)
+	gwObjs, _ := uigateway.Objects(gwCfg)
+
+	// Apply the gateway objects using a simple component wrapper.
+	gwComponent := render.NewPassthrough(gwObjs, nil)
+	if err := handler.CreateOrUpdateOrDelete(ctx, gwComponent, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating gateway resources", err, logc)
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, nil
 }

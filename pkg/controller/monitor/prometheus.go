@@ -66,10 +66,10 @@ func addServiceMonitorElasticsearchWatch(c ctrlruntime.Controller) error {
 	}, &handler.EnqueueRequestForObject{})
 }
 
-func addServiceMonitorFluentdWatch(c ctrlruntime.Controller) error {
+func addServiceMonitorFluentBitWatch(c ctrlruntime.Controller) error {
 	return utils.AddNamespacedWatch(c, &monitoringv1.ServiceMonitor{
 		TypeMeta:   metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: monitor.MonitoringAPIVersion},
-		ObjectMeta: metav1.ObjectMeta{Name: monitor.FluentdMetrics, Namespace: common.TigeraPrometheusNamespace},
+		ObjectMeta: metav1.ObjectMeta{Name: monitor.FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace},
 	}, &handler.EnqueueRequestForObject{})
 }
 
@@ -102,8 +102,8 @@ func addWatch(c ctrlruntime.Controller) error {
 		return fmt.Errorf("failed to watch ServiceMonitor elasticsearch-metrics resource: %w", err)
 	}
 
-	if err = addServiceMonitorFluentdWatch(c); err != nil {
-		return fmt.Errorf("failed to watch ServiceMonitor fluentd-metrics resource: %w", err)
+	if err = addServiceMonitorFluentBitWatch(c); err != nil {
+		return fmt.Errorf("failed to watch ServiceMonitor %s resource: %w", monitor.FluentBitMetrics, err)
 	}
 
 	if err = addServiceMonitorKubeControllerWatch(c); err != nil {

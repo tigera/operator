@@ -52,6 +52,8 @@ var containerNameAliases = map[string]string{
 	"tigera-ui-apis":  "calico-ui-apis",
 	"tigera-es-proxy": "calico-ui-apis",
 	"tigera-voltron-linseed-tls-key-cert-provisioner": "calico-voltron-linseed-tls-key-cert-provisioner",
+	"fluentd": "calico-fluent-bit",
+	"tigera-fluentd-prometheus-tls-key-cert-provisioner": "calico-fluent-bit-tls-key-cert-provisioner",
 }
 
 func resolveContainerName(name string) string {

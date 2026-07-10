@@ -387,18 +387,10 @@ func (e *esGateway) esGatewayCalicoSystemPolicy() *v3.NetworkPolicy {
 			Selector: networkpolicy.KubernetesAppSelector(DeploymentName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Ingress: []v3.Rule{
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.FluentdSourceEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
-				{
-					Action:      v3.Allow,
-					Protocol:    &networkpolicy.TCPProtocol,
-					Source:      render.EKSLogForwarderEntityRule,
-					Destination: esgatewayIngressDestinationEntityRule,
-				},
+				// Note: the log collector (fluent-bit) and the EKS log forwarder
+				// ship to Linseed only — the fluentd-era direct-Elasticsearch
+				// path through es-gateway is gone, so they carry no ingress
+				// allowance here.
 				{
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,

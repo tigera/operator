@@ -238,12 +238,12 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		It("should keep the non-cluster-host ingress rule on the fluent-bit policy when Windows nodes are present", func() {
-			// A Windows node makes the operator also render the Windows fluent-bit
-			// component, which shares the allow-calico-fluent-bit NetworkPolicy with
-			// the Linux component. The non-cluster-host ingress rule (port 9880,
-			// voltron -> http input) is gated on NonClusterHost, so if the Windows
-			// configuration does not carry NonClusterHost it overwrites the policy
-			// without that rule, making the rule flap on every reconcile.
+			// The allow-calico-fluent-bit NetworkPolicy is rendered exactly once,
+			// by the shared component; with Windows nodes present (both OS
+			// components rendered) the policy must still carry the
+			// non-cluster-host ingress rule (port 9880, voltron -> http input)
+			// gated on NonClusterHost — a regression here would reintroduce the
+			// per-OS render contention that used to flap this rule.
 			Expect(c.Create(ctx, &corev1.Node{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "windows-node",
@@ -266,6 +266,30 @@ var _ = Describe("LogCollector controller tests", func() {
 			// Metrics rule (2020) + non-cluster-host rule (9880). Without the fix the
 			// Windows render (applied last) drops the 9880 rule, leaving only one.
 			Expect(policy.Spec.Ingress).To(HaveLen(2))
+		})
+
+		It("should degrade when the syslog endpoint scheme is not tcp or udp", func() {
+			lc := &operatorv1.LogCollector{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, lc)).NotTo(HaveOccurred())
+			lc.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+				Syslog: &operatorv1.SyslogStoreSpec{
+					Endpoint: "http://1.2.3.4:514",
+					LogTypes: []operatorv1.SyslogLogType{operatorv1.SyslogLogFlows},
+				},
+			}
+			Expect(c.Update(ctx, lc)).NotTo(HaveOccurred())
+			By("Setting the license to export logs")
+			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ExportLogsFeature}}})).NotTo(HaveOccurred())
+
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError,
+				`Syslog config has invalid Endpoint scheme "http": only tcp:// and udp:// are supported`,
+				mock.Anything, mock.Anything).Return()
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError,
+				`Syslog config has invalid Endpoint scheme "http": only tcp:// and udp:// are supported`,
+				mock.Anything, mock.Anything)
 		})
 
 		Context("Forward to S3", func() {

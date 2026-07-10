@@ -142,6 +142,18 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", rlogcollector.FluentBitFilterConfigMapName, err)
 	}
 
+	// Watch the rendered configuration ConfigMaps so tampering with them
+	// triggers a reconcile that restores the rendered content.
+	for _, configMapName := range []string{
+		rlogcollector.FluentBitConfConfigMapName,
+		rlogcollector.FluentBitConfConfigMapName + "-windows",
+		rlogcollector.EKSLogForwarderConfConfigMapName,
+	} {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
+		}
+	}
+
 	err = c.WatchObject(&corev1.Node{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)
@@ -503,6 +515,16 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 
+			// Syslog forwarding is TCP or UDP (TLS is selected by the separate
+			// encryption field, not the scheme); any other scheme would render
+			// a syslog output mode fluent-bit rejects at startup.
+			if proto, _, _, err := url.ParseEndpoint(syslog.Endpoint); err == nil {
+				if proto != "tcp" && proto != "udp" {
+					r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Syslog config has invalid Endpoint scheme %q: only tcp:// and udp:// are supported", proto), nil, reqLogger)
+					return reconcile.Result{}, nil
+				}
+			}
+
 			// If the user set Syslog.logTypes, we need to ensure that they did not include
 			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
 			// ManagementClusterConnection CR is present). This is because IDS events
@@ -648,6 +670,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	})
 	components := []render.Component{
 		setUp,
+		// The resources shared by the Linux and Windows installations (the
+		// NetworkPolicy, credential copies, PacketCapture RBAC, managed-cluster
+		// Linseed plumbing and the legacy fluentd cleanup) render once, from a
+		// single configuration, so the per-OS components cannot contend over
+		// them.
+		rlogcollector.FluentBitShared(fluentBitCfg),
 		comp,
 		rcertificatemanagement.CertificateManagement(&certificateComponent),
 	}
@@ -687,17 +715,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			FluentBitKeyPair:       fluentBitKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 			LicenseExpired:         licenseExpired,
-			// Must match the Linux configuration: both OS variants render the
-			// shared allow-calico-fluent-bit NetworkPolicy, whose non-cluster-host
-			// ingress rule (port 9880) is gated on NonClusterHost and whose
-			// manager source selector is tenant-aware. If only the Linux config
-			// sets these, the two renders disagree and the operator flaps the
-			// policy on every reconcile (dropping voltron's access to the http
-			// input). The non-cluster-host input/service themselves are still
-			// Linux-only (gated on OSType), so NonClusterHost only affects the
-			// policy; Tenant/ExternalElastic additionally select the Linseed
-			// endpoint and x-tenant-id header in the Windows rendered config.
-			NonClusterHost:  nonclusterhost,
+			// Tenant/ExternalElastic select the Linseed endpoint and the
+			// x-tenant-id header in the Windows rendered config, exactly as
+			// they do for Linux.
 			Tenant:          tenant,
 			ExternalElastic: r.opts.ElasticExternal,
 		}

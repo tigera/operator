@@ -325,9 +325,8 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	toDelete = append(toDelete,
-		// Remove the pod monitor that existed prior to v1.25 and the
-		// fluentd-era monitors replaced by serviceMonitorFluentBit.
-		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: FluentBitMetrics, Namespace: common.TigeraPrometheusNamespace}},
+		// Remove the fluentd pod monitor that existed prior to v1.25 and the
+		// fluentd-era service monitor replaced by serviceMonitorFluentBit.
 		&monitoringv1.PodMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}},
 		&monitoringv1.ServiceMonitor{ObjectMeta: metav1.ObjectMeta{Name: "fluentd-metrics", Namespace: common.TigeraPrometheusNamespace}},
 		// Remove the tigera-prometheus-api deployment that was part of release-v1.23, but has been removed since.
@@ -1154,11 +1153,7 @@ func (mc *monitorComponent) serviceMonitorFluentBit() *monitoringv1.ServiceMonit
 					Port:          logcollector.FluentBitMetricsPortName,
 					Path:          "/api/v2/metrics/prometheus",
 					ScrapeTimeout: "5s",
-					// fluent-bit's built-in monitoring server (:2020) is plain
-					// HTTP — it has no TLS support, unlike fluentd's Ruby
-					// prometheus exporter which terminated mTLS on :9081. Access
-					// to the port is restricted by the allow-calico-fluent-bit
-					// NetworkPolicy (prometheus ingress only).
+					// No TLS config: plain HTTP, see the function comment.
 				},
 			},
 		},

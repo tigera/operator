@@ -162,8 +162,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		common.CalicoNamespace,
 	}
 	if r.opts.EnterpriseCRDExists {
-		// The log collector (fluent-bit) runs in common.CalicoNamespace, which is
-		// already in the list.
 		namespaces = append(namespaces,
 			render.ComplianceNamespace,
 			render.DexNamespace,

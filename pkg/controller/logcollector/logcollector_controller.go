@@ -154,6 +154,17 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		}
 	}
 
+	// Watch the workloads we render so that deleting or editing them out-of-band
+	// triggers a reconcile that restores them.
+	for _, dsName := range []string{render.FluentBitNodeName, render.FluentBitNodeWindowsName} {
+		if err = utils.AddDaemonsetWatch(c, dsName, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch DaemonSet %s: %w", dsName, err)
+		}
+	}
+	if err = utils.AddDeploymentWatch(c, render.EKSLogForwarderName, common.CalicoNamespace); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch Deployment %s: %w", render.EKSLogForwarderName, err)
+	}
+
 	err = c.WatchObject(&corev1.Node{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch the node resource: %w", err)

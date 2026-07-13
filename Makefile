@@ -117,7 +117,14 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.25.11-llvm18.1.8-k8s1.33.12
+# The project Go version.
+GO_VERSION?=1.25.11
+# Version of Kubernetes to use for dependencies, tests, and kubectl.
+K8S_VERSION?=v1.33.12
+# The version of LLVM to use for the go-build image.
+LLVM_VERSION?=18.1.8
+# Calico toolchain versions and the calico/go-build image to use.
+GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 SRC_FILES=$(shell find ./pkg -name '*.go')
 SRC_FILES+=$(shell find ./api -name '*.go')

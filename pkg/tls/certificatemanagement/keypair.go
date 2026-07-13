@@ -277,15 +277,22 @@ func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 		legacySecretCertName5 = "management-cluster.crt"
 	)
 	data := secret.Data
-	for keyField, certField := range map[string]string{
-		corev1.TLSPrivateKeyKey: corev1.TLSCertKey,
-		legacySecretKeyName:     legacySecretCertName,
-		legacySecretKeyName2:    legacySecretCertName2,
-		legacySecretKeyName3:    legacySecretCertName3,
-		legacySecretKeyName4:    legacySecretCertName4,
-		legacySecretKeyName5:    legacySecretCertName5,
+	// Check the recognised key/cert field-name pairs in a fixed priority order, standard
+	// tls.crt/tls.key first, then the legacy names. Iterating a map here would be a bug: Go
+	// randomizes map iteration order, so a secret that contains more than one recognised pair
+	// (e.g. the standard tls.crt/tls.key alongside a legacy cert/key that is intentionally kept
+	// during a certificate-rotation overlap) would return a non-deterministic cert. That flips
+	// the KeyPair's hash annotation between reconciles, which in turn triggers spurious rolling
+	// restarts of consumers such as Voltron/tigera-manager (dropping managed-cluster tunnels).
+	for _, pair := range []struct{ keyField, certField string }{
+		{corev1.TLSPrivateKeyKey, corev1.TLSCertKey},
+		{legacySecretKeyName, legacySecretCertName},
+		{legacySecretKeyName2, legacySecretCertName2},
+		{legacySecretKeyName3, legacySecretCertName3},
+		{legacySecretKeyName4, legacySecretCertName4},
+		{legacySecretKeyName5, legacySecretCertName5},
 	} {
-		key, cert := data[keyField], data[certField]
+		key, cert := data[pair.keyField], data[pair.certField]
 		if len(cert) > 0 {
 			return key, cert
 		}

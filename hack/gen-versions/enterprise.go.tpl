@@ -91,8 +91,8 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with .Components.fluentd }}
-	ComponentFluentd = Component{
+{{ with index .Components "fluent-bit" }}
+	ComponentFluentBit = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -100,8 +100,8 @@ var (
 		variant:   enterpriseVariant,
 	}
 {{- end }}
-{{ with index .Components "fluentd-windows" }}
-	ComponentFluentdWindows = Component{
+{{ with index .Components "fluent-bit-windows" }}
+	ComponentFluentBitWindows = Component{
 		Version:   "{{ .Version }}",
 		Image:     "{{ .Image }}",
 		Registry:  "{{ .Registry }}",
@@ -315,8 +315,8 @@ var (
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
 		ComponentElasticsearchOperator,
-		ComponentFluentd,
-		ComponentFluentdWindows,
+		ComponentFluentBit,
+		ComponentFluentBitWindows,
 		ComponentIntrusionDetectionController,
 		ComponentKibana,
 		ComponentManager,

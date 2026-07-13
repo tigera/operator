@@ -1082,7 +1082,7 @@ func (c *nodeComponent) nodeDaemonset(cniCfgMap *corev1.ConfigMap) *appsv1.Daemo
 		ds.Spec.Template.Spec.HostPID = true
 	}
 
-	setNodeCriticalPod(&(ds.Spec.Template))
+	SetNodeCriticalPod(&(ds.Spec.Template))
 	if c.cfg.MigrateNamespaces {
 		migration.LimitDaemonSetToMigratedNodes(&ds)
 	}

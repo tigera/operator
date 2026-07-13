@@ -106,6 +106,11 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 					Image: istioFakeImageProxyv2,
 				},
 			},
+			Gateways: &GatewaysConfig{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
 			Profile:                 "ambient",
 			TrustedZtunnelNamespace: IstioNamespace,
 		},

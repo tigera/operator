@@ -15,6 +15,7 @@
 package istio_test
 
 import (
+	"encoding/json"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -407,6 +408,25 @@ var _ = Describe("Istio Component Rendering", func() {
 			for _, v := range valuesConfigMap.Data {
 				Expect(v).NotTo(ContainSubstring("my-pull-secret"), "Expected no secret names in imagePullSecrets when none configured")
 			}
+		})
+
+		It("should set gateways.seccompProfile so waypoints run in PSA-restricted namespaces", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			injectorConfigMap, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, istio.IstioSidecarInjectorConfigMapName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			var values struct {
+				Gateways struct {
+					SeccompProfile corev1.SeccompProfile `json:"seccompProfile"`
+				} `json:"gateways"`
+			}
+			Expect(json.Unmarshal([]byte(injectorConfigMap.Data["values"]), &values)).To(Succeed())
+			Expect(values.Gateways.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault),
+				"waypoint istio-proxy containers only get a seccompProfile when gateways.seccompProfile is set in the istiod values")
 		})
 	})
 

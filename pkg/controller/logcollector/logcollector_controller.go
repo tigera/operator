@@ -44,9 +44,9 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	rlogcollector "github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
@@ -79,7 +79,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-		{Name: render.FluentdPolicyName, Namespace: render.LogCollectorNamespace},
+		{Name: rlogcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace},
 	})
 
 	if opts.MultiTenant {
@@ -129,20 +129,40 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	for _, secretName := range []string{
-		render.ElasticsearchEksLogForwarderUserSecret,
-		render.S3FluentdSecretName, render.EksLogForwarderSecret,
-		render.SplunkFluentdTokenSecretName, monitor.PrometheusClientTLSSecretName,
-		render.FluentdPrometheusTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, render.EKSLogForwarderTLSSecretName,
+		rlogcollector.S3FluentBitSecretName, rlogcollector.EksLogForwarderSecret,
+		rlogcollector.SplunkFluentBitTokenSecretName, monitor.PrometheusClientTLSSecretName,
+		rlogcollector.FluentBitTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, rlogcollector.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)
 		}
 	}
 
-	for _, configMapName := range []string{render.FluentdFilterConfigMapName, relasticsearch.ClusterConfigConfigMapName} {
-		if err = utils.AddConfigMapWatch(c, configMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+	if err = utils.AddConfigMapWatch(c, rlogcollector.FluentBitFilterConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", rlogcollector.FluentBitFilterConfigMapName, err)
+	}
+
+	// Watch the rendered configuration ConfigMaps so tampering with them
+	// triggers a reconcile that restores the rendered content.
+	for _, configMapName := range []string{
+		rlogcollector.FluentBitConfConfigMapName,
+		rlogcollector.FluentBitConfConfigMapName + "-windows",
+		rlogcollector.EKSLogForwarderConfConfigMapName,
+	} {
+		if err = utils.AddConfigMapWatch(c, configMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", configMapName, err)
 		}
+	}
+
+	// Watch the workloads we render so that deleting or editing them out-of-band
+	// triggers a reconcile that restores them.
+	for _, dsName := range []string{render.FluentBitNodeName, render.FluentBitNodeWindowsName} {
+		if err = utils.AddDaemonsetWatch(c, dsName, common.CalicoNamespace); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch DaemonSet %s: %w", dsName, err)
+		}
+	}
+	if err = utils.AddDeploymentWatch(c, render.EKSLogForwarderName, common.CalicoNamespace); err != nil {
+		return fmt.Errorf("logcollector-controller failed to watch Deployment %s: %w", render.EKSLogForwarderName, err)
 	}
 
 	err = c.WatchObject(&corev1.Node{}, &handler.EnqueueRequestForObject{})
@@ -369,9 +389,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// fluentdKeyPair is the key pair fluentd presents to identify itself
-	httpInputServiceNames := dns.GetServiceDNSNames(render.FluentdInputService, render.LogCollectorNamespace, r.opts.ClusterDomain)
-	fluentdKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.FluentdPrometheusTLSSecretName, common.OperatorNamespace(), append([]string{render.FluentdPrometheusTLSSecretName}, httpInputServiceNames...))
+	// fluentBitKeyPair is the key pair fluent-bit presents to identify itself
+	httpInputServiceNames := dns.GetServiceDNSNames(render.FluentBitInputService, render.LogCollectorNamespace, r.opts.ClusterDomain)
+	fluentBitKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, rlogcollector.FluentBitTLSSecretName, common.OperatorNamespace(), append([]string{rlogcollector.FluentBitTLSSecretName}, httpInputServiceNames...))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
@@ -430,7 +450,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// Fluentd needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
+	// Fluent Bit needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
 	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, linseedCertificate)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
@@ -457,7 +477,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	var s3Credential *render.S3Credential
+	var s3Credential *rlogcollector.S3Credential
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.S3 != nil {
 			s3Credential, err = getS3Credential(r.client)
@@ -472,7 +492,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	var splunkCredential *render.SplunkCredential
+	var splunkCredential *rlogcollector.SplunkCredential
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Splunk != nil {
 			splunkCredential, err = getSplunkCredential(r.client)
@@ -506,6 +526,16 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 
+			// Syslog forwarding is TCP or UDP (TLS is selected by the separate
+			// encryption field, not the scheme); any other scheme would render
+			// a syslog output mode fluent-bit rejects at startup.
+			if proto, _, _, err := url.ParseEndpoint(syslog.Endpoint); err == nil {
+				if proto != "tcp" && proto != "udp" {
+					r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Syslog config has invalid Endpoint scheme %q: only tcp:// and udp:// are supported", proto), nil, reqLogger)
+					return reconcile.Result{}, nil
+				}
+			}
+
 			// If the user set Syslog.logTypes, we need to ensure that they did not include
 			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
 			// ManagementClusterConnection CR is present). This is because IDS events
@@ -524,28 +554,35 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	filters, err := getFluentdFilters(r.client)
+	filters, err := getFluentBitFilters(r.client)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Fluentd filters", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving Fluent Bit filters", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	var eksConfig *render.EksCloudwatchLogConfig
-	var esClusterConfig *relasticsearch.ClusterConfig
+	// Surface (non-fatally) any user-provided filter content that is not valid fluent-bit YAML —
+	// e.g. a leftover fluentd <filter> block after an upgrade. The render skips such entries so
+	// logs keep flowing; raise a warning on the Available condition per key and clear it once the
+	// content parses, rather than degrading the whole LogCollector for an optional, malformed filter.
+	invalidFilters := map[string]bool{}
+	for _, key := range filters.InvalidKeys() {
+		invalidFilters[key] = true
+	}
+	for _, key := range []string{rlogcollector.FluentBitFilterFlowName, rlogcollector.FluentBitFilterDNSName} {
+		warningKey := "fluent-bit-filter-" + key
+		if invalidFilters[key] {
+			r.status.SetWarning(warningKey, fmt.Sprintf("Ignoring the %q entry in the %s ConfigMap: it is not valid fluent-bit YAML. Filters previously written in fluentd syntax must be rewritten as a fluent-bit YAML filter list.", key, rlogcollector.FluentBitFilterConfigMapName))
+		} else {
+			r.status.ClearWarning(warningKey)
+		}
+	}
+
+	var eksConfig *rlogcollector.EksCloudwatchLogConfig
 	var eksLogForwarderKeyPair certificatemanagement.KeyPairInterface
 	if installationSpec.KubernetesProvider.IsEKS() {
 		log.Info("Managed kubernetes EKS found, getting necessary credentials and config")
 		if instance.Spec.AdditionalSources != nil {
 			if instance.Spec.AdditionalSources.EksCloudwatchLog != nil {
-				esClusterConfig, err = utils.GetElasticsearchClusterConfig(ctx, r.client)
-				if err != nil {
-					if errors.IsNotFound(err) {
-						r.status.SetDegraded(operatorv1.ResourceNotReady, "Elasticsearch cluster configuration is not available, waiting for it to become available", err, reqLogger)
-						return reconcile.Result{}, nil
-					}
-					r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the elasticsearch cluster configuration", err, reqLogger)
-					return reconcile.Result{}, err
-				}
 				eksConfig, err = getEksCloudwatchLogConfig(r.client,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.FetchInterval,
 					instance.Spec.AdditionalSources.EksCloudwatchLog.Region,
@@ -557,7 +594,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 				}
 
 				// eksLogForwarderKeyPair is the key pair eks-log-forwarder presents to identify itself
-				eksLogForwarderKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{render.EKSLogForwarderTLSSecretName})
+				eksLogForwarderKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, rlogcollector.EKSLogForwarderTLSSecretName, common.OperatorNamespace(), []string{rlogcollector.EKSLogForwarderTLSSecretName})
 				if err != nil {
 					r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating eks log forwarder TLS certificate", err, reqLogger)
 					return reconcile.Result{}, err
@@ -588,9 +625,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
-	fluentdCfg := &render.FluentdConfiguration{
+	fluentBitCfg := &rlogcollector.FluentBitConfiguration{
 		LogCollector:           instance,
-		ESClusterConfig:        esClusterConfig,
 		S3Credential:           s3Credential,
 		SplkCredential:         splunkCredential,
 		Filters:                filters,
@@ -599,7 +635,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Installation:           installationSpec,
 		ClusterDomain:          r.opts.ClusterDomain,
 		OSType:                 rmeta.OSTypeLinux,
-		FluentdKeyPair:         fluentdKeyPair,
+		FluentBitKeyPair:       fluentBitKeyPair,
 		TrustedBundle:          trustedBundle,
 		ManagedCluster:         managedCluster,
 		UseSyslogCertificate:   useSyslogCertificate,
@@ -610,14 +646,14 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
 	}
-	// Render the fluentd component for Linux
-	comp := render.Fluentd(fluentdCfg)
+	// Render the fluent-bit component for Linux
+	comp := rlogcollector.FluentBit(fluentBitCfg)
 
 	certificateComponent := rcertificatemanagement.Config{
 		Namespace:       render.LogCollectorNamespace,
-		ServiceAccounts: []string{render.FluentdNodeName},
+		ServiceAccounts: []string{render.FluentBitNodeName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(fluentdKeyPair, true, true),
+			rcertificatemanagement.NewKeyPairOption(fluentBitKeyPair, true, true),
 		},
 		TrustedBundle: trustedBundle,
 	}
@@ -632,15 +668,25 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	setUp := render.NewSetup(&render.SetUpConfiguration{
-		OpenShift:       r.opts.DetectedProvider.IsOpenShift(),
-		Installation:    installationSpec,
-		PullSecrets:     pullSecrets,
-		Namespace:       render.LogCollectorNamespace,
-		PSS:             render.PSSPrivileged,
-		CreateNamespace: true,
+		OpenShift:    r.opts.DetectedProvider.IsOpenShift(),
+		Installation: installationSpec,
+		PullSecrets:  pullSecrets,
+		Namespace:    render.LogCollectorNamespace,
+		PSS:          render.PSSPrivileged,
+		// calico-system is created and owned by the core Installation
+		// controller. Owning it from the LogCollector CR would let a routine
+		// `kubectl delete logcollector` garbage-collect the entire namespace —
+		// calico-node included.
+		CreateNamespace: false,
 	})
 	components := []render.Component{
 		setUp,
+		// The resources shared by the Linux and Windows installations (the
+		// NetworkPolicy, credential copies, PacketCapture RBAC, managed-cluster
+		// Linseed plumbing and the legacy fluentd cleanup) render once, from a
+		// single configuration, so the per-OS components cannot contend over
+		// them.
+		rlogcollector.FluentBitShared(fluentBitCfg),
 		comp,
 		rcertificatemanagement.CertificateManagement(&certificateComponent),
 	}
@@ -657,16 +703,15 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// Render a fluentd component for Windows if the cluster has Windows nodes.
+	// Render a fluent-bit component for Windows if the cluster has Windows nodes.
 	hasWindowsNodes, err := common.HasWindowsNodes(r.client)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	if hasWindowsNodes {
-		fluentdCfg = &render.FluentdConfiguration{
+		fluentBitCfg = &rlogcollector.FluentBitConfiguration{
 			LogCollector:           instance,
-			ESClusterConfig:        esClusterConfig,
 			S3Credential:           s3Credential,
 			SplkCredential:         splunkCredential,
 			Filters:                filters,
@@ -678,11 +723,16 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:          trustedBundle,
 			ManagedCluster:         managedCluster,
 			UseSyslogCertificate:   useSyslogCertificate,
-			FluentdKeyPair:         fluentdKeyPair,
+			FluentBitKeyPair:       fluentBitKeyPair,
 			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 			LicenseExpired:         licenseExpired,
+			// Tenant/ExternalElastic select the Linseed endpoint and the
+			// x-tenant-id header in the Windows rendered config, exactly as
+			// they do for Linux.
+			Tenant:          tenant,
+			ExternalElastic: r.opts.ElasticExternal,
 		}
-		comp = render.Fluentd(fluentdCfg)
+		comp = rlogcollector.FluentBit(fluentBitCfg)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
@@ -706,8 +756,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 
 	// Check BYO certificate expiry warnings.
 	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.FluentdPrometheusTLSSecretName: fluentdKeyPair,
-		render.EKSLogForwarderTLSSecretName:   eksLogForwarderKeyPair,
+		rlogcollector.FluentBitTLSSecretName:       fluentBitKeyPair,
+		rlogcollector.EKSLogForwarderTLSSecretName: eksLogForwarderKeyPair,
 	}, r.status)
 
 	// Clear the degraded bit if we've reached this far.
@@ -727,81 +777,81 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	return reconcile.Result{RequeueAfter: graceRequeueAfter}, nil
 }
 
-func getS3Credential(client client.Client) (*render.S3Credential, error) {
+func getS3Credential(client client.Client) (*rlogcollector.S3Credential, error) {
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
-		Name:      render.S3FluentdSecretName,
+		Name:      rlogcollector.S3FluentBitSecretName,
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read secret %q: %s", render.S3FluentdSecretName, err)
+		return nil, fmt.Errorf("failed to read secret %q: %s", rlogcollector.S3FluentBitSecretName, err)
 	}
 
 	var ok bool
 	var kId []byte
-	if kId, ok = secret.Data[render.S3KeyIdName]; !ok || len(kId) == 0 {
+	if kId, ok = secret.Data[rlogcollector.S3KeyIdName]; !ok || len(kId) == 0 {
 		return nil, fmt.Errorf("expected secret %q to have a field named %q",
-			render.S3FluentdSecretName, render.S3KeyIdName)
+			rlogcollector.S3FluentBitSecretName, rlogcollector.S3KeyIdName)
 	}
 	var kSecret []byte
-	if kSecret, ok = secret.Data[render.S3KeySecretName]; !ok || len(kSecret) == 0 {
+	if kSecret, ok = secret.Data[rlogcollector.S3KeySecretName]; !ok || len(kSecret) == 0 {
 		return nil, fmt.Errorf("expected secret %q to have a field named %q",
-			render.S3FluentdSecretName, render.S3KeySecretName)
+			rlogcollector.S3FluentBitSecretName, rlogcollector.S3KeySecretName)
 	}
 
-	return &render.S3Credential{
+	return &rlogcollector.S3Credential{
 		KeyId:     kId,
 		KeySecret: kSecret,
 	}, nil
 }
 
-func getSplunkCredential(client client.Client) (*render.SplunkCredential, error) {
+func getSplunkCredential(client client.Client) (*rlogcollector.SplunkCredential, error) {
 	tokenSecret := &corev1.Secret{}
 	tokenNamespacedName := types.NamespacedName{
-		Name:      render.SplunkFluentdTokenSecretName,
+		Name:      rlogcollector.SplunkFluentBitTokenSecretName,
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), tokenNamespacedName, tokenSecret); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read secret %q: %s", render.SplunkFluentdTokenSecretName, err)
+		return nil, fmt.Errorf("failed to read secret %q: %s", rlogcollector.SplunkFluentBitTokenSecretName, err)
 	}
 
-	token, ok := tokenSecret.Data[render.SplunkFluentdSecretTokenKey]
+	token, ok := tokenSecret.Data[rlogcollector.SplunkFluentBitSecretTokenKey]
 	if !ok || len(token) == 0 {
 		return nil, fmt.Errorf("expected secret %q to have a field named %q",
-			render.SplunkFluentdTokenSecretName, render.SplunkFluentdSecretTokenKey)
+			rlogcollector.SplunkFluentBitTokenSecretName, rlogcollector.SplunkFluentBitSecretTokenKey)
 	}
 
-	return &render.SplunkCredential{
+	return &rlogcollector.SplunkCredential{
 		Token: token,
 	}, nil
 }
 
-func getFluentdFilters(client client.Client) (*render.FluentdFilters, error) {
+func getFluentBitFilters(client client.Client) (*rlogcollector.FluentBitFilters, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
-		Name:      render.FluentdFilterConfigMapName,
+		Name:      rlogcollector.FluentBitFilterConfigMapName,
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", render.FluentdFilterConfigMapName, err)
+		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", rlogcollector.FluentBitFilterConfigMapName, err)
 	}
 
-	return &render.FluentdFilters{
-		Flow: cm.Data[render.FluentdFilterFlowName],
-		DNS:  cm.Data[render.FluentdFilterDNSName],
+	return &rlogcollector.FluentBitFilters{
+		Flow: cm.Data[rlogcollector.FluentBitFilterFlowName],
+		DNS:  cm.Data[rlogcollector.FluentBitFilterDNSName],
 	}, nil
 }
 
-func getEksCloudwatchLogConfig(client client.Client, interval int32, region, group, prefix string) (*render.EksCloudwatchLogConfig, error) {
+func getEksCloudwatchLogConfig(client client.Client, interval int32, region, group, prefix string) (*rlogcollector.EksCloudwatchLogConfig, error) {
 	if region == "" {
 		return nil, fmt.Errorf("missing AWS region info")
 	}
@@ -820,24 +870,24 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 
 	secret := &corev1.Secret{}
 	secretNamespacedName := types.NamespacedName{
-		Name:      render.EksLogForwarderSecret,
+		Name:      rlogcollector.EksLogForwarderSecret,
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), secretNamespacedName, secret); err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read Secret %q: %s", render.EksLogForwarderSecret, err)
+		return nil, fmt.Errorf("failed to read Secret %q: %s", rlogcollector.EksLogForwarderSecret, err)
 	}
 
-	if len(secret.Data[render.EksLogForwarderAwsId]) == 0 ||
-		len(secret.Data[render.EksLogForwarderAwsKey]) == 0 {
+	if len(secret.Data[rlogcollector.EksLogForwarderAwsId]) == 0 ||
+		len(secret.Data[rlogcollector.EksLogForwarderAwsKey]) == 0 {
 		return nil, fmt.Errorf("incomplete Cloudwatch credentials")
 	}
 
-	return &render.EksCloudwatchLogConfig{
-		AwsId:         secret.Data[render.EksLogForwarderAwsId],
-		AwsKey:        secret.Data[render.EksLogForwarderAwsKey],
+	return &rlogcollector.EksCloudwatchLogConfig{
+		AwsId:         secret.Data[rlogcollector.EksLogForwarderAwsId],
+		AwsKey:        secret.Data[rlogcollector.EksLogForwarderAwsKey],
 		AwsRegion:     region,
 		GroupName:     group,
 		StreamPrefix:  prefix,
@@ -848,21 +898,21 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
-		Name:      render.SyslogCAConfigMapName,
+		Name:      rlogcollector.SyslogCAConfigMapName,
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("ConfigMap %q is not found, assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName))
+			log.Info(fmt.Sprintf("ConfigMap %q is not found, assuming syslog's certificate is signed by publicly trusted CA", rlogcollector.SyslogCAConfigMapName))
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", render.SyslogCAConfigMapName, err)
+		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", rlogcollector.SyslogCAConfigMapName, err)
 	}
 	if len(cm.Data[corev1.TLSCertKey]) == 0 {
-		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming syslog's certificate is signed by publicly trusted CA", render.SyslogCAConfigMapName, corev1.TLSCertKey))
+		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming syslog's certificate is signed by publicly trusted CA", rlogcollector.SyslogCAConfigMapName, corev1.TLSCertKey))
 		return nil, nil
 	}
-	syslogCert := certificatemanagement.NewCertificate(render.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
+	syslogCert := certificatemanagement.NewCertificate(rlogcollector.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
 }

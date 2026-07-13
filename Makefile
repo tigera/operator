@@ -176,6 +176,23 @@ EXCLUDE_MANIFEST_REGISTRIES?=""
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
 
+# Calico Cloud build variant. `make <target> VARIANT=cloud` builds and pushes the operator-cloud
+# image to GCR (gcr.io/tigera-tesla/operator-cloud), amd64 only, instead of the enterprise quay
+# image, and bakes cloud mode into the binary via CLOUD_LDFLAGS (see the operator build below).
+# Enterprise/OSS builds (VARIANT unset) are completely unaffected. PUSH_MANIFEST_IMAGE_PREFIXES and
+# PUSH_NONMANIFEST_IMAGE_PREFIXES above use recursive `=`, so they pick up these overrides.
+# Note: this is the same tigera/operator repo — only the published image differs (operator-cloud).
+CLOUD_LDFLAGS=
+ifeq ($(VARIANT),cloud)
+BUILD_IMAGE:=tigera-tesla/operator-cloud
+IMAGE_REGISTRY:=gcr.io
+PUSH_IMAGE_PREFIXES:=gcr.io/
+EXCLUDE_MANIFEST_REGISTRIES:=gcr.io/
+VALIDARCHES:=amd64
+# Bake cloud mode into the operator binary so it cannot be disabled at runtime (see pkg/cloud.IsCloudBuild).
+CLOUD_LDFLAGS=-X $(PACKAGE_NAME)/pkg/cloud.buildVariant=cloud
+endif
+
 
 imagetag:
 ifndef IMAGETAG
@@ -279,7 +296,7 @@ $(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FI
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/'
+	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) $(CLOUD_LDFLAGS) -s -w" ./cmd/'
 ifeq ($(ARCH), $(filter $(ARCH),amd64))
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/operator-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
 endif
@@ -507,6 +524,10 @@ release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release VERSION=$(RELEASE_TAG)
 	REPO=$(REPO) $(MAKE) release-publish VERSION=$(RELEASE_TAG)
 
+# Calico Cloud releases reuse release-tag with VARIANT=cloud, e.g.
+# `make release-tag VARIANT=cloud RELEASE_TAG=cloud-vX.Y.Z-N`. The release tool applies cloud
+# behavior (GCR/tesla image, cloud-v* format, no GitHub release) at runtime based on VARIANT.
+
 ## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
 	REPO=$(REPO) hack/bin/release notes
@@ -558,6 +579,11 @@ hack/bin/release: $(shell find ./hack/release -type f)
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -buildvcs=false -o hack/bin/release ./hack/release'
+
+# Calico Cloud releases use the same release binary and targets with VARIANT=cloud, e.g.
+# `make release VARIANT=cloud` / `make release-tag VARIANT=cloud`. The release tool activates its
+# cloud behavior (GCR/tesla image, cloud-vX.Y.Z version format, hashrelease support) at runtime when
+# VARIANT=cloud; no separate binary or build tag is required.
 
 hack/release/ut:
 	mkdir -p report/release
@@ -617,8 +643,9 @@ gen-files: manifests generate
 
 OS_VERSIONS?=config/calico_versions.yml
 EE_VERSIONS?=config/enterprise_versions.yml
+CLOUD_VERSIONS?=config/cloud_versions.yml
 
-.PHONY: gen-versions gen-versions-calico gen-versions-enterprise
+.PHONY: gen-versions gen-versions-calico gen-versions-enterprise gen-versions-cloud
 
 gen-versions: gen-versions-calico gen-versions-enterprise
 
@@ -627,6 +654,14 @@ gen-versions-calico: $(BINDIR)/gen-versions update-calico-crds
 
 gen-versions-enterprise: $(BINDIR)/gen-versions update-enterprise-crds
 	$(BINDIR)/gen-versions -ee-versions=$(EE_VERSIONS) > pkg/components/enterprise.go
+
+# gen-versions-cloud regenerates pkg/components/cloud.go from config/cloud_versions.yml. It is a
+# Calico Cloud concern and is intentionally NOT part of the default `gen-versions` aggregate, so the
+# enterprise build's generated output is unchanged. The cloud release pipeline invokes this target.
+# Unlike the calico/enterprise targets, it does not fetch CRDs (cloud relies on the upstream operator
+# repo for CRD updates).
+gen-versions-cloud: $(BINDIR)/gen-versions
+	$(BINDIR)/gen-versions -cloud-versions=$(CLOUD_VERSIONS) > pkg/components/cloud.go
 
 $(BINDIR)/gen-versions: $(shell find ./hack/gen-versions -type f)
 	mkdir -p $(BINDIR)

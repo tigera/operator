@@ -22,6 +22,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -33,7 +34,10 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -1019,3 +1023,56 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 	})
 })
+
+var _ = Describe("LogCollector controller watches", func() {
+	It("watches the rendered fluent-bit workloads so they are restored if deleted", func() {
+		m := &mockController{}
+		Expect(add(nil, m)).ShouldNot(HaveOccurred())
+
+		var daemonSets, deployments []string
+		for _, obj := range m.watchedObjects {
+			key := obj.GetNamespace() + "/" + obj.GetName()
+			switch obj.(type) {
+			case *appsv1.DaemonSet:
+				daemonSets = append(daemonSets, key)
+			case *appsv1.Deployment:
+				deployments = append(deployments, key)
+			}
+		}
+
+		Expect(daemonSets).To(ContainElements(
+			"calico-system/calico-fluent-bit",
+			"calico-system/calico-fluent-bit-windows",
+		))
+		Expect(deployments).To(ContainElement("calico-system/eks-log-forwarder"))
+	})
+})
+
+// mockController records the objects add() registers watches for, so tests can
+// assert on the watch set without a live manager.
+type mockController struct {
+	mock.Mock
+	watchedObjects []client.Object
+}
+
+func (m *mockController) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watchedObjects = append(m.watchedObjects, object)
+	return nil
+}
+
+func (m *mockController) Watch(src source.Source) error {
+	panic("not implemented")
+}
+
+func (m *mockController) Start(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockController) GetLogger() logr.Logger {
+	var logger logr.Logger
+	return logger
+}
+
+func (m *mockController) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}

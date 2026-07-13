@@ -209,6 +209,13 @@ func AddDeploymentWatch(c ctrlruntime.Controller, name, namespace string) error 
 	}, &handler.EnqueueRequestForObject{})
 }
 
+func AddDaemonsetWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.DaemonSet{
+		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}, &handler.EnqueueRequestForObject{})
+}
+
 func AddPeriodicReconcile(c ctrlruntime.Controller, period time.Duration, handler handler.EventHandler) error {
 	return c.Watch(source.Channel(createPeriodicReconcileChannel(period), handler))
 }

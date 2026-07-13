@@ -21,7 +21,7 @@ blocks:
   - name: Run Renovate
     task:
       secrets:
-        - name: marvin-renovate-token
+        - name: marvin-renovate-token-enterprise
       jobs:
         - name: Renovate
           env_vars:

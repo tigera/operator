@@ -77,10 +77,13 @@ const (
 	EnvoyGatewayPolicySelector = "k8s-app == '" + GatewayControllerLabel + "' || k8s-app == '" + GatewayCertgenLabel + "'"
 
 	// Data-plane proxies run in each Gateway's own namespace (deploy.type=GatewayNamespace),
-	// not calico-system, so they need their own policy in the calico-system tier. EnvoyProxy
-	// stamps gateway.envoyproxy.io/owning-gateway-name on every proxy pod, so use it as the selector.
+	// not calico-system, so they need their own policy in the calico-system tier. We stamp a
+	// Calico-owned k8s-app label on every proxy pod (via the EnvoyProxy pod spec, see
+	// envoyProxyConfig) and select on that, rather than Envoy Gateway's
+	// gateway.envoyproxy.io/owning-gateway-name label which we do not own and which could
+	// change upstream without notice.
 	ProxyPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway-proxy"
-	EnvoyProxyPolicySelector = "has(gateway.envoyproxy.io/owning-gateway-name)"
+	EnvoyProxyPolicySelector = "k8s-app == '" + GatewayProxyLabel + "'"
 )
 
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
@@ -112,6 +115,7 @@ const (
 	GatewayAPIName                      = "calico-gateway-api"
 	GatewayControllerLabel              = GatewayAPIName + "-controller"
 	GatewayCertgenLabel                 = GatewayAPIName + "-certgen"
+	GatewayProxyLabel                   = GatewayAPIName + "-proxy"
 	EnvoyGatewayConfigName              = "envoy-gateway-config"
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
@@ -818,6 +822,18 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	return objs
 }
 
+// ensureGatewayProxyLabel stamps the Calico-owned k8s-app label on the data-plane
+// proxy pods so that calico-system-tier policy (see gatewayAPIProxyPolicy) can select
+// them by our own label rather than Envoy Gateway's gateway.envoyproxy.io/owning-gateway-name,
+// which we do not control and which could change upstream. Any user-supplied pod labels
+// carried over from a custom EnvoyProxy are preserved.
+func ensureGatewayProxyLabel(pod *envoyapi.KubernetesPodSpec) {
+	if pod.Labels == nil {
+		pod.Labels = map[string]string{}
+	}
+	pod.Labels["k8s-app"] = GatewayProxyLabel
+}
+
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
@@ -870,6 +886,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod = &envoyapi.KubernetesPodSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+		ensureGatewayProxyLabel(envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod)
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container == nil {
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container = &envoyapi.KubernetesContainerSpec{}
 		}
@@ -883,6 +900,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod = &envoyapi.KubernetesPodSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+		ensureGatewayProxyLabel(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod)
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container == nil {
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container = &envoyapi.KubernetesContainerSpec{}
 		}

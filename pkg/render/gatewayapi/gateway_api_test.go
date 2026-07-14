@@ -365,6 +365,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, GatewayClassName, common.CalicoNamespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("g-rural", "urban"))
+		// Our Calico-owned label is stamped alongside any user-supplied pod labels, so the
+		// calico-system-tier proxy policy can select the proxy pods by a label we control.
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("k8s-app", GatewayProxyLabel))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations).To(HaveKeyWithValue("g-haste", "speed"))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity).To(Equal(affinity))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector).To(HaveKeyWithValue("g-fast", "slow"))
@@ -1655,6 +1658,17 @@ value:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(policy.Spec.Tier).To(Equal("calico-system"))
 		Expect(policy.Spec.Selector).To(Equal(EnvoyGatewayPolicySelector))
+
+		// The data-plane proxies run in their own Gateway namespaces, so a cluster-scoped
+		// GlobalNetworkPolicy covers them. It selects by our Calico-owned label rather than
+		// Envoy Gateway's owning-gateway-name label, which we do not control.
+		proxyPolicy, err := rtest.GetResourceOfType[*v3.GlobalNetworkPolicy](objsToCreate, ProxyPolicyName, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proxyPolicy.Spec.Tier).To(Equal("calico-system"))
+		Expect(proxyPolicy.Spec.Selector).To(Equal(EnvoyProxyPolicySelector))
+		Expect(proxyPolicy.Spec.Selector).NotTo(ContainSubstring("owning-gateway-name"),
+			"proxy policy must select by our Calico label, not Envoy Gateway's owning-gateway-name")
+
 		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", common.CalicoNamespace)
 		Expect(err).To(HaveOccurred(), "must not render default-deny in calico-system")
 	})

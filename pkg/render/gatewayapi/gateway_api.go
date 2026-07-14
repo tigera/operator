@@ -75,6 +75,12 @@ const (
 
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
 	EnvoyGatewayPolicySelector = "k8s-app == '" + GatewayControllerLabel + "' || k8s-app == '" + GatewayCertgenLabel + "'"
+
+	// Data-plane proxies run in each Gateway's own namespace (deploy.type=GatewayNamespace),
+	// not calico-system, so they need their own policy in the calico-system tier. EnvoyProxy
+	// stamps gateway.envoyproxy.io/owning-gateway-name on every proxy pod, so use it as the selector.
+	ProxyPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway-proxy"
+	EnvoyProxyPolicySelector = "has(gateway.envoyproxy.io/owning-gateway-name)"
 )
 
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
@@ -486,6 +492,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// Installation's default-deny.
 	if pr.cfg.IncludeV3NetworkPolicy {
 		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
+		// Data-plane proxies live in each Gateway's own namespace; a GlobalNetworkPolicy
+		// covers them all and auto-extends to new Gateway namespaces without a re-render.
+		objs = append(objs, gatewayAPIProxyPolicy(openShift))
 	}
 
 	// Helm-rendered envoy-gateway controller in calico-system.
@@ -1392,6 +1401,62 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
 					},
 				},
+			},
+			Egress: egress,
+		},
+	}
+}
+
+// gatewayAPIProxyPolicy lets the data-plane envoy proxies — which run in each
+// Gateway's own namespace (deploy.type=GatewayNamespace), not calico-system —
+// punch through any default-deny in those namespaces. It is a GlobalNetworkPolicy
+// rather than a per-namespace NetworkPolicy fanned out over GatewayNamespaces so
+// that it automatically covers new Gateway namespaces with no re-render.
+func gatewayAPIProxyPolicy(openShift bool) *v3.GlobalNetworkPolicy {
+	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
+	egress = append(egress,
+		// xDS config (18000) and Wasm module fetch (18002) from the envoy-gateway
+		// controller in calico-system. The proxy dials the controller — see
+		// envoyproxy/gateway internal/infrastructure/kubernetes/proxy/resource.go
+		// (XdsServerHost = <svc>.<controllerNamespace>.svc) and internal/xds/bootstrap
+		// (DefaultXdsServerPort=18000, wasmHTTPServicePort=18002). 18001 is the
+		// ratelimit→controller SotW path, not a proxy path, so it is omitted here.
+		v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				NamespaceSelector: "kubernetes.io/metadata.name == '" + common.CalicoNamespace + "'",
+				Selector:          EnvoyGatewayPolicySelector,
+				Ports:             networkpolicy.Ports(18000, 18002),
+			},
+		},
+		// Backend/application egress is left to the user. Under a default-deny tier
+		// the user must allow proxy->backend themselves; until they do, the proxy is
+		// reachable and configured but returns 503 on the upstream connection.
+		v3.Rule{Action: v3.Pass},
+	)
+
+	return &v3.GlobalNetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName},
+		Spec: v3.GlobalNetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: EnvoyProxyPolicySelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			// Allow all inbound TCP from any source (this also covers the 19001 metrics
+			// scrape). Gateway listener ports are user-defined and dynamic, so a managed
+			// Gateway has to accept arbitrary ports to serve traffic out of the box,
+			// including under a default-deny tier. Verified on a cluster: the narrower
+			// alternative (allow only 19001, then Pass) lets listener ingress fall
+			// through to the user's default-deny and silently breaks every Gateway in a
+			// default-deny namespace. The cost of allowing all TCP is that an Allow is
+			// terminal in this tier, so a user cannot narrow ingress to the proxy with
+			// their own policy.
+			Ingress: []v3.Rule{
+				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"0.0.0.0/0"}}},
+				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"::/0"}}},
+				{Action: v3.Pass},
 			},
 			Egress: egress,
 		},

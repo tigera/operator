@@ -778,7 +778,7 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	controllerDeployment.Spec.Template.Spec.ImagePullSecrets = append(
 		controllerDeployment.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
-	controllerDeployment.Spec.Template.Labels["k8s-app"] = GatewayControllerLabel
+	setGatewayComponentLabel(&controllerDeployment.Spec.Template, GatewayControllerLabel)
 
 	// Mount the trust bundle on the envoy-gateway controller. The controller pulls
 	// wasm OCI images and may call out to JWT/OIDC providers, both of which need
@@ -812,21 +812,37 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	certgenJob.Spec.Template.Spec.ImagePullSecrets = append(
 		certgenJob.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
-	if certgenJob.Spec.Template.Labels == nil {
-		certgenJob.Spec.Template.Labels = map[string]string{}
-	}
-	certgenJob.Spec.Template.Labels["k8s-app"] = GatewayCertgenLabel
+	setGatewayComponentLabel(&certgenJob.Spec.Template, GatewayCertgenLabel)
 	rcomp.ApplyJobOverrides(certgenJob, pr.cfg.GatewayAPI.Spec.GatewayCertgenJob)
 	objs = append(objs, certgenJob)
 
 	return objs
 }
 
-// ensureGatewayProxyLabel stamps the Calico-owned k8s-app label on the data-plane
-// proxy pods so that calico-system-tier policy (see gatewayAPIProxyPolicy) can select
-// them by our own label rather than Envoy Gateway's gateway.envoyproxy.io/owning-gateway-name,
-// which we do not control and which could change upstream. Any user-supplied pod labels
-// carried over from a custom EnvoyProxy are preserved.
+// The envoy-gateway components each carry a Calico-owned k8s-app label so the
+// calico-system-tier policies can select them by a label we control (rather than a
+// chart- or Envoy-Gateway-supplied label that could change upstream). The controller
+// and certgen pods are operator-rendered, so we stamp the label on their pod templates
+// directly (setGatewayComponentLabel). The proxy pods are created by the envoy-gateway
+// controller at runtime, so the operator never renders them; the only operator-owned
+// hook is the EnvoyProxy pod spec (ensureGatewayProxyLabel). This is why the label is
+// set here in the gateway render rather than through the standard labeler in
+// pkg/controller/utils/component.go, which keys off the object name and cannot reach a
+// runtime-created pod.
+
+// setGatewayComponentLabel stamps the Calico-owned k8s-app label on an operator-rendered
+// envoy-gateway component's pod template (controller, certgen). Existing template labels
+// are preserved.
+func setGatewayComponentLabel(template *corev1.PodTemplateSpec, label string) {
+	if template.Labels == nil {
+		template.Labels = map[string]string{}
+	}
+	template.Labels["k8s-app"] = label
+}
+
+// ensureGatewayProxyLabel stamps the same Calico-owned k8s-app label on the data-plane
+// proxy pods, via the EnvoyProxy pod spec, so gatewayAPIProxyPolicy can select them.
+// Any user-supplied pod labels carried over from a custom EnvoyProxy are preserved.
 func ensureGatewayProxyLabel(pod *envoyapi.KubernetesPodSpec) {
 	if pod.Labels == nil {
 		pod.Labels = map[string]string{}

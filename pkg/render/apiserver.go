@@ -1843,6 +1843,18 @@ func (c *apiServerComponent) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get"},
 		},
+		// Allow the user to read the gatewayapis CR to detect if Gateway API is enabled/disabled.
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		},
+		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 		// Allow the user to view WAF policies, plugins, and validation policies.
 		{
 			APIGroups: []string{"applicationlayer.projectcalico.org"},
@@ -2058,6 +2070,19 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
+		},
+		// Allow the user to read the gatewayapis CR to detect if Gateway API is enabled/disabled.
+		// Read-only: enabling Gateway API from the WAF UI is intentionally deferred.
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		},
+		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Allow the user to manage WAF policies, plugins, and validation policies.
 		{

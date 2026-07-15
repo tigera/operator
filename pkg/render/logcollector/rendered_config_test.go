@@ -98,7 +98,8 @@ func TestRenderedConfigGoldens(t *testing.T) {
 		name        string
 		fluentdCase string // the fluentd test.sh case this descends from
 		configure   func(cfg *logcollector.FluentBitConfiguration)
-		eks         bool // golden the eks-log-forwarder config instead of the daemonset config
+		eks         bool         // golden the eks-log-forwarder config instead of the daemonset config
+		osType      rmeta.OSType // OS to render; defaults to Linux when empty
 	}{
 		{
 			name:        "linseed",
@@ -252,9 +253,8 @@ func TestRenderedConfigGoldens(t *testing.T) {
 		{
 			name:        "windows",
 			fluentdCase: "(none — reviewability golden for the Windows daemonset config)",
-			configure: func(cfg *logcollector.FluentBitConfiguration) {
-				cfg.OSType = rmeta.OSTypeWindows
-			},
+			osType:      rmeta.OSTypeWindows,
+			configure:   func(cfg *logcollector.FluentBitConfiguration) {},
 		},
 	}
 
@@ -264,9 +264,13 @@ func TestRenderedConfigGoldens(t *testing.T) {
 			cfg := goldenBaseConfig(t)
 			sc.configure(cfg)
 
-			resources, _ := logcollector.FluentBit(cfg).Objects()
+			osType := sc.osType
+			if osType == "" {
+				osType = rmeta.OSTypeLinux
+			}
+			resources, _ := logcollector.FluentBitOSSpecific(cfg, osType).Objects()
 			cmName := logcollector.FluentBitConfConfigMapName
-			if cfg.OSType == rmeta.OSTypeWindows {
+			if osType == rmeta.OSTypeWindows {
 				cmName += "-windows"
 			}
 			if sc.eks {
@@ -327,7 +331,6 @@ func goldenBaseConfig(t *testing.T) *logcollector.FluentBitConfiguration {
 	return &logcollector.FluentBitConfiguration{
 		LogCollector:  &operatorv1.LogCollector{},
 		ClusterDomain: dns.DefaultClusterDomain,
-		OSType:        rmeta.OSTypeLinux,
 		Installation: &operatorv1.InstallationSpec{
 			KubernetesProvider: operatorv1.ProviderNone,
 		},

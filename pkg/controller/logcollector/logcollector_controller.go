@@ -295,6 +295,20 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Validate the syslog Endpoint scheme before defaulting. Syslog forwarding
+	// is TCP or UDP (TLS is selected by the separate encryption field, not the
+	// scheme); any other scheme would render a syslog output mode fluent-bit
+	// rejects at startup. This runs before fillDefaults on purpose: fillDefaults
+	// patches the CR, and the CRD now enforces the tcp/udp Endpoint pattern, so
+	// on upgrade a stored legacy scheme would make that patch fail with an
+	// opaque apiserver error instead of this clear degraded status.
+	if instance.Spec.AdditionalStores != nil && instance.Spec.AdditionalStores.Syslog != nil {
+		if proto, _, _, err := url.ParseEndpoint(instance.Spec.AdditionalStores.Syslog.Endpoint); err == nil && proto != "tcp" && proto != "udp" {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Syslog config has invalid Endpoint scheme %q: only tcp:// and udp:// are supported", proto), nil, reqLogger)
+			return reconcile.Result{}, nil
+		}
+	}
+
 	// Default fields on the LogCollector instance if needed.
 	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
 	modifiedFields := fillDefaults(instance)
@@ -526,16 +540,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		if instance.Spec.AdditionalStores.Syslog != nil {
 			syslog := instance.Spec.AdditionalStores.Syslog
 
-			// Syslog forwarding is TCP or UDP (TLS is selected by the separate
-			// encryption field, not the scheme); any other scheme would render
-			// a syslog output mode fluent-bit rejects at startup.
-			if proto, _, _, err := url.ParseEndpoint(syslog.Endpoint); err == nil {
-				if proto != "tcp" && proto != "udp" {
-					r.status.SetDegraded(operatorv1.ResourceValidationError, fmt.Sprintf("Syslog config has invalid Endpoint scheme %q: only tcp:// and udp:// are supported", proto), nil, reqLogger)
-					return reconcile.Result{}, nil
-				}
-			}
-
 			// If the user set Syslog.logTypes, we need to ensure that they did not include
 			// the v1.SyslogLogIDSEvents option if this is a managed cluster (i.e.
 			// ManagementClusterConnection CR is present). This is because IDS events
@@ -634,7 +638,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		PullSecrets:            pullSecrets,
 		Installation:           installationSpec,
 		ClusterDomain:          r.opts.ClusterDomain,
-		OSType:                 rmeta.OSTypeLinux,
 		FluentBitKeyPair:       fluentBitKeyPair,
 		TrustedBundle:          trustedBundle,
 		ManagedCluster:         managedCluster,
@@ -646,8 +649,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
 	}
-	// Render the fluent-bit component for Linux
-	comp := rlogcollector.FluentBit(fluentBitCfg)
+	// Render the fluent-bit component for Linux. The same configuration drives
+	// the shared and Windows components below; each applies its OS-specific
+	// logic internally (e.g. the Windows render ignores NonClusterHost).
+	comp := rlogcollector.FluentBitOSSpecific(fluentBitCfg, rmeta.OSTypeLinux)
 
 	certificateComponent := rcertificatemanagement.Config{
 		Namespace:       render.LogCollectorNamespace,
@@ -710,29 +715,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if hasWindowsNodes {
-		fluentBitCfg = &rlogcollector.FluentBitConfiguration{
-			LogCollector:           instance,
-			S3Credential:           s3Credential,
-			SplkCredential:         splunkCredential,
-			Filters:                filters,
-			EKSConfig:              eksConfig,
-			PullSecrets:            pullSecrets,
-			Installation:           installationSpec,
-			ClusterDomain:          r.opts.ClusterDomain,
-			OSType:                 rmeta.OSTypeWindows,
-			TrustedBundle:          trustedBundle,
-			ManagedCluster:         managedCluster,
-			UseSyslogCertificate:   useSyslogCertificate,
-			FluentBitKeyPair:       fluentBitKeyPair,
-			EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
-			LicenseExpired:         licenseExpired,
-			// Tenant/ExternalElastic select the Linseed endpoint and the
-			// x-tenant-id header in the Windows rendered config, exactly as
-			// they do for Linux.
-			Tenant:          tenant,
-			ExternalElastic: r.opts.ElasticExternal,
-		}
-		comp = rlogcollector.FluentBit(fluentBitCfg)
+		// Reuse the same configuration as the Linux and shared components; the
+		// OS is what differs, and the component handles the OS-specific logic.
+		comp = rlogcollector.FluentBitOSSpecific(fluentBitCfg, rmeta.OSTypeWindows)
 
 		if err = imageset.ApplyImageSet(ctx, r.client, variant, comp); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)

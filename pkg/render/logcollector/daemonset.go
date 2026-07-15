@@ -58,7 +58,7 @@ func (c *fluentBitComponent) healthProbeHandler() corev1.ProbeHandler {
 }
 
 func (c *fluentBitComponent) securityContext(privileged bool) *corev1.SecurityContext {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return nil
 	}
 	return securitycontext.NewRootContext(privileged)
@@ -101,7 +101,7 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 	migratorEnv := []corev1.EnvVar{
 		{Name: "LOG_DIRS", Value: c.logDirsCSV()},
 	}
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		migratorCommand = c.path("/fluent-bit/pos-migrator.exe")
 		migratorEnv = append([]corev1.EnvVar{
 			{Name: "POS_DIR", Value: c.path("/var/log/calico")},
@@ -176,7 +176,7 @@ func (c *fluentBitComponent) container() corev1.Container {
 	volumeMounts := []corev1.VolumeMount{
 		{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
 	}
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		// Windows containers cannot mount a single file (no subPath file
 		// mounts), so mount the whole ConfigMap as a directory. The Windows
 		// image keeps its own files under C:\fluent-bit, so c:\etc\fluent-bit
@@ -257,7 +257,7 @@ func (c *fluentBitComponent) envvars() []corev1.EnvVar {
 	}
 	// Additional stores are Linux-only (the Windows pipeline ships to Linseed
 	// only, matching the fluentd Windows variant), so their credentials are too.
-	if c.cfg.LogCollector.Spec.AdditionalStores != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+	if c.cfg.LogCollector.Spec.AdditionalStores != nil && c.osType == rmeta.OSTypeLinux {
 		if s3 := c.cfg.LogCollector.Spec.AdditionalStores.S3; s3 != nil {
 			// The standard AWS credential env vars, which fluent-bit's native s3
 			// output reads via the AWS credential chain (the legacy AWS_KEY_ID /

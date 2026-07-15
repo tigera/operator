@@ -30,8 +30,13 @@ func (c *fluentBitComponent) fluentBitServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
-// packetCaptureApiRole creates a role in calico-system to allow pod/exec
-// only from fluent-bit pods. Created by the operator for the PacketCapture API.
+// packetCaptureApiRole grants the PacketCapture API's ServiceAccount (bound
+// below) exec-into and list access on pods in the log-collector namespace. The
+// PacketCapture API retrieves capture files by exec-ing into the per-node
+// fluent-bit DaemonSet pod, which mounts the node's /var/log/calico hostPath
+// where captures are written. Carried over unchanged from the fluentd era
+// (only the namespace moved to calico-system); rendered only when the
+// PacketCapture API is installed.
 func (c *fluentBitComponent) packetCaptureApiRole() *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},

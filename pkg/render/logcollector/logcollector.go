@@ -120,9 +120,16 @@ type SplunkCredential struct {
 	Token []byte
 }
 
-func FluentBit(cfg *FluentBitConfiguration) render.Component {
+// FluentBitOSSpecific renders the fluent-bit resources unique to one OS
+// (DaemonSet, per-OS ConfigMap, metrics Service, RBAC/ServiceAccount, and on
+// Linux the EKS forwarder and non-cluster-host input service). It takes the
+// same FluentBitConfiguration the shared component does; the OS is passed
+// separately so both OS instances render from one configuration, and the
+// component applies the OS-specific logic internally.
+func FluentBitOSSpecific(cfg *FluentBitConfiguration, osType rmeta.OSType) render.Component {
 	return &fluentBitComponent{
 		cfg:          cfg,
+		osType:       osType,
 		probeTimeout: 10,
 		probePeriod:  60,
 	}
@@ -147,7 +154,6 @@ type FluentBitConfiguration struct {
 	PullSecrets      []*corev1.Secret
 	Installation     *operatorv1.InstallationSpec
 	ClusterDomain    string
-	OSType           rmeta.OSType
 	FluentBitKeyPair certificatemanagement.KeyPairInterface
 	TrustedBundle    certificatemanagement.TrustedBundle
 	ManagedCluster   bool
@@ -173,6 +179,7 @@ type FluentBitConfiguration struct {
 
 type fluentBitComponent struct {
 	cfg          *FluentBitConfiguration
+	osType       rmeta.OSType
 	image        string
 	probeTimeout int32
 	probePeriod  int32
@@ -183,7 +190,7 @@ func (c *fluentBitComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		var err error
 		c.image, err = components.GetReference(components.ComponentFluentBitWindows, reg, path, prefix, is)
 		return err
@@ -198,7 +205,7 @@ func (c *fluentBitComponent) ResolveImages(is *operatorv1.ImageSet) error {
 }
 
 func (c *fluentBitComponent) SupportedOSType() rmeta.OSType {
-	return c.cfg.OSType
+	return c.osType
 }
 
 func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
@@ -206,7 +213,7 @@ func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.metricsService())
 	objs = append(objs, c.fluentBitConfigMap())
 
-	if c.cfg.EKSConfig != nil && c.cfg.OSType == rmeta.OSTypeLinux {
+	if c.cfg.EKSConfig != nil && c.osType == rmeta.OSTypeLinux {
 		objs = append(objs,
 			c.eksLogForwarderClusterRole(),
 			c.eksLogForwarderClusterRoleBinding())
@@ -231,7 +238,7 @@ func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.daemonset())
 	}
 
-	if c.cfg.OSType == rmeta.OSTypeLinux {
+	if c.osType == rmeta.OSTypeLinux {
 		if c.cfg.NonClusterHost != nil {
 			objs = append(objs, c.nonClusterHostInputService())
 		} else {
@@ -330,14 +337,14 @@ func (s *fluentBitSharedComponent) Ready() bool {
 }
 
 func (c *fluentBitComponent) fluentBitName() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return fluentBitWindowsName
 	}
 	return fluentBitName
 }
 
 func (c *fluentBitComponent) fluentBitNodeName() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return fluentBitNodeWindowsName
 	}
 	return FluentBitNodeName
@@ -347,21 +354,21 @@ func (c *fluentBitComponent) fluentBitNodeName() string {
 // vs "calico-fluent-bit-metrics-windows") in order to help identify which OS daemonset
 // we are referring to.
 func (c *fluentBitComponent) fluentBitMetricsServiceName() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return FluentBitMetricsServiceWindows
 	}
 	return FluentBitMetricsService
 }
 
 func (c *fluentBitComponent) volumeHostPath() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return "c:/TigeraCalico"
 	}
 	return "/var/log/calico"
 }
 
 func (c *fluentBitComponent) path(path string) string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		// Use c: path prefix for windows.
 		return "c:" + path
 	}
@@ -373,7 +380,7 @@ func (c *fluentBitComponent) path(path string) string {
 // support files under /etc/fluent-bit; the Windows image (Dockerfile-windows)
 // ships everything under C:\fluent-bit.
 func (c *fluentBitComponent) binPath() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return "c:/fluent-bit/fluent-bit.exe"
 	}
 	return "/usr/bin/fluent-bit"
@@ -387,7 +394,7 @@ func (c *fluentBitComponent) pluginsFilePath() string {
 }
 
 func (c *fluentBitComponent) luaScriptPath() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return "c:/fluent-bit/record_transformer.lua"
 	}
 	return "/etc/fluent-bit/record_transformer.lua"
@@ -397,7 +404,7 @@ func (c *fluentBitComponent) luaScriptPath() string {
 // mount on Linux, a directory mount on Windows (which cannot mount single
 // files).
 func (c *fluentBitComponent) configPath() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return "c:/etc/fluent-bit/conf/fluent-bit.yaml"
 	}
 	return "/etc/fluent-bit/fluent-bit.yaml"
@@ -407,7 +414,7 @@ func (c *fluentBitComponent) configPath() string {
 // Windows components each render their own config (different paths and input
 // sets), and a shared name would make the two renders overwrite each other.
 func (c *fluentBitComponent) fluentBitConfConfigMapName() string {
-	if c.cfg.OSType == rmeta.OSTypeWindows {
+	if c.osType == rmeta.OSTypeWindows {
 		return FluentBitConfConfigMapName + "-windows"
 	}
 	return FluentBitConfConfigMapName

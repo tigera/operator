@@ -77,7 +77,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cfg = &logcollector.FluentBitConfiguration{
 			LogCollector:  &operatorv1.LogCollector{},
 			ClusterDomain: dns.DefaultClusterDomain,
-			OSType:        rmeta.OSTypeLinux,
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderNone,
 			},
@@ -89,7 +88,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()
 
@@ -123,7 +122,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -302,7 +301,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		cfg.LogCollector = &logCollectorcfg
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -364,7 +363,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -396,7 +395,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		resources, _ = logcollector.FluentBit(cfg).Objects()
+		resources, _ = logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux).Objects()
 		ds = rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
 		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "calico-fluent-bit")
 		Expect(container).NotTo(BeNil())
@@ -424,13 +423,12 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		managedCfg := &logcollector.FluentBitConfiguration{
 			LogCollector:     cfg.LogCollector,
 			ClusterDomain:    cfg.ClusterDomain,
-			OSType:           cfg.OSType,
 			Installation:     cfg.Installation,
 			FluentBitKeyPair: cfg.FluentBitKeyPair,
 			TrustedBundle:    cfg.TrustedBundle,
 			ManagedCluster:   true,
 		}
-		createResources, deleteResources := renderAll(managedCfg)
+		createResources, deleteResources := renderAll(managedCfg, rmeta.OSTypeLinux)
 		rtest.ExpectResources(createResources, expectedResources)
 		rtest.ExpectResources(deleteResources, expectedDeleteResources)
 
@@ -536,14 +534,13 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		managedCfg := &logcollector.FluentBitConfiguration{
 			LogCollector:     cfg.LogCollector,
 			ClusterDomain:    cfg.ClusterDomain,
-			OSType:           cfg.OSType,
 			Installation:     cfg.Installation,
 			FluentBitKeyPair: cfg.FluentBitKeyPair,
 			TrustedBundle:    cfg.TrustedBundle,
 			ManagedCluster:   true,
 			PacketCapture:    pc,
 		}
-		createResources, deleteResources := renderAll(managedCfg)
+		createResources, deleteResources := renderAll(managedCfg, rmeta.OSTypeLinux)
 		rtest.ExpectResources(createResources, expectedResources)
 		rtest.ExpectResources(deleteResources, expectedDeleteResources)
 
@@ -636,7 +633,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
 
 		// Should render the correct resources.
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 
 		// Should render resource quota
 		Expect(rtest.GetResource(resources, "tigera-critical-pods", "calico-system", "", "v1", "ResourceQuota")).ToNot(BeNil())
@@ -653,9 +650,8 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-windows", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
 		}
 
-		cfg.OSType = rmeta.OSTypeWindows
 		// Should render the correct resources.
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeWindows)
 		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit-windows", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -743,7 +739,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -804,7 +800,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -835,7 +831,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -871,7 +867,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			},
 		}
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -908,7 +904,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		rtest.ExpectResources(resources, expectedResources)
 
 		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
@@ -940,7 +936,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		// Parses the rendered config and returns the match tags per output
 		// plugin, plus the raw output maps for property assertions.
 		renderOutputs := func() map[string][]map[string]interface{} {
-			resources, _ := logcollector.FluentBit(cfg).Objects()
+			resources, _ := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux).Objects()
 			cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
 			var conf struct {
 				Pipeline struct {
@@ -1041,7 +1037,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		// Should render the correct resources.
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 
 		rtest.ExpectResources(resources, expectedResources)
 
@@ -1084,7 +1080,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			DNS:  "- name: grep\n  exclude: qname foo\n",      // valid
 		}
 
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 
 		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, "calico-system", "", "v1", "ConfigMap").(*corev1.ConfigMap)
@@ -1110,7 +1106,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			KubernetesProvider:      operatorv1.ProviderEKS,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
@@ -1205,7 +1201,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			KubernetesProvider: operatorv1.ProviderEKS,
 		}
 
-		resources, _ := logcollector.FluentBit(cfg).Objects()
+		resources, _ := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux).Objects()
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		// The controller defaults these before render in production; this
 		// pins the render-level defense in depth — an empty prefix or "0s"
@@ -1221,7 +1217,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		cfg.EKSConfig = setupEKSCloudwatchLogConfig()
 		cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
 
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deploy).NotTo(BeNil())
@@ -1270,7 +1266,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}
 
 		cfg.LogCollector = &logCollectorcfg
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 		deploy := rtest.GetResource(resources, "eks-log-forwarder", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
 
@@ -1303,7 +1299,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		tenant.Spec.ID = "test-tenant-id"
 		cfg.Tenant = tenant
 
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		// Should render the correct resources.
@@ -1337,7 +1333,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}
 		cfg.ManagedCluster = true
-		resources, _ := renderAll(cfg)
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 		Expect(len(resources)).To(Equal(len(expectedResources)))
 
 		rtest.ExpectResources(resources, expectedResources)
@@ -1379,7 +1375,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				},
 			}
 
-			resources, _ := renderAll(cfg)
+			resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
 			rtest.ExpectResources(resources, expectedResources)
 
 			// Base case: no additional store outputs in ConfigMap besides linseed.
@@ -1401,7 +1397,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			expectedResources = append(expectedResources, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitInputService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}})
 
 			// Should render the correct resources.
-			resources, _ = renderAll(cfg)
+			resources, _ = renderAll(cfg, rmeta.OSTypeLinux)
 			rtest.ExpectResources(resources, expectedResources)
 
 			// Service is rendered as expected.
@@ -1433,7 +1429,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 			By("enabling forwarding of only non-cluster logs")
 			cfg.LogCollector.Spec.AdditionalStores = additionalStoreSpecNonClusterHosts
-			resources, _ = renderAll(cfg)
+			resources, _ = renderAll(cfg, rmeta.OSTypeLinux)
 			rtest.ExpectResources(resources, expectedResources)
 
 			// ConfigMap should still contain the destination output section (non-cluster scope).
@@ -1511,7 +1507,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should move DaemonSet to toDelete when LicenseExpired is true", func() {
 		cfg.LicenseExpired = true
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		toCreate, toDelete := component.Objects()
 
@@ -1535,7 +1531,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 
 	It("should include DaemonSet in toCreate when LicenseExpired is false", func() {
 		cfg.LicenseExpired = false
-		component := logcollector.FluentBit(cfg)
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		toCreate, _ := component.Objects()
 
@@ -1587,12 +1583,44 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			rtest.ExpectResources(deleteResources, legacyFluentdDeleteResources())
 		})
 
-		It("should render identically for the Linux and Windows configurations", func() {
-			linuxCreate, linuxDelete := logcollector.FluentBitShared(cfg).Objects()
-			cfg.OSType = rmeta.OSTypeWindows
-			windowsCreate, windowsDelete := logcollector.FluentBitShared(cfg).Objects()
-			Expect(windowsCreate).To(Equal(linuxCreate))
-			Expect(windowsDelete).To(Equal(linuxDelete))
+		It("should produce disjoint resources across the shared, Linux and Windows components", func() {
+			// The controller renders all three from one configuration. Turn on
+			// every gated feature so each component emits its full resource set,
+			// then assert no two components create the same object — the property
+			// that lets them share a single config without contending.
+			cfg.Installation.KubernetesProvider = operatorv1.ProviderGKE
+			cfg.ManagedCluster = true
+			cfg.S3Credential = &logcollector.S3Credential{KeyId: []byte("id"), KeySecret: []byte("secret")}
+			cfg.SplkCredential = &logcollector.SplunkCredential{Token: []byte("token")}
+			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
+			cfg.NonClusterHost = &operatorv1.NonClusterHost{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec:       operatorv1.NonClusterHostSpec{Endpoint: "https://1.2.3.4:5678"},
+			}
+
+			shared := logcollector.FluentBitShared(cfg)
+			linux := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
+			windows := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeWindows)
+			Expect(linux.ResolveImages(nil)).To(BeNil())
+			Expect(windows.ResolveImages(nil)).To(BeNil())
+
+			// Key on the Go type plus namespace/name: robust even when a
+			// rendered object leaves TypeMeta unset, and still distinguishes
+			// e.g. Role from ClusterRole (distinct Go types).
+			key := func(o client.Object) string {
+				return fmt.Sprintf("%T/%s/%s", o, o.GetNamespace(), o.GetName())
+			}
+			seen := map[string]string{}
+			for name, comp := range map[string]render.Component{"shared": shared, "linux": linux, "windows": windows} {
+				create, _ := comp.Objects()
+				for _, o := range create {
+					k := key(o)
+					if prev, dup := seen[k]; dup {
+						Fail(fmt.Sprintf("resource %s created by both %q and %q components", k, prev, name))
+					}
+					seen[k] = name
+				}
+			}
 		})
 	})
 })
@@ -1671,8 +1699,8 @@ func additionalStoreSpecForDestinationAndScope(destination string, scope operato
 // renderAll renders the shared and per-OS fluent-bit components together —
 // the way the controller composes them — returning the merged create and
 // delete lists.
-func renderAll(cfg *logcollector.FluentBitConfiguration) ([]client.Object, []client.Object) {
-	component := logcollector.FluentBit(cfg)
+func renderAll(cfg *logcollector.FluentBitConfiguration, osType rmeta.OSType) ([]client.Object, []client.Object) {
+	component := logcollector.FluentBitOSSpecific(cfg, osType)
 	Expect(component.ResolveImages(nil)).To(BeNil())
 	sharedCreate, sharedDelete := logcollector.FluentBitShared(cfg).Objects()
 	create, del := component.Objects()

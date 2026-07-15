@@ -104,6 +104,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureServiceAccountName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCapturePodExecRoleName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCapturePodExecRoleBindingName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureDeploymentName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureServiceName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.PacketCaptureNamespace}},
@@ -318,6 +320,31 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		clusterRoleBinding := rtest.GetResource(resources, render.PacketCaptureClusterRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(clusterRoleBinding.RoleRef.Name).To(Equal(render.PacketCaptureClusterRoleName))
 		Expect(clusterRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      render.PacketCaptureServiceAccountName,
+				Namespace: render.PacketCaptureNamespace,
+			},
+		}))
+
+		// The pod/exec Role lets the PacketCapture API read capture files off the
+		// per-node calico-node pod; it is namespaced to calico-system.
+		podExecRole := rtest.GetResource(resources, render.PacketCapturePodExecRoleName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+		}))
+		podExecRoleBinding := rtest.GetResource(resources, render.PacketCapturePodExecRoleBindingName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(render.PacketCapturePodExecRoleName))
+		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
 				Name:      render.PacketCaptureServiceAccountName,

@@ -165,6 +165,9 @@ func (cp SyslogLogType) String() string {
 // SyslogStoreSpec defines configuration for exporting logs to syslog.
 type SyslogStoreSpec struct {
 	// Location of the syslog server. example: tcp://1.2.3.4:601
+	// Only the tcp and udp schemes are supported; TLS is selected via the
+	// Encryption field rather than the scheme.
+	// +kubebuilder:validation:Pattern=`^(tcp|udp)://.+$`
 	Endpoint string `json:"endpoint"`
 
 	// PacketSize defines the maximum size of packets to send to syslog.

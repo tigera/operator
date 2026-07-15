@@ -166,7 +166,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 			render.ComplianceNamespace,
 			render.DexNamespace,
 			render.ElasticsearchNamespace,
-			render.LogCollectorNamespace,
 			render.IntrusionDetectionNamespace,
 			kibana.Namespace,
 			eck.OperatorNamespace,

@@ -607,12 +607,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture CR", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Check if non-cluster host feature is enabled.
 	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
 	if err != nil {
@@ -645,7 +639,6 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		Tenant:                 tenant,
 		ExternalElastic:        r.opts.ElasticExternal,
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
-		PacketCapture:          packetcaptureapi,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
 	}
@@ -687,10 +680,9 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	components := []render.Component{
 		setUp,
 		// The resources shared by the Linux and Windows installations (the
-		// NetworkPolicy, credential copies, PacketCapture RBAC, managed-cluster
-		// Linseed plumbing and the legacy fluentd cleanup) render once, from a
-		// single configuration, so the per-OS components cannot contend over
-		// them.
+		// NetworkPolicy, credential copies, managed-cluster Linseed plumbing and
+		// the legacy fluentd cleanup) render once, from a single configuration,
+		// so the per-OS components cannot contend over them.
 		rlogcollector.FluentBitShared(fluentBitCfg),
 		comp,
 		rcertificatemanagement.CertificateManagement(&certificateComponent),

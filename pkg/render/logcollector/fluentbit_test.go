@@ -110,15 +110,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-		}
-
-		cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-secure",
-			},
 		}
 
 		// Should render the correct resources.
@@ -224,29 +216,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			&corev1.SeccompProfile{
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
-
-		podExecRole := rtest.GetResource(resources, logcollector.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods/exec"},
-				Verbs:     []string{"create"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods"},
-				Verbs:     []string{"list"},
-			},
-		}))
-		podExecRoleBinding := rtest.GetResource(resources, logcollector.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(logcollector.PacketCaptureAPIRole))
-		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      render.PacketCaptureServiceAccountName,
-				Namespace: render.PacketCaptureNamespace,
-			},
-		}))
 
 		// The metrics service should have the correct configuration.
 		ms := rtest.GetResource(resources, logcollector.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
@@ -497,130 +466,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				Kind:      "ServiceAccount",
 				Name:      render.GuardianServiceAccountName,
 				Namespace: render.GuardianNamespace,
-			},
-		}))
-
-		// The metrics service should have the correct configuration.
-		ms := rtest.GetResource(createResources, logcollector.FluentBitMetricsService, render.LogCollectorNamespace, "", "v1", "Service").(*corev1.Service)
-		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
-	})
-
-	It("should render with a configuration for a managed cluster with packet capture", func() {
-		expectedResources := []client.Object{
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}},
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitMetricsService, Namespace: render.LogCollectorNamespace}},
-			&corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
-			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitNodeName, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
-			&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitNodeName, Namespace: render.LogCollectorNamespace}},
-			&corev1.Service{TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}, ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
-		}
-
-		expectedDeleteResources := append([]client.Object{
-			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitInputService, Namespace: render.LogCollectorNamespace}},
-		}, legacyFluentdDeleteResources()...)
-
-		pc := &operatorv1.PacketCaptureAPI{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "tigera-secure",
-			},
-		}
-
-		// Should render the correct resources.
-		managedCfg := &logcollector.FluentBitConfiguration{
-			LogCollector:     cfg.LogCollector,
-			ClusterDomain:    cfg.ClusterDomain,
-			Installation:     cfg.Installation,
-			FluentBitKeyPair: cfg.FluentBitKeyPair,
-			TrustedBundle:    cfg.TrustedBundle,
-			ManagedCluster:   true,
-			PacketCapture:    pc,
-		}
-		createResources, deleteResources := renderAll(managedCfg, rmeta.OSTypeLinux)
-		rtest.ExpectResources(createResources, expectedResources)
-		rtest.ExpectResources(deleteResources, expectedDeleteResources)
-
-		ds := rtest.GetResource(createResources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
-		Expect(ds.Spec.Template.Spec.Volumes[0].VolumeSource.HostPath.Path).To(Equal("/var/log/calico"))
-		Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-		envs := ds.Spec.Template.Spec.Containers[0].Env
-
-		Expect(envs).Should(ContainElement(
-			corev1.EnvVar{
-				Name: "NODENAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{FieldPath: "spec.nodeName"},
-				},
-			},
-		))
-
-		container := ds.Spec.Template.Spec.Containers[0]
-
-		Expect(container.ReadinessProbe.HTTPGet).NotTo(BeNil())
-		Expect(container.ReadinessProbe.HTTPGet.Path).To(Equal("/api/v1/health"))
-		Expect(container.ReadinessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
-		Expect(container.ReadinessProbe.PeriodSeconds).To(BeEquivalentTo(60))
-
-		Expect(container.LivenessProbe.HTTPGet).NotTo(BeNil())
-		Expect(container.LivenessProbe.HTTPGet.Path).To(Equal("/api/v1/uptime"))
-		Expect(container.LivenessProbe.TimeoutSeconds).To(BeEquivalentTo(10))
-		Expect(container.LivenessProbe.PeriodSeconds).To(BeEquivalentTo(60))
-
-		Expect(container.StartupProbe.HTTPGet).NotTo(BeNil())
-		Expect(container.StartupProbe.HTTPGet.Path).To(Equal("/api/v1/uptime"))
-		Expect(container.StartupProbe.TimeoutSeconds).To(BeEquivalentTo(10))
-		Expect(container.StartupProbe.PeriodSeconds).To(BeEquivalentTo(60))
-		Expect(container.StartupProbe.FailureThreshold).To(BeEquivalentTo(10))
-
-		Expect(*container.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
-		Expect(*container.SecurityContext.Privileged).To(BeFalse())
-		Expect(*container.SecurityContext.RunAsGroup).To(BeEquivalentTo(0))
-		Expect(*container.SecurityContext.RunAsNonRoot).To(BeFalse())
-		Expect(*container.SecurityContext.RunAsUser).To(BeEquivalentTo(0))
-		Expect(container.SecurityContext.Capabilities).To(Equal(
-			&corev1.Capabilities{
-				Drop: []corev1.Capability{"ALL"},
-			},
-		))
-		Expect(container.SecurityContext.SeccompProfile).To(Equal(
-			&corev1.SeccompProfile{
-				Type: corev1.SeccompProfileTypeRuntimeDefault,
-			}))
-
-		linseedRoleBinding := rtest.GetResource(createResources, "tigera-linseed", render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(linseedRoleBinding.RoleRef.Name).To(Equal("tigera-linseed-secrets"))
-		Expect(linseedRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      render.GuardianServiceAccountName,
-				Namespace: render.GuardianNamespace,
-			},
-		}))
-
-		podExecRole := rtest.GetResource(createResources, logcollector.PacketCaptureAPIRole, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods/exec"},
-				Verbs:     []string{"create"},
-			},
-			{
-				APIGroups: []string{""},
-				Resources: []string{"pods"},
-				Verbs:     []string{"list"},
-			},
-		}))
-		podExecRoleBinding := rtest.GetResource(createResources, logcollector.PacketCaptureAPIRoleBinding, render.LogCollectorNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(logcollector.PacketCaptureAPIRole))
-		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      render.PacketCaptureServiceAccountName,
-				Namespace: render.PacketCaptureNamespace,
 			},
 		}))
 
@@ -1365,14 +1210,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit"}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 				&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"}},
-			}
-			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "tigera-secure",
-				},
 			}
 
 			resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
@@ -1567,7 +1405,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			cfg.ManagedCluster = true
 			cfg.S3Credential = &logcollector.S3Credential{KeyId: []byte("id"), KeySecret: []byte("secret")}
 			cfg.SplkCredential = &logcollector.SplunkCredential{Token: []byte("token")}
-			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 
 			createResources, deleteResources := logcollector.FluentBitShared(cfg).Objects()
 			rtest.ExpectResources(createResources, []client.Object{
@@ -1577,8 +1414,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 				&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: logcollector.SplunkFluentBitTokenSecretName, Namespace: render.LogCollectorNamespace}},
 				&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
 				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: render.LogCollectorNamespace}},
-				&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRole, Namespace: render.LogCollectorNamespace}},
-				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: logcollector.PacketCaptureAPIRoleBinding, Namespace: render.LogCollectorNamespace}},
 			})
 			rtest.ExpectResources(deleteResources, legacyFluentdDeleteResources())
 		})
@@ -1592,7 +1427,6 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			cfg.ManagedCluster = true
 			cfg.S3Credential = &logcollector.S3Credential{KeyId: []byte("id"), KeySecret: []byte("secret")}
 			cfg.SplkCredential = &logcollector.SplunkCredential{Token: []byte("token")}
-			cfg.PacketCapture = &operatorv1.PacketCaptureAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}}
 			cfg.NonClusterHost = &operatorv1.NonClusterHost{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec:       operatorv1.NonClusterHostSpec{Endpoint: "https://1.2.3.4:5678"},

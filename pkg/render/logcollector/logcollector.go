@@ -95,9 +95,6 @@ const (
 
 	EKSLogForwarderName          = render.EKSLogForwarderName
 	EKSLogForwarderTLSSecretName = "tigera-eks-log-forwarder-tls"
-
-	PacketCaptureAPIRole        = "packetcapture-api-role"
-	PacketCaptureAPIRoleBinding = "packetcapture-api-role-binding"
 )
 
 // Register secret/certs that need Server and Client Key usage
@@ -168,8 +165,6 @@ type FluentBitConfiguration struct {
 
 	// EKSLogForwarderKeyPair contains the certificate presented by EKS LogForwarder when communicating with Linseed
 	EKSLogForwarderKeyPair certificatemanagement.KeyPairInterface
-
-	PacketCapture *operatorv1.PacketCaptureAPI
 
 	NonClusterHost *operatorv1.NonClusterHost
 
@@ -257,10 +252,10 @@ func (c *fluentBitComponent) Ready() bool {
 
 // FluentBitShared renders the resources shared by the Linux and Windows
 // fluent-bit installations: the NetworkPolicy, store credential copies, the
-// PacketCapture RBAC, the managed-cluster Linseed plumbing, the GKE
-// ResourceQuota and the legacy fluentd cleanup. Rendering them exactly once,
-// from a single configuration, keeps the two OS components from contending
-// over the same object with divergent definitions.
+// managed-cluster Linseed plumbing, the GKE ResourceQuota and the legacy
+// fluentd cleanup. Rendering them exactly once, from a single configuration,
+// keeps the two OS components from contending over the same object with
+// divergent definitions.
 func FluentBitShared(cfg *FluentBitConfiguration) render.Component {
 	return &fluentBitSharedComponent{c: fluentBitComponent{cfg: cfg}}
 }
@@ -303,9 +298,6 @@ func (s *fluentBitSharedComponent) Objects() ([]client.Object, []client.Object) 
 	} else {
 		toDelete = append(toDelete, c.externalLinseedService())
 		toDelete = append(toDelete, c.externalLinseedRoleBinding())
-	}
-	if c.cfg.PacketCapture != nil {
-		objs = append(objs, c.packetCaptureApiRole(), c.packetCaptureApiRoleBinding())
 	}
 
 	// Clean up the legacy fluentd installation on upgrade. Deleting the

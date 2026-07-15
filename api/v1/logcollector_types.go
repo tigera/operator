@@ -170,9 +170,10 @@ type SyslogStoreSpec struct {
 	// +kubebuilder:validation:Pattern=`^(tcp|udp)://.+$`
 	Endpoint string `json:"endpoint"`
 
-	// PacketSize defines the maximum size of packets to send to syslog.
-	// In general this is only needed if you notice long logs being truncated.
-	// Default: 1024
+	// PacketSize defines the maximum size, in bytes, of messages sent to syslog;
+	// messages larger than this are truncated. When unset, the syslog output's
+	// own default for the RFC5424 format the operator renders applies (2048
+	// bytes). Set this only if you notice long logs being truncated.
 	// +optional
 	PacketSize *int32 `json:"packetSize,omitempty"`
 

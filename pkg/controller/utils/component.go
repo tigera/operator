@@ -998,6 +998,12 @@ func setStandardSelectorAndLabels(obj client.Object) {
 	if podTemplate.Labels["app.kubernetes.io/name"] == "" {
 		podTemplate.Labels["app.kubernetes.io/name"] = name
 	}
+	if podTemplate.Spec.HostNetwork {
+		// The podiprecovery controller uses this label to find
+		// operator-managed hostNetwork pods that need their IPs
+		// re-checked after a node IP change.
+		podTemplate.Labels[common.HostNetworkedPodLabel] = "true"
+	}
 }
 
 // ReadyFlag is used to synchronize access to a boolean flag

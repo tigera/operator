@@ -306,7 +306,7 @@ func (c *csiComponent) csiDaemonset() *appsv1.DaemonSet {
 		Template: c.csiTemplate(),
 	}
 
-	setNodeCriticalPod(&(dsSpec.Template))
+	SetNodeCriticalPod(&(dsSpec.Template))
 
 	ds := appsv1.DaemonSet{
 		TypeMeta:   typeMeta,

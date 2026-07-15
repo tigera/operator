@@ -42,8 +42,19 @@ type LogCollectorSpec struct {
 	// +optional
 	MultiTenantManagementClusterNamespace string `json:"multiTenantManagementClusterNamespace,omitempty"`
 
-	// FluentdDaemonSet configures the Fluentd DaemonSet.
-	FluentdDaemonSet *FluentdDaemonSet `json:"fluentdDaemonSet,omitempty"`
+	// FluentdDaemonSet configures the calico-fluent-bit DaemonSet (deprecated alias).
+	//
+	// Deprecated: use CalicoFluentBitDaemonSet instead. This field is retained
+	// as an alias for one release during the Fluentd → Fluent Bit migration;
+	// when both are set, CalicoFluentBitDaemonSet takes precedence.
+	// +optional
+	FluentdDaemonSet *FluentBitDaemonSet `json:"fluentdDaemonSet,omitempty"`
+
+	// CalicoFluentBitDaemonSet configures the calico-fluent-bit DaemonSet, the
+	// Fluent Bit replacement for the Fluentd DaemonSet. Pod-template override
+	// semantics are unchanged from the deprecated FluentdDaemonSet field.
+	// +optional
+	CalicoFluentBitDaemonSet *FluentBitDaemonSet `json:"calicoFluentBitDaemonSet,omitempty"`
 
 	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
 	// +optional
@@ -154,6 +165,9 @@ func (cp SyslogLogType) String() string {
 // SyslogStoreSpec defines configuration for exporting logs to syslog.
 type SyslogStoreSpec struct {
 	// Location of the syslog server. example: tcp://1.2.3.4:601
+	// Only the tcp and udp schemes are supported; TLS is selected via the
+	// Encryption field rather than the scheme.
+	// +kubebuilder:validation:Pattern=`^(tcp|udp)://.+$`
 	Endpoint string `json:"endpoint"`
 
 	// PacketSize defines the maximum size of packets to send to syslog.
@@ -222,7 +236,7 @@ type LogCollectorStatus struct {
 // +kubebuilder:resource:scope=Cluster
 
 // LogCollector installs the components required for Tigera flow and DNS log collection. At most one instance
-// of this resource is supported. It must be named "tigera-secure". When created, this installs fluentd on all nodes
+// of this resource is supported. It must be named "tigera-secure". When created, this installs fluent-bit on all nodes
 // configured to collect Tigera log data and export it to Tigera's Elasticsearch cluster as well as any additionally configured destinations.
 //
 // +kubebuilder:validation:XValidation:rule="self.metadata.name == 'tigera-secure'",message="resource name must be 'tigera-secure'"

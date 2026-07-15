@@ -18,7 +18,7 @@ spec:
         openAPIV3Schema:
           description: |-
             LogCollector installs the components required for Tigera flow and DNS log collection. At most one instance
-            of this resource is supported. It must be named "tigera-secure". When created, this installs fluentd on all nodes
+            of this resource is supported. It must be named "tigera-secure". When created, this installs fluent-bit on all nodes
             configured to collect Tigera log data and export it to Tigera's Elasticsearch cluster as well as any additionally configured destinations.
           properties:
             apiVersion:
@@ -142,7 +142,11 @@ spec:
                             - TLS
                           type: string
                         endpoint:
-                          description: "Location of the syslog server. example: tcp://1.2.3.4:601"
+                          description: |-
+                            Location of the syslog server. example: tcp://1.2.3.4:601
+                            Only the tcp and udp schemes are supported; TLS is selected via the
+                            Encryption field rather than the scheme.
+                          pattern: ^(tcp|udp)://.+$
                           type: string
                         hostScope:
                           description:
@@ -181,6 +185,260 @@ spec:
                       required:
                         - endpoint
                         - logTypes
+                      type: object
+                  type: object
+                calicoFluentBitDaemonSet:
+                  description: |-
+                    CalicoFluentBitDaemonSet configures the calico-fluent-bit DaemonSet, the
+                    Fluent Bit replacement for the Fluentd DaemonSet. Pod-template override
+                    semantics are unchanged from the deprecated FluentdDaemonSet field.
+                  properties:
+                    spec:
+                      description: Spec is the specification of the Fluent Bit DaemonSet.
+                      properties:
+                        template:
+                          description:
+                            Template describes the Fluent Bit DaemonSet pod
+                            that will be created.
+                          properties:
+                            spec:
+                              description: Spec is the Fluent Bit DaemonSet's PodSpec.
+                              properties:
+                                containers:
+                                  description: |-
+                                    Containers is a list of Fluent Bit DaemonSet containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its containers.
+                                  items:
+                                    description:
+                                      FluentBitDaemonSetContainer is a Fluent
+                                      Bit DaemonSet container.
+                                    properties:
+                                      livenessProbe:
+                                        description: |-
+                                          LivenessProbe allows customization of the liveness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
+                                      name:
+                                        description: |-
+                                          Name is an enum which identifies the Fluent Bit DaemonSet container by name.
+                                          Supported values are: calico-fluent-bit (or the deprecated alias fluentd, kept
+                                          for one release so existing FluentdDaemonSet overrides continue to validate).
+                                        enum:
+                                          - calico-fluent-bit
+                                          - fluentd
+                                        type: string
+                                      readinessProbe:
+                                        description: |-
+                                          ReadinessProbe allows customization of the readiness probe timing parameters.
+                                          The probe handler is set by the operator and cannot be overridden.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
+                                      resources:
+                                        description: |-
+                                          Resources allows customization of limits and requests for compute resources such as cpu and memory.
+                                          If specified, this overrides the named Fluent Bit DaemonSet container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this container's resources.
+                                        properties:
+                                          claims:
+                                            description: |-
+                                              Claims lists the names of resources, defined in spec.resourceClaims,
+                                              that are used by this container.
+                                              This field depends on the
+                                              DynamicResourceAllocation feature gate.
+                                              This field is immutable. It can only be set for containers.
+                                            items:
+                                              description:
+                                                ResourceClaim references
+                                                one entry in PodSpec.ResourceClaims.
+                                              properties:
+                                                name:
+                                                  description: |-
+                                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                                    the Pod where this field is used. It makes that resource available
+                                                    inside a container.
+                                                  type: string
+                                                request:
+                                                  description: |-
+                                                    Request is the name chosen for a request in the referenced claim.
+                                                    If empty, everything from the claim is made available, otherwise
+                                                    only the result of this request.
+                                                  type: string
+                                              required:
+                                                - name
+                                              type: object
+                                            type: array
+                                            x-kubernetes-list-map-keys:
+                                              - name
+                                            x-kubernetes-list-type: map
+                                          limits:
+                                            additionalProperties:
+                                              anyOf:
+                                                - type: integer
+                                                - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            description: |-
+                                              Limits describes the maximum amount of compute resources allowed.
+                                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                            type: object
+                                          requests:
+                                            additionalProperties:
+                                              anyOf:
+                                                - type: integer
+                                                - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            description: |-
+                                              Requests describes the minimum amount of compute resources required.
+                                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                            type: object
+                                        type: object
+                                    required:
+                                      - name
+                                    type: object
+                                  type: array
+                                initContainers:
+                                  description: |-
+                                    InitContainers is a list of Fluent Bit DaemonSet init containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet init containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its init containers.
+                                  items:
+                                    description:
+                                      FluentBitDaemonSetInitContainer is
+                                      a Fluent Bit DaemonSet init container.
+                                    properties:
+                                      name:
+                                        description: |-
+                                          Name is an enum which identifies the Fluent Bit DaemonSet init container by name.
+                                          Supported values are: calico-fluent-bit-tls-key-cert-provisioner (or the deprecated
+                                          alias tigera-fluentd-prometheus-tls-key-cert-provisioner, kept for one release so
+                                          existing FluentdDaemonSet overrides continue to validate).
+                                        enum:
+                                          - calico-fluent-bit-tls-key-cert-provisioner
+                                          - tigera-fluentd-prometheus-tls-key-cert-provisioner
+                                        type: string
+                                      resources:
+                                        description: |-
+                                          Resources allows customization of limits and requests for compute resources such as cpu and memory.
+                                          If specified, this overrides the named Fluent Bit DaemonSet init container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this init container's resources.
+                                        properties:
+                                          claims:
+                                            description: |-
+                                              Claims lists the names of resources, defined in spec.resourceClaims,
+                                              that are used by this container.
+                                              This field depends on the
+                                              DynamicResourceAllocation feature gate.
+                                              This field is immutable. It can only be set for containers.
+                                            items:
+                                              description:
+                                                ResourceClaim references
+                                                one entry in PodSpec.ResourceClaims.
+                                              properties:
+                                                name:
+                                                  description: |-
+                                                    Name must match the name of one entry in pod.spec.resourceClaims of
+                                                    the Pod where this field is used. It makes that resource available
+                                                    inside a container.
+                                                  type: string
+                                                request:
+                                                  description: |-
+                                                    Request is the name chosen for a request in the referenced claim.
+                                                    If empty, everything from the claim is made available, otherwise
+                                                    only the result of this request.
+                                                  type: string
+                                              required:
+                                                - name
+                                              type: object
+                                            type: array
+                                            x-kubernetes-list-map-keys:
+                                              - name
+                                            x-kubernetes-list-type: map
+                                          limits:
+                                            additionalProperties:
+                                              anyOf:
+                                                - type: integer
+                                                - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            description: |-
+                                              Limits describes the maximum amount of compute resources allowed.
+                                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                            type: object
+                                          requests:
+                                            additionalProperties:
+                                              anyOf:
+                                                - type: integer
+                                                - type: string
+                                              pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                                              x-kubernetes-int-or-string: true
+                                            description: |-
+                                              Requests describes the minimum amount of compute resources required.
+                                              If Requests is omitted for a container, it defaults to Limits if that is explicitly specified,
+                                              otherwise to an implementation-defined value. Requests cannot exceed Limits.
+                                              More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+                                            type: object
+                                        type: object
+                                    required:
+                                      - name
+                                    type: object
+                                  type: array
+                              type: object
+                          type: object
                       type: object
                   type: object
                 collectProcessPath:
@@ -445,28 +703,32 @@ spec:
                       type: object
                   type: object
                 fluentdDaemonSet:
-                  description: FluentdDaemonSet configures the Fluentd DaemonSet.
+                  description: |-
+                    FluentdDaemonSet configures the calico-fluent-bit DaemonSet (deprecated alias).
+                    Deprecated: use CalicoFluentBitDaemonSet instead. This field is retained
+                    as an alias for one release during the Fluentd → Fluent Bit migration;
+                    when both are set, CalicoFluentBitDaemonSet takes precedence.
                   properties:
                     spec:
-                      description: Spec is the specification of the Fluentd DaemonSet.
+                      description: Spec is the specification of the Fluent Bit DaemonSet.
                       properties:
                         template:
                           description:
-                            Template describes the Fluentd DaemonSet pod
+                            Template describes the Fluent Bit DaemonSet pod
                             that will be created.
                           properties:
                             spec:
-                              description: Spec is the Fluentd DaemonSet's PodSpec.
+                              description: Spec is the Fluent Bit DaemonSet's PodSpec.
                               properties:
                                 containers:
                                   description: |-
-                                    Containers is a list of Fluentd DaemonSet containers.
-                                    If specified, this overrides the specified Fluentd DaemonSet containers.
-                                    If omitted, the Fluentd DaemonSet will use its default values for its containers.
+                                    Containers is a list of Fluent Bit DaemonSet containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its containers.
                                   items:
                                     description:
-                                      FluentdDaemonSetContainer is a Fluentd
-                                      DaemonSet container.
+                                      FluentBitDaemonSetContainer is a Fluent
+                                      Bit DaemonSet container.
                                     properties:
                                       livenessProbe:
                                         description: |-
@@ -501,9 +763,11 @@ spec:
                                         type: object
                                       name:
                                         description: |-
-                                          Name is an enum which identifies the Fluentd DaemonSet container by name.
-                                          Supported values are: fluentd
+                                          Name is an enum which identifies the Fluent Bit DaemonSet container by name.
+                                          Supported values are: calico-fluent-bit (or the deprecated alias fluentd, kept
+                                          for one release so existing FluentdDaemonSet overrides continue to validate).
                                         enum:
+                                          - calico-fluent-bit
                                           - fluentd
                                         type: string
                                       readinessProbe:
@@ -540,8 +804,8 @@ spec:
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named Fluentd DaemonSet container's resources.
-                                          If omitted, the Fluentd DaemonSet will use its default value for this container's resources.
+                                          If specified, this overrides the named Fluent Bit DaemonSet container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this container's resources.
                                         properties:
                                           claims:
                                             description: |-
@@ -605,26 +869,29 @@ spec:
                                   type: array
                                 initContainers:
                                   description: |-
-                                    InitContainers is a list of Fluentd DaemonSet init containers.
-                                    If specified, this overrides the specified Fluentd DaemonSet init containers.
-                                    If omitted, the Fluentd DaemonSet will use its default values for its init containers.
+                                    InitContainers is a list of Fluent Bit DaemonSet init containers.
+                                    If specified, this overrides the specified Fluent Bit DaemonSet init containers.
+                                    If omitted, the Fluent Bit DaemonSet will use its default values for its init containers.
                                   items:
                                     description:
-                                      FluentdDaemonSetInitContainer is a
-                                      Fluentd DaemonSet init container.
+                                      FluentBitDaemonSetInitContainer is
+                                      a Fluent Bit DaemonSet init container.
                                     properties:
                                       name:
                                         description: |-
-                                          Name is an enum which identifies the Fluentd DaemonSet init container by name.
-                                          Supported values are: tigera-fluentd-prometheus-tls-key-cert-provisioner
+                                          Name is an enum which identifies the Fluent Bit DaemonSet init container by name.
+                                          Supported values are: calico-fluent-bit-tls-key-cert-provisioner (or the deprecated
+                                          alias tigera-fluentd-prometheus-tls-key-cert-provisioner, kept for one release so
+                                          existing FluentdDaemonSet overrides continue to validate).
                                         enum:
+                                          - calico-fluent-bit-tls-key-cert-provisioner
                                           - tigera-fluentd-prometheus-tls-key-cert-provisioner
                                         type: string
                                       resources:
                                         description: |-
                                           Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                          If specified, this overrides the named Fluentd DaemonSet init container's resources.
-                                          If omitted, the Fluentd DaemonSet will use its default value for this init container's resources.
+                                          If specified, this overrides the named Fluent Bit DaemonSet init container's resources.
+                                          If omitted, the Fluent Bit DaemonSet will use its default value for this init container's resources.
                                         properties:
                                           claims:
                                             description: |-

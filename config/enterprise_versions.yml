@@ -15,11 +15,11 @@ components:
   node-windows:
     image: node-windows
     version: master
-  fluentd:
-    image: fluentd
+  fluent-bit:
+    image: fluent-bit
     version: master
-  fluentd-windows:
-    image: fluentd-windows
+  fluent-bit-windows:
+    image: fluent-bit-windows
     version: master
   dex:
     image: dex

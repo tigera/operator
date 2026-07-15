@@ -1724,6 +1724,16 @@ var (
 			Verbs:     []string{"get"},
 		},
 		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		{
 			APIGroups: []string{"applicationlayer.projectcalico.org"},
 			Resources: []string{
 				"globalwafpolicies",
@@ -1894,6 +1904,16 @@ var (
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
+		},
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		},
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
 			APIGroups: []string{"applicationlayer.projectcalico.org"},

@@ -100,6 +100,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to add waypoint pull secrets controller: %w", err)
 	}
 
+	// The waypoint cleanup controller deletes the per-class resource sets that
+	// istiod strands when a Gateway's spec.gatewayClassName changes: istiod
+	// only applies the set for the current class and never deletes the previous
+	// class's set, and owner-reference GC only fires when the Gateway itself is
+	// deleted.
+	if err := waypoint.AddCleanupController(mgr, opts); err != nil {
+		return fmt.Errorf("failed to add waypoint cleanup controller: %w", err)
+	}
+
 	return nil
 }
 

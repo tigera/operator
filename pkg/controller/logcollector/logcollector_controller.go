@@ -465,11 +465,11 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Fluent Bit needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	trustedBundle, err := certificateManager.CreateTrustedBundleWithSystemRootCertificates(prometheusCertificate, linseedCertificate)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create tigera-ca-bundle configmap", err, reqLogger)
-		return reconcile.Result{}, err
-	}
+	// The bundle carries fluent-bit's own name: calico-system's shared tigera-ca-bundle is rendered by
+	// the core Installation controller with a different certificate set, and the component handler
+	// replaces ConfigMap data wholesale — an unnamed bundle here would fight it, and additions like
+	// the syslog user CA would be lost to whichever controller wrote last.
+	trustedBundle := certificatemanagement.CreateNamedTrustedBundle(render.FluentBitNodeName, certificateManager.KeyPair(), true, prometheusCertificate, linseedCertificate)
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 

@@ -142,6 +142,14 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", rlogcollector.FluentBitFilterConfigMapName, err)
 	}
 
+	// Watch the user-supplied CA ConfigMaps so creating or rotating a syslog or
+	// Splunk CA takes effect without waiting for an unrelated reconcile.
+	for _, caConfigMap := range []string{rlogcollector.SyslogCAConfigMapName, rlogcollector.SplunkCAConfigMapName} {
+		if err = utils.AddConfigMapWatch(c, caConfigMap, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("logcollector-controller failed to watch ConfigMap %s: %v", caConfigMap, err)
+		}
+	}
+
 	// Watch the rendered configuration ConfigMaps so tampering with them
 	// triggers a reconcile that restores the rendered content.
 	for _, configMapName := range []string{
@@ -524,7 +532,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	var useSyslogCertificate bool
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil && instance.Spec.AdditionalStores.Syslog.Encryption == operatorv1.EncryptionTLS {
-			syslogCert, err := getSysLogCertificate(r.client)
+			syslogCert, err := getUserCACertificate(r.client, rlogcollector.SyslogCAConfigMapName)
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading Syslog certificate", err, reqLogger)
 				return reconcile.Result{}, err
@@ -532,6 +540,22 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			if syslogCert != nil {
 				useSyslogCertificate = true
 				trustedBundle.AddCertificates(syslogCert)
+			}
+		}
+		// The Splunk output verifies https HEC endpoints against the trusted
+		// bundle, so a user CA for a self-hosted Splunk rides the same way as
+		// the syslog one. Plain-http endpoints do no verification, so like
+		// syslog's TLS gate the CA is only loaded for https.
+		if splunk := instance.Spec.AdditionalStores.Splunk; splunk != nil {
+			if proto, _, _, err := url.ParseEndpoint(splunk.Endpoint); err == nil && proto == "https" {
+				splunkCert, err := getUserCACertificate(r.client, rlogcollector.SplunkCAConfigMapName)
+				if err != nil {
+					r.status.SetDegraded(operatorv1.ResourceReadError, "Error loading Splunk certificate", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+				if splunkCert != nil {
+					trustedBundle.AddCertificates(splunkCert)
+				}
 			}
 		}
 	}
@@ -872,24 +896,25 @@ func getEksCloudwatchLogConfig(client client.Client, interval int32, region, gro
 	}, nil
 }
 
-func getSysLogCertificate(client client.Client) (certificatemanagement.CertificateInterface, error) {
+// getUserCACertificate reads an optional user-supplied CA from the named
+// ConfigMap in the operator namespace (key tls.crt), for stores whose TLS
+// endpoint is not signed by a publicly trusted CA.
+func getUserCACertificate(client client.Client, name string) (certificatemanagement.CertificateInterface, error) {
 	cm := &corev1.ConfigMap{}
 	cmNamespacedName := types.NamespacedName{
-		Name:      rlogcollector.SyslogCAConfigMapName,
+		Name:      name,
 		Namespace: common.OperatorNamespace(),
 	}
 	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("ConfigMap %q is not found, assuming syslog's certificate is signed by publicly trusted CA", rlogcollector.SyslogCAConfigMapName))
+			log.Info(fmt.Sprintf("ConfigMap %q is not found, assuming the endpoint's certificate is signed by publicly trusted CA", name))
 			return nil, nil
 		}
-		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", rlogcollector.SyslogCAConfigMapName, err)
+		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", name, err)
 	}
 	if len(cm.Data[corev1.TLSCertKey]) == 0 {
-		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming syslog's certificate is signed by publicly trusted CA", rlogcollector.SyslogCAConfigMapName, corev1.TLSCertKey))
+		log.Info(fmt.Sprintf("ConfigMap %q does not have a field named %q, assuming the endpoint's certificate is signed by publicly trusted CA", name, corev1.TLSCertKey))
 		return nil, nil
 	}
-	syslogCert := certificatemanagement.NewCertificate(rlogcollector.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
-
-	return syslogCert, nil
+	return certificatemanagement.NewCertificate(name, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil), nil
 }

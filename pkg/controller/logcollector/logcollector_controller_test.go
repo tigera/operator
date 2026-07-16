@@ -494,6 +494,49 @@ var _ = Describe("LogCollector controller tests", func() {
 				Expect(conf).To(ContainSubstring(`"splunk_token": "${SPLUNK_HEC_TOKEN}"`))
 			})
 
+			It("renders a user-supplied Splunk CA into fluent-bit's bundle", func() {
+				caPEM := "-----BEGIN CERTIFICATE-----\nsplunk-user-ca\n-----END CERTIFICATE-----"
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.SplunkCAConfigMapName, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{corev1.TLSCertKey: caPEM},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				bundle := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-ca-bundle-system-certs", Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &bundle)).To(BeNil())
+				Expect(bundle.Data["tigera-ca-bundle.crt"]).To(ContainSubstring(caPEM))
+			})
+
+			It("does not load the Splunk CA for a plain-http endpoint", func() {
+				lc := operatorv1.LogCollector{
+					TypeMeta:   metav1.TypeMeta{Kind: "LogCollector", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				}
+				Expect(test.GetResource(c, &lc)).To(BeNil())
+				lc.Spec.AdditionalStores.Splunk.Endpoint = "http://localhost:1234"
+				Expect(c.Update(ctx, &lc)).NotTo(HaveOccurred())
+				caPEM := "-----BEGIN CERTIFICATE-----\nsplunk-user-ca\n-----END CERTIFICATE-----"
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.SplunkCAConfigMapName, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{corev1.TLSCertKey: caPEM},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				bundle := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-ca-bundle-system-certs", Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &bundle)).To(BeNil())
+				Expect(bundle.Data["tigera-ca-bundle.crt"]).NotTo(ContainSubstring(caPEM))
+			})
+
 			Context("Disable feature via license", func() {
 				BeforeEach(func() {
 					By("Deleting the previous license")

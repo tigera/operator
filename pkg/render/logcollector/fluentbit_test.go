@@ -174,6 +174,12 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		// keeps the budget the single shared output used to have.
 		Expect(fluentBitConf).To(ContainSubstring(`"storage.total_limit_size": "500M"`))
 		Expect(fluentBitConf).To(ContainSubstring(`"storage.total_limit_size": "100M"`))
+		// Long-line safety on the tail inputs: at the 32K default
+		// buffer_max_size, one over-long line (routine for kube-audit) makes
+		// in_tail abandon the whole file.
+		Expect(fluentBitConf).To(ContainSubstring(`"buffer_chunk_size": "256K"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"buffer_max_size": "10M"`))
+		Expect(fluentBitConf).To(ContainSubstring(`"skip_long_lines": true`))
 		// No Go proxy plugins are loaded.
 		Expect(fluentBitConf).NotTo(ContainSubstring("plugins_file"))
 		Expect(fluentBitConf).NotTo(ContainSubstring(`"name": "linseed"`))

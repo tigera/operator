@@ -539,6 +539,40 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 		)
 	})
 
+	It("should include threat feed domains in the network policy egress rules", func() {
+		cfg.ThreatFeedsDomains = []string{"feeds.example.com", "intel.threatprovider.io"}
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		netPol := rtest.GetResource(resources, "calico-system.intrusion-detection-controller", render.IntrusionDetectionNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(netPol).NotTo(BeNil())
+
+		// Find the threat feed domain egress rule.
+		var found bool
+		for _, rule := range netPol.Spec.Egress {
+			if rule.Action == v3.Allow && len(rule.Destination.Domains) > 0 {
+				Expect(rule.Destination.Domains).To(Equal([]string{"feeds.example.com", "intel.threatprovider.io"}))
+				Expect(rule.Destination.Ports).To(Equal(networkpolicy.Ports(443)))
+				found = true
+				break
+			}
+		}
+		Expect(found).To(BeTrue(), "Expected to find a threat feed domains egress rule")
+	})
+
+	It("should not include threat feed domain rule when no domains are configured", func() {
+		cfg.ThreatFeedsDomains = nil
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		netPol := rtest.GetResource(resources, "calico-system.intrusion-detection-controller", render.IntrusionDetectionNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(netPol).NotTo(BeNil())
+
+		for _, rule := range netPol.Spec.Egress {
+			Expect(rule.Destination.Domains).To(BeEmpty(), "Expected no domain-based egress rule when ThreatFeedsDomains is empty")
+		}
+	})
+
 	It("should render an init container for pods when certificate management is enabled", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block

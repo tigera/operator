@@ -73,6 +73,7 @@ const (
 	SysLogPublicCertKey                      = "ca-bundle.crt"
 	SysLogPublicCAPath                       = SysLogPublicCADir + SysLogPublicCertKey
 	SyslogCAConfigMapName                    = "syslog-ca"
+	SplunkCAConfigMapName                    = "splunk-ca"
 
 	// Constants for Linseed token volume mounting in managed clusters.
 	LinseedTokenVolumeName = render.LinseedTokenVolumeName

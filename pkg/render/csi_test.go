@@ -103,6 +103,39 @@ var _ = Describe("CSI rendering tests", func() {
 				Type: corev1.SeccompProfileTypeRuntimeDefault,
 			}))
 		Expect(ds.Spec.Template.Spec.ServiceAccountName).To(Equal(render.CSIDaemonSetName))
+
+		// The varrun host-path mount must be narrowed to /var/run/nodeagent so
+		// the calico-csi container cannot reach the container runtime socket
+		// (e.g. /var/run/containerd/containerd.sock) on the node.
+		var varrunMount *corev1.VolumeMount
+		for i := range ds.Spec.Template.Spec.Containers[0].VolumeMounts {
+			vm := &ds.Spec.Template.Spec.Containers[0].VolumeMounts[i]
+			if vm.Name == "varrun" {
+				varrunMount = vm
+				break
+			}
+		}
+		Expect(varrunMount).NotTo(BeNil())
+		Expect(varrunMount.MountPath).To(Equal("/var/run/nodeagent"))
+
+		var varrunVol *corev1.Volume
+		for i := range ds.Spec.Template.Spec.Volumes {
+			v := &ds.Spec.Template.Spec.Volumes[i]
+			if v.Name == "varrun" {
+				varrunVol = v
+				break
+			}
+		}
+		Expect(varrunVol).NotTo(BeNil())
+		Expect(varrunVol.HostPath).NotTo(BeNil())
+		Expect(varrunVol.HostPath.Path).To(Equal("/var/run/nodeagent"))
+		Expect(varrunVol.HostPath.Type).NotTo(BeNil())
+		Expect(*varrunVol.HostPath.Type).To(Equal(corev1.HostPathDirectoryOrCreate))
+
+		// The csi-node-driver-registrar container must not mount varrun at all.
+		for _, vm := range ds.Spec.Template.Spec.Containers[1].VolumeMounts {
+			Expect(vm.Name).NotTo(Equal("varrun"))
+		}
 	})
 
 	It("should render properly when KubeletVolumePluginPath is set to 'None'", func() {

@@ -2173,6 +2173,16 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 				return false, err
 			}
 			updated = true
+
+			// A fresh eBPF install opts into sourcing host-networked overlay traffic from the
+			// node's own address instead of an IP assigned to the tunnel device. Felix defaults
+			// this to TunnelAddress, which existing/upgraded clusters keep so their host-networked
+			// flows are not disrupted; brand new clusters have no such flows to preserve. Only set
+			// it when unset so a user-provided value is never overridden.
+			if fc.Spec.BPFOverlayHostSourceIP == nil {
+				hostSourceIP := v3.BPFOverlayHostSourceIPHostAddress
+				fc.Spec.BPFOverlayHostSourceIP = &hostSourceIP
+			}
 		}
 	} else {
 		bpfEnabledOnDaemonsetWithEnvVar, err := bpfEnabledOnDaemonsetWithEnvVar(ds)

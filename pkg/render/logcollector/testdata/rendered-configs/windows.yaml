@@ -34,29 +34,38 @@
   "pipeline": {
     "inputs": [
       {
+        "buffer_chunk_size": "256K",
+        "buffer_max_size": "10M",
         "db": "c:/var/log/calico/calico-fluent-bit/in_tail_flows.db",
         "name": "tail",
         "parser": "json",
         "path": "c:/var/log/calico/flowlogs/flows.log",
         "read_from_head": true,
+        "skip_long_lines": true,
         "storage.type": "filesystem",
         "tag": "flows"
       },
       {
+        "buffer_chunk_size": "256K",
+        "buffer_max_size": "10M",
         "db": "c:/var/log/calico/calico-fluent-bit/in_tail_audit.tsee.db",
         "name": "tail",
         "parser": "json_audit",
         "path": "c:/var/log/calico/audit/tsee-audit.log",
         "read_from_head": true,
+        "skip_long_lines": true,
         "storage.type": "filesystem",
         "tag": "audit.tsee"
       },
       {
+        "buffer_chunk_size": "256K",
+        "buffer_max_size": "10M",
         "db": "c:/var/log/calico/calico-fluent-bit/in_tail_audit.kube.db",
         "name": "tail",
         "parser": "json_audit",
         "path": "c:/var/log/calico/audit/kube-audit.log",
         "read_from_head": true,
+        "skip_long_lines": true,
         "storage.type": "filesystem",
         "tag": "audit.kube"
       }

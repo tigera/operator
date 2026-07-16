@@ -94,6 +94,15 @@ func (c *fluentBitComponent) addInputs(cfg *fluentBitConfig) {
 			"parser":         in.parser,
 			"read_from_head": true,
 			"storage.type":   "filesystem",
+			// A line longer than buffer_max_size (32K default) makes in_tail
+			// abandon the whole file until it rotates, and kube-audit events
+			// routinely exceed 32K (fluentd had no line-length cap). 10M
+			// covers anything the apiserver can log — etcd caps objects at
+			// ~1.5MiB — and skip_long_lines confines anything larger to
+			// dropping that line instead of the file.
+			"buffer_chunk_size": "256K",
+			"buffer_max_size":   "10M",
+			"skip_long_lines":   true,
 		})
 	}
 

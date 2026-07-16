@@ -35,6 +35,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/logcollector"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // TestRenderedConfigGoldens pins the full fluent-bit configuration the
@@ -336,7 +337,7 @@ func goldenBaseConfig(t *testing.T) *logcollector.FluentBitConfiguration {
 		},
 		FluentBitKeyPair:       metricsSecret,
 		EKSLogForwarderKeyPair: eksSecret,
-		TrustedBundle:          certificateManager.CreateTrustedBundle(),
+		TrustedBundle:          certificatemanagement.CreateNamedTrustedBundle(render.FluentBitNodeName, certificateManager.KeyPair(), true),
 	}
 }
 

@@ -1675,6 +1675,52 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
+
+			// A fresh eBPF install should opt into sourcing host-networked overlay traffic
+			// from the node's address rather than a tunnel device IP.
+			Expect(fc.Spec.BPFOverlayHostSourceIP).NotTo(BeNil())
+			Expect(*fc.Spec.BPFOverlayHostSourceIP).To(Equal(v3.BPFOverlayHostSourceIPHostAddress))
+		})
+
+		It("should not set BPFOverlayHostSourceIP on FelixConfiguration when calico-node already exists (upgrade)", func() {
+			createNodeDaemonSet()
+
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// An existing cluster keeps Felix's TunnelAddress default (field left unset) so
+			// its host-networked overlay flows are not disrupted.
+			Expect(fc.Spec.BPFOverlayHostSourceIP).To(BeNil())
+		})
+
+		It("should not override a user-set BPFOverlayHostSourceIP on a fresh install", func() {
+			tunnelAddress := v3.BPFOverlayHostSourceIPTunnelAddress
+			existingFC := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       v3.FelixConfigurationSpec{BPFOverlayHostSourceIP: &tunnelAddress},
+			}
+			Expect(c.Create(ctx, existingFC)).NotTo(HaveOccurred())
+
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The operator must not stomp a value the user already set.
+			Expect(fc.Spec.BPFOverlayHostSourceIP).NotTo(BeNil())
+			Expect(*fc.Spec.BPFOverlayHostSourceIP).To(Equal(v3.BPFOverlayHostSourceIPTunnelAddress))
 		})
 
 		It("should set BPFEnabled to false on FelixConfiguration if BPF is disabled on installation", func() {

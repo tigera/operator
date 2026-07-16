@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -232,6 +233,24 @@ func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
 	for _, tag := range c.linseedTags() {
 		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs,
 			c.linseedHTTPOutput(tag, c.certPath(), c.keyPath(), linseedStorageLimit(tag)))
+	}
+
+	// Mirror every record to the OTel collector's OTLP/HTTP receiver (mTLS,
+	// same Tigera-CA keypair as the Linseed outputs) when the OTelCollector
+	// section is set on the LogCollector CR.
+	if c.cfg.OTelCollectorEnabled {
+		cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, map[string]interface{}{
+			"name":         "opentelemetry",
+			"match":        "*",
+			"host":         fmt.Sprintf("otel-collector.%s.svc", common.CalicoNamespace),
+			"port":         4318,
+			"logs_uri":     "/v1/logs",
+			"tls":          "on",
+			"tls.verify":   "on",
+			"tls.ca_file":  c.trustedBundlePath(),
+			"tls.crt_file": c.certPath(),
+			"tls.key_file": c.keyPath(),
+		})
 	}
 
 	// Additional stores are Linux-only, matching the fluentd Windows variant

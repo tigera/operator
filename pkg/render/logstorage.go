@@ -1372,10 +1372,10 @@ func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmap"},
 		},
-		&rbacv1.RoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"},
-		},
+		// The tigera-linseed RoleBinding in calico-system is NOT deprecated: the
+		// apiserver and logcollector controllers render it in managed clusters so
+		// guardian can manage Linseed token secrets. Deleting it here fought their
+		// create on every reconcile.
 
 		// Remove legacy ExternalName service pointing to Guardian for linseed
 		&corev1.Service{

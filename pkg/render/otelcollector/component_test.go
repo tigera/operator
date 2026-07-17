@@ -137,7 +137,6 @@ var _ = Describe("OTelCollector rendering", func() {
 									Image:   "testregistry.com/tigera/calico:master",
 									Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 									Ports: []corev1.ContainerPort{
-										{Name: "otlp-grpc", ContainerPort: otelcollector.OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
 										{Name: "otlp-http", ContainerPort: otelcollector.OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 										{Name: "health", ContainerPort: otelcollector.HealthCheckPort, Protocol: corev1.ProtocolTCP},
 										{Name: "metrics", ContainerPort: otelcollector.InternalMetricsPort, Protocol: corev1.ProtocolTCP},

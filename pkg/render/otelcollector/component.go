@@ -420,7 +420,9 @@ func (c *component) container() corev1.Container {
 		Image:   c.image,
 		Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
 		Ports: []corev1.ContainerPort{
-			{Name: "otlp-grpc", ContainerPort: OTLPGRPCPort, Protocol: corev1.ProtocolTCP},
+			// No otlp-grpc port: the receiver is HTTP-only (fluent-bit's
+			// opentelemetry output has no gRPC mode). 4317 appears only in
+			// the egress policy for outbound gRPC exporters.
 			{Name: "otlp-http", ContainerPort: OTLPHTTPPort, Protocol: corev1.ProtocolTCP},
 			{Name: "health", ContainerPort: HealthCheckPort, Protocol: corev1.ProtocolTCP},
 			{Name: "metrics", ContainerPort: InternalMetricsPort, Protocol: corev1.ProtocolTCP},

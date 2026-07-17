@@ -428,8 +428,9 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	managedCluster := managementClusterConnection != nil
 
-	// Carry the token Kubernetes populated forward so the reconcile preserves it instead of wiping it.
-	// Empty until Kubernetes first populates the created secret.
+	// Carry the existing token forward so the reconcile preserves it instead of wiping it; empty until
+	// Kubernetes first populates the secret. Non-managed clusters only: on a managed cluster the token is
+	// a Linseed-issued JWT that Linseed's token controller owns, so the operator leaves that secret alone.
 	var alertmanagerLinseedTokenData map[string][]byte
 	if !managedCluster {
 		existingToken := &corev1.Secret{}

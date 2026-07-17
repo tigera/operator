@@ -605,9 +605,8 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 				Labels:      map[string]string{},
 				Annotations: configHashAnnotations,
 			},
-			// Deliver config as a raw alertmanager.yaml secret (the default "alertmanager-<name>") rather
-			// than an AlertmanagerConfig CR. The webhook reads the Linseed token, client cert and CA bundle
-			// by file path, so mount their secrets/configmaps here.
+			// The webhook reads the Linseed token, client cert and CA bundle by file path, so mount their
+			// secrets/configmaps here.
 			Secrets:    []string{AlertmanagerLinseedTokenSecretName, PrometheusClientTLSSecretName},
 			ConfigMaps: []string{certificatemanagement.TrustedCertConfigMapName},
 		},
@@ -632,10 +631,8 @@ func (mc *monitorComponent) alertmanagerLinseedTokenSecret() *corev1.Secret {
 	}
 }
 
-// alertmanagerConfigSecret returns the Secret holding the raw alertmanager.yaml (prometheus-operator
-// reads it from the default "alertmanager-<name>" secret). A plain secret rather than an
-// AlertmanagerConfig CR keeps the routing readable for users running their own Alertmanager and spares
-// the operator watching the CRD.
+// alertmanagerConfigSecret returns the Secret holding the raw alertmanager.yaml. prometheus-operator
+// reads Alertmanager config from the "alertmanager-<name>" secret.
 func (mc *monitorComponent) alertmanagerConfigSecret() *corev1.Secret {
 	return &corev1.Secret{
 		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -646,8 +643,7 @@ func (mc *monitorComponent) alertmanagerConfigSecret() *corev1.Secret {
 
 // alertmanagerConfigYAML renders the Alertmanager configuration. All alerts are routed to the Linseed
 // events webhook over mTLS, authenticating with the calico-alertmanager bearer token, so that they
-// surface as events on the Manager Alerts page. Users suppress individual alerts via AlertExceptions
-// rather than through the Monitor API.
+// surface as events on the Manager Alerts page. Users suppress individual alerts via AlertExceptions.
 func (mc *monitorComponent) alertmanagerConfigYAML() string {
 	route := map[string]interface{}{
 		"group_by":        []string{"job"},

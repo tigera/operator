@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
@@ -82,7 +83,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			},
 			FluentBitKeyPair:       metricsSecret,
 			EKSLogForwarderKeyPair: eksSecret,
-			TrustedBundle:          certificateManager.CreateTrustedBundle(),
+			TrustedBundle:          certificatemanagement.CreateNamedTrustedBundle(render.FluentBitNodeName, certificateManager.KeyPair(), true),
 		}
 	})
 
@@ -693,7 +694,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		for _, vol := range ds.Spec.Template.Spec.Volumes {
 			volnames = append(volnames, vol.Name)
 		}
-		Expect(volnames).To(ContainElement("tigera-ca-bundle"))
+		Expect(volnames).To(ContainElement("calico-fluent-bit-ca-bundle-system-certs"))
 
 		// Syslog TLS configuration is in the ConfigMap.
 		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)

@@ -88,6 +88,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
 		},
 		UpdateFunc: func(e event.UpdateEvent) bool {
+			// Check the old object too: a Gateway leaving the istio-waypoint
+			// class must trigger a reconcile so its namespace's copied pull
+			// secrets are cleaned up promptly rather than on the next periodic
+			// reconcile.
+			if gw, ok := e.ObjectOld.(*gapi.Gateway); ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName {
+				return true
+			}
 			gw, ok := e.ObjectNew.(*gapi.Gateway)
 			return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
 		},

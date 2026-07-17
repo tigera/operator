@@ -178,6 +178,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
 	return nil
 }
 
@@ -641,6 +642,8 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
+		OTelLogTypes:           otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific
@@ -892,4 +895,13 @@ func getSysLogCertificate(client client.Client) (certificatemanagement.Certifica
 	syslogCert := certificatemanagement.NewCertificate(rlogcollector.SyslogCAConfigMapName, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil)
 
 	return syslogCert, nil
+}
+
+// otelLogTypes returns the log types selected for OTel export, empty when the
+// otelCollector section or its logs selection is absent.
+func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OTelLogType {
+	if lc.Spec.OTelCollector == nil || lc.Spec.OTelCollector.Logs == nil {
+		return nil
+	}
+	return lc.Spec.OTelCollector.Logs.Types
 }

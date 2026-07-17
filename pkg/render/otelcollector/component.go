@@ -255,6 +255,24 @@ var collectorConfigTmpl = template.Must(template.New("config").Parse(`receivers:
             - source_labels: [__meta_kubernetes_endpoint_port_name]
               regex: calico-metrics-port|calico-bgp-metrics-port
               action: keep
+        # Felix's own metrics (felix_*) are served plain-http (no TLS), unlike
+        # the reporter/BGP ports above — mirroring the ServiceMonitor split in
+        # pkg/render/monitor. The port only exists on the calico-node-metrics
+        # Service when FelixConfiguration prometheusMetricsEnabled is true;
+        # otherwise this job simply discovers no targets.
+        - job_name: 'felix-metrics'
+          kubernetes_sd_configs:
+            - role: endpoints
+              namespaces:
+                names:
+                  - {{.MetricsNamespace}}
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_service_label_k8s_app]
+              regex: calico-node
+              action: keep
+            - source_labels: [__meta_kubernetes_endpoint_port_name]
+              regex: felix-metrics-port
+              action: keep
 {{- end}}
 
 exporters:
@@ -582,7 +600,9 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
 				Destination: v3.EntityRule{
-					Ports: networkpolicy.Ports(9081, 9900),
+					// Reporter (9081), BGP (9900) and Felix's plain-http
+					// metrics port (9091, when prometheusMetricsEnabled).
+					Ports: networkpolicy.Ports(9081, 9900, 9091),
 				},
 			},
 		)

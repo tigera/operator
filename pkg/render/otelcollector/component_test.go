@@ -314,6 +314,8 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(config).To(ContainSubstring("tls_config:"))
 			Expect(config).To(ContainSubstring("server_name: calico-node-metrics"))
 			Expect(config).To(ContainSubstring("calico-metrics-port|calico-bgp-metrics-port"))
+			Expect(config).To(ContainSubstring("job_name: 'felix-metrics'"))
+			Expect(config).To(ContainSubstring("regex: felix-metrics-port"))
 			Expect(config).To(ContainSubstring("metrics:"))
 			Expect(config).To(ContainSubstring("receivers: [prometheus]"))
 			Expect(config).To(ContainSubstring("exporters: [otlp/backend]"))

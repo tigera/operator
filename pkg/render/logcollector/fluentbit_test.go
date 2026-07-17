@@ -102,6 +102,26 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		}))
 	})
 
+	DescribeTable("should run the pos-migrator init container privileged only on OpenShift",
+		func(provider operatorv1.Provider, expectPrivileged bool) {
+			cfg.Installation.KubernetesProvider = provider
+			component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+			initCtrs := ds.Spec.Template.Spec.InitContainers
+			Expect(initCtrs).NotTo(BeEmpty())
+			Expect(initCtrs[0].Name).To(Equal("pos-migrator"))
+			// Reads the legacy .pos files and creates the DB directory under the
+			// /var/log/calico hostPath; on OpenShift that needs the SELinux-unconfined
+			// (privileged) context. See hostPathSecurityContext.
+			Expect(*initCtrs[0].SecurityContext.Privileged).To(Equal(expectPrivileged))
+		},
+		Entry("OpenShift", operatorv1.ProviderOpenShift, true),
+		Entry("none", operatorv1.ProviderNone, false),
+	)
+
 	It("should render with a default configuration", func() {
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: logcollector.FluentBitPolicyName, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},

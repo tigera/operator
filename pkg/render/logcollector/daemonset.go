@@ -64,6 +64,24 @@ func (c *fluentBitComponent) securityContext(privileged bool) *corev1.SecurityCo
 	return securitycontext.NewRootContext(privileged)
 }
 
+// hostPathSecurityContext returns the security context for the containers that touch
+// the /var/log/calico hostPath: the fluent-bit container, and the pos-migrator init
+// container that seeds its tail-offset DBs from the legacy fluentd .pos files.
+//
+// On OpenShift these must be privileged. kubelet never relabels hostPath volumes, so
+// /var/log/calico keeps its host SELinux label (var_log_t) while a confined container
+// runs as container_t and can neither read the .pos files nor create the DB directory.
+// Privileged clears the container's SELinux label so it runs unconfined as spc_t.
+// rbac.go already grants the service account use of the privileged SCC on OpenShift, and
+// the pod already required that SCC for its hostPath and runAsUser: 0 — so this widens
+// nothing.
+//
+// Both callers must use this: they mount the same volume, so they cannot correctly
+// disagree.
+func (c *fluentBitComponent) hostPathSecurityContext() *corev1.SecurityContext {
+	return c.securityContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
+}
+
 func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 	// Give fluent-bit time to flush on the way down: the engine flushes
 	// in-flight chunks for up to its 5s shutdown grace on SIGTERM (and
@@ -113,7 +131,7 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 		Image:           c.image,
 		Command:         []string{migratorCommand},
 		Env:             migratorEnv,
-		SecurityContext: c.securityContext(false),
+		SecurityContext: c.hostPathSecurityContext(),
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
 		},
@@ -212,7 +230,7 @@ func (c *fluentBitComponent) container() corev1.Container {
 		Args:    []string{"-c", c.configPath()},
 		Env:     envs,
 		// On OpenShift Fluent Bit needs privileged access to access logs on host path volume
-		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider.IsOpenShift()),
+		SecurityContext: c.hostPathSecurityContext(),
 		VolumeMounts:    volumeMounts,
 		StartupProbe:    c.startup(),
 		LivenessProbe:   c.liveness(),

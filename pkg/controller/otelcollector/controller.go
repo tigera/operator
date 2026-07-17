@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/otelcollector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -168,7 +167,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	var receiverTLSSecret certificatemanagement.KeyPairInterface
-	var clientTLSSecret certificatemanagement.KeyPairInterface
 	var trustedBundle certificatemanagement.TrustedBundle
 
 	hasLogs := logCollector.Spec.OTelCollector.Logs != nil && len(logCollector.Spec.OTelCollector.Logs.Types) > 0
@@ -194,14 +192,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			}
 		}
 
-		if metricsEnabled {
-			clientTLSSecret, err = certMgr.GetOrCreateKeyPair(r.cli, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating TLS certificate", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
 		certMgr.AddToStatusManager(r.status, otelcollector.OTelCollectorNamespace)
 	}
 
@@ -211,16 +201,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		Installation:      installationSpec,
 		OTelCollector:     logCollector.Spec.OTelCollector,
 		ReceiverTLSSecret: receiverTLSSecret,
-		ClientTLSSecret:   clientTLSSecret,
 		TrustedCertBundle: trustedBundle,
 	}
 
 	var keyPairOptions []rcertificatemanagement.KeyPairOption
 	if receiverTLSSecret != nil {
 		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(receiverTLSSecret, true, true))
-	}
-	if clientTLSSecret != nil {
-		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true))
 	}
 
 	components := []render.Component{

@@ -198,8 +198,7 @@ var _ = Describe("OTelCollector rendering", func() {
 			Expect(statefulSet).To(Equal(expected), cmp.Diff(statefulSet, expected))
 		})
 
-		It("should include TLS volumes and mounts when metrics with certs are enabled", func() {
-			tlsKeyPair := certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "client-tls"}}, nil, "")
+		It("should include the trusted bundle volume when metrics are enabled", func() {
 			trustedBundle := certificatemanagement.CreateTrustedBundle(nil)
 
 			cfg := &otelcollector.Configuration{
@@ -208,7 +207,6 @@ var _ = Describe("OTelCollector rendering", func() {
 					Metrics:   &operatorv1.OTelMetrics{Enabled: ptr.To(operatorv1.OTelMetricsEnable)},
 					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
-				ClientTLSSecret:   tlsKeyPair,
 				TrustedCertBundle: trustedBundle,
 			}
 			component := otelcollector.OTelCollector(cfg)
@@ -292,7 +290,6 @@ var _ = Describe("OTelCollector rendering", func() {
 		})
 
 		It("should include prometheus receiver when metrics are enabled", func() {
-			tlsKeyPair := certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "client-tls"}}, nil, "")
 			trustedBundle := certificatemanagement.CreateTrustedBundle(nil)
 
 			cfg := &otelcollector.Configuration{
@@ -301,7 +298,6 @@ var _ = Describe("OTelCollector rendering", func() {
 					Metrics:   &operatorv1.OTelMetrics{Enabled: ptr.To(operatorv1.OTelMetricsEnable)},
 					Exporters: []operatorv1.OTelExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
-				ClientTLSSecret:   tlsKeyPair,
 				TrustedCertBundle: trustedBundle,
 			}
 			objs, _ := otelcollector.OTelCollector(cfg).Objects()
@@ -310,12 +306,12 @@ var _ = Describe("OTelCollector rendering", func() {
 
 			config := cm.Data["config.yaml"]
 			Expect(config).To(ContainSubstring("prometheus:"))
-			Expect(config).To(ContainSubstring("kubernetes_sd_configs"))
+			Expect(config).To(ContainSubstring("job_name: 'tigera-prometheus-federate'"))
+			Expect(config).To(ContainSubstring("metrics_path: /federate"))
+			Expect(config).To(ContainSubstring("honor_labels: true"))
+			Expect(config).To(ContainSubstring("credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token"))
 			Expect(config).To(ContainSubstring("tls_config:"))
-			Expect(config).To(ContainSubstring("server_name: calico-node-metrics"))
-			Expect(config).To(ContainSubstring("calico-metrics-port|calico-bgp-metrics-port"))
-			Expect(config).To(ContainSubstring("job_name: 'felix-metrics'"))
-			Expect(config).To(ContainSubstring("regex: felix-metrics-port"))
+			Expect(config).To(ContainSubstring("targets: ['prometheus-http-api.tigera-prometheus.svc:9090']"))
 			Expect(config).To(ContainSubstring("metrics:"))
 			Expect(config).To(ContainSubstring("receivers: [prometheus]"))
 			Expect(config).To(ContainSubstring("exporters: [otlp/backend]"))
@@ -452,7 +448,8 @@ var _ = Describe("OTelCollector rendering", func() {
 			cr, err := rtest.GetResourceOfType[*rbacv1.ClusterRole](objs, otelcollector.OTelCollectorClusterRoleName, "")
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(cr.Rules).To(HaveLen(1))
-			Expect(cr.Rules[0].Resources).To(ConsistOf("nodes", "pods", "services", "endpoints"))
+			Expect(cr.Rules[0].Resources).To(ConsistOf("services/proxy"))
+			Expect(cr.Rules[0].ResourceNames).To(ConsistOf("calico-node-prometheus:9090"))
 
 			crb, err := rtest.GetResourceOfType[*rbacv1.ClusterRoleBinding](objs, otelcollector.OTelCollectorClusterRoleName, "")
 			Expect(err).ShouldNot(HaveOccurred())

@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -60,8 +61,6 @@ const (
 	HealthCheckPort     = 13133
 	InternalMetricsPort = 8888
 
-	MetricsTLSServerName = "calico-node-metrics"
-
 	DefaultMemoryLimit         = "512Mi"
 	DefaultMemoryRequest       = "128Mi"
 	DefaultMemoryLimitMiB      = 409 // 80% of 512Mi
@@ -75,8 +74,6 @@ type Configuration struct {
 	OTelCollector *operatorv1.OTelCollectorSpec
 	// ReceiverTLSSecret is the server keypair for the OTLP receiver (mTLS termination).
 	ReceiverTLSSecret certificatemanagement.KeyPairInterface
-	// ClientTLSSecret is the client keypair for outbound prometheus scraping.
-	ClientTLSSecret   certificatemanagement.KeyPairInterface
 	TrustedCertBundle certificatemanagement.TrustedBundleRO
 }
 
@@ -142,10 +139,15 @@ func (c *component) clusterRole() *rbacv1.ClusterRole {
 			Name: OTelCollectorClusterRoleName,
 		},
 		Rules: []rbacv1.PolicyRule{
+			// Authorizes the collector's federate scrapes at the
+			// tigera-prometheus authn-proxy (TokenReview +
+			// SubjectAccessReview on this resource) — the same rule the
+			// manager and guardian use to query Prometheus.
 			{
-				APIGroups: []string{""},
-				Resources: []string{"nodes", "pods", "services", "endpoints"},
-				Verbs:     []string{"get", "list", "watch"},
+				APIGroups:     []string{""},
+				Resources:     []string{"services/proxy"},
+				ResourceNames: []string{"calico-node-prometheus:9090"},
+				Verbs:         []string{"get"},
 			},
 		},
 	}
@@ -193,23 +195,22 @@ func (c *component) hasLogs() bool {
 }
 
 type configTemplateData struct {
-	HasLogs             bool
-	ReceiverTLS         bool
-	ReceiverCertFile    string
-	ReceiverKeyFile     string
-	ReceiverClientCA    string
-	MetricsEnabled      bool
-	MetricsCAFile       string
-	MetricsCertFile     string
-	MetricsKeyFile      string
-	MetricsServerName   string
-	MetricsNamespace    string
-	Exporters           []exporterEntry
-	ExporterNames       string
-	HealthCheckPort     int
-	InternalMetricsPort int
-	MemoryLimitMiB      int
-	MemorySpikeLimitMiB int
+	HasLogs          bool
+	ReceiverTLS      bool
+	ReceiverCertFile string
+	ReceiverKeyFile  string
+	ReceiverClientCA string
+	MetricsEnabled   bool
+	MetricsCAFile    string
+	// PrometheusFederateTarget is the host:port of the tigera-prometheus
+	// authn-proxy fronting the /federate endpoint.
+	PrometheusFederateTarget string
+	Exporters                []exporterEntry
+	ExporterNames            string
+	HealthCheckPort          int
+	InternalMetricsPort      int
+	MemoryLimitMiB           int
+	MemorySpikeLimitMiB      int
 }
 
 type exporterEntry struct {
@@ -233,46 +234,29 @@ var collectorConfigTmpl = template.Must(template.New("config").Parse(`receivers:
 {{- end}}
 {{- end}}
 {{- if .MetricsEnabled}}
+  # Federate everything the in-cluster tigera-prometheus already scrapes
+  # (calico-node, typha/kube-controllers, calico-api, fluent-bit,
+  # elasticsearch, operator — every ServiceMonitor, including future ones)
+  # instead of re-implementing per-component scrape configs and their TLS
+  # quirks here. The request goes through Prometheus's authn-proxy: bearer
+  # token is the pod's ServiceAccount token, authorized by the
+  # services/proxy RBAC rule on the collector's ClusterRole.
   prometheus:
     config:
       scrape_configs:
-        - job_name: 'calico-metrics'
+        - job_name: 'tigera-prometheus-federate'
           scheme: https
+          metrics_path: /federate
+          params:
+            'match[]': ['{__name__=~".+"}']
+          # Keep the original job/instance labels from the federated series.
+          honor_labels: true
+          authorization:
+            credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
           tls_config:
             ca_file: {{.MetricsCAFile}}
-            cert_file: {{.MetricsCertFile}}
-            key_file: {{.MetricsKeyFile}}
-            server_name: {{.MetricsServerName}}
-          kubernetes_sd_configs:
-            - role: endpoints
-              namespaces:
-                names:
-                  - {{.MetricsNamespace}}
-          relabel_configs:
-            - source_labels: [__meta_kubernetes_service_label_k8s_app]
-              regex: calico-node
-              action: keep
-            - source_labels: [__meta_kubernetes_endpoint_port_name]
-              regex: calico-metrics-port|calico-bgp-metrics-port
-              action: keep
-        # Felix's own metrics (felix_*) are served plain-http (no TLS), unlike
-        # the reporter/BGP ports above — mirroring the ServiceMonitor split in
-        # pkg/render/monitor. The port only exists on the calico-node-metrics
-        # Service when FelixConfiguration prometheusMetricsEnabled is true;
-        # otherwise this job simply discovers no targets.
-        - job_name: 'felix-metrics'
-          kubernetes_sd_configs:
-            - role: endpoints
-              namespaces:
-                names:
-                  - {{.MetricsNamespace}}
-          relabel_configs:
-            - source_labels: [__meta_kubernetes_service_label_k8s_app]
-              regex: calico-node
-              action: keep
-            - source_labels: [__meta_kubernetes_endpoint_port_name]
-              regex: felix-metrics-port
-              action: keep
+          static_configs:
+            - targets: ['{{.PrometheusFederateTarget}}']
 {{- end}}
 
 exporters:
@@ -367,12 +351,10 @@ func (c *component) collectorConfig() string {
 		data.ReceiverClientCA = c.cfg.TrustedCertBundle.MountPath()
 	}
 
-	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil && c.cfg.ClientTLSSecret != nil {
+	if c.metricsEnabled() && c.cfg.TrustedCertBundle != nil {
 		data.MetricsCAFile = c.cfg.TrustedCertBundle.MountPath()
-		data.MetricsCertFile = c.cfg.ClientTLSSecret.VolumeMountCertificateFilePath()
-		data.MetricsKeyFile = c.cfg.ClientTLSSecret.VolumeMountKeyFilePath()
-		data.MetricsServerName = MetricsTLSServerName
-		data.MetricsNamespace = OTelCollectorNamespace
+		data.PrometheusFederateTarget = fmt.Sprintf("%s.%s.svc:%d",
+			monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, monitor.PrometheusDefaultPort)
 	}
 
 	var buf bytes.Buffer
@@ -430,12 +412,6 @@ func (c *component) container() corev1.Container {
 	if c.cfg.ReceiverTLSSecret != nil {
 		volumeMounts = append(volumeMounts,
 			c.cfg.ReceiverTLSSecret.VolumeMount(rmeta.OSTypeLinux),
-		)
-	}
-
-	if c.cfg.ClientTLSSecret != nil {
-		volumeMounts = append(volumeMounts,
-			c.cfg.ClientTLSSecret.VolumeMount(rmeta.OSTypeLinux),
 		)
 	}
 
@@ -503,10 +479,6 @@ func (c *component) statefulSet() *appsv1.StatefulSet {
 
 	if c.cfg.ReceiverTLSSecret != nil {
 		volumes = append(volumes, c.cfg.ReceiverTLSSecret.Volume())
-	}
-
-	if c.cfg.ClientTLSSecret != nil {
-		volumes = append(volumes, c.cfg.ClientTLSSecret.Volume())
 	}
 
 	return &appsv1.StatefulSet{
@@ -590,22 +562,12 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 	}
 
 	if c.metricsEnabled() {
-		egressRules = append(egressRules,
-			v3.Rule{
-				Action:      v3.Allow,
-				Protocol:    &networkpolicy.TCPProtocol,
-				Destination: networkpolicy.KubeAPIServerEntityRule,
-			},
-			v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					// Reporter (9081), BGP (9900) and Felix's plain-http
-					// metrics port (9091, when prometheusMetricsEnabled).
-					Ports: networkpolicy.Ports(9081, 9900, 9091),
-				},
-			},
-		)
+		// Federation scrapes go to the tigera-prometheus authn-proxy only.
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.PrometheusEntityRule,
+		})
 	}
 
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)

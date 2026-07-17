@@ -185,6 +185,19 @@
       },
       {
         "action": "Allow",
+        "protocol": "TCP",
+        "source": {
+          "selector": "(app == 'alertmanager' && alertmanager == 'calico-node-alertmanager') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == 'calico-node-alertmanager')",
+          "namespaceSelector": "projectcalico.org/name == 'tigera-prometheus'"
+        },
+        "destination": {
+          "ports": [
+            8444
+          ]
+        }
+      },
+      {
+        "action": "Allow",
         "destination": {
           "ports": [
             8444

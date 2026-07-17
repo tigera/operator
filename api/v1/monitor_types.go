@@ -186,7 +186,7 @@ type Alertmanager struct {
 }
 type AlertmanagerSpec struct {
 	// Replicas defines the number of Alertmanager replicas. When set to 0, Alertmanager is not rendered.
-	// Default: 0
+	// Default: 1
 	// +optional
 	Replicas *int32 `json:"replicas,omitempty"`
 

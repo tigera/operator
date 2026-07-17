@@ -172,17 +172,27 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 		return rbList.Items
 	}
 
-	createTrackedSecret := func(name, namespace string) {
+	createTrackedSecret := func(name, namespace string, owners ...metav1.OwnerReference) {
 		createNamespace(namespace)
 		s := &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    map[string]string{WaypointPullSecretLabel: "true"},
+				Name:            name,
+				Namespace:       namespace,
+				Labels:          map[string]string{WaypointPullSecretLabel: "true"},
+				OwnerReferences: owners,
 			},
 			Type: corev1.SecretTypeDockerConfigJson,
 		}
 		Expect(cli.Create(ctx, s)).NotTo(HaveOccurred())
+	}
+
+	// egwOwnerRef simulates another feature (e.g. egress gateway) holding an owner
+	// reference on a shared resource.
+	egwOwnerRef := metav1.OwnerReference{
+		APIVersion: "operator.tigera.io/v1",
+		Kind:       "EgressGateway",
+		Name:       "egw",
+		UID:        "2222-3333",
 	}
 
 	Context("when no pull secrets are configured", func() {
@@ -220,6 +230,34 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			Expect(secrets[0].Namespace).To(Equal("user-ns"))
 			Expect(secrets[0].Name).To(Equal("my-pull-secret"))
 			Expect(secrets[0].Labels[WaypointPullSecretLabel]).To(Equal("true"))
+			// The multiple-owners label is a directive to the component handler and
+			// must not be persisted.
+			Expect(secrets[0].Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
+		})
+
+		It("should preserve another controller's owner references on shared pull secret copies", func() {
+			// Simulates an egress gateway in the same namespace: it copies the same
+			// pull secret and holds owner references on the copy for GC-based cleanup.
+			createNamespace("user-ns")
+			shared := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "my-pull-secret",
+					Namespace:       "user-ns",
+					OwnerReferences: []metav1.OwnerReference{egwOwnerRef},
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			}
+			Expect(cli.Create(ctx, shared)).NotTo(HaveOccurred())
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			got := &corev1.Secret{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "my-pull-secret", Namespace: "user-ns"}, got)).NotTo(HaveOccurred())
+			Expect(got.OwnerReferences).To(ConsistOf(egwOwnerRef))
+			Expect(got.Labels[WaypointPullSecretLabel]).To(Equal("true"))
+			Expect(got.Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
 		})
 
 		It("should create a tigera-operator-secrets RoleBinding in the waypoint gateway namespace", func() {
@@ -308,16 +346,32 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 
-		It("should never delete labeled secrets in the operator or calico-system namespaces", func() {
-			// Copies of pull secrets in these namespaces are managed by other
-			// controllers; a stray label must not cause this controller to delete them.
-			createTrackedSecret("stray-labeled-secret", common.OperatorNamespace())
-			createTrackedSecret("stray-labeled-secret", common.CalicoNamespace)
+		It("should not delete stale labeled secrets that another controller owns", func() {
+			// A labeled copy carrying owner references is shared with another feature
+			// (e.g. egress gateway) that still needs it; cleanup is the GC's job once
+			// those owners are gone.
+			createTrackedSecret("my-pull-secret", "shared-ns", egwOwnerRef)
 
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(listTrackedSecrets()).To(HaveLen(2))
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			// Nothing was written or deleted in shared-ns, so no RoleBinding was
+			// created there either.
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should never delete labeled secrets in reserved namespaces", func() {
+			// Copies of pull secrets in these namespaces are managed by other
+			// controllers; a stray label must not cause this controller to delete them.
+			createTrackedSecret("stray-labeled-secret", common.OperatorNamespace())
+			createTrackedSecret("stray-labeled-secret", common.CalicoNamespace)
+			createTrackedSecret("stray-labeled-secret", legacyGatewayNamespace)
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(listTrackedSecrets()).To(HaveLen(3))
 			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 
@@ -443,6 +497,19 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 
 			// calico-system pull secrets and the tigera-operator-secrets RoleBinding
 			// are managed by the installation controller.
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should not copy secrets to the tigera-gateway namespace", func() {
+			createWaypointGateway("waypoint", legacyGatewayNamespace)
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The gateway API controller's legacy teardown explicitly deletes pull
+			// secret copies and the tigera-operator-secrets RoleBinding there;
+			// writing copies would fight it.
 			Expect(listTrackedSecrets()).To(BeEmpty())
 			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})

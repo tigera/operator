@@ -55,6 +55,12 @@ const (
 	// cross-namespace query that covers all cleanup scenarios, whereas owner references would
 	// only automate Gateway-deletion cleanup via Kubernetes garbage collection.
 	WaypointPullSecretLabel = "operator.tigera.io/istio-waypoint-pull-secret"
+
+	// legacyGatewayNamespace is the namespace used by the legacy (pre-namespaced) gateway API
+	// install. The gateway API controller's legacy teardown explicitly deletes the
+	// tigera-operator-secrets RoleBinding and pull secret copies there on every reconcile,
+	// so writing copies into it would fight that controller indefinitely.
+	legacyGatewayNamespace = "tigera-gateway"
 )
 
 var log = logf.Log.WithName("controller_istio_waypoint")
@@ -194,11 +200,46 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 		return reconcile.Result{}, fmt.Errorf("failed to list waypoint pull secrets: %w", err)
 	}
 
+	// Build desired secrets for each target namespace, keyed on (namespace, name) so that
+	// renamed or removed secrets are correctly detected as stale. A copy may be shared with
+	// another feature that copies the same pull secret into the same namespace (e.g. egress
+	// gateway); the MultipleOwnersLabel instructs the component handler to preserve the owner
+	// references that feature holds on the shared copy.
+	var desiredSecretObjs []client.Object
+	desiredSecrets := map[types.NamespacedName]bool{}
+	for ns := range targetNamespaces {
+		copied := secret.CopyToNamespace(ns, pullSecrets...)
+		for _, s := range copied {
+			if s.Labels == nil {
+				s.Labels = map[string]string{}
+			}
+			s.Labels[WaypointPullSecretLabel] = "true"
+			s.Labels[common.MultipleOwnersLabel] = "true"
+			desiredSecretObjs = append(desiredSecretObjs, s)
+			desiredSecrets[types.NamespacedName{Namespace: s.Namespace, Name: s.Name}] = true
+		}
+	}
+
+	// Mark stale secrets for deletion. A stale copy carrying owner references is still in
+	// use by another feature (this controller never sets owner references on its copies),
+	// so it is left for the Kubernetes GC once its owners are gone.
+	for i := range existingSecrets.Items {
+		s := &existingSecrets.Items[i]
+		if reservedNamespace(s.Namespace) {
+			continue
+		}
+		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
+		if desiredSecrets[key] || len(s.OwnerReferences) > 0 {
+			continue
+		}
+		toDelete = append(toDelete, s)
+	}
+
 	// The operator has no cluster-wide permission to write secrets; the tigera-operator-secrets
 	// ClusterRole grants writes only in namespaces where a RoleBinding binds it to the operator's
 	// ServiceAccount. Ensure that binding exists in every namespace we're about to write secrets
-	// in: namespaces that need copies (rbDesired), plus namespaces that only have stale copies
-	// left to delete (the binding is created and then removed in the same reconcile, after the
+	// in: namespaces that need copies (rbDesired), plus namespaces where stale copies are being
+	// deleted (there the binding is created and then removed in the same reconcile, after the
 	// secret deletions it authorizes).
 	rbDesired := map[string]bool{}
 	if len(pullSecrets) > 0 {
@@ -210,10 +251,8 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 	for ns := range rbDesired {
 		rbEnsure[ns] = true
 	}
-	for i := range existingSecrets.Items {
-		if ns := existingSecrets.Items[i].Namespace; !reservedNamespace(ns) {
-			rbEnsure[ns] = true
-		}
+	for _, obj := range toDelete {
+		rbEnsure[obj.GetNamespace()] = true
 	}
 
 	// RoleBindings first: objects are created in order, so each namespace's binding
@@ -221,39 +260,7 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 	for ns := range rbEnsure {
 		toCreate = append(toCreate, waypointOperatorSecretsRoleBinding(ns))
 	}
-
-	// Build desired secrets for each target namespace.
-	for ns := range targetNamespaces {
-		copied := secret.CopyToNamespace(ns, pullSecrets...)
-		for _, s := range copied {
-			if s.Labels == nil {
-				s.Labels = map[string]string{}
-			}
-			s.Labels[WaypointPullSecretLabel] = "true"
-			toCreate = append(toCreate, s)
-		}
-	}
-
-	// Build the desired set keyed on (namespace, name) so that renamed or removed
-	// secrets are correctly detected as stale.
-	desiredSecrets := map[types.NamespacedName]bool{}
-	for _, obj := range toCreate {
-		if _, ok := obj.(*corev1.Secret); ok {
-			desiredSecrets[types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = true
-		}
-	}
-
-	// Mark stale secrets for deletion.
-	for i := range existingSecrets.Items {
-		s := &existingSecrets.Items[i]
-		if reservedNamespace(s.Namespace) {
-			continue
-		}
-		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
-		if !desiredSecrets[key] {
-			toDelete = append(toDelete, s)
-		}
-	}
+	toCreate = append(toCreate, desiredSecretObjs...)
 
 	// Mark stale RoleBindings for deletion, after the stale secrets: deletes are processed
 	// in order, so the binding outlives the secret deletions it authorizes. Stale means the
@@ -296,11 +303,11 @@ func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconc
 	return reconcile.Result{}, nil
 }
 
-// reservedNamespace reports whether ns is one of the operator's own namespaces, whose
-// pull secrets and tigera-operator-secrets RoleBinding are managed by other controllers
-// or the install manifests — this controller never writes or deletes anything there.
+// reservedNamespace reports whether ns is a namespace whose pull secrets and
+// tigera-operator-secrets RoleBinding are managed by other controllers or the install
+// manifests — this controller never writes or deletes anything there.
 func reservedNamespace(ns string) bool {
-	return ns == common.OperatorNamespace() || ns == common.CalicoNamespace
+	return ns == common.OperatorNamespace() || ns == common.CalicoNamespace || ns == legacyGatewayNamespace
 }
 
 // waypointOperatorSecretsRoleBinding returns the RoleBinding granting the operator's

@@ -59,6 +59,10 @@ type LogCollectorSpec struct {
 	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
 	// +optional
 	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
+
+	// OTelCollector configures the OpenTelemetry Collector for exporting logs and metrics via OTLP.
+	// +optional
+	OTelCollector *OTelCollectorSpec `json:"otelCollector,omitempty"`
 }
 
 type CollectProcessPathOption string
@@ -258,6 +262,25 @@ type LogCollectorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []LogCollector `json:"items"`
+}
+
+// OTelCollectorSpec defines the desired state of the OpenTelemetry Collector.
+type OTelCollectorSpec struct {
+	// Logs configures which log types are exported via OTLP.
+	// +optional
+	Logs *OTelLogs `json:"logs,omitempty"`
+
+	// Metrics configures whether Calico component metrics are exported via OTLP.
+	// +optional
+	Metrics *OTelMetrics `json:"metrics,omitempty"`
+
+	// Exporters configures the OTLP export endpoints.
+	// +optional
+	Exporters []OTelExporter `json:"exporters,omitempty"`
+
+	// OTelCollectorStatefulSet configures the OTel Collector StatefulSet.
+	// +optional
+	OTelCollectorStatefulSet *OTelCollectorStatefulSet `json:"openTelemetryCollectorStatefulSet,omitempty"`
 }
 
 func init() {

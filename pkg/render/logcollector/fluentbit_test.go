@@ -228,6 +228,28 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
+	It("should render one opentelemetry output per selected OTel log type", func() {
+		cfg.OTelCollectorEnabled = true
+		cfg.OTelLogTypes = []operatorv1.OTelLogType{operatorv1.OTelFlowLog, operatorv1.OTelAuditLog}
+		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
+		resources, _ := component.Objects()
+
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		conf := cm.Data["fluent-bit.yaml"]
+
+		// One output per selected type, matched by tag — DNS not selected, so
+		// no output for it. service.name is stamped at the source via the
+		// per-output processors, so the collector needs no classification.
+		Expect(strings.Count(conf, `"name": "opentelemetry"`)).To(Equal(2), "one output per selected type")
+		Expect(conf).To(ContainSubstring(`"match": "flows"`))
+		Expect(conf).To(ContainSubstring(`"match": "audit.*"`))
+		Expect(conf).To(ContainSubstring(`"name": "opentelemetry_envelope"`))
+		Expect(conf).To(ContainSubstring(`"name": "content_modifier"`))
+		Expect(conf).To(ContainSubstring(`"context": "otel_resource_attributes"`))
+		Expect(conf).To(ContainSubstring(`"value": "flows"`))
+		Expect(conf).To(ContainSubstring(`"value": "audit"`))
+	})
+
 	It("should render fluent-bit DaemonSet with resources requests/limits", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block

@@ -298,6 +298,7 @@ func (c *fluentBitComponent) envvars() []corev1.EnvVar {
 			)
 		}
 	}
+
 	return envs
 }
 

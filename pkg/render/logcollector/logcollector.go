@@ -170,6 +170,8 @@ type FluentBitConfiguration struct {
 
 	// LicenseExpired indicates the license has expired and fluent-bit DaemonSet should be removed.
 	LicenseExpired bool
+
+	OTelCollectorEnabled bool
 }
 
 type fluentBitComponent struct {

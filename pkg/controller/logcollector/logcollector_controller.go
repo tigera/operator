@@ -186,6 +186,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
 	return nil
 }
 
@@ -665,6 +666,7 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific

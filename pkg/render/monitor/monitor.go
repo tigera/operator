@@ -18,7 +18,6 @@ import (
 	"crypto/x509"
 	_ "embed"
 	"fmt"
-	"sort"
 	"strings"
 
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
@@ -336,7 +335,7 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	// must neither create nor delete it there, as the two have different, immutable types and the token
 	// controller — not the operator — owns that Secret's lifecycle.
 	if !mc.cfg.ManagedCluster {
-		if mc.alertmanagerReplicas() > 0 && mc.cfg.Monitor.UIAlertsEnabled() {
+		if mc.alertmanagerReplicas() > 0 {
 			toCreate = append(toCreate, mc.alertmanagerLinseedTokenSecret())
 		} else {
 			toDelete = append(toDelete, mc.alertmanagerLinseedTokenSecret())
@@ -670,20 +669,18 @@ func (mc *monitorComponent) alertmanagerConfigSecret() *corev1.Secret {
 	}
 }
 
-// alertmanagerConfigYAML renders the Alertmanager configuration. Everything routes to a "null"
-// (no-op) receiver by default; alerts whose Monitor.spec.alerts entry is enabled (and only when the
-// UI alerts integration is on) are routed to the Linseed events webhook over mTLS, authenticating
-// with the calico-alertmanager bearer token. Disabled alerts (and any alert not in the enabled set)
-// therefore fall through to "null" and are not forwarded to Linseed.
+// alertmanagerConfigYAML renders the Alertmanager configuration. All alerts are routed to the Linseed
+// events webhook over mTLS, authenticating with the calico-alertmanager bearer token, so that they
+// surface as events on the Manager Alerts page. Users suppress individual alerts via AlertExceptions
+// rather than through the Monitor API.
 func (mc *monitorComponent) alertmanagerConfigYAML() string {
 	route := map[string]interface{}{
 		"group_by":        []string{"job"},
 		"group_wait":      "30s",
 		"group_interval":  "1m",
 		"repeat_interval": "5m",
-		"receiver":        "null",
+		"receiver":        "linseed",
 	}
-	receivers := []map[string]interface{}{{"name": "null"}}
 
 	// On a managed cluster Linseed is not in-cluster; address it via the namespace-local
 	// "tigera-linseed" ExternalName service that redirects to Guardian, using SNI "tigera-linseed".
@@ -692,60 +689,28 @@ func (mc *monitorComponent) alertmanagerConfigYAML() string {
 		url, serverName = LinseedEventsURLManaged, "tigera-linseed"
 	}
 
-	if mc.cfg.Monitor.UIAlertsEnabled() {
-		if names := enabledAlertNames(mc.cfg.Monitor.Alerts); len(names) > 0 {
-			route["routes"] = []map[string]interface{}{{
-				"receiver": "linseed",
-				"matchers": []string{fmt.Sprintf("alertname=~\"^(%s)$\"", strings.Join(names, "|"))},
-			}}
-			receivers = append(receivers, map[string]interface{}{
-				"name": "linseed",
-				"webhook_configs": []map[string]interface{}{{
-					"url":           url,
-					"send_resolved": true,
-					"http_config": map[string]interface{}{
-						"authorization": map[string]interface{}{
-							"type":             "Bearer",
-							"credentials_file": "/etc/alertmanager/secrets/" + AlertmanagerLinseedTokenSecretName + "/" + AlertmanagerLinseedTokenKey,
-						},
-						"tls_config": map[string]interface{}{
-							"ca_file":     "/etc/alertmanager/configmaps/" + certificatemanagement.TrustedCertConfigMapName + "/" + certificatemanagement.TrustedCertConfigMapKeyName,
-							"cert_file":   "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSCertKey,
-							"key_file":    "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSPrivateKeyKey,
-							"server_name": serverName,
-						},
-					},
-				}},
-			})
-		}
-	}
+	receivers := []map[string]interface{}{{
+		"name": "linseed",
+		"webhook_configs": []map[string]interface{}{{
+			"url":           url,
+			"send_resolved": true,
+			"http_config": map[string]interface{}{
+				"authorization": map[string]interface{}{
+					"type":             "Bearer",
+					"credentials_file": "/etc/alertmanager/secrets/" + AlertmanagerLinseedTokenSecretName + "/" + AlertmanagerLinseedTokenKey,
+				},
+				"tls_config": map[string]interface{}{
+					"ca_file":     "/etc/alertmanager/configmaps/" + certificatemanagement.TrustedCertConfigMapName + "/" + certificatemanagement.TrustedCertConfigMapKeyName,
+					"cert_file":   "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSCertKey,
+					"key_file":    "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSPrivateKeyKey,
+					"server_name": serverName,
+				},
+			},
+		}},
+	}}
 
 	out, _ := yaml.Marshal(map[string]interface{}{"route": route, "receivers": receivers})
 	return string(out)
-}
-
-// enabledAlertNames returns the sorted Prometheus alert rule names that should be forwarded to Linseed,
-// based on the per-alert Monitor.spec.alerts configuration. Each logical alert maps to one or more
-// PrometheusRule alert names (see prometheusRule).
-func enabledAlertNames(a operatorv1.Alerts) []string {
-	var names []string
-	if a.DeniedPackets.Enabled() {
-		names = append(names, "DeniedPackets")
-	}
-	if a.TigeraStatus.Enabled() {
-		names = append(names, "ComponentDegradedWarning", "ComponentDegradedCritical", "ComponentProgressingWarning", "ComponentProgressingCritical")
-	}
-	if a.TLSCertExpiry.Enabled() {
-		names = append(names, "TLSCertExpiringWarning", "TLSCertExpiringCritical")
-	}
-	if a.LicenseExpiry.Enabled() {
-		names = append(names, "LicenseExpiringWarning", "LicenseExpiringCritical")
-	}
-	if a.IPPoolExhaustion.Enabled() {
-		names = append(names, "IPPoolNearlyExhausted", "IPPoolExhausted")
-	}
-	sort.Strings(names)
-	return names
 }
 
 // externalLinseedService is rendered only on managed clusters. Alertmanager's webhook posts events to

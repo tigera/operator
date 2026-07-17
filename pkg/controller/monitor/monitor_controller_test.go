@@ -372,26 +372,6 @@ var _ = Describe("Monitor controller tests", func() {
 			Expect(y).To(ContainSubstring(monitor.LinseedEventsURL))
 			Expect(y).To(ContainSubstring("/etc/alertmanager/secrets/calico-alertmanager-tigera-linseed-token/token"))
 		})
-
-		It("should render a null-only config when all alerts are disabled", func() {
-			Expect(cli.Get(ctx, client.ObjectKeyFromObject(monitorCR), monitorCR)).NotTo(HaveOccurred())
-			disabled := operatorv1.AlertStatusDisabled
-			monitorCR.Spec.Alerts = operatorv1.Alerts{
-				DeniedPackets:    operatorv1.Alert{Status: disabled},
-				TigeraStatus:     operatorv1.Alert{Status: disabled},
-				TLSCertExpiry:    operatorv1.Alert{Status: disabled},
-				LicenseExpiry:    operatorv1.Alert{Status: disabled},
-				IPPoolExhaustion: operatorv1.Alert{Status: disabled},
-			}
-			Expect(cli.Update(ctx, monitorCR)).NotTo(HaveOccurred())
-
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred())
-
-			y := getAlertmanagerYAML()
-			Expect(y).NotTo(ContainSubstring("linseed"))
-			Expect(y).To(ContainSubstring(`receiver: "null"`))
-		})
 	})
 
 	Context("Reconcile for Condition status", func() {

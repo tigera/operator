@@ -36,62 +36,6 @@ type MonitorSpec struct {
 	// Alertmanager is the configuration for the Alertmanager.
 	// +optional
 	Alertmanager *Alertmanager `json:"alertManager,omitempty"`
-
-	// Alerts enables or disables Calico Enterprise's built-in alerts.
-	// +optional
-	Alerts Alerts `json:"alerts,omitempty"`
-}
-
-// Alerts enables or disables Calico Enterprise's built-in alerts and whether their events appear on the
-// Manager Alerts page.
-type Alerts struct {
-	// DeniedPackets fires when calico-node is denying packets.
-	// +optional
-	DeniedPackets Alert `json:"deniedPackets,omitempty"`
-
-	// TigeraStatus fires when a component stays degraded or progressing.
-	// +optional
-	TigeraStatus Alert `json:"tigeraStatus,omitempty"`
-
-	// TLSCertExpiry fires when a TLS certificate is close to expiry.
-	// +optional
-	TLSCertExpiry Alert `json:"tlsCertExpiry,omitempty"`
-
-	// LicenseExpiry fires when the license is close to expiry or invalid.
-	// +optional
-	LicenseExpiry Alert `json:"licenseExpiry,omitempty"`
-
-	// IPPoolExhaustion fires when an IP pool is nearly (>=90%) or fully (>=100%) exhausted.
-	// +optional
-	IPPoolExhaustion Alert `json:"ipPoolExhaustion,omitempty"`
-}
-
-type Alert struct {
-	// Status enables or disables the alert. Defaults to Enabled when unset.
-	// +optional
-	Status AlertStatusType `json:"status,omitempty"`
-}
-
-// Enabled reports whether the alert is active. An unset status defaults to Enabled.
-func (a Alert) Enabled() bool {
-	return a.Status != AlertStatusDisabled
-}
-
-// +kubebuilder:validation:Enum=Enabled;Disabled
-type AlertStatusType string
-
-const (
-	// AlertStatusEnabled creates an alert for Alertmanager and displays its events in the Manager UI.
-	AlertStatusEnabled AlertStatusType = "Enabled"
-	// AlertStatusDisabled disables this alert.
-	AlertStatusDisabled AlertStatusType = "Disabled"
-)
-
-// UIAlertsEnabled reports whether any alert is configured to surface its events on the Manager Alerts page.
-func (s *MonitorSpec) UIAlertsEnabled() bool {
-	return s.Alerts.DeniedPackets.Enabled() || s.Alerts.TigeraStatus.Enabled() ||
-		s.Alerts.TLSCertExpiry.Enabled() || s.Alerts.LicenseExpiry.Enabled() ||
-		s.Alerts.IPPoolExhaustion.Enabled()
 }
 
 type ExternalPrometheus struct {

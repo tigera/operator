@@ -428,9 +428,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 	managedCluster := managementClusterConnection != nil
 
-	// Carry forward the token Kubernetes populated into the Alertmanager Linseed token secret so the
-	// component handler preserves it on reconcile instead of wiping it. Empty until Kubernetes first
-	// populates the created secret.
+	// Carry the token Kubernetes populated forward so the reconcile preserves it instead of wiping it.
+	// Empty until Kubernetes first populates the created secret.
 	var alertmanagerLinseedTokenData map[string][]byte
 	if !managedCluster {
 		existingToken := &corev1.Secret{}
@@ -442,9 +441,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// On a managed cluster, Alertmanager forwards alerts to the management cluster's Linseed through
-	// Guardian (see monitor.LinseedEventsURLManaged). Add the management Linseed public certificate
-	// to the Alertmanager's trusted bundle so the webhook can verify it.
+	// On a managed cluster the webhook reaches the management cluster's Linseed through Guardian, so add
+	// the management Linseed public certificate to Alertmanager's trusted bundle to verify it.
 	if managedCluster {
 		linseedCertificate, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 		if err != nil {

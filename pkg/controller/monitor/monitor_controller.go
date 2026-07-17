@@ -442,8 +442,6 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// On a managed cluster the webhook reaches the management cluster's Linseed through Guardian, so add
-	// the management Linseed public certificate to Alertmanager's trusted bundle to verify it.
 	if managedCluster {
 		linseedCertificate, err := certificateManager.GetCertificate(r.client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 		if err != nil {

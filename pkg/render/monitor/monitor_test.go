@@ -334,7 +334,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(serviceObj.Spec.Selector).To(HaveLen(1))
 		Expect(serviceObj.Spec.Selector["alertmanager"]).To(Equal("calico-node-alertmanager"))
 
-		// Alertmanager configuration (raw alertmanager.yaml secret)
 		amConfigSecret, ok := rtest.GetResource(toCreate, "alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue())
 		amYAML := amConfigSecret.StringData["alertmanager.yaml"]
@@ -788,8 +787,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rtest.GetResource(toCreate, "calico-alertmanager-tigera-linseed-token", common.TigeraPrometheusNamespace, "", "v1", "Secret")).To(BeNil())
 		Expect(rtest.GetResource(toDelete, "calico-alertmanager-tigera-linseed-token", common.TigeraPrometheusNamespace, "", "v1", "Secret")).To(BeNil())
 
-		// The webhook must target the namespace-local tigera-linseed name (which redirects to Guardian),
-		// not the management-cluster in-cluster service that does not resolve on a managed cluster.
 		amConfigSecret, ok := rtest.GetResource(toCreate, "alertmanager-calico-node-alertmanager", common.TigeraPrometheusNamespace, "", "v1", "Secret").(*corev1.Secret)
 		Expect(ok).To(BeTrue())
 		amYAML := amConfigSecret.StringData["alertmanager.yaml"]
@@ -797,7 +794,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(amYAML).NotTo(ContainSubstring(monitor.LinseedEventsURL))
 		Expect(amYAML).To(ContainSubstring("server_name: tigera-linseed\n"))
 
-		// And the ExternalName service backing that name must exist, pointing at Guardian.
 		svc, ok := rtest.GetResource(toCreate, "tigera-linseed", common.TigeraPrometheusNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Spec.Type).To(Equal(corev1.ServiceTypeExternalName))
@@ -1090,8 +1086,6 @@ var _ = Describe("monitor rendering tests", func() {
 		serviceMonitor := sm.(*monitoringv1.ServiceMonitor)
 		Expect(serviceMonitor.Spec.Endpoints[0].Port).To(Equal(monitor.OperatorMetricsPortName))
 
-		// Neither should be in toDelete (only the legacy monitors, Deployment, typhaServiceMonitor,
-		// and the managed-only Linseed service/rolebinding).
 		Expect(toDelete).To(HaveLen(6))
 	})
 
@@ -1108,7 +1102,6 @@ var _ = Describe("monitor rendering tests", func() {
 		rules := prometheusruleObj.Spec.Groups[0].Rules
 		Expect(rules).To(HaveLen(11))
 
-		// DeniedPackets - base rule, severity downgraded to info
 		Expect(rules[0].Alert).To(Equal("DeniedPackets"))
 		Expect(rules[0].Expr).To(Equal(intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0")))
 		Expect(rules[0].Labels["severity"]).To(Equal("info"))
@@ -1170,7 +1163,6 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rules[8].Annotations["summary"]).To(Equal("Component {{ $labels.component }} is progressing"))
 		Expect(rules[8].Annotations["description"]).To(Equal("Component {{ $labels.component }} has been in a progressing state for more than 30 minutes."))
 
-		// IP pool utilisation alerts (always present, appended after the operator-metrics rules)
 		Expect(rules[9].Alert).To(Equal("IPPoolNearlyExhausted"))
 		Expect(rules[9].For).To(Equal(ptr.To(monitoringv1.Duration("5m"))))
 		Expect(rules[9].Labels["severity"]).To(Equal("warning"))

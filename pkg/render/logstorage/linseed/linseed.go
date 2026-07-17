@@ -674,7 +674,6 @@ func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 			Destination: linseedIngressDestinationEntityRule,
 		},
 		{
-			// Allow Alertmanager to push Prometheus alerts as events.
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      monitor.AlertmanagerSourceEntityRule,

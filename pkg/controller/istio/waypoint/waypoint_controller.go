@@ -65,7 +65,7 @@ const (
 
 var log = logf.Log.WithName("controller_istio_waypoint")
 
-// Add creates the waypoint pull secrets controller and adds it to the Manager.
+// Add creates the waypoint controller and adds it to the Manager.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.EnterpriseCRDExists {
 		return nil
@@ -73,15 +73,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	gatewayWatchReady := &utils.ReadyFlag{}
 
-	r := &ReconcileWaypointSecrets{
+	r := &ReconcileWaypoint{
 		Client:            mgr.GetClient(),
 		scheme:            mgr.GetScheme(),
 		gatewayWatchReady: gatewayWatchReady,
 	}
 
-	c, err := ctrlruntime.NewController("istio-waypoint-secrets-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("istio-waypoint-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return fmt.Errorf("failed to create istio-waypoint-secrets-controller: %w", err)
+		return fmt.Errorf("failed to create istio-waypoint-controller: %w", err)
 	}
 
 	// Defer the Gateway watch — the Gateway API CRD may not be installed yet.
@@ -112,32 +112,32 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch Istio CR for pull secret config changes.
 	err = c.WatchObject(&operatorv1.Istio{}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return fmt.Errorf("istio-waypoint-secrets-controller failed to watch Istio resource: %w", err)
+		return fmt.Errorf("istio-waypoint-controller failed to watch Istio resource: %w", err)
 	}
 
 	// Watch Installation for pull secret changes.
 	if err = utils.AddInstallationWatch(c); err != nil {
-		return fmt.Errorf("istio-waypoint-secrets-controller failed to watch Installation resource: %w", err)
+		return fmt.Errorf("istio-waypoint-controller failed to watch Installation resource: %w", err)
 	}
 
 	// Periodic reconcile as a backstop.
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("istio-waypoint-secrets-controller failed to create periodic reconcile watch: %w", err)
+		return fmt.Errorf("istio-waypoint-controller failed to create periodic reconcile watch: %w", err)
 	}
 
 	return nil
 }
 
-// ReconcileWaypointSecrets copies pull secrets to namespaces that contain
+// ReconcileWaypoint copies pull secrets to namespaces that contain
 // istio-waypoint Gateways so that waypoint pods can pull images from private registries.
-type ReconcileWaypointSecrets struct {
+type ReconcileWaypoint struct {
 	client.Client
 	scheme *runtime.Scheme
 
 	gatewayWatchReady *utils.ReadyFlag
 }
 
-func (r *ReconcileWaypointSecrets) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.V(1).Info("Reconciling waypoint pull secrets")
 
@@ -327,7 +327,7 @@ func waypointOperatorSecretsRoleBinding(namespace string) *rbacv1.RoleBinding {
 // namespace carries owner references, i.e. is also managed by another controller. Checked
 // against the live object because bindings created by other features (e.g. egress gateway)
 // may not carry this controller's label.
-func (r *ReconcileWaypointSecrets) roleBindingCoOwned(ctx context.Context, namespace string) (bool, error) {
+func (r *ReconcileWaypoint) roleBindingCoOwned(ctx context.Context, namespace string) (bool, error) {
 	rb := &rbacv1.RoleBinding{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: render.TigeraOperatorSecrets}, rb)
 	if errors.IsNotFound(err) {

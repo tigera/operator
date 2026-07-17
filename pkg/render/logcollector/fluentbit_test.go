@@ -101,6 +101,17 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 			Verbs:         []string{"use"},
 			ResourceNames: []string{"privileged"},
 		}))
+
+		// Both the fluent-bit container and the pos-migrator init container
+		// write to the /var/log/calico host path volume, so both must be
+		// privileged on OpenShift.
+		ds := rtest.GetResource(resources, "calico-fluent-bit", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+		container := ds.Spec.Template.Spec.Containers[0]
+		Expect(*container.SecurityContext.Privileged).To(BeTrue())
+		initContainers := ds.Spec.Template.Spec.InitContainers
+		Expect(initContainers).NotTo(BeEmpty())
+		Expect(initContainers[0].Name).To(Equal("pos-migrator"))
+		Expect(*initContainers[0].SecurityContext.Privileged).To(BeTrue())
 	})
 
 	It("should render with a default configuration", func() {

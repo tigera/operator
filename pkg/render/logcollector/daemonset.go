@@ -109,11 +109,14 @@ func (c *fluentBitComponent) daemonset() *appsv1.DaemonSet {
 		}, migratorEnv...)
 	}
 	initContainers := []corev1.Container{{
-		Name:            "pos-migrator",
-		Image:           c.image,
-		Command:         []string{migratorCommand},
-		Env:             migratorEnv,
-		SecurityContext: c.securityContext(false),
+		Name:    "pos-migrator",
+		Image:   c.image,
+		Command: []string{migratorCommand},
+		Env:     migratorEnv,
+		// Writes to the same host path volume as the fluent-bit container, so
+		// it needs the same privileged access on OpenShift (SELinux otherwise
+		// denies mkdir on the host path).
+		SecurityContext: c.securityContext(c.cfg.Installation.KubernetesProvider.IsOpenShift()),
 		VolumeMounts: []corev1.VolumeMount{
 			{MountPath: c.path("/var/log/calico"), Name: "var-log-calico"},
 		},

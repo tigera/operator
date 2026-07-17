@@ -587,6 +587,14 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 			Resources: []string{"packetcaptures/status"},
 			Verbs:     []string{"update"},
 		},
+		{
+			// The HostQoSPolicy status aggregator watches status written per-node by
+			// each Felix and rolls it up into the Ready condition via the /status
+			// subresource. Mirrors the ippools/status pattern.
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"hostqospolicies", "hostqospolicies/status"},
+			Verbs:     []string{"list", "watch", "update"},
+		},
 	}
 
 	if cfg.GatewayAPIPresent {

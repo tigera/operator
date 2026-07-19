@@ -144,7 +144,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"operator.tigera.io"},
-				Resources: []string{"nonclusterhosts"},
+				Resources: []string{"nonclusterhosts", "servals"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
 			rbacv1.PolicyRule{

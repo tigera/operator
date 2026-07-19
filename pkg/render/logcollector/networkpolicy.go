@@ -202,6 +202,15 @@ func (c *fluentBitComponent) calicoSystemPolicy() *v3.NetworkPolicy {
 				Ports: networkpolicy.Ports(FluentBitInputPort),
 			},
 		})
+		// The Serval gateway relays non-cluster host logs to the same input.
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   networkpolicy.ServalSourceEntityRule,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(FluentBitInputPort),
+			},
+		})
 	}
 
 	return &v3.NetworkPolicy{

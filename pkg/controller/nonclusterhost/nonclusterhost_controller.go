@@ -97,6 +97,7 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 	}
 
 	logc.V(2).Info("Loaded config", "config", instance)
+	logc.Info("NonClusterHost is deprecated and superseded by the Serval resource; see the Serval gateway documentation for migration")
 	r.status.OnCRFound()
 	defer r.status.SetMetaData(&instance.ObjectMeta)
 

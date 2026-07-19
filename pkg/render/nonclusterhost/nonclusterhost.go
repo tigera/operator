@@ -186,9 +186,11 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"create"},
 		},
 		{
-			// Used to read endpoint field from the NonClusterHost resource.
+			// Used to read the endpoint field from the NonClusterHost and
+			// Serval resources; a Serval resource tells the host to use the
+			// gateway tunnel for its Typha connection.
 			APIGroups: []string{"operator.tigera.io"},
-			Resources: []string{"nonclusterhosts"},
+			Resources: []string{"nonclusterhosts", "servals"},
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{

@@ -53,7 +53,6 @@ import (
 	"github.com/tigera/operator/version"
 
 	operatortigeraiov1 "github.com/tigera/operator/api/v1"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -526,23 +525,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// Before we start any controllers, make sure our options are valid.
 	if err := verifyConfiguration(ctx, clientset, options); err != nil {
 		setupLog.Error(err, "Invalid configuration")
-		os.Exit(1)
-	}
-
-	// Register a field-selector index on Pod spec.nodeName. The podiprecovery
-	// controller uses this to list operator-managed pods on a specific node
-	// in a single server-side query. Indexes must be registered before the
-	// manager starts (and before any controllers attempt server-side field
-	// lookups via the cached client).
-	if err := mgr.GetFieldIndexer().IndexField(
-		ctx,
-		&corev1.Pod{},
-		"spec.nodeName",
-		func(obj client.Object) []string {
-			return []string{obj.(*corev1.Pod).Spec.NodeName}
-		},
-	); err != nil {
-		setupLog.Error(err, "unable to register field index for pod spec.nodeName")
 		os.Exit(1)
 	}
 

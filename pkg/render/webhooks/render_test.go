@@ -122,6 +122,15 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch", "update"},
 		}))
+
+		// The audit-logging webhook targets the Enterprise-only /audit endpoint, so it must not
+		// be registered on Calico OSS.
+		vwc, err := rtest.GetResourceOfType[*admissionregistrationv1.ValidatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vwc.Webhooks).To(ConsistOf(
+			HaveField("Name", "tiered-rbac.api.projectcalico.org"),
+			HaveField("Name", "cluster-info.api.projectcalico.org"),
+		))
 	})
 
 	It("should render all resources for Enterprise with the correct image", func() {
@@ -157,6 +166,11 @@ var _ = Describe("Webhooks rendering tests", func() {
 			admissionregistrationv1.Delete,
 		))
 		Expect(mwc.Webhooks[0].Rules[0].Rule.Resources).To(Equal([]string{"uisettings"}))
+
+		// The audit-logging webhook is Enterprise-only.
+		vwc, err := rtest.GetResourceOfType[*admissionregistrationv1.ValidatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vwc.Webhooks).To(ContainElement(HaveField("Name", "audit-logging.api.projectcalico.org")))
 
 		// Verify the ClusterRole includes the enterprise-only rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)

@@ -21,6 +21,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,14 +35,15 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render"
 )
 
-var _ = Describe("Waypoint pull secrets controller tests", func() {
+var _ = Describe("Waypoint controller pull secret tests", func() {
 	var (
 		cli          client.Client
 		scheme       *runtime.Scheme
 		ctx          context.Context
-		r            *ReconcileWaypointSecrets
+		r            *ReconcileWaypoint
 		installation *operatorv1.Installation
 		istioCR      *operatorv1.Istio
 	)
@@ -61,7 +63,7 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 		gatewayWatchReady := &utils.ReadyFlag{}
 		gatewayWatchReady.MarkAsReady()
 
-		r = &ReconcileWaypointSecrets{
+		r = &ReconcileWaypoint{
 			Client:            cli,
 			scheme:            scheme,
 			gatewayWatchReady: gatewayWatchReady,
@@ -163,8 +165,38 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 		return secretList.Items
 	}
 
+	listTrackedRoleBindings := func() []rbacv1.RoleBinding {
+		rbList := &rbacv1.RoleBindingList{}
+		err := cli.List(ctx, rbList, client.MatchingLabels{WaypointPullSecretLabel: "true"})
+		Expect(err).NotTo(HaveOccurred())
+		return rbList.Items
+	}
+
+	createTrackedSecret := func(name, namespace string, owners ...metav1.OwnerReference) {
+		createNamespace(namespace)
+		s := &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:            name,
+				Namespace:       namespace,
+				Labels:          map[string]string{WaypointPullSecretLabel: "true"},
+				OwnerReferences: owners,
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+		}
+		Expect(cli.Create(ctx, s)).NotTo(HaveOccurred())
+	}
+
+	// egwOwnerRef simulates another feature (e.g. egress gateway) holding an owner
+	// reference on a shared resource.
+	egwOwnerRef := metav1.OwnerReference{
+		APIVersion: "operator.tigera.io/v1",
+		Kind:       "EgressGateway",
+		Name:       "egw",
+		UID:        "2222-3333",
+	}
+
 	Context("when no pull secrets are configured", func() {
-		It("should not create any secrets", func() {
+		It("should not create any secrets or RoleBindings", func() {
 			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
 			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 			createWaypointGateway("waypoint", "user-ns")
@@ -172,8 +204,8 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
-			Expect(secrets).To(BeEmpty())
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 	})
 
@@ -198,6 +230,56 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			Expect(secrets[0].Namespace).To(Equal("user-ns"))
 			Expect(secrets[0].Name).To(Equal("my-pull-secret"))
 			Expect(secrets[0].Labels[WaypointPullSecretLabel]).To(Equal("true"))
+			// The multiple-owners label is a directive to the component handler and
+			// must not be persisted.
+			Expect(secrets[0].Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
+		})
+
+		It("should preserve another controller's owner references on shared pull secret copies", func() {
+			// Simulates an egress gateway in the same namespace: it copies the same
+			// pull secret and holds owner references on the copy for GC-based cleanup.
+			createNamespace("user-ns")
+			shared := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "my-pull-secret",
+					Namespace:       "user-ns",
+					OwnerReferences: []metav1.OwnerReference{egwOwnerRef},
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			}
+			Expect(cli.Create(ctx, shared)).NotTo(HaveOccurred())
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			got := &corev1.Secret{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "my-pull-secret", Namespace: "user-ns"}, got)).NotTo(HaveOccurred())
+			Expect(got.OwnerReferences).To(ConsistOf(egwOwnerRef))
+			Expect(got.Labels[WaypointPullSecretLabel]).To(Equal("true"))
+			Expect(got.Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
+		})
+
+		It("should create a tigera-operator-secrets RoleBinding in the waypoint gateway namespace", func() {
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			rbs := listTrackedRoleBindings()
+			Expect(rbs).To(HaveLen(1))
+			Expect(rbs[0].Namespace).To(Equal("user-ns"))
+			Expect(rbs[0].Name).To(Equal(render.TigeraOperatorSecrets))
+			Expect(rbs[0].RoleRef.Kind).To(Equal("ClusterRole"))
+			Expect(rbs[0].RoleRef.Name).To(Equal(render.TigeraOperatorSecrets))
+			Expect(rbs[0].Subjects).To(ConsistOf(rbacv1.Subject{
+				Kind:      "ServiceAccount",
+				Name:      common.OperatorServiceAccount(),
+				Namespace: common.OperatorNamespace(),
+			}))
+			// The multiple-owners label is a directive to the component handler and
+			// must not be persisted.
+			Expect(rbs[0].Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
 		})
 
 		It("should copy pull secrets only once for multiple gateways in same namespace", func() {
@@ -246,8 +328,88 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			_, err = doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Secrets should be cleaned up.
+			// Secrets and the RoleBinding should be cleaned up in a single reconcile.
 			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should clean up labeled secrets in a namespace that has no RoleBinding", func() {
+			// Simulates copies left behind from before the controller managed
+			// RoleBindings (or created manually): the controller must grant itself
+			// access to delete them, then remove that grant again.
+			createTrackedSecret("my-pull-secret", "orphan-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should not delete stale labeled secrets that another controller owns", func() {
+			// A labeled copy carrying owner references is shared with another feature
+			// (e.g. egress gateway) that still needs it; cleanup is the GC's job once
+			// those owners are gone.
+			createTrackedSecret("my-pull-secret", "shared-ns", egwOwnerRef)
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			// Nothing was written or deleted in shared-ns, so no RoleBinding was
+			// created there either.
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should never delete labeled secrets in reserved namespaces", func() {
+			// Copies of pull secrets in these namespaces are managed by other
+			// controllers; a stray label must not cause this controller to delete them.
+			createTrackedSecret("stray-labeled-secret", common.OperatorNamespace())
+			createTrackedSecret("stray-labeled-secret", common.CalicoNamespace)
+			createTrackedSecret("stray-labeled-secret", legacyGatewayNamespace)
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(listTrackedSecrets()).To(HaveLen(3))
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should not delete a RoleBinding that another controller owns", func() {
+			createNamespace("shared-ns")
+			rb := &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      render.TigeraOperatorSecrets,
+					Namespace: "shared-ns",
+					OwnerReferences: []metav1.OwnerReference{{
+						APIVersion: "gateway.networking.k8s.io/v1",
+						Kind:       "Gateway",
+						Name:       "envoy-gw",
+						UID:        "0000-1111",
+					}},
+				},
+				RoleRef: rbacv1.RoleRef{
+					APIGroup: "rbac.authorization.k8s.io",
+					Kind:     "ClusterRole",
+					Name:     render.TigeraOperatorSecrets,
+				},
+				Subjects: []rbacv1.Subject{{
+					Kind:      "ServiceAccount",
+					Name:      common.OperatorServiceAccount(),
+					Namespace: common.OperatorNamespace(),
+				}},
+			}
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+			createTrackedSecret("my-pull-secret", "shared-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The stale secret goes, but the co-owned binding stays for its other owner.
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			got := &rbacv1.RoleBinding{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: render.TigeraOperatorSecrets, Namespace: "shared-ns"}, got)).NotTo(HaveOccurred())
+			Expect(got.OwnerReferences).To(HaveLen(1))
 		})
 
 		It("should not take action for non-matching gatewayClassName", func() {
@@ -323,8 +485,33 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 
 			// Pull secrets already exist in the operator namespace; the controller
 			// should skip it to avoid overwriting source secrets with labeled copies.
-			secrets := listTrackedSecrets()
-			Expect(secrets).To(BeEmpty())
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should not copy secrets to the calico-system namespace", func() {
+			createWaypointGateway("waypoint", common.CalicoNamespace)
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// calico-system pull secrets and the tigera-operator-secrets RoleBinding
+			// are managed by the installation controller.
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
+
+		It("should not copy secrets to the tigera-gateway namespace", func() {
+			createWaypointGateway("waypoint", legacyGatewayNamespace)
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The gateway API controller's legacy teardown explicitly deletes pull
+			// secret copies and the tigera-operator-secrets RoleBinding there;
+			// writing copies would fight it.
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 	})
 
@@ -341,6 +528,7 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
 
 			// Delete the Istio CR.
 			Expect(cli.Delete(ctx, istioCR)).NotTo(HaveOccurred())
@@ -349,8 +537,9 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			_, err = doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// All secrets should be cleaned up.
+			// All secrets and RoleBindings should be cleaned up.
 			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 	})
 
@@ -364,9 +553,7 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 	})
 
 	Context("when Gateway watch is not yet ready", func() {
-		It("should skip Gateway listing and not create secrets", func() {
-			r.gatewayWatchReady = &utils.ReadyFlag{}
-
+		BeforeEach(func() {
 			createPullSecret("my-pull-secret")
 			installation.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
 				{Name: "my-pull-secret"},
@@ -374,12 +561,59 @@ var _ = Describe("Waypoint pull secrets controller tests", func() {
 			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
 			Expect(cli.Create(ctx, istioCR)).NotTo(HaveOccurred())
 			createWaypointGateway("waypoint", "user-ns")
+		})
+
+		It("should skip Gateway listing and not create secrets", func() {
+			r.gatewayWatchReady = &utils.ReadyFlag{}
 
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
 			secrets := listTrackedSecrets()
 			Expect(secrets).To(BeEmpty())
+		})
+
+		It("should not treat existing copies as stale", func() {
+			// Copy the secrets with the watch ready, then simulate an operator
+			// restart where a reconcile fires before the watch is re-established.
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+
+			r.gatewayWatchReady = &utils.ReadyFlag{}
+
+			_, err = doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+		})
+
+		It("should clean up copies when no pull secrets are configured", func() {
+			// Copy the secrets with the watch ready.
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+
+			// Remove all pull secrets from the Installation, then simulate an operator
+			// restart where a reconcile fires before the watch is re-established.
+			inst := &operatorv1.Installation{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, inst)).NotTo(HaveOccurred())
+			inst.Spec.ImagePullSecrets = nil
+			Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+
+			r.gatewayWatchReady = &utils.ReadyFlag{}
+
+			_, err = doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// With no pull secrets the desired state is empty regardless of which
+			// namespaces contain waypoint Gateways, so stale copies and RoleBindings
+			// are cleaned up without waiting for the Gateway watch.
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 	})
 })

@@ -762,6 +762,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
 		{Name: "RBAC_UI_ENABLED", Value: strconv.FormatBool(c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant())},
+		{Name: "WAF_UI_ENABLED", Value: strconv.FormatBool(c.cfg.Manager.WAFManagementEnabled() && !c.cfg.Tenant.MultiTenant())},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

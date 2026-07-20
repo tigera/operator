@@ -778,14 +778,16 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
 	})
 
-	It("preserves other controllers' owner references on shared per-namespace resources", func() {
+	It("preserves other controllers' owner references on shared per-namespace resources, pruning stale Gateway ones", func() {
 		// Simulates another feature (e.g. istio waypoint or egress gateway) having copied
-		// the same pull secret into the namespace with its own owner reference.
+		// the same pull secret into the namespace with its own owner reference, alongside a
+		// reference to a Gateway that has since been deleted.
 		egwRef := metav1.OwnerReference{APIVersion: "operator.tigera.io/v1", Kind: "EgressGateway", Name: "egw", UID: "egw-uid"}
+		staleGatewayRef := metav1.OwnerReference{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway", Name: "old-gw", UID: "u-old"}
 		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
 			Namespace:       "app-ns",
 			Name:            "tigera-pull-secret",
-			OwnerReferences: []metav1.OwnerReference{egwRef},
+			OwnerReferences: []metav1.OwnerReference{egwRef, staleGatewayRef},
 		}})).NotTo(HaveOccurred())
 
 		pullSecrets := []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}}

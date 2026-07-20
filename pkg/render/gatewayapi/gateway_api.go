@@ -68,10 +68,11 @@ var (
 // Single envoy-gateway install in calico-system with deploy.type=GatewayNamespace,
 // so proxies run in each Gateway's own namespace.
 const (
-	ReleaseName         = "tigera-gateway-api"
-	ControllerName      = "gateway.envoyproxy.io/gatewayclass-controller"
-	GatewayClassName    = "tigera-gateway-class"
-	DeploymentNamespace = common.CalicoNamespace
+	ReleaseName            = "tigera-gateway-api"
+	ControllerName         = "gateway.envoyproxy.io/gatewayclass-controller"
+	GatewayClassName       = "tigera-gateway-class"
+	DeploymentNamespace    = common.CalicoNamespace
+	LegacyGatewayNamespace = "tigera-gateway"
 
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
 	EnvoyGatewayPolicySelector = "k8s-app == '" + GatewayControllerLabel + "' || k8s-app == '" + GatewayCertgenLabel + "'"
@@ -544,7 +545,7 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 // tigera-gateway by the current render are excluded so we don't queue a
 // delete for something we're also creating.
 func (pr *gatewayAPIImplementationComponent) legacyTeardownObjects(creating []client.Object) []client.Object {
-	const legacyNS = "tigera-gateway"
+	const legacyNS = LegacyGatewayNamespace
 	const helmPrefix = "tigera-gateway-api-gateway-helm"
 
 	key := func(o client.Object) string { return fmt.Sprintf("%T/%s", o, o.GetName()) }

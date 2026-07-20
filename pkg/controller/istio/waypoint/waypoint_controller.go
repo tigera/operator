@@ -294,29 +294,53 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		rbEnsure[obj.GetNamespace()] = true
 	}
 
-	// RoleBindings first: objects are created in order, so each namespace's binding
-	// exists before its secrets are written.
+	// RoleBindings first: objects are created in order, so each namespace's binding exists
+	// before its secrets are written. Only bindings this controller created (carrying its
+	// label) are written: a pre-existing unlabeled binding — created manually or by another
+	// feature — already grants the operator access, so it is used as-is rather than adopted,
+	// which would wrongly mark it for cleanup once the namespace no longer needs copies.
+	rbCreated := map[string]bool{}
 	for ns := range rbEnsure {
-		toCreate = append(toCreate, waypointOperatorSecretsRoleBinding(ns))
+		rb := &rbacv1.RoleBinding{}
+		err := r.Get(ctx, types.NamespacedName{Namespace: ns, Name: render.TigeraOperatorSecrets}, rb)
+		switch {
+		case errors.IsNotFound(err):
+			rbCreated[ns] = true
+			toCreate = append(toCreate, waypointOperatorSecretsRoleBinding(ns))
+		case err != nil:
+			return reconcile.Result{}, err
+		case rb.Labels[WaypointPullSecretLabel] == "true":
+			// Ours from an earlier reconcile; keep it reconciled to the desired shape.
+			toCreate = append(toCreate, waypointOperatorSecretsRoleBinding(ns))
+		}
 	}
 	toCreate = append(toCreate, desiredSecretObjs...)
 
 	// Mark stale RoleBindings for deletion, after the stale secrets: deletes are processed
-	// in order, so the binding outlives the secret deletions it authorizes. Stale means the
-	// namespace no longer needs copies — bindings created above solely to authorize stale
-	// secret deletion are removed in this same reconcile.
+	// in order, so the binding outlives the secret deletions it authorizes. Only bindings
+	// managed by this controller are candidates — those carrying its label, plus the ones
+	// created above solely to authorize stale secret deletion, which are removed again in
+	// this same reconcile. Unlabeled bindings are never deleted: they belong to an admin or
+	// another feature.
 	existingRBs := &rbacv1.RoleBindingList{}
 	if err := r.List(ctx, existingRBs, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to list waypoint RoleBindings: %w", err)
 	}
 	staleRBCandidates := map[string]bool{}
-	for ns := range rbEnsure {
+	for ns := range rbCreated {
 		staleRBCandidates[ns] = true
 	}
 	for i := range existingRBs.Items {
-		if existingRBs.Items[i].Name == render.TigeraOperatorSecrets {
-			staleRBCandidates[existingRBs.Items[i].Namespace] = true
+		rb := &existingRBs.Items[i]
+		if rb.Name != render.TigeraOperatorSecrets {
+			continue
 		}
+		if len(rb.OwnerReferences) > 0 {
+			// Another controller (e.g. gateway API or egress gateway) also relies on this
+			// binding and owns it; leave it for the Kubernetes GC when its owners are gone.
+			continue
+		}
+		staleRBCandidates[rb.Namespace] = true
 	}
 	for ns := range staleRBCandidates {
 		if rbDesired[ns] || reservedNamespace(ns) {
@@ -325,13 +349,6 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		if terminating, err := nsTerminating(ns); err != nil {
 			return reconcile.Result{}, err
 		} else if terminating {
-			continue
-		}
-		if coOwned, err := r.roleBindingCoOwned(ctx, ns); err != nil {
-			return reconcile.Result{}, err
-		} else if coOwned {
-			// Another controller (e.g. gateway API or egress gateway) also relies on this
-			// binding and owns it; leave it for the Kubernetes GC when its owners are gone.
 			continue
 		}
 		toDelete = append(toDelete, render.CreateOperatorSecretsRoleBinding(ns))
@@ -365,20 +382,4 @@ func waypointOperatorSecretsRoleBinding(namespace string) *rbacv1.RoleBinding {
 		common.MultipleOwnersLabel: "true",
 	}
 	return rb
-}
-
-// roleBindingCoOwned reports whether the tigera-operator-secrets RoleBinding in the given
-// namespace carries owner references, i.e. is also managed by another controller. Checked
-// against the live object because bindings created by other features (e.g. egress gateway)
-// may not carry this controller's label.
-func (r *ReconcileWaypoint) roleBindingCoOwned(ctx context.Context, namespace string) (bool, error) {
-	rb := &rbacv1.RoleBinding{}
-	err := r.Get(ctx, types.NamespacedName{Namespace: namespace, Name: render.TigeraOperatorSecrets}, rb)
-	if errors.IsNotFound(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return len(rb.OwnerReferences) > 0, nil
 }

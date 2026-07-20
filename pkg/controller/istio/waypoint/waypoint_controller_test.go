@@ -407,6 +407,35 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 
+		It("should use a pre-existing unlabeled RoleBinding without adopting or deleting it", func() {
+			// An admin (or another feature, without owner references) already created the
+			// binding; it authorizes the operator as-is and is not this controller's to manage.
+			createNamespace("user-ns")
+			rb := render.CreateOperatorSecretsRoleBinding("user-ns")
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+			createWaypointGateway("waypoint", "user-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Copies are written, but the binding is not adopted (no label added).
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+
+			// Once the copies are stale, they are cleaned up but the binding survives.
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "waypoint", Namespace: "user-ns"}, gw)).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, gw)).NotTo(HaveOccurred())
+
+			_, err = doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			got := &rbacv1.RoleBinding{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: render.TigeraOperatorSecrets, Namespace: "user-ns"}, got)).NotTo(HaveOccurred())
+			Expect(got.Labels).NotTo(HaveKey(WaypointPullSecretLabel))
+		})
+
 		It("should not delete a RoleBinding that another controller owns", func() {
 			createNamespace("shared-ns")
 			rb := &rbacv1.RoleBinding{

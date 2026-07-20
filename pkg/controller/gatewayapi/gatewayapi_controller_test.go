@@ -777,6 +777,32 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "other-ns", Name: certificatemanagement.TrustedCertConfigMapName}, &corev1.ConfigMap{}))).To(BeTrue())
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
 	})
+
+	It("preserves other controllers' owner references on shared per-namespace resources, pruning stale Gateway ones", func() {
+		// Simulates another feature (e.g. istio waypoint or egress gateway) having copied
+		// the same pull secret into the namespace with its own owner reference, alongside a
+		// reference to a Gateway that has since been deleted.
+		egwRef := metav1.OwnerReference{APIVersion: "operator.tigera.io/v1", Kind: "EgressGateway", Name: "egw", UID: "egw-uid"}
+		staleGatewayRef := metav1.OwnerReference{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway", Name: "old-gw", UID: "u-old"}
+		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "app-ns",
+			Name:            "tigera-pull-secret",
+			OwnerReferences: []metav1.OwnerReference{egwRef, staleGatewayRef},
+		}})).NotTo(HaveOccurred())
+
+		pullSecrets := []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}}
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+		}
+		Expect(r.reconcileGatewayNamespaceResources(ctx, nil, pullSecrets, true, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+
+		got := &corev1.Secret{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-pull-secret"}, got)).NotTo(HaveOccurred())
+		Expect(got.OwnerReferences).To(ConsistOf(
+			metav1.OwnerReference{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway", Name: "gw1", UID: "u1"},
+			egwRef,
+		))
+	})
 })
 
 var fakeComponentHandlers []*fakeComponentHandler

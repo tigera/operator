@@ -433,6 +433,11 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
+	if c.cfg.Installation.NetworkReadyTaintIsEnabled() {
+		// Typha is host-networked, so it can run on a node whose networking isn't ready yet. It must
+		// tolerate the taint so calico-node (which depends on Typha) can come up and clear it.
+		tolerations = append(tolerations, rmeta.TolerateNetworkReadyTaint)
+	}
 
 	deploy := &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},

@@ -66,6 +66,12 @@ const (
 	KindValidatingPolicy = "ValidatingAdmissionPolicy"
 	// KindValidatingBinding is the ValidatingAdmissionPolicyBinding kind.
 	KindValidatingBinding = "ValidatingAdmissionPolicyBinding"
+
+	// NetworkReadyTaintPolicyName and NetworkReadyTaintBindingName identify the node-taint policy,
+	// which ships in the embedded set but is only installed when the network-ready taint feature is
+	// enabled in the Installation (see updateMutatingAdmissionPolicies).
+	NetworkReadyTaintPolicyName  = "networkreadytaint.projectcalico.org"
+	NetworkReadyTaintBindingName = "networkreadytaint-binding"
 )
 
 // PolicyGroupKind is the GroupKind for MutatingAdmissionPolicy. Exposed so the API discovery

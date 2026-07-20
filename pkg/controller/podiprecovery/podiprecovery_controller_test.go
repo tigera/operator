@@ -86,7 +86,11 @@ var _ = Describe("PodIPRecovery controller", func() {
 				return []string{obj.(*corev1.Pod).Spec.NodeName}
 			}).
 			Build()
-		r = &Reconciler{client: c}
+		// In production the lister wraps a label-scoped cache; the fake client
+		// (which carries the same spec.nodeName index) stands in for it here.
+		// onNode keeps a redundant label selector, so unlabeled pods in this
+		// unscoped fake client are still filtered out.
+		r = &Reconciler{client: c, hostNetworkedPods: hostNetworkedPodLister{reader: c}}
 
 		// By default, create the Installation so Reconcile proceeds.
 		// The Installation-gate test overrides this expectation.

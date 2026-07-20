@@ -187,16 +187,19 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 			return reconcile.Result{}, err
 		}
 
-		// List all Gateway resources and filter for istio-waypoint class.
-		gatewayList := &gapi.GatewayList{}
-		if err := r.List(ctx, gatewayList); err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed to list Gateways: %w", err)
-		}
+		// List all Gateway resources and filter for istio-waypoint class, but only if there
+		// is at least one pull secret to copy.
+		if len(pullSecrets) > 0 {
+			gatewayList := &gapi.GatewayList{}
+			if err := r.List(ctx, gatewayList); err != nil {
+				return reconcile.Result{}, fmt.Errorf("failed to list Gateways: %w", err)
+			}
 
-		for i := range gatewayList.Items {
-			gw := &gatewayList.Items[i]
-			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName && !reservedNamespace(gw.Namespace) {
-				targetNamespaces[gw.Namespace] = true
+			for i := range gatewayList.Items {
+				gw := &gatewayList.Items[i]
+				if string(gw.Spec.GatewayClassName) == IstioWaypointClassName && !reservedNamespace(gw.Namespace) {
+					targetNamespaces[gw.Namespace] = true
+				}
 			}
 		}
 	}

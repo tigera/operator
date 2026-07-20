@@ -7303,6 +7303,15 @@ spec:
                         - Disabled
                       type: string
                   type: object
+                networkReadyTaint:
+                  description: |-
+                    NetworkReadyTaint, when Enabled, taints new nodes with node.projectcalico.org/network-not-ready:NoSchedule
+                    until Calico networking is ready on the node, so that workloads don't schedule onto a node before Calico
+                    can service them. Calico removes the taint once networking is ready. Defaults to Disabled.
+                  enum:
+                    - Enabled
+                    - Disabled
+                  type: string
                 nodeMetricsPort:
                   description: |-
                     NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.
@@ -16752,6 +16761,15 @@ spec:
                             - Disabled
                           type: string
                       type: object
+                    networkReadyTaint:
+                      description: |-
+                        NetworkReadyTaint, when Enabled, taints new nodes with node.projectcalico.org/network-not-ready:NoSchedule
+                        until Calico networking is ready on the node, so that workloads don't schedule onto a node before Calico
+                        can service them. Calico removes the taint once networking is ready. Defaults to Disabled.
+                      enum:
+                        - Enabled
+                        - Disabled
+                      type: string
                     nodeMetricsPort:
                       description: |-
                         NodeMetricsPort specifies which port calico/node serves prometheus metrics on. By default, metrics are not enabled.

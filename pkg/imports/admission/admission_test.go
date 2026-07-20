@@ -29,7 +29,7 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 	Describe("GetMutatingAdmissionPolicies", func() {
 		It("returns Calico v1beta1 MAPs when v3=true", func() {
 			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1Beta1)
-			Expect(objs).To(HaveLen(4))
+			Expect(objs).To(HaveLen(6))
 
 			var mapCount, mapbCount int
 			for _, obj := range objs {
@@ -41,13 +41,13 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 				}
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
 			}
-			Expect(mapCount).To(Equal(2))
-			Expect(mapbCount).To(Equal(2))
+			Expect(mapCount).To(Equal(3))
+			Expect(mapbCount).To(Equal(3))
 		})
 
 		It("returns Calico v1 MAPs when discovered version is v1", func() {
 			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1)
-			Expect(objs).To(HaveLen(4))
+			Expect(objs).To(HaveLen(6))
 
 			var mapCount, mapbCount int
 			for _, obj := range objs {
@@ -61,13 +61,13 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 				}
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
 			}
-			Expect(mapCount).To(Equal(2))
-			Expect(mapbCount).To(Equal(2))
+			Expect(mapCount).To(Equal(3))
+			Expect(mapbCount).To(Equal(3))
 		})
 
 		It("returns Calico v1alpha1 MAPs when discovered version is v1alpha1", func() {
 			objs := GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1Alpha1)
-			Expect(objs).To(HaveLen(4))
+			Expect(objs).To(HaveLen(6))
 
 			var mapCount, mapbCount int
 			for _, obj := range objs {
@@ -81,13 +81,13 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 				}
 				Expect(obj.GetLabels()).To(HaveKeyWithValue(ManagedMAPLabel, ManagedMAPLabelValue))
 			}
-			Expect(mapCount).To(Equal(2))
-			Expect(mapbCount).To(Equal(2))
+			Expect(mapCount).To(Equal(3))
+			Expect(mapbCount).To(Equal(3))
 		})
 
 		It("returns Enterprise MAPs at the chosen version", func() {
 			objs := GetMutatingAdmissionPolicies(opv1.CalicoEnterprise, true, VersionV1)
-			Expect(objs).To(HaveLen(4))
+			Expect(objs).To(HaveLen(6))
 
 			var mapCount, mapbCount int
 			for _, obj := range objs {
@@ -98,8 +98,8 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 					mapbCount++
 				}
 			}
-			Expect(mapCount).To(Equal(2))
-			Expect(mapbCount).To(Equal(2))
+			Expect(mapCount).To(Equal(3))
+			Expect(mapbCount).To(Equal(3))
 		})
 
 		It("returns empty when v3=false", func() {
@@ -116,6 +116,14 @@ var _ = Describe("MutatingAdmissionPolicies", func() {
 			for _, obj := range objs {
 				Expect(obj.GetName()).ToNot(BeEmpty())
 			}
+		})
+
+		It("includes the node-taint policy (gating is applied by the controller, not here)", func() {
+			var names []string
+			for _, obj := range GetMutatingAdmissionPolicies(opv1.Calico, true, VersionV1) {
+				names = append(names, obj.GetName())
+			}
+			Expect(names).To(ContainElements(NetworkReadyTaintPolicyName, NetworkReadyTaintBindingName))
 		})
 	})
 

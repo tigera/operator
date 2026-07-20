@@ -2401,6 +2401,19 @@ func (r *ReconcileInstallation) updateMutatingAdmissionPolicies(ctx context.Cont
 	}
 
 	desired := admission.GetMutatingAdmissionPolicies(install.Spec.Variant, r.v3CRDs, mapAPIVersion)
+	if !install.Spec.NetworkReadyTaintIsEnabled() {
+		// The node-taint policy ships in the embedded set but must only be installed when the feature
+		// is enabled - otherwise nodes get tainted with nothing to remove the taint. Dropping it from
+		// the desired set here also uninstalls it if the feature is later turned off.
+		filtered := desired[:0]
+		for _, obj := range desired {
+			if name := obj.GetName(); name == admission.NetworkReadyTaintPolicyName || name == admission.NetworkReadyTaintBindingName {
+				continue
+			}
+			filtered = append(filtered, obj)
+		}
+		desired = filtered
+	}
 	existingMAPs, existingMAPBs, err := admission.ListManaged(ctx, r.client, mapAPIVersion)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error listing managed MutatingAdmissionPolicy resources", err, log)

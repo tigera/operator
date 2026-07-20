@@ -38,6 +38,11 @@ const (
 	TigeraOperatorCAIssuerPrefix = "tigera-operator-signer"
 )
 
+// NetworkReadyTaintKey is the taint Calico applies to nodes until networking is ready. It mirrors
+// the constant of the same name in libcalico-go, kept here to avoid a dependency bump before the
+// calico-side change merges.
+const NetworkReadyTaintKey = "node.projectcalico.org/network-not-ready"
+
 var (
 	// TolerateControlPlane allows pod to be scheduled on master nodes
 	TolerateControlPlane = []corev1.Toleration{
@@ -116,6 +121,15 @@ var (
 			Effect:   corev1.TaintEffectNoExecute,
 			Operator: corev1.TolerationOpExists,
 		},
+	}
+
+	// TolerateNetworkReadyTaint lets a component schedule onto a node that Calico has tainted as
+	// not-ready. Only host-networked components that don't need pod networking (e.g. Typha) should
+	// use it, so that calico-node can come up and clear the taint.
+	TolerateNetworkReadyTaint = corev1.Toleration{
+		Key:      NetworkReadyTaintKey,
+		Operator: corev1.TolerationOpExists,
+		Effect:   corev1.TaintEffectNoSchedule,
 	}
 )
 

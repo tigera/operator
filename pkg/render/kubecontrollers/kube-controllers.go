@@ -971,6 +971,10 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 
 	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)
 
+	if c.cfg.Installation.NetworkReadyTaintIsEnabled() {
+		env = append(env, corev1.EnvVar{Name: "CALICO_MANAGE_NETWORK_READY_TAINT", Value: "true"})
+	}
+
 	if c.cfg.Installation.Variant.IsEnterprise() {
 		if c.cfg.Tenant != nil {
 			env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.Tenant.Spec.ID})

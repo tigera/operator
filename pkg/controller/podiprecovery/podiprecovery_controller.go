@@ -50,9 +50,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/sets"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -70,14 +72,50 @@ import (
 
 var log = logf.Log.WithName("controller_podiprecovery")
 
-// podNodeNameIndex is the field-index registered in cmd/main.go that lets
-// us list pods by their `spec.nodeName` with a server-side field selector.
+// podNodeNameIndex is the field-index (registered on this controller's
+// dedicated host-networked pod cache) that lets us list pods by their
+// `spec.nodeName` with a server-side field selector.
 const podNodeNameIndex = "spec.nodeName"
 
 // Add wires the controller into the manager.
 func Add(mgr manager.Manager, _ options.ControllerOptions) error {
+	// Build a dedicated cache scoped server-side to operator-managed
+	// host-networked pods. Both the Pod watch and the per-node pod List read
+	// from this cache, so the controller only ever lists/watches/holds the
+	// handful of host-networked pods cluster-wide — it does not force the
+	// manager's shared cache to watch every pod in the cluster (which, at
+	// scale, would be a sizable memory cost).
+	podCache, err := cache.New(mgr.GetConfig(), cache.Options{
+		Scheme: mgr.GetScheme(),
+		Mapper: mgr.GetRESTMapper(),
+		ByObject: map[client.Object]cache.ByObject{
+			&corev1.Pod{}: {
+				Label: labels.SelectorFromSet(labels.Set{common.HostNetworkedPodLabel: "true"}),
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("podiprecovery-controller failed to create host-networked pod cache: %w", err)
+	}
+
+	// Index the scoped cache by spec.nodeName so Reconcile can list a node's
+	// pods with a server-side field selector.
+	if err := podCache.IndexField(context.Background(), &corev1.Pod{}, podNodeNameIndex,
+		func(obj client.Object) []string {
+			return []string{obj.(*corev1.Pod).Spec.NodeName}
+		},
+	); err != nil {
+		return fmt.Errorf("podiprecovery-controller failed to index host-networked pod cache: %w", err)
+	}
+
+	// Run the scoped cache as part of the manager so it starts/stops with it.
+	if err := mgr.Add(podCache); err != nil {
+		return fmt.Errorf("podiprecovery-controller failed to add host-networked pod cache to manager: %w", err)
+	}
+
 	r := &Reconciler{
-		client: mgr.GetClient(),
+		client:            mgr.GetClient(),
+		hostNetworkedPods: hostNetworkedPodLister{reader: podCache},
 	}
 
 	c, err := ctrlruntime.NewController("podiprecovery-controller", mgr, controller.Options{Reconciler: r})
@@ -103,7 +141,10 @@ func Add(mgr manager.Manager, _ options.ControllerOptions) error {
 	// (the recovery would be edge-triggered on the node event alone). The
 	// map function keys back to the Node, and Reconcile is idempotent, so
 	// the extra enqueues for already-healthy pods are cheap no-ops.
-	if err := c.WatchObject(&corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(podToNode), hostNetPodSettledPredicate()); err != nil {
+	//
+	// The watch uses the label-scoped podCache above, so the informer only
+	// receives events for host-networked pods.
+	if err := c.WatchObjectInCache(podCache, &corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(podToNode), hostNetPodSettledPredicate()); err != nil {
 		return fmt.Errorf("podiprecovery-controller failed to watch Pods: %w", err)
 	}
 
@@ -245,10 +286,44 @@ func nodeHostIPSet(addrs []corev1.NodeAddress) sets.Set[string] {
 
 // Reconciler implements reconcile.Reconciler.
 type Reconciler struct {
+	// client is the manager's shared cached client, used for Node reads, the
+	// Installation gate, and pod deletes.
 	client client.Client
+	// hostNetworkedPods reads operator-managed host-networked pods from a
+	// label-scoped cache, so the controller never forces the shared cache to
+	// watch every pod cluster-wide.
+	hostNetworkedPods hostNetworkedPodLister
 }
 
 var _ reconcile.Reconciler = &Reconciler{}
+
+// hostNetworkedPodLister lists operator-managed host-networked pods from a
+// cache scoped server-side to the host-networked marker label.
+//
+// It deliberately wraps the scoped reader and exposes ONLY a node-scoped list
+// of host-networked pods, rather than being a general client.Reader. This
+// guards against the one dangerous mistake with a scoped cache: reading from
+// it expecting the full set of cluster pods would silently drop every
+// non-host-networked pod. There is intentionally no way to Get/List arbitrary
+// pods through this type.
+type hostNetworkedPodLister struct {
+	reader client.Reader
+}
+
+// onNode returns the operator-managed host-networked pods scheduled on the
+// given node. The label selector is a redundant guard (the backing cache is
+// already label-scoped); the field selector narrows by node using the index
+// registered on that cache.
+func (l hostNetworkedPodLister) onNode(ctx context.Context, nodeName string) ([]corev1.Pod, error) {
+	var pl corev1.PodList
+	if err := l.reader.List(ctx, &pl,
+		client.MatchingLabels{common.HostNetworkedPodLabel: "true"},
+		client.MatchingFields{podNodeNameIndex: nodeName},
+	); err != nil {
+		return nil, err
+	}
+	return pl.Items, nil
+}
 
 // Reconcile is called for a Node when its host IPs change (or on initial
 // creation). It lists operator-managed pods on the node and deletes any
@@ -284,21 +359,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 		return ctrl.Result{}, nil
 	}
 
-	// List operator-managed hostNetwork pods on this node. The label is
-	// applied at render time across all hostNetwork workloads; the field
-	// selector narrows by node server-side using the index registered in
-	// cmd/main.go.
-	var pl corev1.PodList
-	if err := r.client.List(ctx, &pl,
-		client.MatchingLabels{common.HostNetworkedPodLabel: "true"},
-		client.MatchingFields{podNodeNameIndex: node.Name},
-	); err != nil {
+	// List operator-managed host-networked pods on this node from the scoped
+	// cache (host-networked pods only — never the full pod set).
+	pods, err := r.hostNetworkedPods.onNode(ctx, node.Name)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to list pods on node %q: %w", node.Name, err)
 	}
 
 	var firstErr error
 	deleted := 0
-	for _, pod := range pl.Items {
+	for _, pod := range pods {
 		if !pod.Spec.HostNetwork {
 			// Safety check: only delete hostNetwork pods. A non-hostNetwork
 			// pod that happens to carry our label has a CNI-assigned IP

@@ -120,6 +120,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("istio-waypoint-controller failed to watch Installation resource: %w", err)
 	}
 
+	// Watch secrets in the operator namespace so pull-secret rotations reconcile the
+	// per-namespace copies immediately. Named "" to catch arbitrarily-named
+	// user-provided pull secrets.
+	if err = utils.AddSecretsWatch(c, "", common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("istio-waypoint-controller failed to watch secrets: %w", err)
+	}
+
 	// Periodic reconcile as a backstop.
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("istio-waypoint-controller failed to create periodic reconcile watch: %w", err)

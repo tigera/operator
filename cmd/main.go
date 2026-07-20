@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/awssgsetup"
+	"github.com/tigera/operator/pkg/cloud"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
@@ -95,6 +96,9 @@ func init() {
 
 func printVersion() {
 	log.Info(fmt.Sprintf("Version: %v", version.VERSION))
+	if cloud.IsCloudBuild() {
+		log.Info("Variant: Calico Cloud")
+	}
 	log.Info(fmt.Sprintf("Go Version: %s", goruntime.Version()))
 	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", goruntime.GOOS, goruntime.GOARCH))
 }
@@ -151,6 +155,9 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		fmt.Println("Operator:", version.VERSION)
 		fmt.Println("Calico:", components.CalicoRelease)
 		fmt.Println("Enterprise:", components.EnterpriseRelease)
+		if cloud.IsCloudBuild() {
+			fmt.Println("Variant: Calico Cloud")
+		}
 		os.Exit(0)
 	}
 
@@ -217,6 +224,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	cs, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	// Load cloud options. For non-cloud (regular Calico Enterprise) installs this returns
+	// cloud.Options{Cloud: false} and is a no-op; cloud behavior is only activated when the
+	// cloud-operator-config ConfigMap (or the relevant env vars) are present.
+	cloudOpts, err := cloud.Load(ctx, cs)
+	if err != nil {
+		setupLog.Error(err, "failed to parse cloud options")
 		os.Exit(1)
 	}
 
@@ -304,7 +320,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgrOpts := ctrl.Options{
 		Scheme:  scheme,
 		Metrics: metricsOpts,
 		WebhookServer: webhook.NewServer(webhook.Options{
@@ -331,7 +347,17 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		// not being this mapper (which has since been rectified). It was a tough issue to figure out when the default
 		// had changed out from under us, so better to continue to explicitly set it as we know this is the mapper we want.
 		MapperProvider: apiutil.NewDynamicRESTMapper,
-	})
+	}
+
+	if cloudOpts.Cloud {
+		// Cloud tweaks: multiply the default leader-election timings by 4 to tolerate the higher
+		// API-server latency seen in Calico Cloud management clusters.
+		mgrOpts.LeaseDuration = cloud.ToPtr(60 * time.Second)
+		mgrOpts.RenewDeadline = cloud.ToPtr(40 * time.Second)
+		mgrOpts.RetryPeriod = cloud.ToPtr(8 * time.Second)
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
@@ -518,9 +544,16 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ShutdownContext:     ctx,
 		K8sClientset:        clientset,
 		MultiTenant:         multiTenant,
-		ElasticExternal:     discovery.UseExternalElastic(bootConfig),
-		UseV3CRDs:           v3CRDs,
-		APIDiscovery:        apiDiscovery,
+		// External-ES is a single knob, sourced only from the operator bootstrap configmap
+		// (operator-bootstrap-config) via discovery.UseExternalElastic. Calico Cloud provisions
+		// ELASTIC_EXTERNAL there too (in addition to its own cloud-operator-config, which cloud.Load
+		// still reads for its startup verify), so cloud and enterprise share one downstream knob
+		// rather than the previous two-source OR.
+		ElasticExternal: discovery.UseExternalElastic(bootConfig),
+		Cloud:           cloudOpts.Cloud,
+		ESMigration:     cloudOpts.ESMigration,
+		UseV3CRDs:       v3CRDs,
+		APIDiscovery:    apiDiscovery,
 	}
 
 	// Before we start any controllers, make sure our options are valid.
@@ -665,6 +698,12 @@ func executePreDeleteHook(ctx context.Context, c client.Client) error {
 
 // verifyConfiguration verifies that the final configuration of the operator is correct before starting any controllers.
 func verifyConfiguration(ctx context.Context, cs kubernetes.Interface, opts options.ControllerOptions) error {
+	if opts.ESMigration {
+		// During the final phase of an ES migration both internal and external ES exist
+		// simultaneously, so the internal/external cert exclusivity checks below do not apply.
+		return nil
+	}
+
 	if opts.ElasticExternal {
 		// There should not be an internal-es cert
 		if _, err := cs.CoreV1().Secrets(render.ElasticsearchNamespace).Get(ctx, render.TigeraElasticsearchInternalCertSecret, metav1.GetOptions{}); err != nil {

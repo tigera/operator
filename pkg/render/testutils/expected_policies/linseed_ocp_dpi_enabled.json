@@ -18,8 +18,8 @@
         "action": "Allow",
         "protocol": "TCP",
         "source": {
-          "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'",
-          "namespaceSelector": "name == 'tigera-fluentd'"
+          "selector": "k8s-app == 'calico-fluent-bit' || k8s-app == 'calico-fluent-bit-windows'",
+          "namespaceSelector": "name == 'calico-system'"
         },
         "destination": {
           "ports": [
@@ -32,7 +32,7 @@
         "protocol": "TCP",
         "source": {
           "selector": "k8s-app == 'eks-log-forwarder'",
-          "namespaceSelector": "projectcalico.org/name == 'tigera-fluentd'"
+          "namespaceSelector": "projectcalico.org/name == 'calico-system'"
         },
         "destination": {
           "ports": [

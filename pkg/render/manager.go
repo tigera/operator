@@ -17,6 +17,7 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -76,6 +77,11 @@ const (
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
 	ManagerPortName              = "https"
+
+	// RBACManagementLDAPConfigSecretName is the RBAC-UI LDAP directory-sync config
+	// Secret (calico-system) the rbacsync process reads to perform the sync.
+	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
+	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -208,8 +214,9 @@ type ManagerConfiguration struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	Manager       *operatorv1.Manager
-	KibanaEnabled bool
+	Manager        *operatorv1.Manager
+	Authentication *operatorv1.Authentication
+	KibanaEnabled  bool
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
 	// Passed to Voltron so it can identify the correct CA issuer public key.
@@ -274,10 +281,13 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.cfg.Manager.RBACManagementEnabled()),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
+	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() {
+		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
+	}
 	if c.cfg.Tenant.MultiTenant() {
 		objsToCreate = append(objsToCreate, c.multiTenantManagedClustersAccess()...)
 	}
@@ -560,6 +570,11 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		// Voltron verifies the in-cluster fluent-bit http input (non-cluster-host
+		// log ingestion) against the same trusted bundle. Without this the config
+		// default (/etc/pki/tls/certs/ca.crt) is used, which is not mounted, so the
+		// mTLS handshake to calico-fluent-bit-http-input fails.
+		{Name: "VOLTRON_LOG_COLLECTOR_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -739,6 +754,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
+		{Name: "RBAC_UI_ENABLED", Value: strconv.FormatBool(c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant())},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
@@ -948,7 +964,8 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
+// When rbacManagementEnabled is true it also carries the RBAC management UI rules.
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementEnabled bool) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -1154,6 +1171,13 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 		},
 	}
 
+	// Not rendered on multi-tenant management clusters. Keep this condition in
+	// sync with the rbacManagementUINamespacedRole gate; the cluster rules and
+	// the namespaced grant are rendered together.
+	if rbacManagementEnabled && !tenant.MultiTenant() {
+		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
+	}
+
 	if tenant.MultiTenant() {
 		cr.Rules = append(cr.Rules,
 			rbacv1.PolicyRule{
@@ -1186,6 +1210,72 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
+}
+
+// rbacManagementUIRules returns the cluster-scoped rules the RBAC management
+// UI adds to calico-manager-role. Named-resource access is scoped separately
+// on rbacManagementUINamespacedRole.
+func rbacManagementUIRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			// Lets ui-apis read the Compliance CR (the operator singleton) so the
+			// UI can tell whether compliance is installed before offering
+			// compliance-scoped RBAC.
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get"},
+		},
+	}
+}
+
+// rbacManagementUINamespacedRole returns the Role + RoleBinding that scopes
+// the RBAC management UI's Secret/ConfigMap access to calico-system, where
+// tigera-idp-groups and tigera-idp-ldap-config live.
+func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
+	return []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					// create carries the object name in the request body, not the
+					// URL path, so RBAC cannot restrict it by resource name; it is
+					// scoped to this namespace instead.
+					APIGroups: []string{""},
+					Resources: []string{"configmaps", "secrets"},
+					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"secrets"},
+					ResourceNames: []string{RBACManagementLDAPConfigSecretName},
+					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{"tigera-idp-groups"},
+					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     ManagerClusterRole,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ManagerServiceAccount,
+					Namespace: c.cfg.Namespace,
+				},
+			},
+		},
+	}
 }
 
 func (c *managerComponent) getTLSObjects() []client.Object {
@@ -1247,9 +1337,36 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 			Destination: v3.EntityRule{
 				Services: &v3.ServiceMatch{
 					Namespace: LogCollectorNamespace,
-					Name:      FluentdInputService,
+					Name:      FluentBitInputService,
 				},
 			},
+		})
+	}
+
+	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() &&
+		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
+		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
+		// being configured on the Authentication CR. The destination is scoped to
+		// Authentication.spec.ldap.host — a domain match for a hostname or a
+		// /32/128 for a literal IP. Both standard ports stay open (the host may
+		// specify a non-standard port; scoping the port too would risk denying a
+		// valid config), so only the host is narrowed.
+		dest := v3.EntityRule{Ports: networkpolicy.Ports(389, 636)}
+		if host := ldapEgressHost(c.cfg.Authentication.Spec.LDAP.Host); host != "" {
+			if ip := net.ParseIP(host); ip != nil {
+				suffix := "/32"
+				if ip.To4() == nil {
+					suffix = "/128"
+				}
+				dest.Nets = []string{ip.String() + suffix}
+			} else {
+				dest.Domains = []string{host}
+			}
+		}
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: dest,
 		})
 	}
 
@@ -1315,6 +1432,18 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 			Egress:   egressRules,
 		},
 	}
+}
+
+// ldapEgressHost returns the host (without port) from an
+// Authentication.spec.ldap.host value, used to scope the manager's LDAP egress
+// policy. The value carries an optional port (e.g. "ad.example.com:636"); when
+// no port is present the value is already the host. IPv6 literals are returned
+// unbracketed so the caller can parse them with net.ParseIP.
+func ldapEgressHost(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 }
 
 func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
@@ -1387,7 +1516,6 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 		"tigera-dpi",
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
-		"tigera-fluentd",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
 		"tigera-manager",

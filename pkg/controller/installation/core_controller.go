@@ -252,6 +252,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
 		}
 
+		// Watch the Manager CR so changes to spec.rbac re-run the installation
+		// reconcile (the rbacsync controller in calico-kube-controllers is
+		// gated on it).
+		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
+		if err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
+		}
+
 		// watch for change to primary resource LogCollector
 		err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -667,6 +675,10 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 	if instance.Spec.CNI.BinDir == nil || *instance.Spec.CNI.BinDir == "" {
 		instance.Spec.CNI.BinDir = &defaultCNIBinDir
 	}
+	if instance.Spec.CNI.InstallMode == nil {
+		mode := operatorv1.CNIInstallModeAll
+		instance.Spec.CNI.InstallMode = &mode
+	}
 
 	// While a number of the fields in this section are relevant to all CNI plugins,
 	// there are some settings which are currently only applicable if using Calico CNI.
@@ -1045,6 +1057,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
+	var managerCR *operatorv1.Manager
 	var logCollector *operatorv1.LogCollector
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
@@ -1064,6 +1077,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		managerCR, err = utils.GetManager(ctx, r.client, false, "")
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1377,7 +1396,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// spec.extensions.waf.state != Enabled, the WAF surface is not rendered.
 	// See design tigera/designs#25 (PMREQ-384) §Gating.
 	wafGatewayExtensionEnabled := false
+	// gatewayAPIPresent means the GatewayAPI CR exists (regardless of waf.state),
+	// so the operator manages the Gateway API + Envoy Gateway CRDs the WAF
+	// reconcilers watch. It keeps the applicationlayer controller wired (with
+	// EnvoyExtensionPolicy delete RBAC) even while WAF is disabled, so the
+	// controller can tear down the EEPs it generated instead of being removed in
+	// the same reconcile that disables WAF (EV-6751).
+	gatewayAPIPresent := false
 	if gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client); err == nil {
+		gatewayAPIPresent = true
 		wafGatewayExtensionEnabled = gatewayAPI.Spec.IsWAFGatewayExtensionEnabled()
 	} else if !apierrors.IsNotFound(err) {
 		// Mirrors the GatewayAPI controller's handling: a read error or a
@@ -1694,6 +1721,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
 		WAFGatewayExtensionEnabled:  wafGatewayExtensionEnabled,
+		GatewayAPIPresent:           gatewayAPIPresent,
 		WAFWebhookServerTLS:         wafWebhookTLS,
 		WASMPullSecret:              wasmPullSecret,
 		WASMCACert:                  wasmCACert,
@@ -1701,7 +1729,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// the kube-controllers component (and deleted when the WAF extension is
 		// disabled); the caBundle is the operator CA that issued the serving
 		// cert above.
-		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
+		WAFWebhookCABundle:    certificateManager.KeyPair().GetCertificatePEM(),
+		RBACManagementEnabled: managerCR.RBACManagementEnabled(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

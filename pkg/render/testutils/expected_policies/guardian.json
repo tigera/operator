@@ -23,8 +23,8 @@
         },
         "protocol": "TCP",
         "source": {
-          "namespaceSelector": "name == 'tigera-fluentd'",
-          "selector": "k8s-app == 'fluentd-node' || k8s-app == 'fluentd-node-windows'"
+          "namespaceSelector": "name == 'calico-system'",
+          "selector": "k8s-app == 'calico-fluent-bit' || k8s-app == 'calico-fluent-bit-windows'"
         }
       },
       {

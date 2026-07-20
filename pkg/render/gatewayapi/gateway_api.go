@@ -80,24 +80,26 @@ const (
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
 // helm chart (as of the version indicated by `ENVOY_GATEWAY_VERSION` in `Makefile`).
 type gatewayAPIResources struct {
-	k8sCRDs                       []*apiextenv1.CustomResourceDefinition
-	envoyCRDs                     []*apiextenv1.CustomResourceDefinition
-	controllerServiceAccount      *corev1.ServiceAccount
-	envoyGatewayConfigMap         *corev1.ConfigMap
-	envoyGatewayConfig            *envoyapi.EnvoyGateway
-	clusterRoles                  []*rbacv1.ClusterRole
-	clusterRoleBindings           []*rbacv1.ClusterRoleBinding
-	role                          *rbacv1.Role
-	roleBinding                   *rbacv1.RoleBinding
-	leaderElectionRole            *rbacv1.Role
-	leaderElectionRoleBinding     *rbacv1.RoleBinding
-	controllerService             *corev1.Service
-	controllerDeployment          *appsv1.Deployment
-	certgenServiceAccount         *corev1.ServiceAccount
-	certgenRole                   *rbacv1.Role
-	certgenRoleBinding            *rbacv1.RoleBinding
-	certgenJob                    *batchv1.Job
-	mutatingWebhookConfigurations []*admissionregv1.MutatingWebhookConfiguration
+	k8sCRDs                           []*apiextenv1.CustomResourceDefinition
+	envoyCRDs                         []*apiextenv1.CustomResourceDefinition
+	controllerServiceAccount          *corev1.ServiceAccount
+	envoyGatewayConfigMap             *corev1.ConfigMap
+	envoyGatewayConfig                *envoyapi.EnvoyGateway
+	clusterRoles                      []*rbacv1.ClusterRole
+	clusterRoleBindings               []*rbacv1.ClusterRoleBinding
+	role                              *rbacv1.Role
+	roleBinding                       *rbacv1.RoleBinding
+	leaderElectionRole                *rbacv1.Role
+	leaderElectionRoleBinding         *rbacv1.RoleBinding
+	controllerService                 *corev1.Service
+	controllerDeployment              *appsv1.Deployment
+	certgenServiceAccount             *corev1.ServiceAccount
+	certgenRole                       *rbacv1.Role
+	certgenRoleBinding                *rbacv1.RoleBinding
+	certgenJob                        *batchv1.Job
+	mutatingWebhookConfigurations     []*admissionregv1.MutatingWebhookConfiguration
+	validatingAdmissionPolicies       []*admissionregv1.ValidatingAdmissionPolicy
+	validatingAdmissionPolicyBindings []*admissionregv1.ValidatingAdmissionPolicyBinding
 }
 
 const (
@@ -109,27 +111,25 @@ const (
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
 	EnvoyGatewayJobContainerName        = "envoy-gateway-certgen"
 	wafFilterName                       = "waf-http-filter"
+
+	// wafLogComponentWasm is the Envoy "wasm" logger component. Envoy Gateway does not
+	// define a const for it (its enum omits wasm), but EnvoyProxy.Spec.Logging.Level
+	// passes arbitrary component keys through to Envoy's --component-log-level arg, and
+	// Envoy recognises "wasm". Setting it to info surfaces the Coraza WASM filter's
+	// "AuditLog:" lines (emitted via proxywasm.LogInfo) in Envoy's application log.
+	wafLogComponentWasm = envoyapi.ProxyLogComponent("wasm")
+
+	// wafAuditLogPath is the file that Envoy's application log is redirected to via
+	// --log-path, and that the l7-log-collector tails for Coraza "AuditLog:" lines
+	// (WAF_AUDIT_LOG_PATH). It lives on the "access-logs" emptyDir that is already
+	// mounted in both the envoy container (which writes it) and the l7-log-collector
+	// (which reads it) - so no extra volume or mount is needed. Envoy will not create
+	// parent directories for --log-path, so this is a file directly under the existing
+	// /access_logs mount, not a new subdirectory.
+	wafAuditLogPath = "/access_logs/envoy.log"
 )
 
 var (
-	// logger gateway name and namespace are set from the k8s downward api pod metadata.
-	GatewayNameEnvVar = corev1.EnvVar{
-		Name: "LOGGER_GATEWAY_NAME",
-		ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{
-				FieldPath: "metadata.name",
-			},
-		},
-	}
-	GatewayNamespaceEnvVar = corev1.EnvVar{
-		Name: "LOGGER_GATEWAY_NAMESPACE",
-		ValueFrom: &corev1.EnvVarSource{
-			FieldRef: &corev1.ObjectFieldSelector{
-				FieldPath: "metadata.namespace",
-			},
-		},
-	}
-
 	// Owning Gateway name and namespace are exposed via pod labels set by EnvoyProxy.
 	// These allow the l7-log-collector to know which Gateway it is collecting logs for
 	// without needing to query the Kubernetes API.
@@ -332,6 +332,10 @@ func parseManifest(scheme *runtime.Scheme, manifest string) (*gatewayAPIResource
 			resources.certgenJob = typedObj
 		case *admissionregv1.MutatingWebhookConfiguration:
 			resources.mutatingWebhookConfigurations = append(resources.mutatingWebhookConfigurations, typedObj)
+		case *admissionregv1.ValidatingAdmissionPolicy:
+			resources.validatingAdmissionPolicies = append(resources.validatingAdmissionPolicies, typedObj)
+		case *admissionregv1.ValidatingAdmissionPolicyBinding:
+			resources.validatingAdmissionPolicyBindings = append(resources.validatingAdmissionPolicyBindings, typedObj)
 		case *corev1.Namespace:
 			// The chart may render a namespace; we create our own in Objects(), so skip it.
 		default:
@@ -412,7 +416,6 @@ type gatewayAPIImplementationComponent struct {
 	envoyGatewayImage   string
 	envoyProxyImage     string
 	envoyRatelimitImage string
-	calicoImage         string
 	L7LogCollectorImage string
 
 	// Pre-rendered helm chart resources.
@@ -443,10 +446,6 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 			return err
 		}
 		pr.envoyRatelimitImage, err = components.GetReference(components.ComponentGatewayAPIEnvoyRatelimit, reg, path, prefix, is)
-		if err != nil {
-			return err
-		}
-		pr.calicoImage, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
 		if err != nil {
 			return err
 		}
@@ -701,6 +700,12 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	for _, mwc := range resources.mutatingWebhookConfigurations {
 		objs = append(objs, mwc.DeepCopyObject().(client.Object))
 	}
+	for _, vap := range resources.validatingAdmissionPolicies {
+		objs = append(objs, vap.DeepCopyObject().(client.Object))
+	}
+	for _, vapb := range resources.validatingAdmissionPolicyBindings {
+		objs = append(objs, vapb.DeepCopyObject().(client.Object))
+	}
 	for _, resource := range []client.Object{
 		resources.role,
 		resources.roleBinding,
@@ -820,6 +825,37 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	return objs
 }
 
+// ensureExtraArg sets "flag value" in an Envoy Gateway ExtraArgs slice (func-e parses each token as
+// a separate element), replacing the value if flag is already present as an option, or inserting the
+// flag/value pair if not. A bare "--" terminates option parsing, so tokens at or after it are left
+// alone: the flag is matched only before "--", and a newly inserted pair goes before it. The slice is
+// copied, so this never mutates a slice backing a cached EnvoyProxy object.
+func ensureExtraArg(args []string, flag, value string) []string {
+	// Options end at the first bare "--"; anything from there on is a non-option token.
+	sep := len(args)
+	for i, a := range args {
+		if a == "--" {
+			sep = i
+			break
+		}
+	}
+	out := make([]string, 0, len(args)+2)
+	for i := 0; i < sep; i++ {
+		if args[i] == flag {
+			out = append(out, flag, value)
+			next := i + 1
+			if next < sep { // drop the existing value, if any
+				next++
+			}
+			return append(out, args[next:]...)
+		}
+		out = append(out, args[i])
+	}
+	// flag is not present as an option: insert it just before the "--" (or at the end).
+	out = append(out, flag, value)
+	return append(out, args[sep:]...)
+}
+
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
 	// Ensure the minimal structure that we need for basic correctness and for the following
 	// customizations.  Note, we always create the running EnvoyProxy in our own namespace, even
@@ -922,37 +958,31 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 		// The WAF HTTP filter is not supported when the envoy proxy is deployed as a DaemonSet
 		// as there is no support for init containers in a DaemonSet.
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment != nil {
-			// Add or update the Init Container to the deployment
-			wafHTTPFilter := corev1.Container{
-				Name:    wafFilterName,
-				Image:   pr.calicoImage,
-				Command: []string{components.CalicoBinaryPath, "component", "waf-http-filter"},
-				Args: []string{
-					"--logFileDirectory",
-					"/var/log/calico/waf",
-					"--logFileName",
-					"waf.log",
-					"--socketPath",
-					"/var/run/waf-http-filter/extproc.sock",
-				},
-				RestartPolicy: ptr.To(corev1.ContainerRestartPolicyAlways),
-				VolumeMounts: []corev1.VolumeMount{
-					{
-						Name:      wafFilterName,
-						MountPath: "/var/run/waf-http-filter",
-					},
-					{
-						Name:      "var-log-calico",
-						MountPath: "/var/log/calico",
-					},
-				},
-				Env: []corev1.EnvVar{
-					GatewayNameEnvVar,
-					GatewayNamespaceEnvVar,
-				},
-				SecurityContext: securitycontext.NewRootContext(true),
+			// Tune Envoy log levels for WAF audit capture: the wasm component logs at
+			// info so the Coraza filter's "AuditLog:" lines reach Envoy's application
+			// log, while the default stays at warn to keep the redirected log file
+			// approximately just the audit lines. A user-supplied default level (e.g.
+			// for debugging) is preserved.
+			if envoyProxy.Spec.Logging.Level == nil {
+				envoyProxy.Spec.Logging.Level = map[envoyapi.ProxyLogComponent]envoyapi.LogLevel{}
 			}
-			// need to make changes to the envoy container to mount the socket
+			if _, ok := envoyProxy.Spec.Logging.Level[envoyapi.LogComponentDefault]; !ok {
+				envoyProxy.Spec.Logging.Level[envoyapi.LogComponentDefault] = envoyapi.LogLevelWarn
+			}
+			envoyProxy.Spec.Logging.Level[wafLogComponentWasm] = envoyapi.LogLevelInfo
+
+			// Redirect Envoy's application log (where the wasm filter's "AuditLog:" lines land)
+			// to a file on the "access-logs" emptyDir so the l7-log-collector can tail it (the
+			// collector already mounts that volume, and can only read files under /access_logs).
+			// EnvoyProxy has no native log-path field, and a Patch on the envoy container's args
+			// would replace Envoy Gateway's generated args, so use ExtraArgs, which EG appends to
+			// the proxy command line. func-e parses each element as a single token, so the flag
+			// and value are separate elements. The operator owns --log-path whenever WAF audit
+			// capture is enabled: it must match WAF_AUDIT_LOG_PATH on the l7-log-collector and
+			// live on the shared access-logs volume, so set it to wafAuditLogPath, replacing any
+			// value carried over from a custom base EnvoyProxy.
+			envoyProxy.Spec.ExtraArgs = ensureExtraArg(envoyProxy.Spec.ExtraArgs, "--log-path", wafAuditLogPath)
+
 			l7LogCollector := corev1.Container{
 				Name:  "l7-log-collector",
 				Image: pr.L7LogCollectorImage,
@@ -968,6 +998,12 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					{
 						Name:  "ENVOY_ACCESS_LOG_PATH",
 						Value: "/access_logs/access.log",
+					},
+					// WAF audit capture: file the collector tails for the wasm filter's
+					// Coraza "AuditLog:" lines (Envoy's app log, redirected via --log-path).
+					{
+						Name:  "WAF_AUDIT_LOG_PATH",
+						Value: wafAuditLogPath,
 					},
 					// Owning Gateway info from pod labels (set by EnvoyProxy)
 					OwningGatewayNameEnvVar,
@@ -987,16 +1023,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 				SecurityContext: securitycontext.NewRootContext(true),
 			}
 
-			hasWAFHTTPFilter := false
 			hasL7LogCollector := false
 			for i, initContainer := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers {
-				if initContainer.Name == wafHTTPFilter.Name {
-					hasWAFHTTPFilter = true
-					// Handle update
-					if initContainer.Image != wafHTTPFilter.Image {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers[i] = wafHTTPFilter
-					}
-				}
 				if initContainer.Name == l7LogCollector.Name {
 					hasL7LogCollector = true
 					// Handle update
@@ -1009,68 +1037,31 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					}
 				}
 			}
-			if !hasWAFHTTPFilter {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, wafHTTPFilter)
-			}
-
 			if !hasL7LogCollector {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.InitContainers, l7LogCollector)
 			}
 
 			accessLogsName := "access-logs"
 			// Add or update Container volume mount
-			wafSocketVolumeMount := corev1.VolumeMount{
-				Name:      wafFilterName,
-				MountPath: "/var/run/waf-http-filter",
-			}
-
 			l7SocketVolumeMount := corev1.VolumeMount{
 				Name:      accessLogsName,
 				MountPath: "/access_logs",
 			}
 
-			hasWAFFilterSocketVolumeMount := false
 			hasAccessLogsVolumeMount := false
-
 			for i, volumeMount := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts {
-				switch volumeMount.Name {
-				case wafSocketVolumeMount.Name:
-					hasWAFFilterSocketVolumeMount = true
-					if volumeMount.MountPath != wafSocketVolumeMount.MountPath {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = wafSocketVolumeMount
-					}
-				case l7SocketVolumeMount.Name:
+				if volumeMount.Name == l7SocketVolumeMount.Name {
 					hasAccessLogsVolumeMount = true
 					if volumeMount.MountPath != l7SocketVolumeMount.MountPath {
 						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts[i] = l7SocketVolumeMount
 					}
-
 				}
 			}
-			if !hasWAFFilterSocketVolumeMount {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, wafSocketVolumeMount)
-			}
-
 			if !hasAccessLogsVolumeMount {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container.VolumeMounts, l7SocketVolumeMount)
 			}
 
 			// Add or update Pod volumes
-			logsVolume := corev1.Volume{
-				VolumeSource: corev1.VolumeSource{
-					HostPath: &corev1.HostPathVolumeSource{
-						Path: "/var/log/calico",
-						Type: ptr.To(corev1.HostPathDirectoryOrCreate),
-					},
-				},
-				Name: "var-log-calico",
-			}
-			WAFHttpFilterSocketVolume := corev1.Volume{
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-				Name: wafFilterName,
-			}
 			AccessLogsVolume := []corev1.Volume{
 				{
 					VolumeSource: corev1.VolumeSource{
@@ -1087,23 +1078,8 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 					Name: "felix-sync",
 				},
 			}
-			hasLogsVolume := false
-			hasSocketVolume := false
 			hasAccessLogsVolume := false
 			for i, volume := range envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes {
-				if volume.Name == logsVolume.Name {
-					hasLogsVolume = true
-					// Handle update
-					if volume.HostPath.Path != logsVolume.HostPath.Path || volume.HostPath.Type != logsVolume.HostPath.Type {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = logsVolume
-					}
-				}
-				if volume.Name == WAFHttpFilterSocketVolume.Name {
-					hasSocketVolume = true
-					if volume.EmptyDir != WAFHttpFilterSocketVolume.EmptyDir {
-						envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes[i] = WAFHttpFilterSocketVolume
-					}
-				}
 				for _, acVolume := range AccessLogsVolume {
 					if volume.Name == acVolume.Name {
 						hasAccessLogsVolume = true
@@ -1112,19 +1088,13 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 						}
 					}
 				}
-
-			}
-			if !hasLogsVolume {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, logsVolume)
-			}
-			if !hasSocketVolume {
-				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, WAFHttpFilterSocketVolume)
 			}
 			if !hasAccessLogsVolume {
 				envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes = append(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Volumes, AccessLogsVolume...)
 			}
 
-			// Configure service account for WAF HTTP Filter license client
+			// Configure the envoy-proxy pod's service account, used by the l7-log-collector
+			// for license verification and Gateway-API reads.
 			// Use EnvoyProxy patch mechanism to set serviceAccountName and automountServiceAccountToken
 			serviceAccountPatch := map[string]interface{}{
 				"spec": map[string]interface{}{

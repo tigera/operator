@@ -165,7 +165,6 @@ func (r *ReconcileTiers) prepareTiersConfig(ctx context.Context, reqLogger logr.
 		namespaces = append(namespaces,
 			render.DexNamespace,
 			render.ElasticsearchNamespace,
-			render.LogCollectorNamespace,
 			render.IntrusionDetectionNamespace,
 			kibana.Namespace,
 			eck.OperatorNamespace,

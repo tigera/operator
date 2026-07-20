@@ -21,7 +21,7 @@ OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/d
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.20.2
+HELM3_VERSION = v3.21.1
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -101,8 +101,15 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.3-llvm21.1.8-k8s1.36.1
-CALICO_BASE_VER ?= ubi9-1779935431
+# The project Go version.
+GO_VERSION?=1.26.5
+# Version of Kubernetes to use for dependencies, tests, and kubectl.
+K8S_VERSION?=v1.36.2
+# The version of LLVM to use for the go-build image.
+LLVM_VERSION?=21.1.8
+# Calico toolchain versions and the calico/go-build image to use.
+GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
+CALICO_BASE_VER ?= ubi9-1783525764
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -247,7 +254,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.2
+ENVOY_GATEWAY_VERSION ?= v1.8.0
 ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
 $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
@@ -314,6 +321,7 @@ $(BINDIR)/kind:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(ISTIO_CHART_FILES)
+	rm -rf $(ENVOY_GATEWAY_CHART)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
@@ -942,9 +950,15 @@ hooks_installed:=$(shell ./install-git-hooks)
 install-git-hooks:
 	./install-git-hooks
 
+GIT_COMMON_DIR := $(realpath $(shell git rev-parse --git-common-dir 2>/dev/null))
+ifneq ($(GIT_COMMON_DIR),$(realpath $(CURDIR)/.git))
+# Handle worktrees where .git is a file - we need to get the actual location
+WORKTREE_GIT_MOUNT := -v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):rw
+endif
+
 .PHONY: pre-commit
 pre-commit:
-	$(CONTAINERIZED) $(foreach ALTERNATE,$(shell cat $(shell git rev-parse --git-dir)/objects/info/alternates 2>/dev/null),-v $(ALTERNATE):$(ALTERNATE):ro) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+	$(CONTAINERIZED) $(WORKTREE_GIT_MOUNT) $(foreach ALTERNATE,$(shell cat $(GIT_COMMON_DIR)/objects/info/alternates 2>/dev/null),-v $(ALTERNATE):$(ALTERNATE):ro) $(CALICO_BUILD) git-hooks/pre-commit-in-container
 
 # var-set-% checks if there is a non empty variable for the value describe by %. If FAIL_NOT_SET is set, then var-set-%
 # fails with an error message. If FAIL_NOT_SET is not set, then var-set-% appends a 1 to VARSET if the variable isn't

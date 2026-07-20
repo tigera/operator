@@ -67,6 +67,7 @@ var _ = Describe("Istio controller tests", func() {
 		Expect(rbacv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(admregv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 		Expect(autoscalingv2.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		// EnvoyFilter is registered via apis.AddToScheme above.
 
 		ctx = context.Background()
 		objTrackerWithCalls = test.NewObjectTrackerWithCalls(scheme)
@@ -74,6 +75,8 @@ var _ = Describe("Istio controller tests", func() {
 
 		// Set up a mock status
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("AddDaemonsets", mock.Anything).Maybe().Return()
 		mockStatus.On("AddDeployments", mock.Anything).Maybe().Return()
 		mockStatus.On("AddStatefulSets", mock.Anything).Maybe().Return()
@@ -470,6 +473,28 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(err.Error()).To(ContainSubstring("felixconfig IstioAmbientMode modified by user"))
 		})
 
+		It("initializes nil Annotations when writing the DSCP mark (no nil-map panic)", func() {
+			// configureIstioAmbientMode only initializes fc.Annotations when it
+			// writes the mode annotation and can return without doing so, so
+			// configureIstioDSCPMark must guard the nil map itself before
+			// writing the DSCP annotation.
+			dscp := numorstring.DSCPFromInt(23)
+			instance := &operatorv1.Istio{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       operatorv1.IstioSpec{DSCPMark: &dscp},
+			}
+			// FelixConfiguration with nil Annotations (zero value).
+			fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+
+			r := &ReconcileIstio{}
+			changed, err := r.configureIstioDSCPMark(instance, fc, false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(changed).To(BeTrue())
+			Expect(fc.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationDSCP, "23"))
+			Expect(fc.Spec.IstioDSCPMark).NotTo(BeNil())
+			Expect(fc.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
+		})
+
 		It("should detect user modification of IstioDSCPMark in FelixConfiguration", func() {
 			// Create FelixConfiguration with mismatched annotation and spec
 			userModifiedDSCP := numorstring.DSCPFromInt(50)
@@ -496,6 +521,135 @@ var _ = Describe("Istio controller tests", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("felixconfig IstioDSCPMark modified by user"))
+		})
+
+		Context("policySyncPathPrefix coordination", func() {
+			// All tests in this block run with Enterprise variant: the L7
+			// waypoint feature that makes Istio claim policySyncPathPrefix
+			// is Enterprise-only. The parent Context's BeforeEach has
+			// already created the Installation as Calico, so we re-read and
+			// patch it to Enterprise here.
+			BeforeEach(func() {
+				inst := &operatorv1.Installation{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, inst)).NotTo(HaveOccurred())
+				inst.Spec.Variant = operatorv1.CalicoEnterprise
+				inst.Status.Variant = operatorv1.CalicoEnterprise
+				Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+			})
+
+			It("sets policySyncPathPrefix to the operator default when no AL is present", func() {
+				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				patched := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, patched)).NotTo(HaveOccurred())
+				Expect(patched.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+			})
+
+			It("does not stomp a customer override on policySyncPathPrefix", func() {
+				fc := &v3.FelixConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec:       v3.FelixConfigurationSpec{PolicySyncPathPrefix: "/var/run/customer"},
+				}
+				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				patched := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, patched)).NotTo(HaveOccurred())
+				Expect(patched.Spec.PolicySyncPathPrefix).To(Equal("/var/run/customer"))
+			})
+
+			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer still needs it", func() {
+				// AL with logsCollection enabled — the symmetric coordination
+				// case the user called out: Istio deletion must not clear the
+				// field while AL is still actively using it.
+				enabled := operatorv1.L7LogCollectionEnabled
+				al := &operatorv1.ApplicationLayer{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Spec: operatorv1.ApplicationLayerSpec{
+						LogCollection: &operatorv1.LogCollectionSpec{CollectLogs: &enabled},
+					},
+				}
+				Expect(cli.Create(ctx, al)).NotTo(HaveOccurred())
+
+				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// Now delete the Istio CR and reconcile the finalizer cleanup.
+				updated := &operatorv1.Istio{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updated)).NotTo(HaveOccurred())
+				Expect(cli.Delete(ctx, updated)).NotTo(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cleaned := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+			})
+
+			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer features are all disabled", func() {
+				disabled := operatorv1.L7LogCollectionDisabled
+				al := &operatorv1.ApplicationLayer{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Spec: operatorv1.ApplicationLayerSpec{
+						LogCollection: &operatorv1.LogCollectionSpec{CollectLogs: &disabled},
+					},
+				}
+				Expect(cli.Create(ctx, al)).NotTo(HaveOccurred())
+
+				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				updated := &operatorv1.Istio{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updated)).NotTo(HaveOccurred())
+				Expect(cli.Delete(ctx, updated)).NotTo(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cleaned := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
+				// Never clear a value we may not own: egressgateway and Gateway
+				// API share this default and never clear it, so Istio deletion
+				// preserves it rather than wiping it out from under them.
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+			})
+
+			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer is absent", func() {
+				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+				r := &ReconcileIstio{Client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				updated := &operatorv1.Istio{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updated)).NotTo(HaveOccurred())
+				Expect(cli.Delete(ctx, updated)).NotTo(HaveOccurred())
+				_, err = r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cleaned := &v3.FelixConfiguration{}
+				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
+				// Never clear a value we may not own: egressgateway and Gateway
+				// API share this default and never clear it, so Istio deletion
+				// preserves it rather than wiping it out from under them.
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+			})
 		})
 
 		It("should clear FelixConfiguration on deletion", func() {
@@ -789,6 +943,8 @@ var _ = Describe("Istio controller tests", func() {
 						{Image: "tigera/istio-install-cni", Digest: "sha256:cni123"},
 						{Image: "tigera/istio-ztunnel", Digest: "sha256:ztunnel123"},
 						{Image: "tigera/istio-proxyv2", Digest: "sha256:proxyv2123"},
+						// Waypoint l7-collector runs from the combined calico image.
+						{Image: "tigera/calico", Digest: "sha256:calico123"},
 					},
 				},
 			}

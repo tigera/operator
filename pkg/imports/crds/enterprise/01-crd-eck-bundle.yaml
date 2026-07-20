@@ -4,12 +4,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: agents.agent.k8s.elastic.co
 spec:
   group: agent.k8s.elastic.co
@@ -497,12 +497,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: apmservers.apm.k8s.elastic.co
 spec:
   group: apm.k8s.elastic.co
@@ -1019,12 +1019,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: autoopsagentpolicies.autoops.k8s.elastic.co
 spec:
   group: autoops.k8s.elastic.co
@@ -1040,7 +1040,7 @@ spec:
   scope: Namespaced
   versions:
     - additionalPrinterColumns:
-        - jsonPath: .status.ready
+        - jsonPath: .status.readyCount
           name: Ready
           type: string
         - jsonPath: .status.phase
@@ -1135,6 +1135,19 @@ spec:
               type: object
             status:
               properties:
+                details:
+                  additionalProperties:
+                    properties:
+                      error:
+                        type: string
+                      message:
+                        type: string
+                      phase:
+                        type: string
+                    required:
+                      - phase
+                    type: object
+                  type: object
                 errors:
                   type: integer
                 observedGeneration:
@@ -1144,7 +1157,11 @@ spec:
                   type: string
                 ready:
                   type: integer
+                readyCount:
+                  type: string
                 resources:
+                  type: integer
+                skipped:
                   type: integer
               required:
                 - errors
@@ -1162,12 +1179,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: beats.beat.k8s.elastic.co
 spec:
   group: beat.k8s.elastic.co
@@ -1401,12 +1418,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: elasticmapsservers.maps.k8s.elastic.co
 spec:
   group: maps.k8s.elastic.co
@@ -1658,12 +1675,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: elasticsearchautoscalers.autoscaling.k8s.elastic.co
 spec:
   group: autoscaling.k8s.elastic.co
@@ -1915,12 +1932,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: elasticsearches.elasticsearch.k8s.elastic.co
 spec:
   group: elasticsearch.k8s.elastic.co
@@ -2105,6 +2122,11 @@ spec:
                           properties:
                             secretName:
                               type: string
+                          type: object
+                        client:
+                          properties:
+                            authentication:
+                              type: boolean
                           type: object
                         selfSignedCertificate:
                           properties:
@@ -2291,6 +2313,17 @@ spec:
                               type: object
                           type: object
                         type: array
+                      zoneAwareness:
+                        properties:
+                          topologyKey:
+                            type: string
+                          zones:
+                            items:
+                              type: string
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: set
+                        type: object
                     required:
                       - name
                     type: object
@@ -3284,12 +3317,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: enterprisesearches.enterprisesearch.k8s.elastic.co
 spec:
   group: enterprisesearch.k8s.elastic.co
@@ -3762,12 +3795,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: kibanas.kibana.k8s.elastic.co
 spec:
   group: kibana.k8s.elastic.co
@@ -3815,6 +3848,8 @@ spec:
                   type: integer
                 elasticsearchRef:
                   properties:
+                    clientCertificateSecretName:
+                      type: string
                     name:
                       type: string
                     namespace:
@@ -4017,8 +4052,6 @@ spec:
                     name:
                       type: string
                     namespace:
-                      type: string
-                    secretName:
                       type: string
                     serviceName:
                       type: string
@@ -4330,12 +4363,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: logstashes.logstash.k8s.elastic.co
 spec:
   group: logstash.k8s.elastic.co
@@ -4873,12 +4906,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: packageregistries.packageregistry.k8s.elastic.co
 spec:
   group: packageregistry.k8s.elastic.co
@@ -5115,12 +5148,12 @@ apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
-    controller-gen.kubebuilder.io/version: v0.20.0
+    controller-gen.kubebuilder.io/version: v0.20.1
     helm.sh/resource-policy: keep
   labels:
     app.kubernetes.io/instance: 'elastic-operator'
     app.kubernetes.io/name: 'eck-operator-crds'
-    app.kubernetes.io/version: '3.3.2'
+    app.kubernetes.io/version: '3.4.1'
   name: stackconfigpolicies.stackconfigpolicy.k8s.elastic.co
 spec:
   group: stackconfigpolicy.k8s.elastic.co

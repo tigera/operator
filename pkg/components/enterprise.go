@@ -37,12 +37,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version: "8.19.16",
+		Version: "8.19.17",
 		variant: enterpriseVariant,
 	}
 
 	ComponentEckKibana = Component{
-		Version: "8.19.16",
+		Version: "8.19.17",
 		variant: enterpriseVariant,
 	}
 
@@ -63,7 +63,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.4.1",
 		variant: enterpriseVariant,
 	}
 
@@ -75,17 +75,17 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentFluentd = Component{
+	ComponentFluentBit = Component{
 		Version:   "master",
-		Image:     "fluentd",
+		Image:     "fluent-bit",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
-	ComponentFluentdWindows = Component{
+	ComponentFluentBitWindows = Component{
 		Version:   "master",
-		Image:     "fluentd-windows",
+		Image:     "fluent-bit-windows",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -168,7 +168,7 @@ var (
 	}
 
 	ComponentCoreOSAlertmanager = Component{
-		Version: "v0.31.1",
+		Version: "v0.32.1",
 		variant: enterpriseVariant,
 	}
 
@@ -199,6 +199,14 @@ var (
 	ComponentTigeraCNIWindows = Component{
 		Version:   "master",
 		Image:     "cni-windows",
+		Registry:  "",
+		imagePath: "",
+		variant:   enterpriseVariant,
+	}
+
+	ComponentTigeraCNIPlugins = Component{
+		Version:   "master",
+		Image:     "third-party-cni-plugins",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -264,8 +272,8 @@ var (
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
 		ComponentElasticsearchOperator,
-		ComponentFluentd,
-		ComponentFluentdWindows,
+		ComponentFluentBit,
+		ComponentFluentBitWindows,
 		ComponentIntrusionDetectionController,
 		ComponentKibana,
 		ComponentManager,
@@ -279,6 +287,7 @@ var (
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
 		ComponentTigeraCNIWindows,
+		ComponentTigeraCNIPlugins,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,

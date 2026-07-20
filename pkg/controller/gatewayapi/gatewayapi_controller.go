@@ -102,6 +102,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("gatewayapi-controller failed to watch Installation resource: %w", err)
 	}
 
+	// Watch secrets in the operator namespace so pull-secret rotations reconcile the
+	// per-namespace copies we push into each Gateway namespace. Named "" to catch
+	// arbitrarily-named user-provided pull secrets.
+	if err = utils.AddSecretsWatch(c, "", common.OperatorNamespace()); err != nil {
+		log.V(5).Info("Failed to create secrets watch", "err", err)
+		return fmt.Errorf("gatewayapi-controller failed to watch secrets: %w", err)
+	}
+
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {

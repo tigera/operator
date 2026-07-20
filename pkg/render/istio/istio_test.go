@@ -15,6 +15,7 @@
 package istio_test
 
 import (
+	"encoding/json"
 	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -59,6 +60,24 @@ func getCalicoTestImageSet() *operatorv1.ImageSet {
 
 // getEnterpriseTestImageSet returns a standard imageSet for testing with Enterprise variant
 func getEnterpriseTestImageSet() *operatorv1.ImageSet {
+	return &operatorv1.ImageSet{
+		Spec: operatorv1.ImageSetSpec{
+			Images: []operatorv1.Image{
+				{Image: "tigera/istio-pilot", Digest: "sha256:test-pilot-digest"},
+				{Image: "tigera/istio-install-cni", Digest: "sha256:test-cni-digest"},
+				{Image: "tigera/istio-ztunnel", Digest: "sha256:test-ztunnel-digest"},
+				{Image: "tigera/istio-proxyv2", Digest: "sha256:test-proxyv2-digest"},
+				// The waypoint l7-collector runs from the combined calico image.
+				{Image: "tigera/calico", Digest: "sha256:test-calico-digest"},
+			},
+		},
+	}
+}
+
+// getEnterpriseTestImageSetWithoutL7Collector returns an Enterprise imageSet
+// that omits the combined calico image, used to verify that disabling
+// WaypointLogging makes the L7 collector image unnecessary.
+func getEnterpriseTestImageSetWithoutL7Collector() *operatorv1.ImageSet {
 	return &operatorv1.ImageSet{
 		Spec: operatorv1.ImageSetSpec{
 			Images: []operatorv1.Image{
@@ -389,6 +408,25 @@ var _ = Describe("Istio Component Rendering", func() {
 			for _, v := range valuesConfigMap.Data {
 				Expect(v).NotTo(ContainSubstring("my-pull-secret"), "Expected no secret names in imagePullSecrets when none configured")
 			}
+		})
+
+		It("should set gateways.seccompProfile so waypoints run in PSA-restricted namespaces", func() {
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			objsToCreate, _ := component.Objects()
+
+			injectorConfigMap, err := rtest.GetResourceOfType[*corev1.ConfigMap](objsToCreate, istio.IstioSidecarInjectorConfigMapName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			var values struct {
+				Gateways struct {
+					SeccompProfile corev1.SeccompProfile `json:"seccompProfile"`
+				} `json:"gateways"`
+			}
+			Expect(json.Unmarshal([]byte(injectorConfigMap.Data["values"]), &values)).To(Succeed())
+			Expect(values.Gateways.SeccompProfile.Type).To(Equal(corev1.SeccompProfileTypeRuntimeDefault),
+				"waypoint istio-proxy containers only get a seccompProfile when gateways.seccompProfile is set in the istiod values")
 		})
 	})
 
@@ -845,6 +883,130 @@ var _ = Describe("Istio Component Rendering", func() {
 			for _, data := range configMap.Data {
 				Expect(data).NotTo(ContainSubstring("fake.io/fakeimg/proxyv2:faketag"))
 			}
+		})
+
+		It("should emit waypoint L7 logging resources only for Enterprise variant", func() {
+			// Enterprise: the five L7 waypoint resources (defaults ConfigMap,
+			// the EnvoyFilter-writer Role and RoleBinding, and two EnvoyFilters)
+			// are rendered into the Istio root namespace. This test asserts the
+			// ConfigMap (with the l7-collector image resolved onto it) and the
+			// two EnvoyFilters.
+			cfg.Installation.Variant = operatorv1.CalicoEnterprise
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getEnterpriseTestImageSet())).To(Succeed())
+
+			objsToCreate, _ := component.Objects()
+
+			defaults, err := rtest.GetResourceOfType[*corev1.ConfigMap](
+				objsToCreate, istio.L7WaypointDefaultsConfigMapName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(defaults.Labels).To(HaveKeyWithValue(
+				"gateway.istio.io/defaults-for-class", istio.IstioWaypointGatewayClass))
+			expectedImage, _ := components.GetReference(components.CombinedCalicoImage(cfg.Installation),
+				cfg.Installation.Registry, cfg.Installation.ImagePath, cfg.Installation.ImagePrefix,
+				getEnterpriseTestImageSet())
+			Expect(defaults.Data["deployment"]).To(ContainSubstring(expectedImage))
+			Expect(defaults.Data["deployment"]).To(ContainSubstring("--mode=waypoint"))
+
+			_, err = rtest.GetResourceOfType[*istio.EnvoyFilter](
+				objsToCreate, istio.L7WaypointALSFilterName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = rtest.GetResourceOfType[*istio.EnvoyFilter](
+				objsToCreate, istio.L7WaypointSrcPortFilterName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// Calico (OSS) variant: none of the five resources should appear,
+			// regardless of image resolution outcome.
+			cfg.Installation.Variant = operatorv1.Calico
+			_, component, err = istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getCalicoTestImageSet())).To(Succeed())
+
+			objsToCreate, _ = component.Objects()
+			for _, o := range objsToCreate {
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointDefaultsConfigMapName))
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointALSFilterName))
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointSrcPortFilterName))
+			}
+		})
+
+		It("should render waypoint L7 logging resources when WaypointLogging is explicitly Enabled", func() {
+			cfg.Installation.Variant = operatorv1.CalicoEnterprise
+			enabled := operatorv1.L7LogCollectionEnabled
+			cfg.Istio.Spec.WaypointLogging = &enabled
+
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(component.ResolveImages(getEnterpriseTestImageSet())).To(Succeed())
+
+			objsToCreate, _ := component.Objects()
+			_, err = rtest.GetResourceOfType[*corev1.ConfigMap](
+				objsToCreate, istio.L7WaypointDefaultsConfigMapName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = rtest.GetResourceOfType[*istio.EnvoyFilter](
+				objsToCreate, istio.L7WaypointALSFilterName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			_, err = rtest.GetResourceOfType[*istio.EnvoyFilter](
+				objsToCreate, istio.L7WaypointSrcPortFilterName, istio.IstioNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+		})
+
+		It("should omit waypoint L7 logging resources when WaypointLogging is Disabled", func() {
+			cfg.Installation.Variant = operatorv1.CalicoEnterprise
+			disabled := operatorv1.L7LogCollectionDisabled
+			cfg.Istio.Spec.WaypointLogging = &disabled
+
+			_, component, err := istio.Istio(cfg)
+			Expect(err).ShouldNot(HaveOccurred())
+			// L7CollectorImage is not required when disabled — pass an ImageSet
+			// that omits it to verify ResolveImages doesn't fail.
+			Expect(component.ResolveImages(getEnterpriseTestImageSetWithoutL7Collector())).To(Succeed())
+
+			objsToCreate, objsToDelete := component.Objects()
+			for _, o := range objsToCreate {
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointDefaultsConfigMapName))
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointALSFilterName))
+				Expect(o.GetName()).NotTo(Equal(istio.L7WaypointSrcPortFilterName))
+			}
+
+			// The five L7 resources must be enqueued for deletion so that
+			// flipping Enabled→Disabled removes any previously-created copies.
+			deleteNames := map[string]string{}
+			for _, o := range objsToDelete {
+				if o.GetNamespace() == istio.IstioNamespace {
+					deleteNames[o.GetName()] = o.GetObjectKind().GroupVersionKind().Kind
+				}
+			}
+			Expect(deleteNames).To(HaveKey(istio.L7WaypointDefaultsConfigMapName))
+			Expect(deleteNames).To(HaveKey(istio.L7WaypointALSFilterName))
+			Expect(deleteNames).To(HaveKey(istio.L7WaypointSrcPortFilterName))
+
+			// Delete the EnvoyFilters BEFORE the Role/RoleBinding otherwise the grant is
+			// removed first and the EnvoyFilter deletes fail with Forbidden,
+			// orphaning them.
+			idxOf := func(kind, name string) int {
+				for i, o := range objsToDelete {
+					if o.GetObjectKind().GroupVersionKind().Kind == kind &&
+						o.GetName() == name && o.GetNamespace() == istio.IstioNamespace {
+						return i
+					}
+				}
+				return -1
+			}
+			alsIdx := idxOf("EnvoyFilter", istio.L7WaypointALSFilterName)
+			srcIdx := idxOf("EnvoyFilter", istio.L7WaypointSrcPortFilterName)
+			roleIdx := idxOf("Role", istio.L7WaypointEnvoyFilterRoleName)
+			bindingIdx := idxOf("RoleBinding", istio.L7WaypointEnvoyFilterRoleName)
+			Expect(alsIdx).To(BeNumerically(">=", 0))
+			Expect(srcIdx).To(BeNumerically(">=", 0))
+			Expect(roleIdx).To(BeNumerically(">=", 0))
+			Expect(bindingIdx).To(BeNumerically(">=", 0))
+			// Both EnvoyFilters precede both the writer Role and RoleBinding.
+			Expect(alsIdx).To(BeNumerically("<", roleIdx))
+			Expect(alsIdx).To(BeNumerically("<", bindingIdx))
+			Expect(srcIdx).To(BeNumerically("<", roleIdx))
+			Expect(srcIdx).To(BeNumerically("<", bindingIdx))
 		})
 	})
 

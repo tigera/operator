@@ -205,6 +205,13 @@ func AddDeploymentWatch(c ctrlruntime.Controller, name, namespace string) error 
 	}, &handler.EnqueueRequestForObject{})
 }
 
+func AddDaemonsetWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.DaemonSet{
+		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}, &handler.EnqueueRequestForObject{})
+}
+
 func AddPeriodicReconcile(c ctrlruntime.Controller, period time.Duration, handler handler.EventHandler) error {
 	return c.Watch(source.Channel(createPeriodicReconcileChannel(period), handler))
 }
@@ -466,6 +473,42 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 	}
 
 	return applicationLayer, nil
+}
+
+// Return the Istio CR if present. No error is returned if it was not found.
+func GetIstio(ctx context.Context, c client.Client) (*operatorv1.Istio, error) {
+	istio := &operatorv1.Istio{}
+
+	err := c.Get(ctx, DefaultInstanceKey, istio)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return istio, nil
+}
+
+// GetManager returns the Manager CR, or nil if it is not found. When
+// multiTenant is true the tenant-scoped instance is read from ns; otherwise the
+// cluster-scoped instance is read and ns is ignored. A NoMatchError (the
+// Manager CRD is not registered) is returned to the caller rather than treated
+// as not-found: absence of the CRD is distinct from the user not having created
+// a Manager, and the caller decides how to handle it.
+func GetManager(ctx context.Context, cli client.Client, multiTenant bool, ns string) (*operatorv1.Manager, error) {
+	key := DefaultEnterpriseInstanceKey
+	if multiTenant {
+		key.Namespace = ns
+	}
+	instance := &operatorv1.Manager{}
+	if err := cli.Get(ctx, key, instance); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return instance, nil
 }
 
 // Return the ManagementCluster CR if present. No error is returned if it was not found.

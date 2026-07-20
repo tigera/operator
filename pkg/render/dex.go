@@ -334,7 +334,7 @@ func (c *dexComponent) deployment() client.Object {
 							VolumeMounts: mounts,
 						},
 					},
-					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume(), trustedBundleVolume(c.cfg.TrustedBundle)),
+					Volumes: append(c.cfg.DexConfig.RequiredVolumes(), c.cfg.TLSKeyPair.Volume(), TrustedBundleVolume(c.cfg.TrustedBundle)),
 				},
 			},
 		},

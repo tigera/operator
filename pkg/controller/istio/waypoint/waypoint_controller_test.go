@@ -589,5 +589,31 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(listTrackedSecrets()).To(HaveLen(1))
 			Expect(listTrackedRoleBindings()).To(HaveLen(1))
 		})
+
+		It("should clean up copies when no pull secrets are configured", func() {
+			// Copy the secrets with the watch ready.
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+
+			// Remove all pull secrets from the Installation, then simulate an operator
+			// restart where a reconcile fires before the watch is re-established.
+			inst := &operatorv1.Installation{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, inst)).NotTo(HaveOccurred())
+			inst.Spec.ImagePullSecrets = nil
+			Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+
+			r.gatewayWatchReady = &utils.ReadyFlag{}
+
+			_, err = doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// With no pull secrets the desired state is empty regardless of which
+			// namespaces contain waypoint Gateways, so stale copies and RoleBindings
+			// are cleaned up without waiting for the Gateway watch.
+			Expect(listTrackedSecrets()).To(BeEmpty())
+			Expect(listTrackedRoleBindings()).To(BeEmpty())
+		})
 	})
 })

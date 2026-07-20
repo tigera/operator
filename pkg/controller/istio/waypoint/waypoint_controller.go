@@ -161,14 +161,6 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{}, err
 	}
 
-	// If Istio is active but the Gateway watch isn't established yet, the desired state is
-	// unknown — bail out rather than treat every existing copy as stale. Gateway events after
-	// the watch syncs (or the periodic reconcile) will trigger the next pass.
-	if istioActive && !r.gatewayWatchReady.IsReady() {
-		reqLogger.V(1).Info("Waiting for Gateway watch to be established")
-		return reconcile.Result{}, nil
-	}
-
 	// Build the desired set of secrets if Istio is active.
 	var pullSecrets []*corev1.Secret
 	targetNamespaces := map[string]bool{}
@@ -186,20 +178,30 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		if err != nil {
 			return reconcile.Result{}, err
 		}
+	}
 
-		// List all Gateway resources and filter for istio-waypoint class, but only if there
-		// is at least one pull secret to copy.
-		if len(pullSecrets) > 0 {
-			gatewayList := &gapi.GatewayList{}
-			if err := r.List(ctx, gatewayList); err != nil {
-				return reconcile.Result{}, fmt.Errorf("failed to list Gateways: %w", err)
-			}
+	// Copies are desired only in namespaces that contain istio-waypoint Gateways, so the
+	// Gateway list is needed only when there are pull secrets to copy. With none configured
+	// the desired state is empty regardless of Gateways, and cleanup below proceeds.
+	if len(pullSecrets) > 0 {
+		// If the Gateway watch isn't established yet, the desired state is unknown — bail
+		// out rather than treat every existing copy as stale. Gateway events after the
+		// watch syncs (or the periodic reconcile) will trigger the next pass.
+		if !r.gatewayWatchReady.IsReady() {
+			reqLogger.V(1).Info("Waiting for Gateway watch to be established")
+			return reconcile.Result{}, nil
+		}
 
-			for i := range gatewayList.Items {
-				gw := &gatewayList.Items[i]
-				if string(gw.Spec.GatewayClassName) == IstioWaypointClassName && !reservedNamespace(gw.Namespace) {
-					targetNamespaces[gw.Namespace] = true
-				}
+		// List all Gateway resources and filter for istio-waypoint class.
+		gatewayList := &gapi.GatewayList{}
+		if err := r.List(ctx, gatewayList); err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed to list Gateways: %w", err)
+		}
+
+		for i := range gatewayList.Items {
+			gw := &gatewayList.Items[i]
+			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName && !reservedNamespace(gw.Namespace) {
+				targetNamespaces[gw.Namespace] = true
 			}
 		}
 	}

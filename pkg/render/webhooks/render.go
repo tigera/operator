@@ -412,41 +412,45 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 			},
-			{
-				// This webhook is for audit logging. The webhook controller will get events for all relevant Calico API types
-				// and product audit logs for them.
-				Name: "audit-logging.api.projectcalico.org",
-				Rules: []admissionregistrationv1.RuleWithOperations{
-					{
-						Operations: []admissionregistrationv1.OperationType{
-							admissionregistrationv1.Create,
-							admissionregistrationv1.Update,
-							admissionregistrationv1.Delete,
-							admissionregistrationv1.Connect,
-						},
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"projectcalico.org"},
-							APIVersions: []string{"v3"},
-							Resources:   []string{"*"},
-							Scope:       ptr.To(admissionregistrationv1.AllScopes),
-						},
-					},
-				},
-				ClientConfig: admissionregistrationv1.WebhookClientConfig{
-					Service: &admissionregistrationv1.ServiceReference{
-						Namespace: common.CalicoNamespace,
-						Name:      WebhooksName,
-						Path:      ptr.To("/audit"),
-					},
-					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
-				},
-				AdmissionReviewVersions: []string{"v1"},
-				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To(int32(5)),
-				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
-				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
-			},
 		},
+	}
+
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		// The /audit handler only exists in Enterprise. Registering this webhook on Calico OSS
+		// points the API server at an endpoint that isn't served, filling its log with failed
+		// webhook calls, so only add it for Enterprise.
+		vwc.Webhooks = append(vwc.Webhooks, admissionregistrationv1.ValidatingWebhook{
+			Name: "audit-logging.api.projectcalico.org",
+			Rules: []admissionregistrationv1.RuleWithOperations{
+				{
+					Operations: []admissionregistrationv1.OperationType{
+						admissionregistrationv1.Create,
+						admissionregistrationv1.Update,
+						admissionregistrationv1.Delete,
+						admissionregistrationv1.Connect,
+					},
+					Rule: admissionregistrationv1.Rule{
+						APIGroups:   []string{"projectcalico.org"},
+						APIVersions: []string{"v3"},
+						Resources:   []string{"*"},
+						Scope:       ptr.To(admissionregistrationv1.AllScopes),
+					},
+				},
+			},
+			ClientConfig: admissionregistrationv1.WebhookClientConfig{
+				Service: &admissionregistrationv1.ServiceReference{
+					Namespace: common.CalicoNamespace,
+					Name:      WebhooksName,
+					Path:      ptr.To("/audit"),
+				},
+				CABundle: c.cfg.KeyPair.GetCertificatePEM(),
+			},
+			AdmissionReviewVersions: []string{"v1"},
+			SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
+			TimeoutSeconds:          ptr.To(int32(5)),
+			FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
+			MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
+		})
 	}
 
 	// Create a MutatingWebhookConfiguration for Enterprise-only mutating webhooks.

@@ -232,6 +232,28 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		}
 	}
 
+	// Cleanup skips terminating namespaces: the namespace deletion removes the copies and
+	// RoleBindings itself, and a terminating namespace rejects the RoleBinding creation that
+	// authorizes this controller's secret deletes, so attempting cleanup there can only fail.
+	terminatingNS := map[string]bool{}
+	nsTerminating := func(ns string) (bool, error) {
+		if t, ok := terminatingNS[ns]; ok {
+			return t, nil
+		}
+		n := &corev1.Namespace{}
+		if err := r.Get(ctx, types.NamespacedName{Name: ns}, n); err != nil {
+			if errors.IsNotFound(err) {
+				// Already gone, along with everything in it.
+				terminatingNS[ns] = true
+				return true, nil
+			}
+			return false, err
+		}
+		t := !n.DeletionTimestamp.IsZero()
+		terminatingNS[ns] = t
+		return t, nil
+	}
+
 	// Mark stale secrets for deletion. A stale copy carrying owner references is still in
 	// use by another feature (this controller never sets owner references on its copies),
 	// so it is left for the Kubernetes GC once its owners are gone.
@@ -242,6 +264,11 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		}
 		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
 		if desiredSecrets[key] || len(s.OwnerReferences) > 0 {
+			continue
+		}
+		if terminating, err := nsTerminating(s.Namespace); err != nil {
+			return reconcile.Result{}, err
+		} else if terminating {
 			continue
 		}
 		toDelete = append(toDelete, s)
@@ -293,6 +320,11 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 	}
 	for ns := range staleRBCandidates {
 		if rbDesired[ns] || reservedNamespace(ns) {
+			continue
+		}
+		if terminating, err := nsTerminating(ns); err != nil {
+			return reconcile.Result{}, err
+		} else if terminating {
 			continue
 		}
 		if coOwned, err := r.roleBindingCoOwned(ctx, ns); err != nil {

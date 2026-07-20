@@ -333,6 +333,38 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(listTrackedRoleBindings()).To(BeEmpty())
 		})
 
+		It("should leave cleanup in a terminating namespace to the namespace deletion", func() {
+			// A finalizer keeps the namespace around in the terminating state after
+			// deletion, like a real namespace mid-teardown.
+			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				Name:       "doomed-ns",
+				Finalizers: []string{"kubernetes"},
+			}}
+			Expect(cli.Create(ctx, ns)).NotTo(HaveOccurred())
+			createWaypointGateway("waypoint", "doomed-ns")
+
+			_, err := doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+
+			// Namespace deletion removes the Gateway first, leaving the copies stale
+			// while the namespace is still terminating.
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "waypoint", Namespace: "doomed-ns"}, gw)).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, gw)).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, ns)).NotTo(HaveOccurred())
+
+			_, err = doReconcile()
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// The copies and RoleBinding are left for the namespace deletion to remove;
+			// deleting them ourselves could only fail once the namespace stops accepting
+			// the RoleBinding that authorizes the deletes.
+			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+		})
+
 		It("should clean up labeled secrets in a namespace that has no RoleBinding", func() {
 			// Simulates copies left behind from before the controller managed
 			// RoleBindings (or created manually): the controller must grant itself

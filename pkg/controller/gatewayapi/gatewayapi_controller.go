@@ -751,8 +751,13 @@ func (r *ReconcileGatewayAPI) legacyGatewayOrphans(ctx context.Context, namespac
 	return orphans, nil
 }
 
-// upsertGatewayOwned creates or updates obj, refreshing its owner references (and ConfigMap/Secret
-// data) so the namespace's owner set stays current as its Gateways come and go.
+// upsertGatewayOwned creates or updates obj, adding owner references (and refreshing
+// ConfigMap/Secret data) so the namespace's owner set stays current as its Gateways come and go.
+// Existing owner references are merged rather than replaced: some of these objects are shared
+// with other features (e.g. istio waypoint and egress gateway copy the same pull secrets and
+// tigera-operator-secrets RoleBinding) which hold their own owner references on them. References
+// to Gateways that no longer exist are dangling, which the garbage collector treats as
+// already-deleted owners, so leaving them merged in does not delay GC.
 func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired client.Object, owners []metav1.OwnerReference) error {
 	desired.SetOwnerReferences(owners)
 	existing := desired.DeepCopyObject().(client.Object)
@@ -762,7 +767,7 @@ func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired cl
 	case err != nil:
 		return err
 	default:
-		existing.SetOwnerReferences(owners)
+		existing.SetOwnerReferences(common.MergeOwnerReferences(owners, existing.GetOwnerReferences()))
 		switch d := desired.(type) {
 		case *corev1.ConfigMap:
 			e := existing.(*corev1.ConfigMap)

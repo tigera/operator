@@ -72,6 +72,15 @@
         "protocol": "TCP",
         "destination": {
           "ports": [
+            2020
+          ]
+        }
+      },
+      {
+        "action": "Allow",
+        "protocol": "TCP",
+        "destination": {
+          "ports": [
             9900
           ]
         }

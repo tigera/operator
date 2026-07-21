@@ -17,6 +17,7 @@ package components
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
@@ -36,6 +37,10 @@ import (
 
 var log = logf.Log.WithName("components")
 
+// CustomOverridesAnnotation is set on workloads when the render package applies user-specified
+// probe timing or resource overrides. The value is a comma-separated list of override types.
+const CustomOverridesAnnotation = "operator.tigera.io/custom-overrides"
+
 // containerNameAliases maps deprecated container names to their current names.
 // When a user provides an override using a deprecated name, it is transparently
 // resolved to the current name before matching against rendered containers.
@@ -47,6 +52,8 @@ var containerNameAliases = map[string]string{
 	"tigera-ui-apis":  "calico-ui-apis",
 	"tigera-es-proxy": "calico-ui-apis",
 	"tigera-voltron-linseed-tls-key-cert-provisioner": "calico-voltron-linseed-tls-key-cert-provisioner",
+	"fluentd": "calico-fluent-bit",
+	"tigera-fluentd-prometheus-tls-key-cert-provisioner": "calico-fluent-bit-tls-key-cert-provisioner",
 }
 
 func resolveContainerName(name string) string {
@@ -402,6 +409,28 @@ func applyReplicatedPodResourceOverrides(r *replicatedPodResource, overrides any
 	// probe timing overrides are applied to the corresponding container.
 	if cos := GetContainerOverrides(overrides); cos != nil {
 		mergeContainerOverrides(r.podTemplateSpec.Spec.Containers, cos)
+
+		// Track which override types were applied for status correlation.
+		seen := map[string]bool{}
+		var overrideTypes []string
+		for _, co := range cos {
+			if co.ReadinessProbe != nil && !seen["readinessProbe"] {
+				seen["readinessProbe"] = true
+				overrideTypes = append(overrideTypes, "readinessProbe")
+			}
+			if co.LivenessProbe != nil && !seen["livenessProbe"] {
+				seen["livenessProbe"] = true
+				overrideTypes = append(overrideTypes, "livenessProbe")
+			}
+			if co.Resources != nil && !seen["resources"] {
+				seen["resources"] = true
+				overrideTypes = append(overrideTypes, "resources")
+			}
+		}
+		if len(overrideTypes) > 0 {
+			r.annotations = common.MapExistsOrInitialize(r.annotations)
+			r.annotations[CustomOverridesAnnotation] = strings.Join(overrideTypes, ",")
+		}
 	}
 
 	// If `overrides` has a Spec.Template.Spec.Affinity field, and it's non-nil, it sets

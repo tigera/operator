@@ -71,7 +71,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "3.4.0",
+		Version: "3.4.1",
 		variant: enterpriseVariant,
 	}
 
@@ -83,17 +83,17 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentFluentd = Component{
+	ComponentFluentBit = Component{
 		Version:   "master",
-		Image:     "fluentd",
+		Image:     "fluent-bit",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
-	ComponentFluentdWindows = Component{
+	ComponentFluentBitWindows = Component{
 		Version:   "master",
-		Image:     "fluentd-windows",
+		Image:     "fluent-bit-windows",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -281,8 +281,8 @@ var (
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
 		ComponentElasticsearchOperator,
-		ComponentFluentd,
-		ComponentFluentdWindows,
+		ComponentFluentBit,
+		ComponentFluentBitWindows,
 		ComponentIntrusionDetectionController,
 		ComponentKibana,
 		ComponentManager,

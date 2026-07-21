@@ -157,6 +157,18 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
 	}
 
+	if opts.MultiTenant {
+		// On a multi-tenant management cluster the aggregated API server remains a single cluster-scoped
+		// component in calico-system, but each tenant's calico-apiserver identity must be granted Linseed
+		// access via a ClusterRoleBinding with one subject per tenant namespace. That binding is rendered by
+		// the (cluster-scoped) reconcile over the current set of tenant namespaces, so a Tenant change just
+		// needs to trigger a reconcile; the binding is then re-rendered with the up-to-date namespace set,
+		// which also drops a deleted tenant's subject.
+		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch Tenant resource: %w", err)
+		}
+	}
+
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
 	// to migration phase changes (e.g., goes hands-off during Migrating).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions

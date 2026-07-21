@@ -31,6 +31,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -161,6 +162,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
 			{Name: "VOLTRON_URL", Value: render.ManagerService(nil)},
+			{Name: "RBAC_UI_ENABLED", Value: "false"},
 		}
 		Expect(uiAPIs.Env).To(Equal(uiAPIsExpectedEnvVars))
 
@@ -215,6 +217,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
 			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
 			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"},
+			{Name: "VOLTRON_LOG_COLLECTOR_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://calico-api.calico-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy/"},
 			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
@@ -1237,7 +1240,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 			policyWithoutNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
 
-			// Validate that we have a single egress rule added for the fluentd service.
+			// Validate that we have a single egress rule added for the fluent-bit service.
 			Expect(policyWithoutNonClusterHosts.Spec.Ingress).To(Equal(policyWithNonClusterHosts.Spec.Ingress))
 			Expect(len(policyWithoutNonClusterHosts.Spec.Egress)).To(Equal(len(policyWithNonClusterHosts.Spec.Egress) - 1))
 			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(11))
@@ -1247,7 +1250,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Destination: v3.EntityRule{
 					Services: &v3.ServiceMatch{
 						Namespace: render.LogCollectorNamespace,
-						Name:      render.FluentdInputService,
+						Name:      render.FluentBitInputService,
 					},
 				},
 			}))
@@ -1730,6 +1733,235 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)).To(BeNil())
 		})
 	})
+
+	Context("RBAC management UI", func() {
+		var installation *operatorv1.InstallationSpec
+		BeforeEach(func() {
+			replicas := int32(1)
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.CalicoEnterprise,
+				Registry:             "testregistry.com/",
+			}
+		})
+
+		rbacUIEnabledEnv := func(d *appsv1.Deployment) corev1.EnvVar {
+			for _, c := range d.Spec.Template.Spec.Containers {
+				if c.Name == render.UIAPIsName {
+					for _, e := range c.Env {
+						if e.Name == "RBAC_UI_ENABLED" {
+							return e
+						}
+					}
+				}
+			}
+			return corev1.EnvVar{}
+		}
+
+		// Namespaced Role carries the create rule on ConfigMaps/Secrets — this
+		// is the stable presence check for the RBAC management UI gate.
+		nsCreateRule := rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"create"},
+		}
+
+		It("renders RBAC_UI_ENABLED=false and no namespaced RBAC UI role when rbac is unset", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
+
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		It("renders RBAC_UI_ENABLED=false and no namespaced RBAC UI role when the Manager exists but rbacUI is unset", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager:      &operatorv1.Manager{Spec: operatorv1.ManagerSpec{}},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
+
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		It("renders RBAC_UI_ENABLED=true and the namespaced RBAC UI role when rbacUI.state is Enabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "true"}))
+
+			role := rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
+			Expect(role.Rules).To(ContainElement(nsCreateRule))
+		})
+
+		It("renders RBAC_UI_ENABLED=false when rbacUI.state is Disabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIDisabled)},
+					},
+				},
+			})
+			d := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
+			Expect(rbacUIEnabledEnv(d)).To(Equal(corev1.EnvVar{Name: "RBAC_UI_ENABLED", Value: "false"}))
+		})
+
+		It("does not add the manager-side RBAC rules in multi-tenant mode", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation:      installation,
+				ns:                "tenant-a",
+				bindingNamespaces: []string{"tenant-a"},
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-a",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+				manager: &operatorv1.Manager{
+					Spec: operatorv1.ManagerSpec{
+						RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)},
+					},
+				},
+			})
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, "tenant-a", rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		Context("LDAP egress network policy gate", func() {
+			policyName := types.NamespacedName{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}
+			// ldapEgress is the fallback rule shape rendered when LDAP is configured
+			// on the Authentication CR but its host is empty: ports open, destination
+			// unscoped.
+			ldapEgress := v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(389, 636),
+				},
+			}
+			rbacUIManager := &operatorv1.Manager{
+				Spec: operatorv1.ManagerSpec{RBACUI: &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)}},
+			}
+
+			It("adds an unscoped LDAP egress when RBAC UI and LDAP auth are configured but no host is set", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, ldapConfigured: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a Domains match when the LDAP host is a hostname", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, ldapConfigured: true,
+					ldapHost: "ad.example.com:636",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Domains: []string{"ad.example.com"},
+						Ports:   networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a /32 Nets match when the LDAP host is an IPv4 address", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, ldapConfigured: true,
+					ldapHost: "10.20.30.40:389",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets:  []string{"10.20.30.40/32"},
+						Ports: networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a /128 Nets match when the LDAP host is an IPv6 address", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, ldapConfigured: true,
+					ldapHost: "[2001:db8::1]:636",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets:  []string{"2001:db8::1/128"},
+						Ports: networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when LDAP auth is not configured, even with RBAC UI enabled", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					manager: rbacUIManager, ldapConfigured: false,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when LDAP auth is configured but RBAC UI is disabled", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					ldapConfigured: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress in multi-tenant mode even with RBAC UI enabled and LDAP auth configured", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation:      installation,
+					ns:                "tenant-a",
+					bindingNamespaces: []string{"tenant-a"},
+					tenant: &operatorv1.Tenant{
+						ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+						Spec: operatorv1.TenantSpec{
+							ID:                    "tenant-a",
+							ManagedClusterVariant: &operatorv1.Calico,
+						},
+					},
+					manager:        rbacUIManager,
+					ldapConfigured: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(
+					types.NamespacedName{Name: "calico-system.manager-access", Namespace: "tenant-a"}, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+		})
+	})
 })
 
 type renderConfig struct {
@@ -1746,6 +1978,10 @@ type renderConfig struct {
 	tenant                  *operatorv1.Tenant
 	manager                 *operatorv1.Manager
 	externalElastic         bool
+	// ldapConfigured, when true, sets Authentication.spec.ldap (gating the RBAC-UI
+	// LDAP egress rule); ldapHost sets Authentication.spec.ldap.host (scoping it).
+	ldapConfigured bool
+	ldapHost       string
 }
 
 func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
@@ -1813,6 +2049,12 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 		Manager:                 roc.manager,
 		ExternalElastic:         roc.externalElastic,
 		CACertCommonName:        certificateManager.CACertCommonName(),
+	}
+
+	if roc.ldapConfigured {
+		cfg.Authentication = &operatorv1.Authentication{
+			Spec: operatorv1.AuthenticationSpec{LDAP: &operatorv1.AuthenticationLDAP{Host: roc.ldapHost}},
+		}
 	}
 
 	if roc.tenant.MultiTenant() {

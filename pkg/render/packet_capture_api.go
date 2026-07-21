@@ -26,6 +26,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -46,6 +47,12 @@ const (
 	PacketCaptureServiceAccountName     = PacketCaptureName
 	PacketCaptureClusterRoleName        = PacketCaptureName
 	PacketCaptureClusterRoleBindingName = PacketCaptureName
+	// PacketCapturePodExecRole/Binding grant the PacketCapture API pod/exec
+	// access in the calico-system namespace. These keep their historical names
+	// (previously rendered by the log-collector component) so the move to this
+	// component adopts the existing objects in place.
+	PacketCapturePodExecRoleName        = "packetcapture-api-role"
+	PacketCapturePodExecRoleBindingName = "packetcapture-api-role-binding"
 	PacketCaptureDeploymentName         = PacketCaptureName
 	PacketCaptureServiceName            = PacketCaptureName
 	PacketCapturePolicyName             = networkpolicy.CalicoComponentPolicyPrefix + PacketCaptureName
@@ -122,6 +129,8 @@ func (pc *packetCaptureApiComponent) Objects() ([]client.Object, []client.Object
 		pc.serviceAccount(),
 		pc.clusterRole(),
 		pc.clusterRoleBinding(),
+		pc.podExecRole(),
+		pc.podExecRoleBinding(),
 		pc.deployment(),
 		pc.service(),
 	)
@@ -224,6 +233,54 @@ func (pc *packetCaptureApiComponent) clusterRoleBinding() *rbacv1.ClusterRoleBin
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
 			Name:     PacketCaptureClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      PacketCaptureServiceAccountName,
+				Namespace: PacketCaptureNamespace,
+			},
+		},
+	}
+}
+
+// podExecRole grants the PacketCapture API pod/exec and pod/list in the
+// calico-system namespace. The API retrieves capture files by exec-ing into the
+// per-node calico-node pod, which writes captures to the node's /var/log/calico
+// hostPath. Namespaced to calico-system to keep the grant least-privilege.
+func (pc *packetCaptureApiComponent) podExecRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PacketCapturePodExecRoleName,
+			Namespace: common.CalicoNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+		},
+	}
+}
+
+func (pc *packetCaptureApiComponent) podExecRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      PacketCapturePodExecRoleBindingName,
+			Namespace: common.CalicoNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     PacketCapturePodExecRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{

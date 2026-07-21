@@ -477,8 +477,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 			Expect(d.Labels).To(HaveLen(1))
 			Expect(d.Labels["top-level"]).To(Equal("label1"))
-			Expect(d.Annotations).To(HaveLen(1))
+			Expect(d.Annotations).To(HaveLen(2))
 			Expect(d.Annotations["top-level"]).To(Equal("annot1"))
+			// The render package records the applied resource override in an annotation.
+			Expect(d.Annotations["operator.tigera.io/custom-overrides"]).To(Equal("resources"))
 
 			Expect(d.Spec.MinReadySeconds).To(Equal(minReadySeconds))
 

@@ -157,6 +157,8 @@ var _ = Describe("Tenant controller", func() {
 
 		// Create the reconciler for the test.
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("Run").Return()
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("ReadyToMonitor")

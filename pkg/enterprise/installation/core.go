@@ -68,7 +68,12 @@ type installationRenderData struct {
 	// and the WAF v3 (Gateway API add-on) surface.
 	kubeControllerRules       []rbacv1.PolicyRule
 	kubeControllerControllers []string
-	waf                       wafRenderData
+
+	// rbacManagementEnabled mirrors Manager.spec.rbacUI being enabled; the kube-controllers
+	// modifier uses it to create the rbacsync controller's namespaced Role/RoleBinding.
+	rbacManagementEnabled bool
+
+	waf wafRenderData
 }
 
 // installationData pulls the installation extension's render data back out of the
@@ -194,12 +199,21 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (con
 		return cc, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
 	}
 
+	// The rbacsync controller reconciles the ClusterRoles backing the Manager UI's RBAC
+	// management feature; it runs only when Manager.spec.rbacUI is enabled.
+	managerCR, err := utils.GetManager(cc.Ctx, cc.Client, false, "")
+	if err != nil {
+		return cc, nil, fmt.Errorf("error reading Manager: %w", err)
+	}
+	rbacManagementEnabled := managerCR.RBACManagementEnabled()
+
 	cc.Extension = installationRenderData{
 		nodePrometheusTLS:         nodePrometheusTLS,
 		kubeControllerTLS:         kubeControllerTLS,
 		collectProcessPath:        collectProcessPathEnabled(logCollector),
-		kubeControllerRules:       calicoKubeControllersEnterpriseRules(waf.enabled, managementClusterConnection != nil),
-		kubeControllerControllers: calicoKubeControllersEnterpriseControllers(waf.enabled),
+		kubeControllerRules:       calicoKubeControllersEnterpriseRules(waf.gatewayAPIPresent, managementClusterConnection != nil, rbacManagementEnabled),
+		kubeControllerControllers: calicoKubeControllersEnterpriseControllers(waf.gatewayAPIPresent, rbacManagementEnabled),
+		rbacManagementEnabled:     rbacManagementEnabled,
 		waf:                       waf,
 	}
 

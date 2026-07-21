@@ -577,20 +577,20 @@ var _ = Describe("Status reporting tests", func() {
 
 				It("should not flag a pod unready for less than the grace period", func() {
 					Expect(client.Create(ctx, notReadyPod("recently-unready", time.Now().Add(-10*time.Second)))).NotTo(HaveOccurred())
-					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
 					Expect(issues).To(BeEmpty())
 				})
 
 				It("should flag a pod unready for longer than the grace period", func() {
 					Expect(client.Create(ctx, notReadyPod("long-unready", time.Now().Add(-90*time.Second)))).NotTo(HaveOccurred())
-					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
 					Expect(issues).To(HaveLen(1))
 					Expect(issues[0].issueType).To(Equal(issueNotReady))
 				})
 
 				It("should not flag a pod with an unset LastTransitionTime", func() {
 					Expect(client.Create(ctx, notReadyPod("no-transition-time", time.Time{}))).NotTo(HaveOccurred())
-					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
 					Expect(issues).To(BeEmpty())
 				})
 
@@ -605,13 +605,13 @@ var _ = Describe("Status reporting tests", func() {
 					}
 					pod := withReadinessProbe(notReadyPod("slow-start", time.Now().Add(-90*time.Second)), probe)
 					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
-					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
 					Expect(issues).To(BeEmpty())
 
 					// Once it has been unready past the derived window, it is flagged.
 					pod2 := withReadinessProbe(notReadyPod("slow-start-stuck", time.Now().Add(-400*time.Second)), probe)
 					Expect(client.Create(ctx, pod2)).NotTo(HaveOccurred())
-					issues = sm.diagnosePods("Test", selector, "NS1", "")
+					issues = sm.diagnosePods("Test", selector, "NS1", "", nil)
 					Expect(issues).To(HaveLen(1))
 					Expect(issues[0].issueType).To(Equal(issueNotReady))
 				})
@@ -622,7 +622,7 @@ var _ = Describe("Status reporting tests", func() {
 					probe := &corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3}
 					pod := withReadinessProbe(notReadyPod("tight-probe", time.Now().Add(-45*time.Second)), probe)
 					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
-					issues := sm.diagnosePods("Test", selector, "NS1", "")
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
 					Expect(issues).To(BeEmpty())
 				})
 			})
@@ -1244,7 +1244,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueCrashLoopBackOff))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1270,7 +1270,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).To(ContainSubstring("possible liveness probe failure"))
 		})
@@ -1289,7 +1289,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueImagePull))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1309,7 +1309,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueTerminated))
 		})
@@ -1320,7 +1320,7 @@ var _ = Describe("Status reporting tests", func() {
 				Spec:       corev1.PodSpec{},
 				Status:     corev1.PodStatus{Phase: corev1.PodFailed},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePodFailed))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1337,7 +1337,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueNotReady))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1358,7 +1358,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePending))
 			Expect(issues[0].severity).To(Equal(severityProgressing))
@@ -1371,7 +1371,7 @@ var _ = Describe("Status reporting tests", func() {
 				Spec:       corev1.PodSpec{},
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePending))
 			Expect(issues[0].severity).To(Equal(severityProgressing))
@@ -1402,7 +1402,7 @@ var _ = Describe("Status reporting tests", func() {
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			})).NotTo(HaveOccurred())
 
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(2))
 		})
 
@@ -1417,8 +1417,87 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods("Test", selector, "ns", "")
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(BeEmpty())
+		})
+
+		It("should add readiness probe hint when pod is not ready and readinessProbe override is configured", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute))},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			overrides := map[string]string{"operator.tigera.io/custom-overrides": "readinessProbe,resources"}
+			issues := sm.diagnosePods("Test", selector, "ns", "", overrides)
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].message).To(ContainSubstring("custom readiness probe configuration is in effect"))
+		})
+
+		It("should add liveness probe hint when pod has possible liveness failure and livenessProbe override is configured", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: terminationReasonError, ExitCode: exitCodeSIGKILL},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			overrides := map[string]string{"operator.tigera.io/custom-overrides": "livenessProbe"}
+			issues := sm.diagnosePods("Test", selector, "ns", "", overrides)
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].message).To(ContainSubstring("custom liveness probe configuration is in effect"))
+		})
+
+		It("should add resources hint when pod is OOMKilled and resources override is configured", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "c1",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			overrides := map[string]string{"operator.tigera.io/custom-overrides": "resources"}
+			issues := sm.diagnosePods("Test", selector, "ns", "", overrides)
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].message).To(ContainSubstring("custom resource limits are in effect"))
+		})
+
+		It("should not add hints when no override annotation is present", func() {
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: podMeta,
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute))},
+					},
+				},
+			})).NotTo(HaveOccurred())
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
+			Expect(issues).To(HaveLen(1))
+			Expect(issues[0].message).NotTo(ContainSubstring("custom"))
 		})
 	})
 

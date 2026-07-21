@@ -181,7 +181,7 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3
 	dest := v3.EntityRule{Ports: networkpolicy.Ports(render.GuardianTargetPort)}
 	helper := networkpolicy.DefaultHelper()
 	ingressRules := []v3.Rule{
-		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: render.FluentdSourceEntityRule, Destination: dest},
+		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: render.FluentBitSourceEntityRule, Destination: dest},
 		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceBenchmarkerSourceEntityRule(), Destination: dest},
 		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceReporterSourceEntityRule(), Destination: dest},
 		{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: helper.ComplianceSnapshotterSourceEntityRule(), Destination: dest},

@@ -466,6 +466,18 @@ spec:
                     to hold one entry per workload and a handful of entries per host (enough to cover its own IPs and
                     tunnel IPs).
                   type: integer
+                bpfOverlayHostSourceIP:
+                  description: |-
+                    BPFOverlayHostSourceIP controls the source IP that Felix uses in BPF mode for host-networked
+                    (node-originated) traffic egressing over an IPIP/VXLAN overlay tunnel.  "TunnelAddress" (the default)
+                    assigns an IP address to the overlay tunnel device and uses it as the source, preserving the behaviour
+                    of clusters upgraded from earlier releases.  "HostAddress" uses the node's own IP directly and does not
+                    assign a tunnel device IP.  This option has no effect on WireGuard tunnels, which always use a tunnel
+                    device IP.  [Default: TunnelAddress]
+                  enum:
+                    - TunnelAddress
+                    - HostAddress
+                  type: string
                 bpfPSNATPorts:
                   anyOf:
                     - type: integer
@@ -970,7 +982,7 @@ spec:
                 flowLogsDynamicAggregationEnabled:
                   description:
                     FlowLogsDynamicAggregationEnabled is used to enable/disable
-                    dynamically changing aggregation levels. Default is true.
+                    dynamically changing aggregation levels. Default is false.
                   type: boolean
                 flowLogsEnableHostEndpoint:
                   description:
@@ -1125,7 +1137,9 @@ spec:
                   type: string
                 flowLogsPositionFilePath:
                   description: |-
-                    FlowLogsPositionFilePath is used specify the position of the external pipeline that reads flow logs. Default is /var/log/calico/flows.log.pos.
+                    FlowLogsPositionFilePath is the path of the log collector's tail-offset database for flow logs (fluent-bit's
+                    in_tail SQLite DB), used to determine how far behind the flow logs the collector is.
+                    Default is /var/log/calico/calico-fluent-bit/in_tail_flows.db.
                     This parameter only takes effect when FlowLogsDynamicAggregationEnabled is set to true.
                   type: string
                 genericXDPEnabled:
@@ -1748,9 +1762,12 @@ spec:
                   type: integer
                 nftablesMode:
                   default: Auto
-                  description:
-                    "NFTablesMode configures nftables support in Felix. [Default:
-                    Auto]"
+                  description: |-
+                    NFTablesMode configures nftables support in Felix. In Auto mode, Felix uses the
+                    nftables dataplane if kube-proxy is detected to be running in nftables mode.
+                    On non-cluster hosts, which have no kube-proxy, Felix uses the nftables
+                    dataplane if the host meets its minimum kernel and nft version requirements.
+                    [Default: Auto]
                   enum:
                     - Disabled
                     - Enabled
@@ -2128,8 +2145,9 @@ spec:
                   type: string
                 windowsFlowLogsPositionFilePath:
                   description: |-
-                    WindowsFlowLogsPositionFilePath is used to specify the position of the external pipeline that reads flow logs on Windows nodes.
-                    [Default: "c:\\TigeraCalico\\flowlogs\\flows.log.pos"].
+                    WindowsFlowLogsPositionFilePath is the path of the log collector's tail-offset database for flow logs
+                    (fluent-bit's in_tail SQLite DB) on Windows nodes.
+                    [Default: "c:\\TigeraCalico\\calico-fluent-bit\\in_tail_flows.db"].
                     This parameter only takes effect when FlowLogsDynamicAggregationEnabled is set to true.
                   type: string
                 windowsManageFirewallRules:

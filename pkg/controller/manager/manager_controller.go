@@ -233,23 +233,6 @@ type ReconcileManager struct {
 	opts            options.ControllerOptions
 }
 
-// GetManager returns the default manager instance with defaults populated.
-func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Manager, error) {
-	key := client.ObjectKey{Name: "tigera-secure"}
-	if mt {
-		key.Namespace = ns
-	}
-
-	// Fetch the manager instance. We only support a single instance named "tigera-secure".
-	instance := &operatorv1.Manager{}
-	err := cli.Get(ctx, key, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
 // and what is in the Manager.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
@@ -276,15 +259,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
-	instance, err := GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
+	instance, err := utils.GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			logc.Info("Manager object not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
-		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Manager", err, logc)
 		return reconcile.Result{}, err
+	}
+	if instance == nil {
+		logc.Info("Manager object not found")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	}
 	logc.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
@@ -719,6 +702,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		BindingNamespaces:          namespaces,
 		OSSTenantNamespaces:        ossTenantNamespaces,
 		Manager:                    instance,
+		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
 		CACertCommonName:           certificateManager.CACertCommonName(),
 	}

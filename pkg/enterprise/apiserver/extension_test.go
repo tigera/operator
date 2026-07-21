@@ -27,6 +27,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -38,6 +39,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
@@ -315,6 +318,95 @@ var _ = Describe("API server enterprise modifier", func() {
 			qs := container(dp, string(render.TigeraAPIServerQueryServerContainerName))
 			Expect(qs).NotTo(BeNil())
 			Expect(qs.Env).To(ContainElement(HaveField("Name", "LINSEED_TOKEN")))
+		})
+	})
+
+	Context("multi-tenant management cluster", func() {
+		// renderMultiTenantAPIServer mirrors renderAPIServer but sets MultiTenant on the render
+		// config, so the modifier takes the multi-tenant RBAC branch.
+		renderMultiTenantAPIServer := func(cc contexts.ControllerContext, rc render.RenderContext, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
+			cfg := &render.APIServerConfiguration{
+				RequiresAggregationServer: true,
+				K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
+				Installation:              cc.Installation,
+				APIServer:                 &operatorv1.APIServerSpec{},
+				TLSKeyPair:                kp,
+				TrustedBundle:             rc.TrustedBundle,
+				KubernetesVersion:         &common.VersionInfo{Major: 1, Minor: 31},
+				MultiTenant:               true,
+			}
+			comp, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
+			create, del := comp.Objects()
+
+			ec := comp.(render.ExtensionContextProvider).ExtensionContext()
+			return extensionstest.ApplyExtensionsWithContext(ext, render.ComponentNameAPIServer, rc, ec, create, del)
+		}
+
+		tenant := func(namespace string) *operatorv1.Tenant {
+			return &operatorv1.Tenant{
+				ObjectMeta: metav1.ObjectMeta{Name: "default", Namespace: namespace},
+				Spec:       operatorv1.TenantSpec{ID: namespace},
+			}
+		}
+
+		// multiTenantExt builds an enterprise Set whose computed options report multi-tenant
+		// mode. ExtendContext reads the mode off the Set's options (not cc.Options, which it
+		// overwrites), so the tenant-namespace lookup only runs when the Set carries it.
+		multiTenantExt := func() *extensions.Set {
+			s := enterprise.New()
+			s.RegisterOptions(func(context.Context, kubernetes.Interface) (any, error) {
+				return eoptions.Options{MultiTenant: true}, nil
+			})
+			Expect(s.ComputeOptions(context.Background(), nil)).NotTo(HaveOccurred())
+			return s
+		}
+
+		It("grants each tenant's calico-apiserver service account least-privilege Linseed access", func() {
+			cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil, tenant("tenant-a"), tenant("tenant-b"))
+			ecc, _, err := multiTenantExt().ExtendContext(cc)
+			rc := ecc.RenderContext
+			Expect(err).NotTo(HaveOccurred())
+
+			objs, _ := renderMultiTenantAPIServer(cc, rc, apiServerKeyPair(cc))
+
+			// A dedicated, Linseed-only ClusterRole.
+			role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-apiserver-linseed-access")
+			Expect(ok).To(BeTrue())
+			Expect(role.Rules).To(ConsistOf(rbacv1.PolicyRule{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"policyactivity"},
+				Verbs:     []string{"get"},
+			}))
+
+			// A single ClusterRoleBinding with one calico-apiserver ServiceAccount subject per tenant
+			// namespace. Linseed authorizes with a cluster-scoped SubjectAccessReview, so this must be a
+			// ClusterRoleBinding.
+			crb, ok := extensions.FindObject[*rbacv1.ClusterRoleBinding](objs, "calico-apiserver-linseed-access")
+			Expect(ok).To(BeTrue())
+			Expect(crb.RoleRef.Name).To(Equal("calico-apiserver-linseed-access"))
+			Expect(crb.Subjects).To(ConsistOf(
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-a"},
+				rbacv1.Subject{Kind: "ServiceAccount", Name: render.APIServerServiceAccountName, Namespace: "tenant-b"},
+			))
+
+			// The zero-tenant user/network-admin roles are not installed in multi-tenant mode.
+			_, ok = extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
+			Expect(ok).To(BeFalse())
+		})
+
+		It("queues the Linseed-access RBAC for deletion in zero-tenant mode", func() {
+			cc := apiServerControllerContext(operatorv1.CalicoEnterprise, nil)
+			ecc, _, err := ext.ExtendContext(cc)
+			rc := ecc.RenderContext
+			Expect(err).NotTo(HaveOccurred())
+
+			_, del := renderAPIServer(cc, rc, apiServerKeyPair(cc))
+			_, ok := extensions.FindObject[*rbacv1.ClusterRole](del, "calico-apiserver-linseed-access")
+			Expect(ok).To(BeTrue())
+			_, ok = extensions.FindObject[*rbacv1.ClusterRoleBinding](del, "calico-apiserver-linseed-access")
+			Expect(ok).To(BeTrue())
 		})
 	})
 

@@ -22,17 +22,22 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -45,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
+	rlogcollector "github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
@@ -77,6 +83,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("RemoveDaemonsets", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 		mockStatus.On("AddCertificateSigningRequests", mock.Anything).Return()
 		mockStatus.On("IsAvailable").Return(true)
 		mockStatus.On("OnCRFound").Return()
@@ -141,13 +148,6 @@ var _ = Describe("LogCollector controller tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))) // Persist the root-ca in the operator namespace.
 
-		Expect(c.Create(ctx, &corev1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      render.ElasticsearchEksLogForwarderUserSecret,
-				Namespace: "tigera-operator",
-			},
-		})).NotTo(HaveOccurred())
-
 		prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(c.Create(ctx, prometheusTLS.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -174,7 +174,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -185,16 +185,16 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentFluentd.Image,
-					components.ComponentFluentd.Version)))
+					components.ComponentFluentBit.Image,
+					components.ComponentFluentBit.Version)))
 		})
 		It("should use images from imageset", func() {
 			Expect(c.Create(ctx, &operatorv1.ImageSet{
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/fluentd", Digest: "sha256:fluentdhash"},
-						{Image: "tigera/fluentd-windows", Digest: "sha256:fluentdwindowshash"},
+						{Image: "tigera/fluent-bit", Digest: "sha256:fluentbithash"},
+						{Image: "tigera/fluent-bit-windows", Digest: "sha256:fluentbitwindowshash"},
 						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
@@ -215,7 +215,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -226,10 +226,10 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentFluentd.Image,
-					"sha256:fluentdhash")))
+					components.ComponentFluentBit.Image,
+					"sha256:fluentbithash")))
 
-			ds.Name = "fluentd-node-windows"
+			ds.Name = "calico-fluent-bit-windows"
 			Expect(test.GetResource(c, &ds)).To(BeNil())
 			Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
 			node = ds.Spec.Template.Spec.Containers[0]
@@ -237,14 +237,69 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(node.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentFluentdWindows.Image,
-					"sha256:fluentdwindowshash")))
+					components.ComponentFluentBitWindows.Image,
+					"sha256:fluentbitwindowshash")))
+		})
+
+		It("should keep the non-cluster-host ingress rule on the fluent-bit policy when Windows nodes are present", func() {
+			// The allow-calico-fluent-bit NetworkPolicy is rendered exactly once,
+			// by the shared component; with Windows nodes present (both OS
+			// components rendered) the policy must still carry the
+			// non-cluster-host ingress rule (port 9880, voltron -> http input)
+			// gated on NonClusterHost — a regression here would reintroduce the
+			// per-OS render contention that used to flap this rule.
+			Expect(c.Create(ctx, &corev1.Node{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "windows-node",
+					Labels: map[string]string{"kubernetes.io/os": "windows"},
+				},
+			})).ToNot(HaveOccurred())
+			Expect(c.Create(ctx, &operatorv1.NonClusterHost{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec:       operatorv1.NonClusterHostSpec{Endpoint: "https://1.2.3.4:5678"},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			policy := v3.NetworkPolicy{
+				TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+				ObjectMeta: metav1.ObjectMeta{Name: "calico-system.allow-calico-fluent-bit", Namespace: render.LogCollectorNamespace},
+			}
+			Expect(test.GetResource(c, &policy)).To(BeNil())
+			// Metrics rule (2020) + non-cluster-host rule (9880). Without the fix the
+			// Windows render (applied last) drops the 9880 rule, leaving only one.
+			Expect(policy.Spec.Ingress).To(HaveLen(2))
+		})
+
+		It("should degrade when the syslog endpoint scheme is not tcp or udp", func() {
+			lc := &operatorv1.LogCollector{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, lc)).NotTo(HaveOccurred())
+			lc.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+				Syslog: &operatorv1.SyslogStoreSpec{
+					Endpoint: "http://1.2.3.4:514",
+					LogTypes: []operatorv1.SyslogLogType{operatorv1.SyslogLogFlows},
+				},
+			}
+			Expect(c.Update(ctx, lc)).NotTo(HaveOccurred())
+			By("Setting the license to export logs")
+			Expect(c.Delete(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}})).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &v3.LicenseKey{ObjectMeta: metav1.ObjectMeta{Name: "default"}, Status: v3.LicenseKeyStatus{Features: []string{common.ExportLogsFeature}}})).NotTo(HaveOccurred())
+
+			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError,
+				`Syslog config has invalid Endpoint scheme "http": only tcp:// and udp:// are supported`,
+				mock.Anything, mock.Anything).Return()
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError,
+				`Syslog config has invalid Endpoint scheme "http": only tcp:// and udp:// are supported`,
+				mock.Anything, mock.Anything)
 		})
 
 		Context("Forward to S3", func() {
 			s3Vars := []corev1.EnvVar{
 				{
-					Name:  "AWS_KEY_ID",
+					Name:  "AWS_ACCESS_KEY_ID",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -256,7 +311,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					},
 				},
 				{
-					Name:  "AWS_SECRET_KEY",
+					Name:  "AWS_SECRET_ACCESS_KEY",
 					Value: "",
 					ValueFrom: &corev1.EnvVarSource{
 						SecretKeyRef: &corev1.SecretKeySelector{
@@ -267,11 +322,6 @@ var _ = Describe("LogCollector controller tests", func() {
 						},
 					},
 				},
-				{Name: "S3_STORAGE", Value: "true"},
-				{Name: "S3_BUCKET_NAME", Value: "s3Bucket"},
-				{Name: "AWS_REGION", Value: "s3Region"},
-				{Name: "S3_BUCKET_PATH", Value: "s3Path"},
-				{Name: "S3_FLUSH_INTERVAL", Value: "5s"},
 			}
 
 			BeforeEach(func() {
@@ -314,7 +364,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "fluentd-node",
+						Name:      "calico-fluent-bit",
 						Namespace: render.LogCollectorNamespace,
 					},
 				}
@@ -323,6 +373,18 @@ var _ = Describe("LogCollector controller tests", func() {
 				node := ds.Spec.Template.Spec.Containers[0]
 				Expect(node).ToNot(BeNil())
 				Expect(node.Env).To(ContainElements(s3Vars))
+
+				// The bucket settings live in the rendered config rather than
+				// env vars.
+				cm := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &cm)).To(BeNil())
+				conf := cm.Data["fluent-bit.yaml"]
+				Expect(conf).To(ContainSubstring(`"name": "s3"`))
+				Expect(conf).To(ContainSubstring(`"bucket": "s3Bucket"`))
+				Expect(conf).To(ContainSubstring(`"region": "s3Region"`))
 			})
 
 			Context("Disable feature via license", func() {
@@ -341,7 +403,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					ds := appsv1.DaemonSet{
 						TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "fluentd-node",
+							Name:      "calico-fluent-bit",
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
@@ -370,13 +432,6 @@ var _ = Describe("LogCollector controller tests", func() {
 						},
 					},
 				},
-				{Name: "SPLUNK_FLOW_LOG", Value: "true"},
-				{Name: "SPLUNK_AUDIT_LOG", Value: "true"},
-				{Name: "SPLUNK_DNS_LOG", Value: "true"},
-				{Name: "SPLUNK_HEC_HOST", Value: "localhost"},
-				{Name: "SPLUNK_HEC_PORT", Value: "1234"},
-				{Name: "SPLUNK_PROTOCOL", Value: "https"},
-				{Name: "SPLUNK_FLUSH_INTERVAL", Value: "5s"},
 			}
 
 			BeforeEach(func() {
@@ -416,7 +471,7 @@ var _ = Describe("LogCollector controller tests", func() {
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "fluentd-node",
+						Name:      "calico-fluent-bit",
 						Namespace: render.LogCollectorNamespace,
 					},
 				}
@@ -425,6 +480,61 @@ var _ = Describe("LogCollector controller tests", func() {
 				node := ds.Spec.Template.Spec.Containers[0]
 				Expect(node).ToNot(BeNil())
 				Expect(node.Env).To(ContainElements(splunkVars))
+
+				// The endpoint settings live in the rendered config rather than
+				// env vars.
+				cm := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &cm)).To(BeNil())
+				conf := cm.Data["fluent-bit.yaml"]
+				Expect(conf).To(ContainSubstring(`"name": "splunk"`))
+				Expect(conf).To(ContainSubstring(`"host": "localhost"`))
+				Expect(conf).To(ContainSubstring(`"splunk_token": "${SPLUNK_HEC_TOKEN}"`))
+			})
+
+			It("renders a user-supplied Splunk CA into fluent-bit's bundle", func() {
+				caPEM := "-----BEGIN CERTIFICATE-----\nsplunk-user-ca\n-----END CERTIFICATE-----"
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.SplunkCAConfigMapName, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{corev1.TLSCertKey: caPEM},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				bundle := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-ca-bundle-system-certs", Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &bundle)).To(BeNil())
+				Expect(bundle.Data["tigera-ca-bundle.crt"]).To(ContainSubstring(caPEM))
+			})
+
+			It("does not load the Splunk CA for a plain-http endpoint", func() {
+				lc := operatorv1.LogCollector{
+					TypeMeta:   metav1.TypeMeta{Kind: "LogCollector", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				}
+				Expect(test.GetResource(c, &lc)).To(BeNil())
+				lc.Spec.AdditionalStores.Splunk.Endpoint = "http://localhost:1234"
+				Expect(c.Update(ctx, &lc)).NotTo(HaveOccurred())
+				caPEM := "-----BEGIN CERTIFICATE-----\nsplunk-user-ca\n-----END CERTIFICATE-----"
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.SplunkCAConfigMapName, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{corev1.TLSCertKey: caPEM},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				bundle := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-ca-bundle-system-certs", Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &bundle)).To(BeNil())
+				Expect(bundle.Data["tigera-ca-bundle.crt"]).NotTo(ContainSubstring(caPEM))
 			})
 
 			Context("Disable feature via license", func() {
@@ -444,7 +554,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					ds := appsv1.DaemonSet{
 						TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "fluentd-node",
+							Name:      "calico-fluent-bit",
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
@@ -461,30 +571,6 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		Context("Forward to Syslog", func() {
-			syslogVars := []corev1.EnvVar{
-				{Name: "SYSLOG_HOST", Value: "localhost"},
-				{Name: "SYSLOG_PORT", Value: "1234"},
-				{Name: "SYSLOG_PROTOCOL", Value: "https"},
-				{Name: "SYSLOG_FLUSH_INTERVAL", Value: "5s"},
-				{
-					Name: "SYSLOG_HOSTNAME",
-					ValueFrom: &corev1.EnvVarSource{
-						FieldRef: &corev1.ObjectFieldSelector{
-							FieldPath: "spec.nodeName",
-						},
-					},
-				},
-				{
-					Name:  "SYSLOG_PACKET_SIZE",
-					Value: "0",
-				},
-				{Name: "SYSLOG_AUDIT_EE_LOG", Value: "true"},
-				{Name: "SYSLOG_AUDIT_KUBE_LOG", Value: "true"},
-				{Name: "SYSLOG_DNS_LOG", Value: "true"},
-				{Name: "SYSLOG_FLOW_LOG", Value: "true"},
-				{Name: "SYSLOG_IDS_EVENT_LOG", Value: "true"},
-			}
-
 			BeforeEach(func() {
 				By("Specify splunk log storage")
 				Expect(c.Delete(ctx, &operatorv1.LogCollector{
@@ -495,7 +581,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					Spec: operatorv1.LogCollectorSpec{
 						AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
 							Syslog: &operatorv1.SyslogStoreSpec{
-								Endpoint:   "https://localhost:1234",
+								Endpoint:   "tcp://localhost:1234",
 								PacketSize: new(int32),
 								LogTypes: []operatorv1.SyslogLogType{
 									operatorv1.SyslogLogAudit,
@@ -520,15 +606,61 @@ var _ = Describe("LogCollector controller tests", func() {
 				ds := appsv1.DaemonSet{
 					TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "fluentd-node",
+						Name:      "calico-fluent-bit",
 						Namespace: render.LogCollectorNamespace,
 					},
 				}
 				Expect(test.GetResource(c, &ds)).To(BeNil())
 				Expect(ds.Spec.Template.Spec.Containers).To(HaveLen(1))
-				node := ds.Spec.Template.Spec.Containers[0]
-				Expect(node).ToNot(BeNil())
-				Expect(node.Env).To(ContainElements(syslogVars))
+
+				// Syslog forwarding is fully config-driven (no env contract).
+				cm := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &cm)).To(BeNil())
+				conf := cm.Data["fluent-bit.yaml"]
+				Expect(conf).To(ContainSubstring(`"name": "syslog"`))
+				Expect(conf).To(ContainSubstring(`"host": "localhost"`))
+				Expect(conf).To(ContainSubstring(`"mode": "tcp"`))
+				// The whole record ships as one JSON MSG via the lua packer.
+				Expect(conf).To(ContainSubstring(`"call": "syslog_pack"`))
+			})
+
+			It("renders the syslog user CA into fluent-bit's own bundle, not the shared tigera-ca-bundle", func() {
+				By("Switching the syslog store to TLS with a user-supplied CA")
+				lc := operatorv1.LogCollector{
+					TypeMeta:   metav1.TypeMeta{Kind: "LogCollector", APIVersion: "operator.tigera.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				}
+				Expect(test.GetResource(c, &lc)).To(BeNil())
+				lc.Spec.AdditionalStores.Syslog.Encryption = operatorv1.EncryptionTLS
+				Expect(c.Update(ctx, &lc)).NotTo(HaveOccurred())
+				caPEM := "-----BEGIN CERTIFICATE-----\nsyslog-user-ca\n-----END CERTIFICATE-----"
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.SyslogCAConfigMapName, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{corev1.TLSCertKey: caPEM},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				// The bundle must be fluent-bit's own: the core Installation controller
+				// renders calico-system's shared tigera-ca-bundle with a different
+				// certificate set, so additions made there would be overwritten.
+				bundle := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "calico-fluent-bit-ca-bundle-system-certs", Namespace: render.LogCollectorNamespace},
+				}
+				Expect(test.GetResource(c, &bundle)).To(BeNil())
+				Expect(bundle.Data["tigera-ca-bundle.crt"]).To(ContainSubstring(caPEM))
+
+				shared := corev1.ConfigMap{
+					TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: render.LogCollectorNamespace},
+				}
+				Expect(errors.IsNotFound(test.GetResource(c, &shared))).To(BeTrue(),
+					"the logcollector controller must not render the shared tigera-ca-bundle")
 			})
 
 			Context("Disable feature via license", func() {
@@ -548,7 +680,7 @@ var _ = Describe("LogCollector controller tests", func() {
 					ds := appsv1.DaemonSet{
 						TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      "fluentd-node",
+							Name:      "calico-fluent-bit",
 							Namespace: render.LogCollectorNamespace,
 						},
 					}
@@ -769,6 +901,49 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 	})
 
+	Context("user filters validation", func() {
+		It("should warn (not degrade) on unparseable filter content and clear the warning once fixed", func() {
+			filtersCM := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rlogcollector.FluentBitFilterConfigMapName,
+					Namespace: common.OperatorNamespace(),
+				},
+				Data: map[string]string{
+					// A leftover fluentd-syntax filter: not a fluent-bit YAML list.
+					"flow": "<filter flows>\n  @type grep\n</filter>",
+					// A valid fluent-bit YAML filter list.
+					"dns": "- name: grep\n  exclude: qname noisy.example.com",
+				},
+			}
+			Expect(c.Create(ctx, filtersCM)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "fluent-bit-filter-flow", mock.Anything)
+			mockStatus.AssertNotCalled(GinkgoT(), "SetWarning", "fluent-bit-filter-dns", mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "fluent-bit-filter-dns")
+
+			// Rendering continued: the valid dns filter is inlined into the
+			// config while the invalid flow filter is skipped.
+			cm := corev1.ConfigMap{
+				TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: rlogcollector.FluentBitConfConfigMapName, Namespace: render.LogCollectorNamespace},
+			}
+			Expect(test.GetResource(c, &cm)).To(BeNil())
+			Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring("noisy.example.com"))
+			Expect(cm.Data["fluent-bit.yaml"]).NotTo(ContainSubstring("<filter"))
+
+			// Rewriting the filter as fluent-bit YAML clears the warning.
+			filtersCM.Data["flow"] = "- name: grep\n  exclude: action allow"
+			Expect(c.Update(ctx, filtersCM)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "fluent-bit-filter-flow")
+		})
+	})
+
 	Context("should test fillDefaults for logCollector", func() {
 		It("should set default values for CollectProcessPath, syslog types", func() {
 			logCollector := operatorv1.LogCollector{Spec: operatorv1.LogCollectorSpec{AdditionalStores: &operatorv1.AdditionalLogStoreSpec{
@@ -812,15 +987,16 @@ var _ = Describe("LogCollector controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(result.RequeueAfter).To(Equal(0 * time.Second))
 
-			// Expect namespace to be created
+			// The calico-system namespace is created and owned by the core
+			// Installation controller, NOT this reconciler — owning it here would
+			// let `kubectl delete logcollector` garbage-collect the whole
+			// namespace.
 			namespace := corev1.Namespace{
 				TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
 			}
-			Expect(c.Get(ctx, client.ObjectKey{
+			Expect(errors.IsNotFound(c.Get(ctx, client.ObjectKey{
 				Name: render.LogCollectorNamespace,
-			}, &namespace)).NotTo(HaveOccurred())
-			Expect(namespace.Labels["pod-security.kubernetes.io/enforce"]).To(Equal("privileged"))
-			Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
+			}, &namespace))).To(BeTrue())
 
 			// Expect operator rolebinding to be created
 			rb := rbacv1.RoleBinding{
@@ -849,8 +1025,8 @@ var _ = Describe("LogCollector controller tests", func() {
 	})
 
 	Context("License expiry", func() {
-		It("should set degraded status and delete fluentd DaemonSet when license is expired", func() {
-			// First reconcile to create fluentd resources.
+		It("should set degraded status and delete fluent-bit DaemonSet when license is expired", func() {
+			// First reconcile to create fluent-bit resources.
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -858,7 +1034,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -884,7 +1060,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds = appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -892,7 +1068,7 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 
 		It("should requeue when license is in the grace period", func() {
-			// First reconcile to create fluentd resources.
+			// First reconcile to create fluent-bit resources.
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
@@ -918,7 +1094,7 @@ var _ = Describe("LogCollector controller tests", func() {
 			ds := appsv1.DaemonSet{
 				TypeMeta: metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      "fluentd-node",
+					Name:      "calico-fluent-bit",
 					Namespace: render.LogCollectorNamespace,
 				},
 			}
@@ -926,3 +1102,56 @@ var _ = Describe("LogCollector controller tests", func() {
 		})
 	})
 })
+
+var _ = Describe("LogCollector controller watches", func() {
+	It("watches the rendered fluent-bit workloads so they are restored if deleted", func() {
+		m := &mockController{}
+		Expect(add(nil, m)).ShouldNot(HaveOccurred())
+
+		var daemonSets, deployments []string
+		for _, obj := range m.watchedObjects {
+			key := obj.GetNamespace() + "/" + obj.GetName()
+			switch obj.(type) {
+			case *appsv1.DaemonSet:
+				daemonSets = append(daemonSets, key)
+			case *appsv1.Deployment:
+				deployments = append(deployments, key)
+			}
+		}
+
+		Expect(daemonSets).To(ContainElements(
+			"calico-system/calico-fluent-bit",
+			"calico-system/calico-fluent-bit-windows",
+		))
+		Expect(deployments).To(ContainElement("calico-system/eks-log-forwarder"))
+	})
+})
+
+// mockController records the objects add() registers watches for, so tests can
+// assert on the watch set without a live manager.
+type mockController struct {
+	mock.Mock
+	watchedObjects []client.Object
+}
+
+func (m *mockController) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watchedObjects = append(m.watchedObjects, object)
+	return nil
+}
+
+func (m *mockController) Watch(src source.Source) error {
+	panic("not implemented")
+}
+
+func (m *mockController) Start(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockController) GetLogger() logr.Logger {
+	var logger logr.Logger
+	return logger
+}
+
+func (m *mockController) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+	return reconcile.Result{}, nil
+}

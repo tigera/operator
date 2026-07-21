@@ -176,8 +176,10 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		}))
 		// Metrics serving TLS wired from the keypair the hook created.
 		Expect(c.Env).To(ContainElement(HaveField("Name", "TLS_KEY_PATH")))
-		// WAF is off, so no WASM env and no webhook objects.
+		// No GatewayAPI CR at all, so no WASM env, no WAF_GATEWAY_EXTENSION_ENABLED env,
+		// and no webhook objects.
 		Expect(c.Env).NotTo(ContainElement(HaveField("Name", "WASM_IMAGE")))
+		Expect(c.Env).NotTo(ContainElement(HaveField("Name", "WAF_GATEWAY_EXTENSION_ENABLED")))
 		_, ok = extensions.FindObject[*corev1.Service](objs, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeFalse())
 	})
@@ -209,6 +211,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WASM_PULL_SECRET", Value: installation.WASMPullSecretName}))
 		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WASM_CA_CERT", Value: installation.WASMCACertName}))
 		Expect(c.Env).To(ContainElement(HaveField("Name", "WAF_WEBHOOK_CERT_DIR")))
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WAF_GATEWAY_EXTENSION_ENABLED", Value: "true"}))
 		Expect(c.Ports).To(ContainElement(corev1.ContainerPort{Name: "waf-webhook", ContainerPort: int32(9443), Protocol: corev1.ProtocolTCP}))
 
 		// The webhook surface, the wasm pull secret, and the wasm CA bundle are rendered.
@@ -233,6 +236,35 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 		_, ok := extensions.FindObject[*corev1.Service](toDelete, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeTrue(), "the webhook Service should be queued for deletion")
+	})
+
+	It("keeps the WAF controller wired but de-programs when GatewayAPI is present and WAF is disabled", func() {
+		cc := gatewayNoWAFControllerContext()
+		ecc, _, err := ext.ExtendContext(cc)
+		rc := ecc.RenderContext
+		Expect(err).NotTo(HaveOccurred())
+		objs := renderKubeControllers(cc, rc)
+
+		// The applicationlayer controller and its WAF v3 RBAC stay wired even though WAF
+		// is disabled, so the controller can tear down the EnvoyExtensionPolicies it
+		// generated instead of losing its RBAC in the same reconcile (EV-6751).
+		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole)
+		Expect(ok).To(BeTrue())
+		Expect(role.Rules).To(ContainElement(HaveField("Resources", ContainElement("wafpolicies"))))
+
+		c := kubeContainer(objs)
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{
+			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
+		}))
+		// It is told to de-program rather than program via WAF_GATEWAY_EXTENSION_ENABLED=false.
+		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "WAF_GATEWAY_EXTENSION_ENABLED", Value: "false"}))
+
+		// But none of the active surface: no WASM env, no webhook port, and the webhook
+		// objects are not created.
+		Expect(c.Env).NotTo(ContainElement(HaveField("Name", "WASM_IMAGE")))
+		Expect(c.Ports).NotTo(ContainElement(HaveField("Name", "waf-webhook")))
+		_, ok = extensions.FindObject[*corev1.Service](objs, applicationlayer.WAFWebhookServiceName)
+		Expect(ok).To(BeFalse())
 	})
 
 	It("adds the WAF webhook ingress rule to the network policy when enabled", func() {
@@ -275,6 +307,50 @@ func wafControllerContext() contexts.ControllerContext {
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 		Spec: operatorv1.GatewayAPISpec{
 			Extensions: &operatorv1.GatewayAPIExtensions{WAF: &operatorv1.WAFExtensionSpec{State: &enabled}},
+		},
+	})).NotTo(HaveOccurred())
+
+	certManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+	Expect(err).NotTo(HaveOccurred())
+
+	return contexts.ControllerContext{
+		RenderContext: render.RenderContext{
+			Installation: &operatorv1.InstallationSpec{
+				Variant:          operatorv1.CalicoEnterprise,
+				Registry:         "test-reg/",
+				ImagePullSecrets: []corev1.LocalObjectReference{{Name: "pull"}},
+			},
+			FelixConfiguration: &v3.FelixConfiguration{},
+			TrustedBundle:      certManager.CreateTrustedBundle(),
+			ClusterDomain:      "cluster.local",
+		},
+		Controller:         contexts.InstallationController,
+		Ctx:                context.Background(),
+		Client:             c,
+		CertificateManager: certManager,
+	}
+}
+
+// gatewayNoWAFControllerContext builds a controller context with a GatewayAPI CR
+// present but its WAF extension explicitly disabled. The applicationlayer controller
+// and its RBAC stay wired so it can de-program, but no active WAF surface is produced
+// (EV-6751).
+func gatewayNoWAFControllerContext() contexts.ControllerContext {
+	scheme := runtime.NewScheme()
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+	Expect(c.Create(context.Background(), &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{Name: "pull", Namespace: common.OperatorNamespace()},
+		Type:       corev1.SecretTypeDockerConfigJson,
+		Data:       map[string][]byte{corev1.DockerConfigJsonKey: []byte(`{"auths":{"reg.example.com":{"auth":"abc"}}}`)},
+	})).NotTo(HaveOccurred())
+
+	disabled := operatorv1.WAFExtensionStateDisabled
+	Expect(c.Create(context.Background(), &operatorv1.GatewayAPI{
+		ObjectMeta: metav1.ObjectMeta{Name: "default"},
+		Spec: operatorv1.GatewayAPISpec{
+			Extensions: &operatorv1.GatewayAPIExtensions{WAF: &operatorv1.WAFExtensionSpec{State: &disabled}},
 		},
 	})).NotTo(HaveOccurred())
 

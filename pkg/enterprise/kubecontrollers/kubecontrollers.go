@@ -131,10 +131,14 @@ func esKubeControllersEnv(cfg *rkc.KubeControllersConfiguration) []corev1.EnvVar
 }
 
 // KubeControllersEnterpriseCommonRules are the Calico Enterprise cluster role rules
-// shared by calico-kube-controllers and es-calico-kube-controllers. wafEnabled adds
-// the WAF v3 (Gateway API add-on) rules; managedCluster adds the license-push rule a
-// managed cluster's kube-controllers needs.
-func KubeControllersEnterpriseCommonRules(wafEnabled, managedCluster bool) []rbacv1.PolicyRule {
+// shared by calico-kube-controllers and es-calico-kube-controllers. gatewayAPIPresent
+// adds the WAF v3 (Gateway API add-on) rules - gated on the GatewayAPI CR existing, not
+// on waf.state == Enabled, so the applicationlayer controller keeps the RBAC it needs
+// to delete the EnvoyExtensionPolicies it generated while WAF is disabled (EV-6751); the
+// rule set is identical enabled vs disabled, so toggling waf.state causes no ClusterRole
+// churn. managedCluster adds the license-push rule a managed cluster's kube-controllers
+// needs.
+func KubeControllersEnterpriseCommonRules(gatewayAPIPresent, managedCluster bool) []rbacv1.PolicyRule {
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -182,7 +186,7 @@ func KubeControllersEnterpriseCommonRules(wafEnabled, managedCluster bool) []rba
 		},
 	}
 
-	if wafEnabled {
+	if gatewayAPIPresent {
 		rules = append(rules, wafRules()...)
 	}
 

@@ -14,7 +14,11 @@
 
 package istio
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 type GlobalConfig struct {
 	IstioNamespace         string           `json:"istioNamespace,omitempty"`
@@ -33,6 +37,10 @@ type ProxyInitConfig struct {
 	Image string `json:"image,omitempty"`
 }
 
+type GatewaysConfig struct {
+	SeccompProfile *corev1.SeccompProfile `json:"seccompProfile,omitempty"`
+}
+
 type AmbientConfig struct {
 	Enabled                    bool `json:"enabled,omitempty"`
 	ReconcileIptablesOnStartup bool `json:"reconcileIptablesOnStartup,omitempty"`
@@ -43,10 +51,11 @@ type BaseOpts struct {
 }
 
 type IstiodOpts struct {
-	Image                   string        `json:"image,omitempty"`
-	Global                  *GlobalConfig `json:"global,omitempty"`
-	Profile                 string        `json:"profile,omitempty"`
-	TrustedZtunnelNamespace string        `json:"trustedZtunnelNamespace,omitempty"`
+	Image                   string          `json:"image,omitempty"`
+	Global                  *GlobalConfig   `json:"global,omitempty"`
+	Gateways                *GatewaysConfig `json:"gateways,omitempty"`
+	Profile                 string          `json:"profile,omitempty"`
+	TrustedZtunnelNamespace string          `json:"trustedZtunnelNamespace,omitempty"`
 }
 
 type IstioCNIOpts struct {

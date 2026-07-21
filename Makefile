@@ -101,8 +101,15 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.4-llvm21.1.8-k8s1.36.2
-CALICO_BASE_VER ?= ubi9-1781568165
+# The project Go version.
+GO_VERSION?=1.26.5
+# Version of Kubernetes to use for dependencies, tests, and kubectl.
+K8S_VERSION?=v1.36.2
+# The version of LLVM to use for the go-build image.
+LLVM_VERSION?=21.1.8
+# Calico toolchain versions and the calico/go-build image to use.
+GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
+CALICO_BASE_VER ?= ubi9-1783525764
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -314,6 +321,7 @@ $(BINDIR)/kind:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(ISTIO_CHART_FILES)
+	rm -rf $(ENVOY_GATEWAY_CHART)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
@@ -451,6 +459,11 @@ format-check:
 	echo $$files; \
 	echo Try running \"make fix\" and committing any changes; \
 	exit 1'
+
+.PHONY: yaml-lint
+## Lint YAML files
+yaml-lint:
+	@docker run --rm $$(tty -s && echo "-it" || echo) -v $(CURDIR):/data cytopia/yamllint:latest .
 
 .PHONY: dirty-check
 dirty-check:

@@ -558,6 +558,66 @@ var _ = Describe("Elasticsearch rendering tests", func() {
 				newNodeName := rtest.GetResource(updatedResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch).Spec.NodeSets[0].Name
 				Expect(newNodeName).NotTo(Equal(oldNodeSetName))
 			})
+
+			// A non-canonical Quantity (e.g. "1024Gi") set in the resource requirements in the LogStorage CR
+			// is parsed by the operator and written into the Elasticsearch CR in its canonical form (e.g.
+			// "1Ti"). This is because when a Quantity is parsed, the requested string representation is
+			// ignored if it is non-canonical, leaving the default encoding logic of the Quantity to decide on
+			// the string representation. We must ensure that if the user specifies a non-canonical Quantity in
+			// the LogStorage, we do not view it as unequal to the canonical quantity we write to the
+			// Elasticsearch CR. Otherwise, we would wrongly conclude that the storage configuration changed
+			// and rename the NodeSet, which causes ECK to recreate the StatefulSet and its PVCs.
+			It("should retain the NodeSet name when the current storage quantity is equal but formatted differently", func() {
+				cfg.LogStorage = &operatorv1.LogStorage{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "tigera-secure",
+					},
+					Spec: operatorv1.LogStorageSpec{
+						Nodes: &operatorv1.Nodes{
+							Count: 1,
+							ResourceRequirements: &corev1.ResourceRequirements{
+								Requests: corev1.ResourceList{
+									"storage": resource.MustParse("1024Gi"),
+								},
+							},
+						},
+						StorageClassName: "tigera-elasticsearch",
+					},
+				}
+				cfg.Elasticsearch = &esv1.Elasticsearch{
+					Spec: esv1.ElasticsearchSpec{
+						NodeSets: []esv1.NodeSet{
+							{
+								Name: "t5kdhpw24vq7",
+								VolumeClaimTemplates: []corev1.PersistentVolumeClaim{
+									{
+										Spec: corev1.PersistentVolumeClaimSpec{
+											StorageClassName: ptr.ToPtr("tigera-elasticsearch"),
+											Resources: corev1.VolumeResourceRequirements{
+												Requests: corev1.ResourceList{
+													"storage": resource.MustParse("1Ti"),
+												},
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				}
+
+				component := render.LogStorage(cfg)
+				createResources, _ := component.Objects()
+				es := rtest.GetResource(createResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
+				Expect(es.Spec.NodeSets[0].Name).To(Equal("t5kdhpw24vq7"))
+
+				// A genuine storage change must still force a rename.
+				cfg.Elasticsearch.Spec.NodeSets[0].VolumeClaimTemplates[0].Spec.Resources.Requests["storage"] = resource.MustParse("2Ti")
+				component = render.LogStorage(cfg)
+				createResources, _ = component.Objects()
+				es = rtest.GetResource(createResources, "tigera-secure", "tigera-elasticsearch", "elasticsearch.k8s.elastic.co", "v1", "Elasticsearch").(*esv1.Elasticsearch)
+				Expect(es.Spec.NodeSets[0].Name).NotTo(Equal("t5kdhpw24vq7"))
+			})
 		})
 
 		It("should render DataNodeSelectors defined in the LogStorage CR", func() {

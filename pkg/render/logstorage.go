@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
@@ -27,6 +26,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -806,7 +806,7 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim, currentES *esv1.Elast
 		// We assume that the VolumeClaimTemplate is the same across all NodeSets (this is how we configure it).
 		currentPVCTemplate := currentES.Spec.NodeSets[0].VolumeClaimTemplates[0]
 		storageClassNamesMatch := *pvcTemplate.Spec.StorageClassName == *currentPVCTemplate.Spec.StorageClassName
-		resourceRequirementsMatch := reflect.DeepEqual(currentPVCTemplate.Spec.Resources, pvcTemplate.Spec.Resources)
+		resourceRequirementsMatch := apiequality.Semantic.DeepEqual(currentPVCTemplate.Spec.Resources, pvcTemplate.Spec.Resources)
 		if !storageClassNamesMatch || !resourceRequirementsMatch {
 			nameMustBeGenerated = true
 		}

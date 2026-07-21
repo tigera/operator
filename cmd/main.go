@@ -323,6 +323,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			Cache: &client.CacheOptions{
 				DisableFor: []client.Object{
 					&v3.LicenseKey{},
+					// Pods are only listed by label/namespace selector from a handful of
+					// controllers. Caching them starts a shared informer that holds every pod
+					// in the cluster in memory (~36 MiB per 1000 pods), so read them uncached
+					// from the apiserver instead.
+					&corev1.Pod{},
 				},
 			},
 		},

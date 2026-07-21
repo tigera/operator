@@ -460,6 +460,11 @@ format-check:
 	echo Try running \"make fix\" and committing any changes; \
 	exit 1'
 
+.PHONY: yaml-lint
+## Lint YAML files
+yaml-lint:
+	@docker run --rm $$(tty -s && echo "-it" || echo) -v $(CURDIR):/data cytopia/yamllint:latest .
+
 .PHONY: dirty-check
 dirty-check:
 	@if [ "$$(git diff --stat)" != "" ]; then \

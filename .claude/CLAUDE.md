@@ -51,8 +51,6 @@ make static-checks      # golangci-lint
 ```
 The CI pipeline (`ci/semaphoreci/pr`) runs: `pre-commit` → `build` + `dirty-check` → `format-check validate-gen-versions fmt test-crds gen-files fix` + `dirty-check` → `vet` + `static-checks` → `ut` + `dirty-check`. The most common failure is a missing `make gen-files` after API type changes.
 
-**NEVER** run `make ci` locally — it includes image builds, pushes, and destructive operations.
-
 ### Other
 ```bash
 make mod-tidy           # go mod tidy

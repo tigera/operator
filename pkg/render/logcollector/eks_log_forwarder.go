@@ -85,7 +85,7 @@ func (c *fluentBitComponent) renderEKSFluentBitConf() string {
 	if err != nil {
 		return fmt.Sprintf("# error rendering config: %v\n", err)
 	}
-	return string(out)
+	return string(out) + "\n"
 }
 
 func (c *fluentBitComponent) eksConfigMap() *corev1.ConfigMap {

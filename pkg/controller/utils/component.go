@@ -48,6 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -79,16 +80,36 @@ type ComponentHandler interface {
 	SetCreateOnly()
 }
 
+// ComponentHandlerOption configures a componentHandler.
+type ComponentHandlerOption func(*componentHandler)
+
+// WithRenderContext supplies the render.RenderContext passed to registered
+// render modifiers.
+func WithRenderContext(ctx render.RenderContext) ComponentHandlerOption {
+	return func(c *componentHandler) { c.renderCtx = ctx }
+}
+
+// WithExtensions supplies the operator's extension Set, whose modifiers the
+// handler applies to extensible components. A handler that renders an
+// extensible component must be given the Set; one that doesn't can omit it.
+func WithExtensions(e *extensions.Set) ComponentHandlerOption {
+	return func(c *componentHandler) { c.extensions = e }
+}
+
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
-	return &componentHandler{
+func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...ComponentHandlerOption) ComponentHandler {
+	h := &componentHandler{
 		client:       cli,
 		scheme:       scheme,
 		cr:           cr,
 		log:          log,
 		apiGroupEnvs: apigroup.EnvVars(),
 	}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 type componentHandler struct {
@@ -98,6 +119,8 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
+	renderCtx    render.RenderContext
+	extensions   *extensions.Set
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -440,6 +463,11 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+	if ext, ok := component.(render.Extensible); ok && ext.ModifierKey() != "" && c.extensions == nil {
+		c.log.Info("BUG: extensible component rendered by a handler with no extension Set; extensions will not be applied", "component", ext.ModifierKey())
+	}
+	component = c.extensions.Decorate(component, c.renderCtx)
+
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -1166,7 +1194,6 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 		owner, ok := cr.(runtime.Object)
 		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
 			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
-
 		}
 	}
 }

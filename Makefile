@@ -254,7 +254,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.8.0
+ENVOY_GATEWAY_VERSION ?= v1.8.2
 ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
 $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
@@ -459,6 +459,11 @@ format-check:
 	echo $$files; \
 	echo Try running \"make fix\" and committing any changes; \
 	exit 1'
+
+.PHONY: yaml-lint
+## Lint YAML files
+yaml-lint:
+	@docker run --rm $$(tty -s && echo "-it" || echo) -v $(CURDIR):/data cytopia/yamllint:latest .
 
 .PHONY: dirty-check
 dirty-check:

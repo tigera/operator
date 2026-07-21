@@ -26,16 +26,22 @@ func TestDecideV3CRDs(t *testing.T) {
 		name                            string
 		v1present, v3present, mapServed bool
 		want                            bool
+		wantErr                         bool
 	}{
-		{"v1 present stays v1", true, false, true, false},
-		{"both present stays v1", true, true, true, false},
-		{"v3 only stays v3", false, true, false, true},
-		{"greenfield capable goes v3", false, false, true, true},
-		{"greenfield not capable stays v1", false, false, false, false},
+		{"v1 present stays v1", true, false, true, false, false},
+		{"both present stays v1", true, true, true, false, false},
+		{"v3 present with MAP stays v3", false, true, true, true, false},
+		{"v3 present without MAP errors", false, true, false, false, true},
+		{"greenfield capable goes v3", false, false, true, true, false},
+		{"greenfield not capable stays v1", false, false, false, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := decideV3CRDs(tc.v1present, tc.v3present, tc.mapServed)
+			got, err := decideV3CRDs(tc.v1present, tc.v3present, tc.mapServed)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("decideV3CRDs(v1=%t,v3=%t,map=%t) err = %v, wantErr %t",
+					tc.v1present, tc.v3present, tc.mapServed, err, tc.wantErr)
+			}
 			if got != tc.want {
 				t.Errorf("decideV3CRDs(v1=%t,v3=%t,map=%t) = %t, want %t",
 					tc.v1present, tc.v3present, tc.mapServed, got, tc.want)
@@ -59,23 +65,52 @@ func TestUseV3CRDsFromDiscovery(t *testing.T) {
 		name      string
 		resources []*metav1.APIResourceList
 		want      bool
+		wantErr   bool
 	}{
-		{"v1 present stays v1", []*metav1.APIResourceList{v1, mapResourceList()}, false},
-		{"both present stays v1", []*metav1.APIResourceList{v1, v3, mapResourceList()}, false},
-		{"v3 only stays v3", []*metav1.APIResourceList{v3}, true},
-		{"greenfield capable goes v3", []*metav1.APIResourceList{mapResourceList()}, true},
-		{"greenfield not capable stays v1", []*metav1.APIResourceList{}, false},
+		{"v1 present stays v1", []*metav1.APIResourceList{v1, mapResourceList()}, false, false},
+		{"both present stays v1", []*metav1.APIResourceList{v1, v3, mapResourceList()}, false, false},
+		{"v3 present with MAP stays v3", []*metav1.APIResourceList{v3, mapResourceList()}, true, false},
+		{"v3 present without MAP errors", []*metav1.APIResourceList{v3}, false, true},
+		{"greenfield capable goes v3", []*metav1.APIResourceList{mapResourceList()}, true, false},
+		{"greenfield not capable stays v1", []*metav1.APIResourceList{}, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := fake.NewClientset()
 			c.Resources = tc.resources
 			got, err := useV3CRDsFromDiscovery(c.Discovery())
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("useV3CRDsFromDiscovery() err = %v, wantErr %t", err, tc.wantErr)
 			}
 			if got != tc.want {
 				t.Errorf("useV3CRDsFromDiscovery() = %t, want %t", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRequireMAPForV3(t *testing.T) {
+	cases := []struct {
+		name      string
+		useV3     bool
+		resources []*metav1.APIResourceList
+		want      bool
+		wantErr   bool
+	}{
+		{"v1 passes through, MAP irrelevant", false, []*metav1.APIResourceList{}, false, false},
+		{"v3 with MAP is allowed", true, []*metav1.APIResourceList{mapResourceList()}, true, false},
+		{"v3 without MAP errors", true, []*metav1.APIResourceList{}, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := fake.NewClientset()
+			c.Resources = tc.resources
+			got, err := requireMAPForV3(tc.useV3, c.Discovery())
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("requireMAPForV3() err = %v, wantErr %t", err, tc.wantErr)
+			}
+			if got != tc.want {
+				t.Errorf("requireMAPForV3() = %t, want %t", got, tc.want)
 			}
 		})
 	}

@@ -41,6 +41,15 @@ go run ./ --enable-leader-election=false
 make cluster-destroy                   # Tear down
 ```
 
+### Pre-push Checklist
+After making changes, run these before pushing to avoid CI failures:
+```bash
+make gen-files          # Regenerate CRDs + deepcopy (make manifests + generate)
+make fix                # goimports formatting
+make dirty-check        # Verify no uncommitted generated/format changes
+make static-checks      # golangci-lint
+```
+
 ### Other
 ```bash
 make mod-tidy           # go mod tidy

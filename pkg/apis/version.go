@@ -16,11 +16,13 @@ package apis
 
 import (
 	"context"
+	"errors"
 	"os"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -35,31 +37,60 @@ var datastoreMigrationGVR = schema.GroupVersionResource{
 	Resource: "datastoremigrations",
 }
 
+const (
+	mutatingAdmissionPolicyGroup = "admissionregistration.k8s.io"
+	mutatingAdmissionPolicyKind  = "MutatingAdmissionPolicy"
+)
+
 var log = ctrl.Log.WithName("apis")
+
+// errV3RequiresMAP is returned when we've concluded v3 CRD mode but the cluster can't serve
+// MutatingAdmissionPolicy. v3 mode relies on a MAP to default policy types, so we refuse to
+// operate rather than run in a degraded state where defaulting silently doesn't happen.
+var errV3RequiresMAP = errors.New("v3 CRD mode requires MutatingAdmissionPolicy support (Kubernetes 1.32+), which this cluster does not serve")
 
 // UseV3CRDS detects whether we should use the crd.projectcalico.org/v1 or
 // projectcalico.org/v3 API group for Calico CRDs.
 func UseV3CRDS(cfg *rest.Config) (bool, error) {
-	if os.Getenv("CALICO_API_GROUP") != "" {
-		log.Info("CALICO_API_GROUP environment variable is set, using its value to determine API group", "CALICO_API_GROUP", os.Getenv("CALICO_API_GROUP"))
-		return os.Getenv("CALICO_API_GROUP") == "projectcalico.org/v3", nil
+	cs, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return false, err
+	}
+	disco := cs.Discovery()
+
+	if apiGroup := os.Getenv("CALICO_API_GROUP"); apiGroup != "" {
+		log.Info("CALICO_API_GROUP environment variable is set, using its value to determine API group", "CALICO_API_GROUP", apiGroup)
+		return requireMAPForV3(apiGroup == "projectcalico.org/v3", disco)
 	}
 
 	// Check if a DatastoreMigration CR exists in a state that indicates v3 CRDs
 	// should be used. This handles operator restarts during or after migration.
 	// This runs before the manager cache is started, so we use a dynamic client
 	// directly rather than the cached datastoremigration.GetPhase().
-	if v3, err := checkDatastoreMigration(cfg); err != nil {
+	if migrated, err := checkDatastoreMigration(cfg); err != nil {
 		log.Info("Failed to check DatastoreMigration CR, falling through to API discovery", "error", err)
-	} else if v3 {
-		return true, nil
+	} else if migrated {
+		return requireMAPForV3(true, disco)
 	}
 
-	cs, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return false, err
+	return useV3CRDsFromDiscovery(disco)
+}
+
+// requireMAPForV3 gates a v3 decision on MutatingAdmissionPolicy support. When v3 is chosen but
+// the cluster can't serve MAP we return an error and refuse to operate; a v1 decision passes
+// through untouched (and skips the discovery call). Used by the paths that assert v3 without
+// cluster CRD evidence - the CALICO_API_GROUP override and a converged DatastoreMigration.
+func requireMAPForV3(useV3 bool, disco discovery.DiscoveryInterface) (bool, error) {
+	if useV3 && !mutatingAdmissionPolicyServed(disco) {
+		return false, errV3RequiresMAP
 	}
-	apiGroups, err := cs.Discovery().ServerGroups()
+	return useV3, nil
+}
+
+// useV3CRDsFromDiscovery is the discovery-success path of UseV3CRDS, split out so it can be tested
+// with a fake discovery client.
+func useV3CRDsFromDiscovery(disco discovery.DiscoveryInterface) (bool, error) {
+	apiGroups, err := disco.ServerGroups()
 	if err != nil {
 		return false, err
 	}
@@ -74,8 +105,16 @@ func UseV3CRDS(cfg *rest.Config) (bool, error) {
 		}
 	}
 
-	log.Info("Detected API groups from API server", "v3present", v3present, "v1present", v1present)
-	return v3present && !v1present, nil
+	// v1 present always wins (existing/upgraded install), so only pay for the MutatingAdmissionPolicy
+	// discovery call when v3 is still in play - an existing v3 install we must gate, or a greenfield
+	// default we can only take when MAP is servable.
+	mapServed := false
+	if !v1present {
+		mapServed = mutatingAdmissionPolicyServed(disco)
+	}
+
+	log.Info("Detected API groups from API server", "v3present", v3present, "v1present", v1present, "mapServed", mapServed)
+	return decideV3CRDs(v1present, v3present, mapServed)
 }
 
 // checkDatastoreMigration uses a dynamic client to look for a DatastoreMigration CR
@@ -102,4 +141,56 @@ func checkDatastoreMigration(cfg *rest.Config) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// decideV3CRDs returns whether the operator should use the projectcalico.org/v3 API group,
+// given which Calico CRD groups are present in the cluster and whether the cluster serves
+// MutatingAdmissionPolicy. This covers the discovery-success path only; the CALICO_API_GROUP
+// override and the DatastoreMigration check are handled by the caller.
+//
+//   - If the v1 CRDs are present, the cluster is an existing/upgraded install (or has opted out
+//     by pre-installing v1 CRDs), so use v1.
+//   - If only the v3 CRDs are present, the cluster is already on v3; never downgrade it, but v3
+//     mode needs MutatingAdmissionPolicy, so error out if the cluster can't serve it.
+//   - If neither is present, this is a brand-new install. Default to v3, but only if the cluster
+//     can serve MutatingAdmissionPolicy (needed to default policy types in v3 mode); otherwise
+//     fall back to v1.
+func decideV3CRDs(v1present, v3present, mapServed bool) (bool, error) {
+	if v1present {
+		return false, nil
+	}
+	if v3present {
+		if !mapServed {
+			return false, errV3RequiresMAP
+		}
+		return true, nil
+	}
+	return mapServed, nil
+}
+
+// mutatingAdmissionPolicyServed reports whether the cluster serves the MutatingAdmissionPolicy
+// API (any version). v3 CRD mode relies on a MutatingAdmissionPolicy to default policy types, so
+// a greenfield install only defaults to v3 when this is available (k8s 1.32+).
+//
+// This is best-effort: ServerGroupsAndResources can return a partial result with an error when an
+// aggregated API is unhealthy, so we log and continue with whatever was returned rather than
+// failing. MutatingAdmissionPolicy is served by the core kube-apiserver, so an unhealthy
+// aggregated API server doesn't affect whether we find it.
+func mutatingAdmissionPolicyServed(disco discovery.DiscoveryInterface) bool {
+	_, resourceLists, err := disco.ServerGroupsAndResources()
+	if err != nil {
+		log.Info("Partial error discovering server resources while checking for MutatingAdmissionPolicy; continuing with partial results", "error", err)
+	}
+	for _, rl := range resourceLists {
+		gv, parseErr := schema.ParseGroupVersion(rl.GroupVersion)
+		if parseErr != nil || gv.Group != mutatingAdmissionPolicyGroup {
+			continue
+		}
+		for _, r := range rl.APIResources {
+			if r.Kind == mutatingAdmissionPolicyKind {
+				return true
+			}
+		}
+	}
+	return false
 }

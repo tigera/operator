@@ -1629,8 +1629,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		if nonclusterhost != nil {
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
+		migrationInProgress, err := utils.APIServerMigrationInProgress(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking apiserver migration state", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 		components = append(components,
-			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg, calicoSystemDefaultDenyForCalicoSystem()),
+			kubecontrollers.NewCalicoKubeControllersPolicy(&kubeControllersCfg, calicoSystemDefaultDenyForCalicoSystem(), migrationInProgress),
 		)
 	}
 

@@ -473,6 +473,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	// Detect the allow-tigera -> calico-system apiserver migration window. Gate on the Tier
+	// watch being ready, matching the includeV3NetworkPolicy read above: before the watch is
+	// ready the aggregated v3 API may be unavailable, and we must not degrade/return on that.
+	// During a real migration the old apiserver is serving, so the watch is ready.
+	migrationInProgress := false
+	if !r.opts.UseV3CRDs && r.tierWatchReady.IsReady() {
+		migrationInProgress, err = utils.APIServerMigrationInProgress(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking apiserver migration state", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	err = utils.PopulateK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
@@ -577,6 +590,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// The bridge must precede the workload component so the apply loop's fail-fast
+	// behavior requeues before any cutover if a bridge write does not land.
+	if migrationInProgress {
+		components = append(components, render.APIServerMigrationBridge(&apiServerCfg))
+	}
+
 	components = append(components,
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -594,7 +613,10 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// dependency on the API server deployment.
 	//
 	// We do this last to avoid transient errors with policy preventing progression of the controller.
-	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
+	// While migrating, the bridge owns calico-system.apiserver-access and the transitional
+	// allow-tigera.apiserver-access must stay; skipping this component avoids the double-write
+	// and suppresses its deletion of allow-tigera.apiserver-access until the apiserver is stable.
+	if (r.opts.UseV3CRDs || includeV3NetworkPolicy) && !migrationInProgress {
 		components = append(components, render.APIServerPolicy(&apiServerCfg))
 	}
 

@@ -105,21 +105,25 @@ type KubeControllersConfiguration struct {
 	Tenant *operatorv1.Tenant
 }
 
-func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
+func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy, migrationInProgress bool) render.Component {
 	toCreate := []client.Object{kubeControllersCalicoSystemPolicy(cfg)}
 
 	if defaultDeny != nil {
 		toCreate = append(toCreate, defaultDeny)
 	}
 
-	return render.NewPassthrough(
-		toCreate,
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", cfg.Namespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
-		},
-	)
+	toDelete := []client.Object{
+		// allow-tigera Tier was renamed to calico-system
+		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", cfg.Namespace),
+	}
+	if !migrationInProgress {
+		// While the apiserver migration bridge owns allow-tigera.default-deny (it rewrites the
+		// selector to exclude calico-apiserver), suppress this deletion to avoid create<->delete
+		// oscillation. Cleanup resumes once the apiserver is stable in calico-system.
+		toDelete = append(toDelete, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace))
+	}
+
+	return render.NewPassthrough(toCreate, toDelete)
 }
 
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeControllersComponent {

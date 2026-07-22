@@ -852,6 +852,42 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		}))
 	})
 
+	It("renders the migration bridge as three policies", func() {
+		component := render.APIServerMigrationBridge(cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		toCreate, toDelete := component.Objects()
+		Expect(toDelete).To(BeEmpty())
+		Expect(toCreate).To(HaveLen(3))
+
+		byName := map[string]*calicov3.NetworkPolicy{}
+		for _, o := range toCreate {
+			np, ok := o.(*calicov3.NetworkPolicy)
+			Expect(ok).To(BeTrue())
+			byName[np.Name] = np
+		}
+
+		defaultDeny := byName["allow-tigera.default-deny"]
+		Expect(defaultDeny).ToNot(BeNil())
+		Expect(defaultDeny.Namespace).To(Equal("calico-system"))
+		Expect(defaultDeny.Spec.Tier).To(Equal("allow-tigera"))
+		Expect(defaultDeny.Spec.Selector).To(Equal("k8s-app != 'calico-apiserver'"))
+
+		allowTigera := byName["allow-tigera.apiserver-access"]
+		Expect(allowTigera).ToNot(BeNil())
+		Expect(allowTigera.Namespace).To(Equal("calico-system"))
+		Expect(allowTigera.Spec.Tier).To(Equal("allow-tigera"))
+		Expect(allowTigera.Spec.Selector).To(Equal("k8s-app == 'calico-apiserver'"))
+		Expect(*allowTigera.Spec.Order).To(Equal(1.0))
+
+		calicoSystem := byName["calico-system.apiserver-access"]
+		Expect(calicoSystem).ToNot(BeNil())
+		Expect(calicoSystem.Spec.Tier).To(Equal("calico-system"))
+
+		// The transitional allow shares the steady-state allow's rules (shared builder).
+		Expect(allowTigera.Spec.Ingress).To(Equal(calicoSystem.Spec.Ingress))
+		Expect(allowTigera.Spec.Egress).To(Equal(calicoSystem.Spec.Egress))
+	})
+
 	It("should not set KUBERENETES_SERVICE_... variables if not host networked on Docker EE with proxy.local", func() {
 		cfg.K8SServiceEndpoint.Host = "proxy.local"
 		cfg.K8SServiceEndpoint.Port = "1234"

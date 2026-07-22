@@ -112,7 +112,7 @@ func (c *fluentBitComponent) addInputs(cfg *fluentBitConfig) {
 	// The ingress path for non-cluster-host log forwarding: voltron relays the
 	// hosts' posts to this input, and in_http derives the non_cluster_* tags
 	// from the request paths.
-	if c.cfg.NonClusterHost != nil && c.osType == rmeta.OSTypeLinux {
+	if c.cfg.NonClusterHostLogIngestion && c.osType == rmeta.OSTypeLinux {
 		cfg.Pipeline.Inputs = append(cfg.Pipeline.Inputs, map[string]interface{}{
 			"name":   "http",
 			"listen": "0.0.0.0",
@@ -257,7 +257,7 @@ func (c *fluentBitComponent) linseedTags() []string {
 		}
 		tags = append(tags, in.tag)
 	}
-	if c.cfg.NonClusterHost != nil && c.osType == rmeta.OSTypeLinux {
+	if c.cfg.NonClusterHostLogIngestion && c.osType == rmeta.OSTypeLinux {
 		tags = append(tags, "non_cluster_flows", "non_cluster_dns", "non_cluster_policy_activity")
 	}
 	return tags

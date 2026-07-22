@@ -184,7 +184,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	}
 
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
+		return fmt.Errorf("logcollector-controller failed to watch NonClusterHost resource: %w", err)
 	}
 	return nil
 }
@@ -643,28 +643,28 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 	}
-
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentBitCfg := &rlogcollector.FluentBitConfiguration{
-		LogCollector:           instance,
-		S3Credential:           s3Credential,
-		SplkCredential:         splunkCredential,
-		Filters:                filters,
-		EKSConfig:              eksConfig,
-		PullSecrets:            pullSecrets,
-		Installation:           installationSpec,
-		ClusterDomain:          r.opts.ClusterDomain,
-		FluentBitKeyPair:       fluentBitKeyPair,
-		TrustedBundle:          trustedBundle,
-		ManagedCluster:         managedCluster,
-		UseSyslogCertificate:   useSyslogCertificate,
-		Tenant:                 tenant,
-		ExternalElastic:        r.opts.ElasticExternal,
-		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
-		NonClusterHost:         nonclusterhost,
-		LicenseExpired:         licenseExpired,
+		LogCollector:               instance,
+		S3Credential:               s3Credential,
+		SplkCredential:             splunkCredential,
+		Filters:                    filters,
+		EKSConfig:                  eksConfig,
+		PullSecrets:                pullSecrets,
+		Installation:               installationSpec,
+		ClusterDomain:              r.opts.ClusterDomain,
+		FluentBitKeyPair:           fluentBitKeyPair,
+		TrustedBundle:              trustedBundle,
+		ManagedCluster:             managedCluster,
+		UseSyslogCertificate:       useSyslogCertificate,
+		Tenant:                     tenant,
+		ExternalElastic:            r.opts.ElasticExternal,
+		EKSLogForwarderKeyPair:     eksLogForwarderKeyPair,
+		NonClusterHost:             nonclusterhost,
+		NonClusterHostLogIngestion: nonclusterhost != nil,
+		LicenseExpired:             licenseExpired,
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific

@@ -89,6 +89,10 @@ func CreateEntityRule(namespace string, deploymentName string, ports ...uint16) 
 	}
 }
 
+// ServalSourceEntityRule matches traffic from the serval gateway, the
+// non-cluster host entrypoint.
+var ServalSourceEntityRule = CreateSourceEntityRule("calico-system", "serval")
+
 // CreateSourceEntityRule creates a conventional entity rule that matches ingress traffic based on namespace and deployment name.
 func CreateSourceEntityRule(namespace string, deploymentName string) v3.EntityRule {
 	return v3.EntityRule{

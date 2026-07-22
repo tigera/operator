@@ -57,6 +57,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/typhaautoscaler"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -195,7 +196,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:      typhaautoscaler.New(cs, nodeIndexInformer, mockStatus, []string{common.TyphaDeploymentName}),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
@@ -204,7 +205,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				newComponentHandler:  utils.NewComponentHandler,
 			}
 
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
@@ -263,13 +264,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					TypeMeta:   metav1.TypeMeta{Kind: "NonClusterHost", APIVersion: "operator.tigera.io/v1"},
 					ObjectMeta: nonClusterHostObjectMeta,
 				})).NotTo(HaveOccurred())
-
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus)
-				r.typhaAutoscalerNonClusterHost.start(ctx)
 			})
 
 			AfterEach(func() {
-				r.typhaAutoscalerNonClusterHost = nil
 				Expect(c.Delete(ctx, &operator.NonClusterHost{ObjectMeta: nonClusterHostObjectMeta})).NotTo(HaveOccurred())
 			})
 
@@ -824,7 +821,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:      typhaautoscaler.New(cs, nodeIndexInformer, mockStatus, []string{common.TyphaDeploymentName}),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
@@ -833,7 +830,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler:  utils.NewComponentHandler,
 			}
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -1046,7 +1043,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:      typhaautoscaler.New(cs, nodeIndexInformer, mockStatus, []string{common.TyphaDeploymentName}),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
@@ -1055,7 +1052,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				newComponentHandler:  utils.NewComponentHandler,
 			}
 
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
@@ -2334,7 +2331,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:      typhaautoscaler.New(cs, nodeIndexInformer, mockStatus, []string{common.TyphaDeploymentName}),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
@@ -2343,7 +2340,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				migrationWatchReady:  &utils.ReadyFlag{},
 				newComponentHandler:  utils.NewComponentHandler,
 			}
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -2471,7 +2468,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				scheme:               scheme,
 				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				typhaAutoscaler:      newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:      typhaautoscaler.New(cs, nodeIndexInformer, mockStatus, []string{common.TyphaDeploymentName}),
 				namespaceMigration:   &fakeNamespaceMigration{},
 				enterpriseCRDsExist:  true,
 				migrationChecked:     true,
@@ -2482,7 +2479,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}
 
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 

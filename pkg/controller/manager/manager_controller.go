@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -35,6 +36,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/compliance"
+	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -47,6 +49,8 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	rgateway "github.com/tigera/operator/pkg/render/gateway"
+	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -157,6 +161,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch LogStorage resource: %w", err)
+	}
+	if err = c.WatchObject(&operatorv1.GatewayAPI{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch GatewayAPI resource: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -719,6 +726,19 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Resolve gateway component if spec.gateway is configured.
+	var gatewayComponent render.Component
+	if instance.Spec.Gateway != nil {
+		gwComp, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
+		if err != nil {
+			return result, err
+		}
+		if gwComp == nil {
+			return result, nil
+		}
+		gatewayComponent = gwComp
+	}
+
 	components := []render.Component{
 		// Install manager components.
 		component,
@@ -741,6 +761,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	if tunnelSecretPassthrough != nil {
 		components = append(components, tunnelSecretPassthrough)
+	}
+
+	if gatewayComponent != nil {
+		components = append(components, gatewayComponent)
 	}
 
 	for _, component := range components {
@@ -853,4 +877,95 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 		return nil, nil
 	}
 	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
+}
+
+const (
+	ManagerGatewayTLSSecretName  = "calico-manager-gateway-tls"
+	ManagerGatewayResourcePrefix = "calico-manager"
+)
+
+// resolveGateway validates the Manager spec.gateway configuration, resolves the
+// GatewayClass, provisions the TLS keypair, and returns a gateway render component.
+// Returns (nil, result, nil) when gateway rendering should be skipped (warning set),
+// or (nil, result, err) on hard errors.
+func (r *ReconcileManager) resolveGateway(
+	ctx context.Context,
+	instance *operatorv1.Manager,
+	authenticationCR *operatorv1.Authentication,
+	certManager certificatemanager.CertificateManager,
+	helper utils.NamespaceHelper,
+	logc logr.Logger,
+) (render.Component, reconcile.Result, error) {
+	gw := instance.Spec.Gateway
+
+	// Fetch GatewayAPI CR.
+	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetWarning("gatewayapi-missing", "GatewayAPI CR not found; gateway resources will not be rendered")
+			return nil, reconcile.Result{}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
+		return nil, reconcile.Result{}, err
+	}
+
+	// Resolve gatewayClassName.
+	gatewayClassName, err := resolveGatewayClassName(gw, gatewayAPI)
+	if err != nil {
+		r.status.SetWarning("gateway-class-ambiguous", err.Error())
+		return nil, reconcile.Result{}, nil
+	}
+
+	// OIDC hostname mismatch check.
+	if authenticationCR != nil && authenticationCR.Spec.ManagerDomain != "" {
+		if gw.Hostname != authenticationCR.Spec.ManagerDomain {
+			r.status.SetWarning("hostname-mismatch",
+				fmt.Sprintf("spec.gateway.hostname %q does not match Authentication.spec.managerDomain %q — OIDC redirects will fail",
+					gw.Hostname, authenticationCR.Spec.ManagerDomain))
+			return nil, reconcile.Result{}, nil
+		}
+	}
+
+	// Provision TLS keypair for the gateway listener.
+	gwTLSKeyPair, err := certManager.GetOrCreateKeyPair(
+		r.client,
+		ManagerGatewayTLSSecretName,
+		helper.TruthNamespace(),
+		[]string{gw.Hostname})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, logc)
+		return nil, reconcile.Result{}, err
+	}
+
+	gwCfg := &rgateway.Configuration{
+		Hostname:                     gw.Hostname,
+		GatewayNamespace:             gw.NamespaceOrDefault(),
+		GatewayClassName:             gatewayClassName,
+		BackendServiceName:           render.ManagerServiceName,
+		BackendPort:                  render.ManagerPort,
+		BackendNamespace:             helper.InstallNamespace(),
+		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
+		TLSKeyPair:                   gwTLSKeyPair,
+		ResourcePrefix:               ManagerGatewayResourcePrefix,
+	}
+
+	return rgateway.Component(gwCfg), reconcile.Result{}, nil
+}
+
+// resolveGatewayClassName determines the GatewayClass name to use based on the
+// user's spec.gateway.gatewayClassName or the GatewayAPI CR's configured classes.
+func resolveGatewayClassName(gw *operatorv1.GatewaySpec, gatewayAPI *operatorv1.GatewayAPI) (string, error) {
+	if gw.GatewayClassName != nil && *gw.GatewayClassName != "" {
+		return *gw.GatewayClassName, nil
+	}
+
+	classes := gatewayAPI.Spec.GatewayClasses
+	switch len(classes) {
+	case 0:
+		return rgatewayapi.GatewayClassName, nil
+	case 1:
+		return classes[0].Name, nil
+	default:
+		return "", fmt.Errorf("multiple GatewayClasses configured on GatewayAPI CR; set spec.gateway.gatewayClassName to select one")
+	}
 }

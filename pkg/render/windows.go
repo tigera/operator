@@ -187,7 +187,7 @@ func (c *windowsComponent) windowsCNIConfigMap() *corev1.ConfigMap {
 
 	config := fmt.Sprintf(`{
 			  "name": "Calico",
-			  "cniVersion": "0.3.1",
+			  "cniVersion": "1.0.0",
 			  "plugins": %s
 			}`, string(pluginsArray))
 

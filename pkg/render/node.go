@@ -830,7 +830,7 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 
 	config := fmt.Sprintf(`{
 			  "name": "k8s-pod-network",
-			  "cniVersion": "0.3.1",
+			  "cniVersion": "1.0.0",
 			  "plugins": %s
 			}`, string(pluginsArray))
 

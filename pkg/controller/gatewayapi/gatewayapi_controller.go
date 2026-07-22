@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -521,7 +522,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 	// then does the Get below return NotFound, guaranteeing nothing re-creates the proxies we then
 	// sweep. Owner-scoped, requeueing until clean. Skipped if a Gateway lives in tigera-gateway,
 	// since then the proxy there belongs to the new controller.
-	const legacyGatewayNamespace = "tigera-gateway"
+	const legacyGatewayNamespace = gatewayapi.LegacyGatewayNamespace
 	legacyNamespaceHostsGateway := slices.Contains(gatewayConfig.GatewayNamespaces, legacyGatewayNamespace)
 	if !legacyNamespaceHostsGateway {
 		legacyController := &v1.Deployment{}
@@ -751,8 +752,13 @@ func (r *ReconcileGatewayAPI) legacyGatewayOrphans(ctx context.Context, namespac
 	return orphans, nil
 }
 
-// upsertGatewayOwned creates or updates obj, refreshing its owner references (and ConfigMap/Secret
-// data) so the namespace's owner set stays current as its Gateways come and go.
+// upsertGatewayOwned creates or updates obj, refreshing its owner references (and
+// ConfigMap/Secret data) so the namespace's owner set stays current as its Gateways come and go.
+// Gateway owner references are replaced with the current set — carrying stale ones forward would
+// grow the list without bound as the namespace's Gateways churn — while owner references of any
+// other kind are preserved: some of these objects are shared with other features (e.g. istio
+// waypoint and egress gateway copy the same pull secrets and tigera-operator-secrets RoleBinding)
+// which hold their own owner references on them.
 func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired client.Object, owners []metav1.OwnerReference) error {
 	desired.SetOwnerReferences(owners)
 	existing := desired.DeepCopyObject().(client.Object)
@@ -762,7 +768,13 @@ func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired cl
 	case err != nil:
 		return err
 	default:
-		existing.SetOwnerReferences(owners)
+		merged := slices.Clone(owners)
+		for _, ref := range existing.GetOwnerReferences() {
+			if ref.Kind != "Gateway" || !strings.HasPrefix(ref.APIVersion, "gateway.networking.k8s.io/") {
+				merged = append(merged, ref)
+			}
+		}
+		existing.SetOwnerReferences(merged)
 		switch d := desired.(type) {
 		case *corev1.ConfigMap:
 			e := existing.(*corev1.ConfigMap)

@@ -73,7 +73,7 @@ func (c *fluentBitComponent) renderFluentBitConf() string {
 	if err != nil {
 		return fmt.Sprintf("# error rendering config: %v\n", err)
 	}
-	return string(out)
+	return string(out) + "\n"
 }
 
 // addInputs wires the tail inputs (one per log file) and, when non-cluster

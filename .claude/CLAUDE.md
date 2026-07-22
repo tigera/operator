@@ -42,14 +42,15 @@ make cluster-destroy                   # Tear down
 ```
 
 ### Pre-push Checklist
-Run the relevant commands before pushing to avoid CI failures:
+Only run the commands matching what you changed — none are needed for a
+docs/YAML/comment-only push:
 ```bash
-# After API type changes (api/v1/, config/*_versions.yml):
+# After API/CRD/config changes (api/v1/, config/*_versions.yml):
 make gen-files          # Regenerate CRDs + deepcopy (make manifests + generate)
+make dirty-check        # Verify regenerated files are committed
 
-# After any Go file changes:
+# After any Go code changes:
 make fix                # goimports formatting
-make dirty-check        # Verify no uncommitted generated/format changes
 make static-checks      # golangci-lint
 ```
 

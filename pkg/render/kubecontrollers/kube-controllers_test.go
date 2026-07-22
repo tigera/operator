@@ -1055,7 +1055,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					},
 				}
 
-				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, defaultDenyPolicy)
+				component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, defaultDenyPolicy, false)
 				resources, _ := component.Objects()
 				Expect(resources).To(HaveLen(2))
 				Expect(resources).Should(ContainElement(defaultDenyPolicy))
@@ -1081,18 +1081,37 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		It("policy should omit prometheus ingress rule when metrics port is 0", func() {
 			// Baseline
 			cfg.MetricsPort = 9094
-			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil)
+			component := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil, false)
 			resources, _ := component.Objects()
 			Expect(resources).To(HaveLen(1))
 			baselinePolicy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 
 			// Zeroed policy
 			cfg.MetricsPort = 0
-			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil)
+			component = kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil, false)
 			resources, _ = component.Objects()
 			zeroedPolicy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 
 			Expect(len(zeroedPolicy.Spec.Ingress)).To(Equal(len(baselinePolicy.Spec.Ingress) - 1))
+		})
+
+		It("omits the deprecated allow-tigera.default-deny deletion while migrating", func() {
+			names := func(objs []client.Object) []string {
+				var out []string
+				for _, o := range objs {
+					out = append(out, o.GetName())
+				}
+				return out
+			}
+
+			_, notMigrating := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil, false).Objects()
+			Expect(names(notMigrating)).To(ContainElement("allow-tigera.default-deny"))
+			Expect(names(notMigrating)).To(ContainElement("allow-tigera.kube-controller-access"))
+
+			_, migrating := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil, true).Objects()
+			Expect(names(migrating)).ToNot(ContainElement("allow-tigera.default-deny"))
+			// The kube-controller-access deletion is unconditional either way.
+			Expect(names(migrating)).To(ContainElement("allow-tigera.kube-controller-access"))
 		})
 	})
 
@@ -1163,7 +1182,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	It("should add egress policy with Enterprise variant and K8SServiceEndpoint defined", func() {
 		cfg.K8sServiceEp.Host = "k8shost"
 		cfg.K8sServiceEp.Port = "1234"
-		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil).Objects()
+		objects, _ := kubecontrollers.NewCalicoKubeControllersPolicy(&cfg, nil, false).Objects()
 		Expect(objects).To(HaveLen(1))
 		policy, ok := objects[0].(*v3.NetworkPolicy)
 		Expect(ok).To(BeTrue())

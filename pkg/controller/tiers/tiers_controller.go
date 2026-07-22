@@ -96,6 +96,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tiers-controller failed to watch node-local-dns daemonset: %v", err)
 	}
 
+	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues, and also
+	// makes sure we spot when things change that might not trigger a reconciliation - notably, deleting
+	// the deprecated allow-tigera tier once the transitional apiserver-migration policies within it have
+	// been cleaned up (that cleanup is driven by other controllers and does not enqueue this one).
+	if err := utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("tiers-controller failed to create periodic reconcile watch: %w", err)
+	}
+
 	return nil
 }
 
@@ -136,13 +144,21 @@ func (r *ReconcileTiers) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	// Try to delete allow-tigera deprecated tier
-	err = componentHandler.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(&v3.Tier{
-		TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
-	}), nil)
-	if err != nil {
-		log.V(1).Info("Unable to delete deprecated allow-tigera tier at this time", "error", err)
+	// Delete the deprecated allow-tigera tier, but not while the apiserver is still migrating
+	// out of it: the migration bridge (apiserver controller) writes transitional policies into
+	// this tier, so removing it mid-migration would fight the bridge. Resume once the apiserver
+	// is stable in calico-system.
+	migrationInProgress, migErr := utils.APIServerMigrationInProgress(ctx, r.client)
+	if migErr != nil {
+		log.V(1).Info("Unable to determine apiserver migration state; deferring allow-tigera tier deletion", "error", migErr)
+	} else if !migrationInProgress {
+		err = componentHandler.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(&v3.Tier{
+			TypeMeta:   metav1.TypeMeta{Kind: "Tier", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"},
+		}), nil)
+		if err != nil {
+			log.V(1).Info("Unable to delete deprecated allow-tigera tier at this time", "error", err)
+		}
 	}
 
 	r.status.ReadyToMonitor()

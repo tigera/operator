@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	appsv1 "k8s.io/api/apps/v1"
+	kerror "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -202,6 +203,45 @@ var _ = Describe("tier controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("does not delete the allow-tigera tier while the apiserver migration is in progress", func() {
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		// Migration in progress: deprecated tier present, calico-apiserver not Ready.
+		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 0},
+		})).NotTo(HaveOccurred())
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		tier := &v3.Tier{}
+		Expect(c.Get(ctx, client.ObjectKey{Name: "allow-tigera"}, tier)).NotTo(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+	})
+
+	It("deletes the allow-tigera tier once the apiserver is stable in calico-system", func() {
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		// Migration complete: deprecated tier present, calico-apiserver Ready.
+		Expect(c.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &appsv1.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"},
+			Status:     appsv1.DeploymentStatus{ReadyReplicas: 1},
+		})).NotTo(HaveOccurred())
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		tier := &v3.Tier{}
+		err = c.Get(ctx, client.ObjectKey{Name: "allow-tigera"}, tier)
+		Expect(kerror.IsNotFound(err)).To(BeTrue())
 		mockStatus.AssertExpectations(GinkgoT())
 	})
 })

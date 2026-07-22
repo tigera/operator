@@ -21,6 +21,13 @@ const (
 	KubeControllersDeploymentName = "calico-kube-controllers"
 	WindowsDaemonSetName          = "calico-node-windows"
 
+	// ServalName is the name of Serval's Deployment and of the Service in front of
+	// it. Typha needs the Service name too, so it lives here rather than in the
+	// serval render package, which imports render.
+	ServalName = "serval"
+	// ServalServicePortName is the name of the HTTPS port on that Service.
+	ServalServicePortName = "https"
+
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"
 

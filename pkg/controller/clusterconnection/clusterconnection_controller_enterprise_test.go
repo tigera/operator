@@ -82,6 +82,8 @@ var _ = Describe("ManagementClusterConnection controller enterprise tests", func
 		c = ctrlrfake.DefaultFakeClientBuilder(clientScheme).WithObjectTracker(&objTrackerWithCalls).Build()
 		ctx = context.Background()
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("Run").Return()
 		mockStatus.On("AddDaemonsets", mock.Anything)
 		mockStatus.On("AddDeployments", mock.Anything)

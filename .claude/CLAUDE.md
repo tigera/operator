@@ -42,8 +42,6 @@ make cluster-destroy                   # Tear down
 ```
 
 ### Pre-push Checklist
-Only run the commands matching what you changed — none are needed for a
-docs/YAML/comment-only push:
 ```bash
 # After API/CRD/config changes (api/v1/, config/*_versions.yml):
 make gen-files          # Regenerate CRDs + deepcopy (make manifests + generate)

@@ -204,8 +204,9 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		}
 		needsCSRRole = monitorCR.Spec.ExternalPrometheus != nil
 
-		// Check whether the non-cluster host feature is enabled.
-		// Non-cluster hosts generate CSRs to establish mTLS connections with the cluster.
+		// Check whether the non-cluster host feature is enabled. Non-cluster hosts
+		// generate CSRs to establish mTLS connections with the cluster, in both the
+		// serval gateway and legacy modes.
 		if !needsCSRRole {
 			nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
 			if err != nil {

@@ -64,6 +64,8 @@ var _ = Describe("NonClusterHost controller tests", func() {
 		mockStatus.On("OnCRNotFound").Return()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
+		// Legacy mode tears down any serval deployment, so the handler untracks it.
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 
 		r = ReconcileNonClusterHost{
 			client: cli,

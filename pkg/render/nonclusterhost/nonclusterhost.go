@@ -45,6 +45,12 @@ type nonClusterHostComponent struct {
 	cfg *Config
 }
 
+// name is the object name for the rendered host scaffolding: the single
+// tigera-noncluster-host identity that non-cluster hosts authenticate as.
+func (c *nonClusterHostComponent) name() string {
+	return NonClusterHostObjectName
+}
+
 func (c *nonClusterHostComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
@@ -74,7 +80,7 @@ func (c *nonClusterHostComponent) serviceAccount() *corev1.ServiceAccount {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      NonClusterHostObjectName,
+			Name:      c.name(),
 			Namespace: common.CalicoNamespace,
 		},
 	}
@@ -87,11 +93,11 @@ func (c *nonClusterHostComponent) tokenSecret() *corev1.Secret {
 			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      NonClusterHostObjectName,
+			Name:      c.name(),
 			Namespace: common.CalicoNamespace,
 			// The annotation below will result in the auto-creation of spec.data.token.
 			Annotations: map[string]string{
-				"kubernetes.io/service-account.name": NonClusterHostObjectName,
+				"kubernetes.io/service-account.name": c.name(),
 			},
 		},
 		Type: "kubernetes.io/service-account-token",
@@ -186,7 +192,9 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"create"},
 		},
 		{
-			// Used to read endpoint field from the NonClusterHost resource.
+			// Used to read the endpoint and typhaEndpoint fields from the
+			// NonClusterHost resource: an unset typhaEndpoint tells the host to
+			// reach Typha through the gateway tunnel.
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"nonclusterhosts"},
 			Verbs:     []string{"get", "list", "watch"},
@@ -237,7 +245,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: NonClusterHostObjectName,
+			Name: c.name(),
 		},
 		Rules: rules,
 	}
@@ -247,17 +255,17 @@ func (c *nonClusterHostComponent) clusterRoleBinding() *rbacv1.ClusterRoleBindin
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: NonClusterHostObjectName,
+			Name: c.name(),
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "ClusterRole",
-			Name:     NonClusterHostObjectName,
+			Name:     c.name(),
 		},
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      NonClusterHostObjectName,
+				Name:      c.name(),
 				Namespace: common.CalicoNamespace,
 			},
 		},

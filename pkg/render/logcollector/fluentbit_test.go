@@ -1249,6 +1249,7 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 					Endpoint: "https://1.2.3.4:5678",
 				},
 			}
+			cfg.NonClusterHostLogIngestion = true
 			cfg.LogCollector.Spec.AdditionalStores = additionalStoreSpecAllHosts
 			expectedResources = append(expectedResources, &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.FluentBitInputService, Namespace: render.LogCollectorNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}})
 
@@ -1340,13 +1341,15 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 					Endpoint: "https://1.2.3.4:5678",
 				},
 			}
+			cfg.NonClusterHostLogIngestion = true
 			resourcesWithNonClusterHosts, _ := logcollector.FluentBitShared(cfg).Objects()
 			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 
-			// Validate that we have a single ingress rule added for the fluent-bit service.
+			// Validate the ingress rules added for the fluent-bit input: one
+			// for voltron and one for the Serval gateway.
 			Expect(policyWithoutNonClusterHosts.Spec.Egress).To(Equal(policyWithNonClusterHosts.Spec.Egress))
-			Expect(len(policyWithoutNonClusterHosts.Spec.Ingress)).To(Equal(len(policyWithNonClusterHosts.Spec.Ingress) - 1))
-			Expect(len(policyWithNonClusterHosts.Spec.Ingress)).To(Equal(2))
+			Expect(len(policyWithoutNonClusterHosts.Spec.Ingress)).To(Equal(len(policyWithNonClusterHosts.Spec.Ingress) - 2))
+			Expect(len(policyWithNonClusterHosts.Spec.Ingress)).To(Equal(3))
 			Expect(policyWithNonClusterHosts.Spec.Ingress[1]).To(Equal(v3.Rule{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
@@ -1354,6 +1357,14 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 					Selector:          fmt.Sprintf("k8s-app == '%s'", render.ManagerDeploymentName),
 					NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", render.ManagerNamespace),
 				},
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(logcollector.FluentBitInputPort),
+				},
+			}))
+			Expect(policyWithNonClusterHosts.Spec.Ingress[2]).To(Equal(v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source:   networkpolicy.ServalSourceEntityRule,
 				Destination: v3.EntityRule{
 					Ports: networkpolicy.Ports(logcollector.FluentBitInputPort),
 				},

@@ -114,6 +114,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		logSeverity := operator.LogLevelError
 		var linuxPolicySetupTimeoutSeconds int32 = 1
 		cniBinDir := "/opt/custom/cni/bin"
+		cniSpecVersion := operator.CNISpecVersion100
 		cniConfDir := "/etc/custom/cni/net.d"
 		cniInstallMode := operator.CNIInstallModeAll
 
@@ -140,6 +141,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					BinDir:      &cniBinDir,
 					ConfDir:     &cniConfDir,
 					InstallMode: &cniInstallMode,
+					SpecVersion: &cniSpecVersion,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpIptables, // Actually the default but BPF would make other values invalid.
@@ -211,6 +213,7 @@ var _ = Describe("Defaulting logic tests", func() {
 		logFileMaxSize := resource.MustParse("50Mi")
 		logSeverity := operator.LogLevelError
 		cniBinDir := "/opt/custom/cni/bin"
+		cniSpecVersion := operator.CNISpecVersion100
 		cniConfDir := "/etc/custom/cni/net.d"
 		cniInstallMode := operator.CNIInstallModeAll
 
@@ -237,6 +240,7 @@ var _ = Describe("Defaulting logic tests", func() {
 					BinDir:      &cniBinDir,
 					ConfDir:     &cniConfDir,
 					InstallMode: &cniInstallMode,
+					SpecVersion: &cniSpecVersion,
 				},
 				CalicoNetwork: &operator.CalicoNetworkSpec{
 					LinuxDataplane:   &dpBPF, // Actually the default but BPF would make other values invalid.

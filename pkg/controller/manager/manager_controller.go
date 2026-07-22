@@ -939,7 +939,6 @@ func (r *ReconcileManager) resolveGateway(
 
 	gwCfg := &rgateway.Configuration{
 		Hostname:                     gw.Hostname,
-		Port:                         gw.PortOrDefault(),
 		GatewayNamespace:             gw.NamespaceOrDefault(),
 		GatewayClassName:             gatewayClassName,
 		BackendServiceName:           render.ManagerServiceName,

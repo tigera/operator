@@ -36,7 +36,6 @@ const (
 // Gateway API resources for a UI component (Manager or Whisker).
 type Configuration struct {
 	Hostname         string
-	Port             int32
 	GatewayNamespace string
 	GatewayClassName string
 
@@ -109,7 +108,7 @@ func (c *gatewayComponent) gateway() *gapi.Gateway {
 				{
 					Name:     listenerName,
 					Protocol: gapi.HTTPSProtocolType,
-					Port:     gapi.PortNumber(c.cfg.Port),
+					Port:     gapi.PortNumber(443),
 					Hostname: &hostname,
 					TLS: &gapi.ListenerTLSConfig{
 						Mode: ptr.To(gapi.TLSModeTerminate),

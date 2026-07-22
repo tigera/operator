@@ -23,12 +23,6 @@ type GatewaySpec struct {
 	// +kubebuilder:validation:MinLength=1
 	Hostname string `json:"hostname"`
 
-	// Port the Gateway listens on externally. Defaults to 443.
-	// +kubebuilder:validation:Minimum=1
-	// +kubebuilder:validation:Maximum=65535
-	// +optional
-	Port *int32 `json:"port,omitempty"`
-
 	// GatewayNamespace is the namespace where the Gateway and Envoy Proxy pods
 	// run. Defaults to "calico-system".
 	// +optional
@@ -40,14 +34,6 @@ type GatewaySpec struct {
 	// warning requiring the user to specify one.
 	// +optional
 	GatewayClassName *string `json:"gatewayClassName,omitempty"`
-}
-
-// PortOrDefault returns the configured port or 443.
-func (g *GatewaySpec) PortOrDefault() int32 {
-	if g.Port != nil {
-		return *g.Port
-	}
-	return 443
 }
 
 // NamespaceOrDefault returns the configured gateway namespace or "calico-system".

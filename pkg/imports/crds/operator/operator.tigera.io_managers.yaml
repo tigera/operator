@@ -67,14 +67,6 @@ spec:
                         managerDomain when OIDC is configured (Manager only).
                       minLength: 1
                       type: string
-                    port:
-                      description:
-                        Port the Gateway listens on externally. Defaults
-                        to 443.
-                      format: int32
-                      maximum: 65535
-                      minimum: 1
-                      type: integer
                   required:
                     - hostname
                   type: object

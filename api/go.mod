@@ -3,7 +3,7 @@ module github.com/tigera/operator/api
 go 1.26.5
 
 require (
-	github.com/envoyproxy/gateway v1.7.2
+	github.com/envoyproxy/gateway v1.7.4
 	github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring v0.91.0
 	github.com/tigera/api v0.0.0-20260604222052-a4ab1787c00b
 	k8s.io/api v0.36.2

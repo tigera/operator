@@ -109,7 +109,7 @@ K8S_VERSION?=v1.36.2
 LLVM_VERSION?=21.1.8
 # Calico toolchain versions and the calico/go-build image to use.
 GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
-CALICO_BASE_VER ?= ubi9-1783525764
+CALICO_BASE_VER ?= ubi9-1784675397
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')

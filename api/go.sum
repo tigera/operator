@@ -5,8 +5,8 @@ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSs
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc h1:U9qPSI2PIWSS1VwoXQT9A3Wy9MM3WgvqSxFWenqJduM=
 github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
-github.com/envoyproxy/gateway v1.7.2 h1:mIC52fBLZKO8ahwwh5hNbpWP++HLC7I7RO+6n6JcJbI=
-github.com/envoyproxy/gateway v1.7.2/go.mod h1:EiXhtwv0xkFE17KDXmchFF60jg0y9H9Ou3V7pIIzyUc=
+github.com/envoyproxy/gateway v1.7.4 h1:O2rq4Cw4KL/m8NvuhozwhYbcBZOdZeqdTZ+etc1ElmQ=
+github.com/envoyproxy/gateway v1.7.4/go.mod h1:rxCXGMRFAyVORqYV6Wr0jxfHbwC9GRjkatH0e9ZV0M0=
 github.com/evanphx/json-patch v5.9.11+incompatible h1:ixHHqfcGvxhWkniF1tWxBHA0yb4Z+d1UQi45df52xW8=
 github.com/evanphx/json-patch v5.9.11+incompatible/go.mod h1:50XU6AFN0ol/bzJsmQLiYLvXMP4fmwYFNcr97nuDLSk=
 github.com/fxamacker/cbor/v2 v2.9.0 h1:NpKPmjDBgUfBms6tr6JZkTHtfFGcMKsw3eGcmD/sapM=

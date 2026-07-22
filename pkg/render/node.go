@@ -830,9 +830,9 @@ func (c *nodeComponent) nodeCNIConfigMap() *corev1.ConfigMap {
 
 	config := fmt.Sprintf(`{
 			  "name": "k8s-pod-network",
-			  "cniVersion": "1.0.0",
+			  "cniVersion": "%s",
 			  "plugins": %s
-			}`, string(pluginsArray))
+			}`, c.cfg.Installation.CNI.ResolvedSpecVersion(), string(pluginsArray))
 
 	return &corev1.ConfigMap{
 		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},

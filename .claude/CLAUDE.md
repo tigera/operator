@@ -41,6 +41,17 @@ go run ./ --enable-leader-election=false
 make cluster-destroy                   # Tear down
 ```
 
+### Pre-push Checklist
+```bash
+# After API/CRD/config changes (api/v1/, config/*_versions.yml):
+make gen-files          # Regenerate CRDs + deepcopy (make manifests + generate)
+make dirty-check        # Verify regenerated files are committed
+
+# After any Go code changes:
+make fix                # goimports formatting
+make static-checks      # golangci-lint
+```
+
 ### Other
 ```bash
 make mod-tidy           # go mod tidy

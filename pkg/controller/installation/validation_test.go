@@ -245,19 +245,22 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should allow specVersion with Calico CNI and reject it with other CNI plugins", func() {
+	It("should allow specVersion with Calico CNI", func() {
 		pinned := operator.CNISpecVersion100
 		instance.Spec.CNI.SpecVersion = &pinned
-		err := validateCustomResource(instance)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
 
+	It("should reject specVersion when the CNI plugin is not Calico", func() {
+		pinned := operator.CNISpecVersion100
 		bgp := operator.BGPDisabled
 		dis := operator.HostPortsDisabled
 		instance.Spec.CalicoNetwork.BGP = &bgp
 		instance.Spec.CalicoNetwork.HostPorts = &dis
 		instance.Spec.CNI.Type = operator.PluginAmazonVPC
 		instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
-		err = validateCustomResource(instance)
+		instance.Spec.CNI.SpecVersion = &pinned
+		err := validateCustomResource(instance)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("spec.cni.specVersion is only valid"))
 	})

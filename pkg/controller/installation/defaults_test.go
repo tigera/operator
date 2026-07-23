@@ -320,6 +320,36 @@ var _ = Describe("Defaulting logic tests", func() {
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
+	It("should default CNI spec version to Auto for Calico CNI", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+				},
+			},
+		}
+		err := fillDefaults(instance, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(instance.Spec.CNI.SpecVersion).NotTo(BeNil())
+		Expect(*instance.Spec.CNI.SpecVersion).To(Equal(operator.CNISpecVersionAuto))
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should not set CNI spec version for other CNI plugins", func() {
+		instance := &operator.Installation{
+			Spec: operator.InstallationSpec{
+				CNI: &operator.CNISpec{
+					Type: operator.PluginAmazonVPC,
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{},
+			},
+		}
+		err := fillDefaults(instance, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(instance.Spec.CNI.SpecVersion).To(BeNil())
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
 	It("should default BGP to disabled for other CNI plugins", func() {
 		instance := &operator.Installation{
 			Spec: operator.InstallationSpec{

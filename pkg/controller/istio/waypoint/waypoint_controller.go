@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,18 +42,20 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/gatewayapi"
 )
 
 const (
 	// IstioWaypointClassName is the GatewayClass name used by Istio waypoints.
 	IstioWaypointClassName = "istio-waypoint"
 
-	// WaypointPullSecretLabel labels secrets copied by this controller. We use a label rather
-	// than owner references because the controller needs to efficiently find and clean up its
-	// managed secrets during reconciliation — for example, when pull secrets are removed from
-	// Installation or when the Istio CR is deleted. A label selector provides a simple,
-	// cross-namespace query that covers all cleanup scenarios, whereas owner references would
-	// only automate Gateway-deletion cleanup via Kubernetes garbage collection.
+	// WaypointPullSecretLabel labels secrets copied by this controller, and the
+	// tigera-operator-secrets RoleBindings it creates alongside them. The label drives
+	// cleanup: a label selector is a simple cross-namespace query that finds every managed
+	// copy when pull secrets change or the Istio CR is deleted — something owner references
+	// alone could not do, since GC only fires on owner deletion. The controller additionally
+	// stamps an Istio owner reference on these objects as a garbage-collection safety net for
+	// namespaces shared with the gateway API feature (see Reconcile).
 	WaypointPullSecretLabel = "operator.tigera.io/istio-waypoint-pull-secret"
 )
 
@@ -131,6 +134,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("istio-waypoint-controller failed to watch Installation resource: %w", err)
 	}
 
+	// Watch all secrets in the operator namespace so pull-secret rotations reconcile the
+	// per-namespace copies immediately.
+	if err = utils.AddSecretsWatch(c, "", common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("istio-waypoint-controller failed to watch secrets: %w", err)
+	}
+
 	// Periodic reconcile as a backstop.
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("istio-waypoint-controller failed to create periodic reconcile watch: %w", err)
@@ -166,7 +175,7 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 	istioActive := err == nil && instance.DeletionTimestamp.IsZero()
 	gatewaysVisible := istioActive && r.gatewayWatchReady.IsReady()
 
-	toCreate, toDelete, err := r.pullSecretChanges(ctx, gatewaysVisible, reqLogger)
+	toCreate, toDelete, err := r.pullSecretChanges(ctx, instance, istioActive, reqLogger)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -189,13 +198,32 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 	return reconcile.Result{}, nil
 }
 
-// pullSecretChanges determines which copied pull secrets need to exist
-// (toCreate) based on the namespaces that contain istio-waypoint Gateways, and
-// which existing copies are stale (toDelete). When active is false no copies
-// are desired, so every existing copy is returned as stale.
-func (r *ReconcileWaypoint) pullSecretChanges(ctx context.Context, active bool, reqLogger logr.Logger) (toCreate, toDelete []client.Object, err error) {
-	// Build the desired set of secrets if Istio is active and the Gateway watch is established.
-	if active {
+// pullSecretChanges determines which pull-secret copies and
+// tigera-operator-secrets need to exist based on the namespaces that contain
+// istio-waypoint Gateways, and which existing ones are stale. When istioActive
+// is false no copies are desired, so every existing copy is returned as stale.
+func (r *ReconcileWaypoint) pullSecretChanges(ctx context.Context, instance *operatorv1.Istio, istioActive bool, reqLogger logr.Logger) (toCreate, toDelete []client.Object, err error) {
+	// When Istio is active, own the shared pull-secret copies and RoleBindings with a
+	// reference to the (cluster-scoped) Istio CR. This is a safety net against premature
+	// garbage collection: in a namespace shared with the gateway API feature, that controller
+	// stamps its own Gateway owner reference on the same objects, and deleting the last such
+	// Gateway would otherwise let Kubernetes GC remove a copy the waypoint still needs. The
+	// reference coexists with other features' references via the MultipleOwnersLabel merge;
+	// the label-based cleanup below still removes objects only this controller owns.
+	var istioOwner *metav1.OwnerReference
+	if istioActive {
+		istioOwner = &metav1.OwnerReference{
+			APIVersion: operatorv1.GroupVersion.String(),
+			Kind:       "Istio",
+			Name:       instance.Name,
+			UID:        instance.UID,
+		}
+	}
+
+	// Build the desired set of secrets if Istio is active.
+	var pullSecrets []*corev1.Secret
+	targetNamespaces := map[string]bool{}
+	if istioActive {
 		_, installationSpec, err := utils.GetInstallationSpec(ctx, r)
 		if err != nil {
 			if errors.IsNotFound(err) {
@@ -205,9 +233,22 @@ func (r *ReconcileWaypoint) pullSecretChanges(ctx context.Context, active bool, 
 			return nil, nil, err
 		}
 
-		pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r)
+		pullSecrets, err = utils.GetInstallationPullSecrets(installationSpec, r)
 		if err != nil {
 			return nil, nil, err
+		}
+	}
+
+	// Copies are desired only in namespaces that contain istio-waypoint Gateways, so the
+	// Gateway list is needed only when there are pull secrets to copy. With none configured
+	// the desired state is empty regardless of Gateways, and cleanup below proceeds.
+	if len(pullSecrets) > 0 {
+		// If the Gateway watch isn't established yet, the desired state is unknown — bail
+		// out rather than treat every existing copy as stale. Gateway events after the
+		// watch syncs (or the periodic reconcile) will trigger the next pass.
+		if !r.gatewayWatchReady.IsReady() {
+			reqLogger.V(1).Info("Waiting for Gateway watch to be established")
+			return nil, nil, nil
 		}
 
 		// List all Gateway resources and filter for istio-waypoint class.
@@ -216,47 +257,193 @@ func (r *ReconcileWaypoint) pullSecretChanges(ctx context.Context, active bool, 
 			return nil, nil, fmt.Errorf("failed to list Gateways: %w", err)
 		}
 
-		targetNamespaces := map[string]bool{}
-		for i := range gatewayList.Items {
-			gw := &gatewayList.Items[i]
-			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName &&
-				gw.Namespace != common.OperatorNamespace() {
+		for _, gw := range gatewayList.Items {
+			if string(gw.Spec.GatewayClassName) == IstioWaypointClassName && !reservedNamespace(gw.Namespace) {
 				targetNamespaces[gw.Namespace] = true
 			}
 		}
-
-		// Build desired secrets for each target namespace.
-		for ns := range targetNamespaces {
-			copied := secret.CopyToNamespace(ns, pullSecrets...)
-			for _, s := range copied {
-				if s.Labels == nil {
-					s.Labels = map[string]string{}
-				}
-				s.Labels[WaypointPullSecretLabel] = "true"
-				toCreate = append(toCreate, s)
-			}
-		}
 	}
 
-	// Build the desired set keyed on (namespace, name) so that renamed or removed
-	// secrets are correctly detected as stale.
-	desiredSecrets := map[types.NamespacedName]bool{}
-	for _, obj := range toCreate {
-		desiredSecrets[types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}] = true
-	}
-
-	// List all existing secrets managed by this controller and mark stale ones for deletion.
+	// List all existing secrets managed by this controller.
 	existingSecrets := &corev1.SecretList{}
 	if err := r.List(ctx, existingSecrets, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
 		return nil, nil, fmt.Errorf("failed to list waypoint pull secrets: %w", err)
 	}
-	for i := range existingSecrets.Items {
-		s := &existingSecrets.Items[i]
-		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
-		if !desiredSecrets[key] {
-			toDelete = append(toDelete, s)
+
+	// Build desired secrets for each target namespace, keyed on (namespace, name) so that
+	// renamed or removed secrets are correctly detected as stale. Each copy carries an Istio
+	// owner reference (the GC safety net) and the MultipleOwnersLabel, which tells the
+	// component handler to merge — rather than replace — owner references, preserving any that
+	// another feature (e.g. egress gateway) holds on a shared copy.
+	var desiredSecretObjs []client.Object
+	desiredSecrets := map[types.NamespacedName]bool{}
+	for ns := range targetNamespaces {
+		copied := secret.CopyToNamespace(ns, pullSecrets...)
+		for _, s := range copied {
+			if s.Labels == nil {
+				s.Labels = map[string]string{}
+			}
+			s.Labels[WaypointPullSecretLabel] = "true"
+			s.Labels[common.MultipleOwnersLabel] = "true"
+			if istioOwner != nil {
+				s.OwnerReferences = append(s.OwnerReferences, *istioOwner)
+			}
+			desiredSecretObjs = append(desiredSecretObjs, s)
+			desiredSecrets[types.NamespacedName{Namespace: s.Namespace, Name: s.Name}] = true
 		}
 	}
 
+	// Cleanup skips terminating namespaces: the namespace deletion removes the copies and
+	// RoleBindings itself, and a terminating namespace rejects the RoleBinding creation that
+	// authorizes this controller's secret deletes, so attempting cleanup there can only fail.
+	terminatingNS := map[string]bool{}
+	nsTerminating := func(ns string) (bool, error) {
+		if t, ok := terminatingNS[ns]; ok {
+			return t, nil
+		}
+		n := &corev1.Namespace{}
+		if err := r.Get(ctx, types.NamespacedName{Name: ns}, n); err != nil {
+			if errors.IsNotFound(err) {
+				// Already gone, along with everything in it.
+				terminatingNS[ns] = true
+				return true, nil
+			}
+			return false, err
+		}
+		t := !n.DeletionTimestamp.IsZero()
+		terminatingNS[ns] = t
+		return t, nil
+	}
+
+	// Mark stale secrets for deletion. A copy that a different feature also owns (a foreign
+	// owner reference — gateway API's Gateway, egress gateway's EgressGateway) is left for the
+	// Kubernetes GC once those owners are gone; this controller's own Istio owner reference
+	// does not count. Copies this controller solely owns are deleted here.
+	staleSecretNamespaces := map[string]bool{}
+	for _, s := range existingSecrets.Items {
+		if reservedNamespace(s.Namespace) {
+			continue
+		}
+		key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
+		if desiredSecrets[key] || hasForeignOwnerRef(s.OwnerReferences) {
+			continue
+		}
+		if terminating, err := nsTerminating(s.Namespace); err != nil {
+			return nil, nil, err
+		} else if terminating {
+			continue
+		}
+		toDelete = append(toDelete, &s)
+		staleSecretNamespaces[s.Namespace] = true
+	}
+
+	// Ensure that a RoleBinding exists in every namespace we're about to write
+	// secrets in: namespaces that need copies (targetNamespaces), plus
+	// namespaces where stale copies are being deleted.
+	rbEnsure := map[string]bool{}
+	for ns := range targetNamespaces {
+		rbEnsure[ns] = true
+	}
+	for ns := range staleSecretNamespaces {
+		rbEnsure[ns] = true
+	}
+
+	// RoleBindings first: objects are created in order, so each namespace's binding exists
+	// before its secrets are written.
+	rbCreated := map[string]bool{}
+	for ns := range rbEnsure {
+		rb := &rbacv1.RoleBinding{}
+		err := r.Get(ctx, types.NamespacedName{Namespace: ns, Name: render.TigeraOperatorSecrets}, rb)
+		switch {
+		case errors.IsNotFound(err):
+			rbCreated[ns] = true
+			toCreate = append(toCreate, waypointOperatorSecretsRoleBinding(ns, istioOwner))
+		case err != nil:
+			return nil, nil, err
+		case rb.Labels[WaypointPullSecretLabel] == "true":
+			// Ours from an earlier reconcile; keep it reconciled to the desired shape.
+			toCreate = append(toCreate, waypointOperatorSecretsRoleBinding(ns, istioOwner))
+		}
+	}
+	toCreate = append(toCreate, desiredSecretObjs...)
+
+	// Mark stale RoleBindings for deletion, after the stale secrets: deletes are processed
+	// in order, so the binding outlives the secret deletions it authorizes. Only bindings
+	// managed by this controller are candidates — those carrying its label, plus the ones
+	// created above solely to authorize stale secret deletion, which are removed again in
+	// this same reconcile.
+	existingRBs := &rbacv1.RoleBindingList{}
+	if err := r.List(ctx, existingRBs, client.MatchingLabels{WaypointPullSecretLabel: "true"}); err != nil {
+		return nil, nil, fmt.Errorf("failed to list waypoint RoleBindings: %w", err)
+	}
+	staleRBCandidates := map[string]bool{}
+	for ns := range rbCreated {
+		staleRBCandidates[ns] = true
+	}
+	for _, rb := range existingRBs.Items {
+		if rb.Name != render.TigeraOperatorSecrets {
+			continue
+		}
+		if hasForeignOwnerRef(rb.OwnerReferences) {
+			// Another controller (e.g. gateway API or egress gateway) also relies on this
+			// binding and owns it; leave it for the Kubernetes GC when its owners are gone.
+			// This controller's own Istio owner reference does not count.
+			continue
+		}
+		staleRBCandidates[rb.Namespace] = true
+	}
+	for ns := range staleRBCandidates {
+		if targetNamespaces[ns] || reservedNamespace(ns) {
+			continue
+		}
+		if terminating, err := nsTerminating(ns); err != nil {
+			return nil, nil, err
+		} else if terminating {
+			continue
+		}
+		toDelete = append(toDelete, render.CreateOperatorSecretsRoleBinding(ns))
+	}
+
 	return toCreate, toDelete, nil
+}
+
+// reservedNamespace reports whether ns is a namespace whose pull secrets and
+// tigera-operator-secrets RoleBinding are managed by other controllers or the install
+// manifests — this controller never writes or deletes anything there. In particular, the
+// gateway API controller's legacy teardown explicitly deletes both from the legacy gateway
+// namespace on every reconcile, so writing copies there would fight it indefinitely.
+func reservedNamespace(ns string) bool {
+	return ns == common.OperatorNamespace() || ns == common.CalicoNamespace || ns == gatewayapi.LegacyGatewayNamespace
+}
+
+// waypointOperatorSecretsRoleBinding returns the RoleBinding granting the operator's
+// ServiceAccount the tigera-operator-secrets ClusterRole in the given namespace. The
+// MultipleOwnersLabel instructs the component handler to merge owner references, preserving
+// those other controllers (e.g. gateway API, egress gateway) may hold on a shared binding;
+// owner, when non-nil, is this controller's Istio owner reference (the GC safety net).
+func waypointOperatorSecretsRoleBinding(namespace string, owner *metav1.OwnerReference) *rbacv1.RoleBinding {
+	rb := render.CreateOperatorSecretsRoleBinding(namespace)
+	rb.Labels = map[string]string{
+		WaypointPullSecretLabel:    "true",
+		common.MultipleOwnersLabel: "true",
+	}
+	if owner != nil {
+		rb.OwnerReferences = append(rb.OwnerReferences, *owner)
+	}
+	return rb
+}
+
+// hasForeignOwnerRef reports whether refs contains an owner reference belonging to a feature
+// other than this controller — anything that is not the Istio CR. Such an owner (gateway
+// API's Gateway, egress gateway's EgressGateway) means another feature still relies on the
+// shared object, so this controller leaves its removal to the Kubernetes garbage collector
+// rather than deleting it directly.
+func hasForeignOwnerRef(refs []metav1.OwnerReference) bool {
+	for _, ref := range refs {
+		if ref.Kind == "Istio" && ref.APIVersion == operatorv1.GroupVersion.String() {
+			continue
+		}
+		return true
+	}
+	return false
 }

@@ -88,7 +88,9 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 }
 
 func (c *gatewayComponent) tlsSecret() *corev1.Secret {
-	return c.cfg.TLSKeyPair.Secret(c.cfg.GatewayNamespace)
+	s := c.cfg.TLSKeyPair.Secret(c.cfg.GatewayNamespace)
+	s.Type = corev1.SecretTypeTLS
+	return s
 }
 
 func (c *gatewayComponent) gateway() *gapi.Gateway {

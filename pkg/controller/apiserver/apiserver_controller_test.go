@@ -32,7 +32,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -1026,6 +1028,108 @@ var _ = Describe("apiserver controller tests", func() {
 			err := validateAPIServerResource(instance)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("CalicoWebhooksDeployment"))
+		})
+	})
+
+	Context("apiserver migration bridge", func() {
+		// Reconciler wired as in the other tests, with both watches ready.
+		newReconciler := func(cli client.Client) ReconcileAPIServer {
+			return ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+				migrationWatchReady: ready,
+				opts: options.ControllerOptions{
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
+					ClusterDomain:       dns.DefaultClusterDomain,
+				},
+			}
+		}
+
+		seedMigrationState := func(cli client.Client) {
+			// Deprecated tier still present; apiserver not yet Ready in calico-system.
+			Expect(cli.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera"}})).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &v3.NetworkPolicy{
+				ObjectMeta: metav1.ObjectMeta{Name: "allow-tigera.default-deny", Namespace: "calico-system"},
+				Spec:       v3.NetworkPolicySpec{Tier: "allow-tigera", Selector: "all()"},
+			})).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+		}
+
+		It("writes the bridge and does not tear down allow-tigera.apiserver-access while migrating", func() {
+			seedMigrationState(cli)
+			r := newReconciler(cli)
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			// default-deny rewritten to exclude the apiserver.
+			dd := &v3.NetworkPolicy{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "allow-tigera.default-deny", Namespace: "calico-system"}, dd)).NotTo(HaveOccurred())
+			Expect(dd.Spec.Selector).To(Equal("k8s-app != 'calico-apiserver'"))
+
+			// order-1 transitional allow created in the deprecated tier and NOT deleted.
+			at := &v3.NetworkPolicy{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "allow-tigera.apiserver-access", Namespace: "calico-system"}, at)).NotTo(HaveOccurred())
+			Expect(at.Spec.Tier).To(Equal("allow-tigera"))
+
+			// steady-state allow created by the bridge.
+			cs := &v3.NetworkPolicy{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "calico-system.apiserver-access", Namespace: "calico-system"}, cs)).NotTo(HaveOccurred())
+		})
+
+		It("requeues without moving when a bridge write fails", func() {
+			// A bridge write failure surfaces through SetDegraded(ResourceUpdateError, ...),
+			// which the shared mock (set up for other error codes only) does not expect.
+			mockStatus.On("SetDegraded", operatorv1.ResourceUpdateError, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
+
+			failing := ctrlrfake.DefaultFakeClientBuilder(scheme).WithInterceptorFuncs(interceptor.Funcs{
+				Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+					if np, ok := obj.(*v3.NetworkPolicy); ok && np.GetName() == "allow-tigera.apiserver-access" {
+						return kerror.NewServiceUnavailable("the server is currently unable to handle the request")
+					}
+					return c.Create(ctx, obj, opts...)
+				},
+			}).Build()
+
+			// Re-seed prerequisites on the failing client (mirrors BeforeEach essentials): the
+			// operator CA (so certificatemanager.Create, which is not called with
+			// AllowCACreation from within Reconcile, does not fail first), and the APIServer CR
+			// (without it Reconcile short-circuits on "not found" before ever reaching the
+			// bridge). Authentication/dex/oidc are not required: GetAuthentication's NotFound is
+			// tolerated and the keyValidatorConfig lookup is skipped.
+			certificateManager, err := certificatemanager.Create(failing, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(failing.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(failing.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			Expect(failing.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
+			seedMigrationState(failing)
+
+			r := newReconciler(failing)
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(HaveOccurred())
+
+			// The workload cutover must NOT have happened. The bridge is ordered before the
+			// workload component and the apply loop is fail-fast, so render.APIServer never runs
+			// and the v3.projectcalico.org APIService is never created this reconcile.
+			apiService := &apiregv1.APIService{}
+			getErr := failing.Get(ctx, client.ObjectKey{Name: "v3.projectcalico.org"}, apiService)
+			Expect(kerror.IsNotFound(getErr)).To(BeTrue(), "workload cutover must not run when a bridge write fails")
+		})
+
+		It("lets the tail create calico-system.apiserver-access when no bridge is needed", func() {
+			// No allow-tigera tier => not migrating; calico-system tier already seeded by BeforeEach.
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			r := newReconciler(cli)
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			cs := &v3.NetworkPolicy{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "calico-system.apiserver-access", Namespace: "calico-system"}, cs)).NotTo(HaveOccurred())
+			Expect(cs.Spec.Tier).To(Equal("calico-system"))
 		})
 	})
 })

@@ -70,7 +70,11 @@ const (
 	QueryserverServiceName = "calico-api"
 
 	// Use the same API server container name for both OSS and Enterprise.
-	APIServerName                                         = "calico-apiserver"
+	APIServerName = "calico-apiserver"
+
+	// DeprecatedAPIServerTierName is the pre-3.22 policy tier the migration bridge writes into.
+	DeprecatedAPIServerTierName = "allow-tigera"
+
 	APIServerContainerName                  ContainerName = "calico-apiserver"
 	TigeraAPIServerQueryServerContainerName ContainerName = "tigera-queryserver"
 
@@ -123,6 +127,66 @@ func APIServerPolicy(cfg *APIServerConfiguration) Component {
 			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("apiserver-access", APIServerNamespace),
 		},
 	)
+}
+
+// APIServerMigrationBridge renders the transitional policies that keep calico-apiserver
+// reachable during a direct allow-tigera -> calico-system upgrade. They are written
+// through the still-serving old apiserver *before* the workload cutover, reproducing the
+// validated 3.22 steady state:
+//   - allow-tigera.default-deny rewritten to exclude calico-apiserver,
+//   - order-1 allow-tigera.apiserver-access in the deprecated tier,
+//   - calico-system.apiserver-access in the calico-system tier.
+//
+// See docs/superpowers/specs/2026-07-20-ev6821-apiserver-upgrade-allow-gap-design.md.
+func APIServerMigrationBridge(cfg *APIServerConfiguration) Component {
+	return NewPassthrough(
+		[]client.Object{
+			allowTigeraDefaultDenyBridgePolicy(),
+			allowTigeraAPIServerBridgePolicy(cfg),
+			calicoSystemAPIServerPolicy(cfg),
+		},
+		nil,
+	)
+}
+
+// allowTigeraDefaultDenyBridgePolicy rewrites the leftover 3.21-era allow-tigera.default-deny
+// in calico-system so its selector excludes calico-apiserver (replacing the all() selector),
+// stopping the deprecated tier's default-deny from trapping the moved apiserver pod.
+func allowTigeraDefaultDenyBridgePolicy() *v3.NetworkPolicy {
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeprecatedAPIServerTierName + ".default-deny",
+			Namespace: APIServerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Tier:     DeprecatedAPIServerTierName,
+			Selector: "k8s-app != 'calico-apiserver'",
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+		},
+	}
+}
+
+// allowTigeraAPIServerBridgePolicy is the transitional order-1 allow for calico-apiserver in
+// the deprecated allow-tigera tier. It shares calicoSystemAPIServerPolicy's rules so the two
+// allows cannot drift.
+func allowTigeraAPIServerBridgePolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+	ingress, egress := apiServerPolicyIngressEgress(cfg)
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      DeprecatedAPIServerTierName + ".apiserver-access",
+			Namespace: APIServerNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     DeprecatedAPIServerTierName,
+			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress:  ingress,
+			Egress:   egress,
+		},
+	}
 }
 
 // APIServerConfiguration contains all the config information needed to render the component.
@@ -533,10 +597,14 @@ func (c *apiServerComponent) linseedAccessClusterRoleBinding() *rbacv1.ClusterRo
 	return rcomp.ClusterRoleBinding(APIServerLinseedAccessClusterRoleName, APIServerLinseedAccessClusterRoleName, APIServerServiceAccountName, c.cfg.BindingNamespaces)
 }
 
-func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.OpenShift)
-	egressRules = append(egressRules, []v3.Rule{
+// apiServerPolicyIngressEgress builds the ingress and egress rules shared by the
+// steady-state calico-system.apiserver-access policy and the transitional
+// allow-tigera.apiserver-access policy written by the migration bridge. Keeping a
+// single builder prevents the two allows from drifting.
+func apiServerPolicyIngressEgress(cfg *APIServerConfiguration) (ingress, egress []v3.Rule) {
+	egress = []v3.Rule{}
+	egress = networkpolicy.AppendDNSEgressRules(egress, cfg.OpenShift)
+	egress = append(egress, []v3.Rule{
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
@@ -562,35 +630,54 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 
 	if cfg.KeyValidatorConfig != nil {
 		if parsedURL, err := url.Parse(cfg.KeyValidatorConfig.Issuer()); err == nil {
-			oidcEgressRule := networkpolicy.GetOIDCEgressRule(parsedURL)
-			egressRules = append(egressRules, oidcEgressRule)
+			egress = append(egress, networkpolicy.GetOIDCEgressRule(parsedURL))
 		}
 	}
 
 	if r, err := cfg.K8SServiceEndpoint.DestinationEntityRule(); r != nil && err == nil {
-		egressRules = append(egressRules, v3.Rule{
+		egress = append(egress, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: *r,
 		})
 	}
 
-	// add pass after all egress rules
-	egressRules = append(egressRules, v3.Rule{
-		// Pass to subsequent tiers for further enforcement
-		Action: v3.Pass,
-	})
+	// Pass to subsequent tiers for further enforcement.
+	egress = append(egress, v3.Rule{Action: v3.Pass})
 
 	apiServerContainerPort := getContainerPort(cfg, APIServerContainerName).ContainerPort
 	queryServerContainerPort := getContainerPort(cfg, TigeraAPIServerQueryServerContainerName).ContainerPort
 	l7AdmCtrlContainerPort := getContainerPort(cfg, L7AdmissionControllerContainerName).ContainerPort
 
-	// The ports Calico Enterprise API Server and Calico Enterprise Query Server are configured to listen on.
+	// The ports the API Server and Query Server listen on.
 	ingressPorts := networkpolicy.Ports(443, uint16(apiServerContainerPort), uint16(queryServerContainerPort), 10443)
 	if cfg.IsSidecarInjectionEnabled() {
 		ingressPorts = append(ingressPorts, numorstring.Port{MinPort: uint16(l7AdmCtrlContainerPort), MaxPort: uint16(l7AdmCtrlContainerPort)})
 	}
 
+	ingress = []v3.Rule{
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+			Destination: v3.EntityRule{
+				Ports: ingressPorts,
+			},
+		},
+		{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source:   v3.EntityRule{Nets: []string{"::/0"}},
+			Destination: v3.EntityRule{
+				Ports: ingressPorts,
+			},
+		},
+	}
+	return ingress, egress
+}
+
+func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy {
+	ingress, egress := apiServerPolicyIngressEgress(cfg)
 	return &v3.NetworkPolicy{
 		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -602,30 +689,8 @@ func calicoSystemAPIServerPolicy(cfg *APIServerConfiguration) *v3.NetworkPolicy 
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: networkpolicy.KubernetesAppSelector(APIServerName),
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			Ingress: []v3.Rule{
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					// This policy allows Calico Enterprise API Server access from anywhere.
-					Source: v3.EntityRule{
-						Nets: []string{"0.0.0.0/0"},
-					},
-					Destination: v3.EntityRule{
-						Ports: ingressPorts,
-					},
-				},
-				{
-					Action:   v3.Allow,
-					Protocol: &networkpolicy.TCPProtocol,
-					Source: v3.EntityRule{
-						Nets: []string{"::/0"},
-					},
-					Destination: v3.EntityRule{
-						Ports: ingressPorts,
-					},
-				},
-			},
-			Egress: egressRules,
+			Ingress:  ingress,
+			Egress:   egress,
 		},
 	}
 }

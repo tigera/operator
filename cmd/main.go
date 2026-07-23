@@ -482,7 +482,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		common.CalicoNamespace,
 		"calico-apiserver",
 		render.ElasticsearchNamespace,
-		render.ComplianceNamespace,
 		render.IntrusionDetectionNamespace,
 		dpi.DeepPacketInspectionNamespace,
 		eck.OperatorNamespace,

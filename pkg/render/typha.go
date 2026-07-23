@@ -132,7 +132,37 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.typhaPrometheusService())
 	}
 
-	return objs, nil
+	var objsToDelete []client.Object
+	if c.cfg.NonClusterHost == nil {
+		// The non-cluster-host Typha renders only while a NonClusterHost
+		// resource exists; with Serval, Typha runs in-process instead. When the
+		// resource is absent, delete any leftover non-cluster-host Typha objects
+		// rather than orphaning them.
+		objsToDelete = append(objsToDelete, c.nonClusterHostObjectsForDeletion()...)
+	}
+
+	return objs, objsToDelete
+}
+
+// nonClusterHostObjectsForDeletion returns the non-cluster-host Typha objects as
+// deletion stubs (name and namespace only), used when no NonClusterHost
+// resource exists so the operator garbage-collects them instead of leaving them
+// orphaned.
+func (c *typhaComponent) nonClusterHostObjectsForDeletion() []client.Object {
+	return []client.Object{
+		&appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: common.TyphaDeploymentName + TyphaNonClusterHostSuffix, Namespace: common.CalicoNamespace},
+		},
+		&corev1.Service{
+			TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: TyphaServiceName + TyphaNonClusterHostSuffix, Namespace: common.CalicoNamespace},
+		},
+		&v3.NetworkPolicy{
+			TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+			ObjectMeta: metav1.ObjectMeta{Name: TyphaNonClusterHostNetworkPolicyName, Namespace: common.CalicoNamespace},
+		},
+	}
 }
 
 func NewTyphaNonClusterHostPolicy(cfg *TyphaConfiguration) Component {

@@ -169,6 +169,13 @@ type FluentBitConfiguration struct {
 
 	NonClusterHost *operatorv1.NonClusterHost
 
+	// NonClusterHostLogIngestion enables the in-cluster fluent-bit HTTP input
+	// and the non_cluster_* pipeline that receive host logs. It is true while
+	// either a NonClusterHost (legacy voltron relay) or a Serval resource (the
+	// gateway relays to the same input) exists, so the input survives deleting
+	// one CR while the other is still in use.
+	NonClusterHostLogIngestion bool
+
 	// LicenseExpired indicates the license has expired and fluent-bit DaemonSet should be removed.
 	LicenseExpired bool
 }
@@ -235,11 +242,12 @@ func (c *fluentBitComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	if c.osType == rmeta.OSTypeLinux {
-		if c.cfg.NonClusterHost != nil {
+		if c.cfg.NonClusterHostLogIngestion {
 			objs = append(objs, c.nonClusterHostInputService())
 		} else {
-			// Clean up the input service when the NonClusterHost resource is
-			// removed; the rendered config drops the http input at the same time.
+			// Clean up the input service when neither a NonClusterHost nor a
+			// Serval resource exists; the rendered config drops the http input at
+			// the same time.
 			toDelete = append(toDelete, c.nonClusterHostInputService())
 		}
 	}

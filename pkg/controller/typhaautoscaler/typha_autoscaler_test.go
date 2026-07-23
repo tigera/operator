@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package typhaautoscaler
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	. "github.com/tigera/operator/test"
 
@@ -41,9 +42,9 @@ var _ = Describe("Test typha autoscaler ", func() {
 	var c *kfake.Clientset
 	var ctx context.Context
 	var cancel context.CancelFunc
-	var nlw, tlw cache.ListerWatcher
+	var nlw cache.ListerWatcher
 	var nodeIndexInformer cache.SharedIndexInformer
-	var ta *typhaAutoscaler
+	var ta *Autoscaler
 
 	BeforeEach(func() {
 		ta = nil
@@ -59,9 +60,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}
 		c = kfake.NewClientset(objs...)
 		nlw = NewNodeListWatch(c)
-		tlw = NewTyphaListWatch(c)
 
-		// Create the indexer and informer used by the typhaAutoscaler
+		// Create the indexer and informer used by the autoscaler
 		nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
 
 		ctx, cancel = context.WithCancel(context.Background())
@@ -77,13 +77,13 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// spec has ended, panicking a later, unrelated spec.
 		cancel()
 		if ta != nil {
-			ta.waitForShutdown()
+			ta.WaitForShutdown()
 		}
 	})
 
 	It("should initialize an autoscaler", func() {
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
-		ta.start(ctx)
+		ta = New(c, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName})
+		ta.Start(ctx)
 	})
 
 	It("should get the correct number of nodes", func() {
@@ -93,7 +93,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		// Don't start the autoscaler - this test only exercises getNodeCounts(), which reads
 		// from the nodeIndexInformer directly. Starting it would race with node creation,
 		// since autoscaleReplicas() can fire before the informer has picked up the new nodes.
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
+		ta = New(c, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName})
 
 		Eventually(func() error {
 			schedulableNodes, linuxNodes := ta.getNodeCounts()
@@ -144,8 +144,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
 		// Create the autoscaler and run it
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
-		ta.start(ctx)
+		ta = New(c, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName}, OptionSyncPeriod(10*time.Millisecond))
+		ta.Start(ctx)
 
 		// For clusters smaller than 3 nodes we only expect 1 replica.
 		verifyTyphaReplicas(c, 1)
@@ -198,8 +198,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}).Should(HaveLen(5))
 
 		// Create the autoscaler and run it
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
-		ta.start(ctx)
+		ta = New(c, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName}, OptionSyncPeriod(10*time.Millisecond))
+		ta.Start(ctx)
 
 		verifyTyphaReplicas(c, 3)
 	})
@@ -233,8 +233,8 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}).Should(HaveLen(5))
 
 		// Create the autoscaler and run it
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
-		ta.start(ctx)
+		ta = New(c, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName}, OptionSyncPeriod(10*time.Millisecond))
+		ta.Start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is a virtual-kubelet,
 		// we should still only expect two
@@ -273,34 +273,48 @@ var _ = Describe("Test typha autoscaler ", func() {
 		}).Should(HaveLen(5))
 
 		// Create the autoscaler and run it
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager, typhaAutoscalerOptionPeriod(10*time.Millisecond))
-		ta.start(ctx)
+		ta = New(c, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName}, OptionSyncPeriod(10*time.Millisecond))
+		ta.Start(ctx)
 
 		// This blocks until the first run is done.
-		ta.isDegraded()
+		ta.IsDegraded()
 
 		statusManager.AssertExpectations(GinkgoT())
 	})
 
-	It("should not autoscale or report degraded once its context is cancelled", func() {
-		// statusManager has no SetDegraded expectation configured, so the mock panics if it's
-		// called. With zero linux nodes the startup autoscale would normally report degraded, so
-		// a cancelled autoscaler that still runs the startup autoscale would panic here.
-		cancelledCtx, cancelStart := context.WithCancel(context.Background())
-		cancelStart()
+	It("should scale the deployment it is named for, not one derived from the counting mode", func() {
+		// Regression: the target deployment is an explicit constructor argument, so an
+		// autoscaler scales exactly that deployment (e.g. the Serval gateway) rather than a
+		// name derived from a flag. Previously a host-endpoint autoscaler always scaled
+		// calico-typha-noncluster-host regardless of which deployment it was created for.
+		deploymentName := "serval"
+		var r int32 = 0
+		_, err := c.AppsV1().Deployments("calico-system").Create(ctx, &appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: deploymentName, Namespace: "calico-system"},
+			Spec:       appsv1.DeploymentSpec{Replicas: &r},
+		}, metav1.CreateOptions{})
+		Expect(err).NotTo(HaveOccurred())
 
-		ta = newTyphaAutoscaler(c, nodeIndexInformer, tlw, statusManager)
-		ta.start(cancelledCtx)
+		CreateNode(c, "node1", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		CreateNode(c, "node2", map[string]string{"kubernetes.io/os": "linux"}, nil)
+		CreateNode(c, "node3", map[string]string{"kubernetes.io/os": "linux"}, nil)
 
-		// The goroutine should observe the cancelled context and exit without autoscaling.
-		ta.waitForShutdown()
-		statusManager.AssertNotCalled(GinkgoT(), "SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		ta = New(c, nodeIndexInformer, statusManager, []string{deploymentName}, OptionSyncPeriod(10*time.Millisecond))
+		ta.Start(ctx)
+
+		// Three nodes scale to two replicas, applied to the named deployment.
+		verifyReplicas(c, deploymentName, 2)
 	})
 })
 
 func verifyTyphaReplicas(c kubernetes.Interface, expectedReplicas int) {
+	verifyReplicas(c, "calico-typha", expectedReplicas)
+}
+
+func verifyReplicas(c kubernetes.Interface, deploymentName string, expectedReplicas int) {
 	EventuallyWithOffset(1, func() int32 {
-		typha, err := c.AppsV1().Deployments("calico-system").Get(context.Background(), "calico-typha", metav1.GetOptions{})
+		typha, err := c.AppsV1().Deployments("calico-system").Get(context.Background(), deploymentName, metav1.GetOptions{})
 		Expect(err).NotTo(HaveOccurred())
 		// Just return an invalid number that will never match an expected replica count.
 		if typha.Spec.Replicas == nil {

@@ -218,6 +218,20 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
+	It("should mark the non-cluster-host Typha objects for deletion when no NonClusterHost resource exists", func() {
+		cfg.NonClusterHost = nil
+		component := render.Typha(&cfg)
+		create, del := component.Objects()
+
+		// Not rendered for creation...
+		Expect(rtest.GetResource(create, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")).To(BeNil())
+		// ...but returned for deletion so the operator garbage-collects any leftovers
+		// (Serval runs Typha in-process; there is no separate non-cluster-host Typha).
+		Expect(rtest.GetResource(del, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")).NotTo(BeNil())
+		Expect(rtest.GetResource(del, "calico-typha-noncluster-host", "calico-system", "", "v1", "Service")).NotTo(BeNil())
+		Expect(rtest.GetResource(del, render.TyphaNonClusterHostNetworkPolicyName, "calico-system", "projectcalico.org", "v3", "NetworkPolicy")).NotTo(BeNil())
+	})
+
 	It("should strip the host-network apiserver endpoint from the non-cluster-host Typha and fall back to the default Service", func() {
 		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
 

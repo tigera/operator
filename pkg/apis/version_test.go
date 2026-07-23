@@ -18,37 +18,11 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
 )
-
-func TestDecideV3CRDs(t *testing.T) {
-	cases := []struct {
-		name                            string
-		v1present, v3present, mapServed bool
-		want                            bool
-		wantErr                         bool
-	}{
-		{"v1 present stays v1", true, false, true, false, false},
-		{"both present stays v1", true, true, true, false, false},
-		{"v3 present with MAP stays v3", false, true, true, true, false},
-		{"v3 present without MAP errors", false, true, false, false, true},
-		{"greenfield capable goes v3", false, false, true, true, false},
-		{"greenfield not capable stays v1", false, false, false, false, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := decideV3CRDs(tc.v1present, tc.v3present, tc.mapServed)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("decideV3CRDs(v1=%t,v3=%t,map=%t) err = %v, wantErr %t",
-					tc.v1present, tc.v3present, tc.mapServed, err, tc.wantErr)
-			}
-			if got != tc.want {
-				t.Errorf("decideV3CRDs(v1=%t,v3=%t,map=%t) = %t, want %t",
-					tc.v1present, tc.v3present, tc.mapServed, got, tc.want)
-			}
-		})
-	}
-}
 
 func mapResourceList() *metav1.APIResourceList {
 	return &metav1.APIResourceList{
@@ -57,66 +31,56 @@ func mapResourceList() *metav1.APIResourceList {
 	}
 }
 
-func TestUseV3CRDsFromDiscovery(t *testing.T) {
+// emptyDynamicClient returns a dynamic fake with no DatastoreMigration CRs, so the migration check
+// finds nothing and useV3CRDs falls through to API discovery.
+func emptyDynamicClient() *dynamicfake.FakeDynamicClient {
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{datastoreMigrationGVR: "DatastoreMigrationList"},
+	)
+}
+
+func TestUseV3CRDs(t *testing.T) {
 	v1 := &metav1.APIResourceList{GroupVersion: "crd.projectcalico.org/v1"}
 	v3 := &metav1.APIResourceList{GroupVersion: "projectcalico.org/v3"}
 
 	cases := []struct {
 		name      string
+		apiGroup  string
 		resources []*metav1.APIResourceList
 		want      bool
 		wantErr   bool
 	}{
-		{"v1 present stays v1", []*metav1.APIResourceList{v1, mapResourceList()}, false, false},
-		{"both present stays v1", []*metav1.APIResourceList{v1, v3, mapResourceList()}, false, false},
-		{"v3 present with MAP stays v3", []*metav1.APIResourceList{v3, mapResourceList()}, true, false},
-		{"v3 present without MAP errors", []*metav1.APIResourceList{v3}, false, true},
-		{"greenfield capable goes v3", []*metav1.APIResourceList{mapResourceList()}, true, false},
-		{"greenfield not capable stays v1", []*metav1.APIResourceList{}, false, false},
+		{"v1 present stays v1", "", []*metav1.APIResourceList{v1, mapResourceList()}, false, false},
+		{"both present stays v1", "", []*metav1.APIResourceList{v1, v3, mapResourceList()}, false, false},
+		{"v3 present with MAP stays v3", "", []*metav1.APIResourceList{v3, mapResourceList()}, true, false},
+		{"v3 present without MAP errors", "", []*metav1.APIResourceList{v3}, false, true},
+		{"greenfield capable goes v3", "", []*metav1.APIResourceList{mapResourceList()}, true, false},
+		{"greenfield not capable stays v1", "", []*metav1.APIResourceList{}, false, false},
+
+		{"override v3 with MAP goes v3", "projectcalico.org/v3", []*metav1.APIResourceList{mapResourceList()}, true, false},
+		{"override v3 without MAP errors", "projectcalico.org/v3", []*metav1.APIResourceList{}, false, true},
+		{"override v1 ignores MAP", "crd.projectcalico.org/v1", []*metav1.APIResourceList{}, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.apiGroup != "" {
+				t.Setenv("CALICO_API_GROUP", tc.apiGroup)
+			}
 			c := fake.NewClientset()
 			c.Resources = tc.resources
-			got, err := useV3CRDsFromDiscovery(c.Discovery())
+			got, err := useV3CRDs(c.Discovery(), emptyDynamicClient())
 			if (err != nil) != tc.wantErr {
-				t.Fatalf("useV3CRDsFromDiscovery() err = %v, wantErr %t", err, tc.wantErr)
+				t.Fatalf("useV3CRDs() err = %v, wantErr %t", err, tc.wantErr)
 			}
 			if got != tc.want {
-				t.Errorf("useV3CRDsFromDiscovery() = %t, want %t", got, tc.want)
+				t.Errorf("useV3CRDs() = %t, want %t", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestRequireMAPForV3(t *testing.T) {
-	cases := []struct {
-		name      string
-		useV3     bool
-		resources []*metav1.APIResourceList
-		want      bool
-		wantErr   bool
-	}{
-		{"v1 passes through, MAP irrelevant", false, []*metav1.APIResourceList{}, false, false},
-		{"v3 with MAP is allowed", true, []*metav1.APIResourceList{mapResourceList()}, true, false},
-		{"v3 without MAP errors", true, []*metav1.APIResourceList{}, false, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			c := fake.NewClientset()
-			c.Resources = tc.resources
-			got, err := requireMAPForV3(tc.useV3, c.Discovery())
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("requireMAPForV3() err = %v, wantErr %t", err, tc.wantErr)
-			}
-			if got != tc.want {
-				t.Errorf("requireMAPForV3() = %t, want %t", got, tc.want)
-			}
-		})
-	}
-}
-
-func TestMutatingAdmissionPolicyServed(t *testing.T) {
+func TestIsMutatingAdmissionPolicyServed(t *testing.T) {
 	cases := []struct {
 		name      string
 		resources []*metav1.APIResourceList
@@ -148,9 +112,9 @@ func TestMutatingAdmissionPolicyServed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := fake.NewClientset()
 			c.Resources = tc.resources
-			got := mutatingAdmissionPolicyServed(c.Discovery())
+			got := isMutatingAdmissionPolicyServed(c.Discovery())
 			if got != tc.want {
-				t.Errorf("mutatingAdmissionPolicyServed() = %t, want %t", got, tc.want)
+				t.Errorf("isMutatingAdmissionPolicyServed() = %t, want %t", got, tc.want)
 			}
 		})
 	}

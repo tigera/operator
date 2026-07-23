@@ -131,17 +131,6 @@ func Add(mgr manager.Manager, _ options.ControllerOptions) error {
 		return fmt.Errorf("podiprecovery-controller failed to watch Nodes: %w", err)
 	}
 
-	// Watch host-networked pods too, and re-enqueue the pod's node when one
-	// settles into a Running-with-IPs state. The Node watch catches the
-	// instant a node's IP changes, but a pod that is still restarting at
-	// that instant has no status.podIPs yet and is skipped by Reconcile;
-	// when the kubelet finishes (re)starting it, the surviving pod reports
-	// its old (now stale) IP and no further Node event ever fires. Without
-	// this second watch that late-settling pod would never be re-evaluated
-	// (the recovery would be edge-triggered on the node event alone). The
-	// map function keys back to the Node, and Reconcile is idempotent, so
-	// the extra enqueues for already-healthy pods are cheap no-ops.
-	//
 	// The watch uses the label-scoped podCache above, so the informer only
 	// receives events for host-networked pods.
 	if err := c.WatchObjectInCache(podCache, &corev1.Pod{}, handler.EnqueueRequestsFromMapFunc(podToNode), hostNetPodSettledPredicate()); err != nil {
@@ -232,6 +221,13 @@ func hostNetPodSettledPredicate() predicate.Predicate {
 
 // isManagedHostNetPod reports whether the pod is an operator-managed
 // hostNetwork pod — the only kind the recovery controller acts on.
+// The label check is defense-in-depth: the Pod watch is backed by a cache
+// scoped server-side to this same label (see Add), so events reaching the
+// predicate already carry it. It's kept intentionally so the predicate stays
+// correct independently of how the watch is wired — if the watch is ever
+// pointed back at a non-label-scoped cache, this still prevents enqueuing a
+// reconcile for every pod in the cluster. The spec.HostNetwork check is not
+// covered by the label selector.
 func isManagedHostNetPod(pod *corev1.Pod) bool {
 	return pod.Spec.HostNetwork && pod.Labels[common.HostNetworkedPodLabel] == "true"
 }

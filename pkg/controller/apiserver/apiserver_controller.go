@@ -487,6 +487,29 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	// During a direct upgrade from the deprecated API server layout (tigera-apiserver in the
+	// tigera-system namespace, allow-tigera policy tier), the migrated calico-apiserver pod would be
+	// trapped by the leftover allow-tigera.default-deny policy in the calico-system namespace: that
+	// policy sits in the earlier-evaluated allow-tigera tier and selects all() endpoints, so it denies
+	// the pod at end-of-tier before the calico-system tier (whose default-deny excludes the API server)
+	// is ever reached. The installation controller removes that policy via the still-serving old API
+	// server. If we render the move now we would repoint the aggregated API onto the trapped pod before
+	// the deny is gone, taking the aggregated API down permanently. Hold the move back until the deny
+	// has been removed. This is a no-op on fresh installs (the policy never exists) and on the native
+	// v3 CRD path (no aggregated API server to deadlock).
+	if !r.opts.UseV3CRDs {
+		waitForDenyRemoval, err := r.apiServerMoveBlockedByDeprecatedDenyPolicy(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for the deprecated allow-tigera.default-deny policy", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if waitForDenyRemoval {
+			reqLogger.Info("Waiting for the deprecated allow-tigera.default-deny policy to be removed before migrating the API server")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the deprecated allow-tigera.default-deny policy to be removed before migrating the API server", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+	}
+
 	err = utils.PopulateK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
@@ -645,6 +668,43 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 	return reconcile.Result{}, nil
+}
+
+// apiServerMoveBlockedByDeprecatedDenyPolicy reports whether the API server move must be held back
+// because the deprecated allow-tigera.default-deny policy - which would trap the migrated
+// calico-apiserver pod - is still present in the calico-system namespace.
+//
+// When the tier watch is ready the aggregated API is reachable, so we query the policy directly and
+// hold back only while it exists. When the tier watch is not yet ready we cannot query v3 resources;
+// in that case we fall back to the presence of the deprecated tigera-system namespace to tell an
+// in-progress upgrade (hold back until the watch is ready and we can check the policy) apart from a
+// fresh install (proceed, so the API server - and therefore the v3 API and the tier watch - can come
+// up in the first place).
+func (r *ReconcileAPIServer) apiServerMoveBlockedByDeprecatedDenyPolicy(ctx context.Context) (bool, error) {
+	if r.tierWatchReady.IsReady() {
+		deny := networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", render.APIServerNamespace)
+		if err := r.client.Get(ctx, client.ObjectKeyFromObject(deny), deny); err != nil {
+			if errors.IsNotFound(err) || meta.IsNoMatchError(err) {
+				// Already removed, or the aggregated v3 API group is not served - safe to proceed.
+				return false, nil
+			}
+			return false, err
+		}
+		// Still present - hold the move back.
+		return true, nil
+	}
+
+	// Tier watch not ready: fall back to the deprecated-layout marker.
+	ns := &corev1.Namespace{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: "tigera-system"}, ns); err != nil {
+		if errors.IsNotFound(err) {
+			// Fresh install (or already migrated) - proceed.
+			return false, nil
+		}
+		return false, err
+	}
+	// Mid-upgrade but cannot yet confirm the policy is gone - hold the move back.
+	return true, nil
 }
 
 func validateAPIServerResource(instance *operatorv1.APIServer) error {

@@ -142,10 +142,10 @@ func handleCore(c *components, install *operatorv1.Installation) error {
 	}
 	// var-run-calico / var-lib-calico may use non-default hostPaths (e.g. microk8s snap paths).
 	// Capture them onto Installation so the operator continues rendering the same host paths.
-	if err := handleCalicoHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico", &install.Spec.CalicoNodeRunPath); err != nil {
+	if err := handleCalicoHostPathVolume(c.node.Spec.Template.Spec, "var-run-calico", "/var/run/calico", &install.Spec.CalicoRunHostPath); err != nil {
 		return err
 	}
-	if err := handleCalicoHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico", &install.Spec.CalicoNodeLibPath); err != nil {
+	if err := handleCalicoHostPathVolume(c.node.Spec.Template.Spec, "var-lib-calico", "/var/lib/calico", &install.Spec.CalicoLibHostPath); err != nil {
 		return err
 	}
 	if err := checkNodeHostPathVolume(c.node.Spec.Template.Spec, "xtables-lock", "/run/xtables.lock"); err != nil {

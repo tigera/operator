@@ -567,8 +567,8 @@ var _ = Describe("core handler", func() {
 	Context("calico host paths", func() {
 		It("should accept default var-run/var-lib calico hostPaths without setting Installation fields", func() {
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.CalicoNodeRunPath).To(BeEmpty())
-			Expect(i.Spec.CalicoNodeLibPath).To(BeEmpty())
+			Expect(i.Spec.CalicoRunHostPath).To(BeEmpty())
+			Expect(i.Spec.CalicoLibHostPath).To(BeEmpty())
 		})
 
 		It("should accept microk8s-style hostPaths and record them on Installation", func() {
@@ -581,8 +581,8 @@ var _ = Describe("core handler", func() {
 				}
 			}
 			Expect(handleCore(&comps, i)).ToNot(HaveOccurred())
-			Expect(i.Spec.CalicoNodeRunPath).To(Equal("/var/snap/microk8s/current/var/run/calico"))
-			Expect(i.Spec.CalicoNodeLibPath).To(Equal("/var/snap/microk8s/current/var/lib/calico"))
+			Expect(i.Spec.CalicoRunHostPath).To(Equal("/var/snap/microk8s/current/var/run/calico"))
+			Expect(i.Spec.CalicoLibHostPath).To(Equal("/var/snap/microk8s/current/var/lib/calico"))
 		})
 
 		It("should reject hostPaths that do not end with the expected suffix", func() {

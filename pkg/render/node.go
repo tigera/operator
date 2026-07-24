@@ -1198,15 +1198,15 @@ func (c *nodeComponent) nodeVolumes() []corev1.Volume {
 }
 
 func (c *nodeComponent) calicoRunHostPath() string {
-	if c.cfg.Installation != nil && c.cfg.Installation.CalicoNodeRunPath != "" {
-		return c.cfg.Installation.CalicoNodeRunPath
+	if c.cfg.Installation != nil && c.cfg.Installation.CalicoRunHostPath != "" {
+		return c.cfg.Installation.CalicoRunHostPath
 	}
 	return "/var/run/calico"
 }
 
 func (c *nodeComponent) calicoLibHostPath() string {
-	if c.cfg.Installation != nil && c.cfg.Installation.CalicoNodeLibPath != "" {
-		return c.cfg.Installation.CalicoNodeLibPath
+	if c.cfg.Installation != nil && c.cfg.Installation.CalicoLibHostPath != "" {
+		return c.cfg.Installation.CalicoLibHostPath
 	}
 	return "/var/lib/calico"
 }

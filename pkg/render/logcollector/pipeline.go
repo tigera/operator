@@ -23,6 +23,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -234,6 +235,47 @@ func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
 			c.linseedHTTPOutput(tag, c.certPath(), c.keyPath(), linseedStorageLimit(tag)))
 	}
 
+	// One opentelemetry output per selected OTel log type, each stamping the
+	// OTLP resource attribute service.name from the fluent-bit tag it
+	// matches. Classification happens here — at the source, where the type
+	// is known — rather than by probing body fields in the collector.
+	// mTLS uses the same Tigera-CA keypair as the Linseed outputs.
+	if c.cfg.OTelCollectorEnabled {
+		for _, t := range c.cfg.OTelLogTypes {
+			match, serviceName := otelTypeMatch(t)
+			if match == "" {
+				continue
+			}
+			cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, map[string]interface{}{
+				"name":         "opentelemetry",
+				"match":        match,
+				"host":         fmt.Sprintf("otel-collector.%s.svc", common.CalicoNamespace),
+				"port":         4318,
+				"logs_uri":     "/v1/logs",
+				"tls":          "on",
+				"tls.verify":   "on",
+				"tls.ca_file":  c.trustedBundlePath(),
+				"tls.crt_file": c.certPath(),
+				"tls.key_file": c.keyPath(),
+				// opentelemetry_envelope lifts the flat record into OTLP
+				// structure so content_modifier can address the resource
+				// attributes context.
+				"processors": map[string]interface{}{
+					"logs": []map[string]interface{}{
+						{"name": "opentelemetry_envelope"},
+						{
+							"name":    "content_modifier",
+							"context": "otel_resource_attributes",
+							"action":  "upsert",
+							"key":     "service.name",
+							"value":   serviceName,
+						},
+					},
+				},
+			})
+		}
+	}
+
 	// Additional stores are Linux-only, matching the fluentd Windows variant
 	// (Linseed only).
 	if c.cfg.LogCollector.Spec.AdditionalStores != nil && c.osType == rmeta.OSTypeLinux {
@@ -241,6 +283,21 @@ func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
 		c.addSyslogOutputs(cfg)
 		c.addSplunkOutputs(cfg)
 	}
+}
+
+// otelTypeMatch maps an OTel log type to the fluent-bit match pattern of the
+// tags carrying it and the service.name stamped on the exported records.
+func otelTypeMatch(t operatorv1.OTelLogType) (string, string) {
+	switch t {
+	case operatorv1.OTelFlowLog:
+		return "flows", "flows"
+	case operatorv1.OTelDNSLog:
+		return "dns", "dns"
+	case operatorv1.OTelAuditLog:
+		// Covers audit.tsee and audit.kube.
+		return "audit.*", "audit"
+	}
+	return "", ""
 }
 
 // linseedTags lists the tags shipped to Linseed: every tailed tag except

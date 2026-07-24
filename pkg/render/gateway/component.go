@@ -24,6 +24,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -49,6 +50,12 @@ type Configuration struct {
 	// ResourcePrefix names all generated resources, e.g. "calico-manager" produces
 	// "calico-manager-gateway", "calico-manager-route", etc.
 	ResourcePrefix string
+
+	// Enterprise controls whether the proxy SA and RoleBinding are rendered.
+	// The GatewayAPI controller creates these in user namespaces but skips
+	// calico-system (lifecycle guard); when we place a Gateway there, we
+	// render them operator-owned on the main path.
+	Enterprise bool
 }
 
 // Component renders Gateway API resources for CIG access to a UI component.
@@ -82,6 +89,13 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 
 	if rg := c.referenceGrant(); rg != nil {
 		objs = append(objs, rg)
+	}
+
+	if c.cfg.Enterprise {
+		objs = append(objs,
+			rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
+			rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
+		)
 	}
 
 	return objs, nil

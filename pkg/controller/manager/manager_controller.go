@@ -932,8 +932,8 @@ func (r *ReconcileManager) resolveGateway(
 	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetWarning("gatewayapi-missing", "GatewayAPI CR not found; gateway resources will not be rendered")
-			return nil, reconcile.Result{}, nil
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; gateway resources will not be rendered", err, logc)
+			return nil, reconcile.Result{}, err
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
 		return nil, reconcile.Result{}, err
@@ -942,17 +942,17 @@ func (r *ReconcileManager) resolveGateway(
 	// Resolve gatewayClassName.
 	gatewayClassName, err := resolveGatewayClassName(gw, gatewayAPI)
 	if err != nil {
-		r.status.SetWarning("gateway-class-resolution", err.Error())
-		return nil, reconcile.Result{}, nil
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to resolve gateway class", err, logc)
+		return nil, reconcile.Result{}, err
 	}
 
 	// OIDC hostname mismatch check.
 	if authenticationCR != nil && authenticationCR.Spec.ManagerDomain != "" {
 		if gw.Hostname != authenticationCR.Spec.ManagerDomain {
-			r.status.SetWarning("hostname-mismatch",
-				fmt.Sprintf("spec.gateway.hostname %q does not match Authentication.spec.managerDomain — OIDC redirects will fail",
-					gw.Hostname))
-			return nil, reconcile.Result{}, nil
+			err := fmt.Errorf("spec.gateway.hostname %q does not match Authentication.spec.managerDomain — OIDC redirects will fail",
+				gw.Hostname)
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Gateway hostname mismatch", err, logc)
+			return nil, reconcile.Result{}, err
 		}
 	}
 
@@ -977,6 +977,7 @@ func (r *ReconcileManager) resolveGateway(
 		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
 		TLSKeyPair:                   gwTLSKeyPair,
 		ResourcePrefix:               ManagerGatewayResourcePrefix,
+		Enterprise:                   true,
 	}
 
 	return rgateway.Component(gwCfg), reconcile.Result{}, nil

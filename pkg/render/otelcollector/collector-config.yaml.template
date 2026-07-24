@@ -1,0 +1,85 @@
+receivers:
+{{- if .HasLogs}}
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+{{- if .ReceiverTLS}}
+        tls:
+          cert_file: {{.ReceiverCertFile}}
+          key_file: {{.ReceiverKeyFile}}
+          client_ca_file: {{.ReceiverClientCA}}
+{{- end}}
+{{- end}}
+{{- if .MetricsEnabled}}
+  # Federate everything the in-cluster tigera-prometheus already scrapes
+  # (calico-node, typha/kube-controllers, calico-api, fluent-bit,
+  # elasticsearch, operator — every ServiceMonitor, including future ones)
+  # instead of re-implementing per-component scrape configs and their TLS
+  # quirks here. The request goes through Prometheus's authn-proxy: bearer
+  # token is the pod's ServiceAccount token, authorized by the
+  # services/proxy RBAC rule on the collector's ClusterRole.
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: 'tigera-prometheus-federate'
+          scheme: https
+          metrics_path: /federate
+          params:
+            'match[]': ['{__name__=~".+"}']
+          # Keep the original job/instance labels from the federated series.
+          honor_labels: true
+          authorization:
+            credentials_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+          tls_config:
+            ca_file: {{.MetricsCAFile}}
+          static_configs:
+            - targets: ['{{.PrometheusFederateTarget}}']
+{{- end}}
+
+exporters:
+{{- range .Exporters}}
+  {{.Prefix}}/{{.Name}}:
+    endpoint: {{.Endpoint}}
+{{- if .TLSInsecure}}
+    tls:
+      insecure: true
+{{- end}}
+{{- end}}
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: {{.MemoryLimitMiB}}
+    spike_limit_mib: {{.MemorySpikeLimitMiB}}
+  batch:
+    send_batch_size: {{.BatchMaxSize}}
+    send_batch_max_size: {{.BatchMaxSize}}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:{{.HealthCheckPort}}
+
+service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: "0.0.0.0"
+                port: {{.InternalMetricsPort}}
+  extensions: [health_check]
+  pipelines:
+{{- if .HasLogs}}
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [{{.ExporterNames}}]
+{{- end}}
+{{- if .MetricsEnabled}}
+    metrics:
+      receivers: [prometheus]
+      processors: [memory_limiter, batch]
+      exporters: [{{.ExporterNames}}]
+{{- end}}

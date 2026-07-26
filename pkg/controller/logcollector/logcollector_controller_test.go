@@ -267,9 +267,10 @@ var _ = Describe("LogCollector controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-system.allow-calico-fluent-bit", Namespace: render.LogCollectorNamespace},
 			}
 			Expect(test.GetResource(c, &policy)).To(BeNil())
-			// Metrics rule (2020) + non-cluster-host rule (9880). Without the fix the
-			// Windows render (applied last) drops the 9880 rule, leaving only one.
-			Expect(policy.Spec.Ingress).To(HaveLen(2))
+			// Metrics rule (2020) + the two non-cluster-host rules on 9880
+			// (voltron and serval sources). Without the fix the Windows render
+			// (applied last) drops the 9880 rules, leaving only the metrics rule.
+			Expect(policy.Spec.Ingress).To(HaveLen(3))
 		})
 
 		It("should degrade when the syslog endpoint scheme is not tcp or udp", func() {

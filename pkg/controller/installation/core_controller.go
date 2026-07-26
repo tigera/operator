@@ -57,7 +57,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
@@ -72,6 +71,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/typhaautoscaler"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -340,8 +340,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
 
 	// Create a Typha autoscaler.
-	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
+	typhaScaler := typhaautoscaler.New(opts.K8sClientset, nodeIndexInformer, statusManager, []string{common.TyphaDeploymentName})
 
 	r := &ReconcileInstallation{
 		config:               mgr.GetConfig(),
@@ -365,7 +364,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		apiDiscovery:         opts.APIDiscovery,
 	}
 	r.status.Run(opts.ShutdownContext)
-	r.typhaAutoscaler.start(opts.ShutdownContext)
+	r.typhaAutoscaler.Start(opts.ShutdownContext)
 
 	return r, nil
 }
@@ -402,26 +401,25 @@ var _ reconcile.Reconciler = &ReconcileInstallation{}
 type ReconcileInstallation struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	config                        *rest.Config
-	client                        client.Client
-	clientset                     *kubernetes.Clientset
-	scheme                        *runtime.Scheme
-	shutdownContext               context.Context
-	watches                       map[runtime.Object]struct{}
-	autoDetectedProvider          operatorv1.Provider
-	status                        status.StatusManager
-	typhaAutoscaler               *typhaAutoscaler
-	typhaAutoscalerNonClusterHost *typhaAutoscaler
-	namespaceMigration            migration.NamespaceMigration
-	enterpriseCRDsExist           bool
-	migrationChecked              bool
-	clusterDomain                 string
-	manageCRDs                    bool
-	tierWatchReady                *utils.ReadyFlag
-	migrationWatchReady           *utils.ReadyFlag
-	v3CRDs                        bool
-	kubernetesVersion             *common.VersionInfo
-	apiDiscovery                  *discovery.APIDiscovery
+	config               *rest.Config
+	client               client.Client
+	clientset            *kubernetes.Clientset
+	scheme               *runtime.Scheme
+	shutdownContext      context.Context
+	watches              map[runtime.Object]struct{}
+	autoDetectedProvider operatorv1.Provider
+	status               status.StatusManager
+	typhaAutoscaler      *typhaautoscaler.Autoscaler
+	namespaceMigration   migration.NamespaceMigration
+	enterpriseCRDsExist  bool
+	migrationChecked     bool
+	clusterDomain        string
+	manageCRDs           bool
+	tierWatchReady       *utils.ReadyFlag
+	migrationWatchReady  *utils.ReadyFlag
+	v3CRDs               bool
+	kubernetesVersion    *common.VersionInfo
+	apiDiscovery         *discovery.APIDiscovery
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler
@@ -1012,16 +1010,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !installationMarkedForDeletion {
 		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 		// the run the reset the degraded status and requeue the request.
-		if r.typhaAutoscaler.isDegraded() {
-			if err := r.typhaAutoscaler.triggerRun(); err != nil {
+		if r.typhaAutoscaler.IsDegraded() {
+			if err := r.typhaAutoscaler.TriggerRun(); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceScalingError, "Failed to scale typha", err, reqLogger)
-				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-			}
-		}
-
-		if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
-			if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
 				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 		}
@@ -1450,14 +1441,18 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:   typhaNodeTLS.TrustedBundle,
 		}))
 
-	// Check if non-cluster host feature is enabled.
-	var nonclusterhost *operatorv1.NonClusterHost
+	// Check if the non-cluster host feature is enabled. The legacy directly-exposed Typha
+	// deployment (calico-typha-noncluster-host) renders only when a NonClusterHost sets
+	// spec.typhaEndpoint. An unset endpoint selects the serval gateway (rendered by the
+	// nonclusterhost controller), whose in-process Typha replaces this deployment.
+	var legacyNonClusterHost *operatorv1.NonClusterHost
 	if instance.Spec.Variant.IsEnterprise() {
-		nonclusterhost, err = utils.GetNonClusterHost(ctx, r.client)
+		nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
 			return reconcile.Result{}, err
-		} else if nonclusterhost != nil {
+		} else if nonclusterhost != nil && nonclusterhost.Spec.TyphaEndpoint != "" {
+			legacyNonClusterHost = nonclusterhost
 			// This is the default common name in CSR from non-cluster hosts.
 			typhaNodeTLS.NodeNonClusterHostCommonName = render.FelixCommonName + render.TyphaNonClusterHostSuffix
 			// Attempt to retrieve the BYO node certificates for non-cluster hosts if they are present.
@@ -1473,22 +1468,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 				typhaNodeTLS.NodeNonClusterHostCommonName = cn
 				typhaNodeTLS.NodeNonClusterHostURISAN = urisan
 			}
-
-			if r.typhaAutoscalerNonClusterHost == nil {
-				calicoClient, err := calicoclient.NewForConfig(r.config)
-				if err != nil {
-					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
-					return reconcile.Result{}, err
-				}
-
-				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
-				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-				go hepIndexInformer.Run(r.shutdownContext.Done())
-
-				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.clientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.clientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-				r.typhaAutoscalerNonClusterHost.start(r.shutdownContext)
-			}
 		}
 	}
 
@@ -1500,7 +1479,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TLS:                    typhaNodeTLS,
 		MigrateNamespaces:      needsNamespaceMigration,
 		ClusterDomain:          r.clusterDomain,
-		NonClusterHost:         nonclusterhost,
+		NonClusterHost:         legacyNonClusterHost,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
 	components = append(components, render.Typha(&typhaCfg))
@@ -1738,7 +1717,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
-		if nonclusterhost != nil {
+		if legacyNonClusterHost != nil {
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
 		components = append(components,

@@ -115,6 +115,7 @@ func TestRenderedConfigGoldens(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 					Spec:       operatorv1.NonClusterHostSpec{Endpoint: "https://1.2.3.4:5678"},
 				}
+				cfg.NonClusterHostLogIngestion = true
 			},
 		},
 		{

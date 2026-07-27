@@ -16,8 +16,8 @@ package extensions
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -55,30 +55,26 @@ func (v *Variant) Image(component string, image components.Component) {
 	v.images.Register(v.variant, component, image)
 }
 
-// Modify registers v's modifier for the component that owns key. Cfg comes from
-// the key, not from modify, so a modifier written against a different component
-// does not compile - the key is the component's own declaration of what it hands
-// over, and only the component's package can declare one.
-//
-// The component supplies the value through render.ExtensionInputsProvider; Modify
-// asserts it to Cfg once, here, so the modifier body needs no assertion. It is a
-// free function because Go has no generic methods.
+// Modify registers v's modifier for the component that owns key. Cfg comes from the
+// key, not from modify, so a modifier written against a different component does not
+// compile. Modify asserts the component's inputs to Cfg once, here, so the modifier
+// body needs no assertion. Free function because Go has no generic methods.
 func Modify[Cfg any](
 	v *Variant,
 	key render.ModifierKey[Cfg],
 	modify func(ri render.Inputs, cfg Cfg, create, delete []client.Object) ([]client.Object, []client.Object),
 ) {
 	v.modifiers[key.String()] = func(base render.Component, ri render.Inputs) render.Component {
+		// Both of these mean the component and its key disagree, which the component's
+		// own package controls and no caller can recover from.
 		provider, ok := base.(render.ExtensionInputsProvider)
 		if !ok {
-			logrus.Errorf("BUG: component %q has a registered modifier but provides no extension inputs; leaving it unmodified", key)
-			return base
+			panic(fmt.Sprintf("BUG: component %q has a registered modifier but provides no extension inputs", key))
 		}
 		cfg, ok := provider.ExtensionInputs().(Cfg)
 		if !ok {
 			var want Cfg
-			logrus.Errorf("BUG: component %q extension inputs are %T, want %T; leaving it unmodified", key, provider.ExtensionInputs(), want)
-			return base
+			panic(fmt.Sprintf("BUG: component %q extension inputs are %T, want %T", key, provider.ExtensionInputs(), want))
 		}
 		bound := func(ri render.Inputs, create, delete []client.Object) ([]client.Object, []client.Object) {
 			return modify(ri, cfg, create, delete)

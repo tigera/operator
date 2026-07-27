@@ -435,7 +435,8 @@ func (c *apiServer) layerDeployment(d *appsv1.Deployment) {
 	// Audit logging and the management-cluster tunnel args are layered onto the
 	// aggregation API server container, which is only present when that server runs.
 	if c.cfg.RequiresAggregationServer {
-		if ctr, ok := render.Container(spec, string(render.APIServerContainerName)); ok {
+		{
+			ctr := render.MustContainer(spec, render.APIServerContainerName)
 			ctr.VolumeMounts = append(ctr.VolumeMounts,
 				corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 				corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
@@ -577,7 +578,7 @@ func (c *apiServer) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:    string(render.L7AdmissionControllerContainerName),
+		Name:    render.L7AdmissionControllerContainerName,
 		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
 		Env: []corev1.EnvVar{
@@ -840,7 +841,7 @@ func (c *apiServer) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:    string(render.TigeraAPIServerQueryServerContainerName),
+		Name:    render.TigeraAPIServerQueryServerContainerName,
 		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "queryserver"},
 		Env:     env,

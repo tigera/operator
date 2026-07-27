@@ -40,21 +40,17 @@ const (
 	WindowsNodeObjectName     = "calico-node-windows"
 	WindowsNodeMetricsService = "calico-node-metrics-windows"
 
-	// The calico-node-windows containers. Modifiers reach for these by name, so
-	// they are declared here rather than inline at the containers they name.
 	WindowsInstallCNIContainerName = "install-cni"
 	WindowsNodeContainerName       = "node"
 	WindowsFelixContainerName      = "felix"
 	WindowsConfdContainerName      = "confd"
 )
 
-// WindowsNodeContainerNames are the calico-node-windows containers that share the
-// felix environment and the node volume mounts, so a modifier layering enterprise
-// settings onto the daemonset applies them to all three.
+// WindowsNodeContainerNames are the calico-node-windows containers that always
+// render. Confd is gated on BGP, so callers add it separately.
 var WindowsNodeContainerNames = []string{
 	WindowsNodeContainerName,
 	WindowsFelixContainerName,
-	WindowsConfdContainerName,
 }
 
 func Windows(

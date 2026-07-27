@@ -15,21 +15,14 @@
 package render
 
 import (
-	"github.com/sirupsen/logrus"
+	"fmt"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
-// Container returns the named container in spec, searching regular containers
-// before init containers. The returned pointer aliases spec, so mutating it
-// mutates the pod.
-//
-// Variant modifiers layer onto containers this package renders, and they can only
-// find them by name. Picking them out of the PodSpec directly means matching a
-// name render chose with nothing tying the two together: rename the container and
-// the modifier keeps compiling and silently stops matching. Going through here
-// keeps the lookup next to the names, and makes a miss loud - a modifier asking
-// for a container the component no longer renders is a bug on one side or the
-// other, not something to skip over quietly.
+// Container returns the named container in spec, init containers included. The
+// returned pointer aliases spec. Use it for containers a component only renders
+// under some configurations; for the rest, use MustContainer.
 func Container(spec *corev1.PodSpec, name string) (*corev1.Container, bool) {
 	for i := range spec.Containers {
 		if spec.Containers[i].Name == name {
@@ -41,18 +34,25 @@ func Container(spec *corev1.PodSpec, name string) (*corev1.Container, bool) {
 			return &spec.InitContainers[i], true
 		}
 	}
-	logrus.Errorf("BUG: no container named %q to modify; leaving it alone", name)
 	return nil, false
 }
 
-// Containers returns the named containers in spec, in the order named, skipping
-// (and logging) any that are absent. A partial match is as loud as no match.
-func Containers(spec *corev1.PodSpec, names ...string) []*corev1.Container {
+// MustContainer returns the named container, panicking if it is absent. A modifier
+// asking for a container that is always rendered and not finding one means render
+// and the modifier have drifted apart, which no caller can recover from.
+func MustContainer(spec *corev1.PodSpec, name string) *corev1.Container {
+	c, ok := Container(spec, name)
+	if !ok {
+		panic(fmt.Sprintf("BUG: no container named %q to modify", name))
+	}
+	return c
+}
+
+// MustContainers returns the named containers, panicking if any is absent.
+func MustContainers(spec *corev1.PodSpec, names ...string) []*corev1.Container {
 	found := make([]*corev1.Container, 0, len(names))
 	for _, name := range names {
-		if c, ok := Container(spec, name); ok {
-			found = append(found, c)
-		}
+		found = append(found, MustContainer(spec, name))
 	}
 	return found
 }

@@ -125,20 +125,20 @@ func modifyNodeDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 
 	multiInterfaceMode := multiInterfaceModeEnv(ri.Installation)
 
+	// MultiInterfaceMode is rejected in validation unless the CNI is Calico, which is
+	// also what gates the install-cni container.
 	if multiInterfaceMode != nil {
-		if cni, ok := render.Container(spec, render.InstallCNIContainerName); ok {
-			cni.Env = append(cni.Env, *multiInterfaceMode)
-		}
+		cni := render.MustContainer(spec, render.InstallCNIContainerName)
+		cni.Env = append(cni.Env, *multiInterfaceMode)
 	}
 
-	if c, ok := render.Container(spec, render.CalicoNodeObjectName); ok {
-		c.Env = append(c.Env, nodeEnterpriseEnv(ri)...)
+	c := render.MustContainer(spec, render.CalicoNodeObjectName)
+	c.Env = append(c.Env, nodeEnterpriseEnv(ri)...)
 
-		// Add the BGP metrics readiness check, but only when the base render kept
-		// the bird readiness check (i.e. BGP is in use and we're not on VPP).
-		if c.ReadinessProbe != nil && c.ReadinessProbe.Exec != nil && slices.Contains(c.ReadinessProbe.Exec.Command, "--bird-ready") {
-			c.ReadinessProbe.Exec.Command = append(c.ReadinessProbe.Exec.Command, "--bgp-metrics-ready")
-		}
+	// Add the BGP metrics readiness check, but only when the base render kept the
+	// bird readiness check (i.e. BGP is in use and we're not on VPP).
+	if c.ReadinessProbe != nil && c.ReadinessProbe.Exec != nil && slices.Contains(c.ReadinessProbe.Exec.Command, "--bird-ready") {
+		c.ReadinessProbe.Exec.Command = append(c.ReadinessProbe.Exec.Command, "--bgp-metrics-ready")
 	}
 
 	mountNodePrometheusTLS(ri, ds)
@@ -160,11 +160,10 @@ func mountNodePrometheusTLS(ri render.Inputs, ds *appsv1.DaemonSet) {
 
 	spec.Volumes = append(spec.Volumes, tls.Volume())
 
-	if c, ok := render.Container(spec, render.CalicoNodeObjectName); ok {
-		c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeLinux))
-		if tls.UseCertificateManagement() {
-			spec.InitContainers = append(spec.InitContainers, tls.InitContainer(common.CalicoNamespace, c.SecurityContext))
-		}
+	c := render.MustContainer(spec, render.CalicoNodeObjectName)
+	c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeLinux))
+	if tls.UseCertificateManagement() {
+		spec.InitContainers = append(spec.InitContainers, tls.InitContainer(common.CalicoNamespace, c.SecurityContext))
 	}
 
 	if ds.Spec.Template.Annotations == nil {

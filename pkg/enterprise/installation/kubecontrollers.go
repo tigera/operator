@@ -139,7 +139,8 @@ func modifyKubeControllersDeployment(ri render.Inputs, dp *appsv1.Deployment, da
 		spec.Volumes = append(spec.Volumes, waf.webhookTLS.Volume())
 	}
 
-	if c, ok := render.Container(spec, kubecontrollers.KubeController); ok {
+	{
+		c := render.MustContainer(spec, kubecontrollers.KubeController)
 
 		appendEnabledControllers(c, data.kubeControllerControllers)
 		c.Env = append(c.Env, enterpriseEnv(ri)...)

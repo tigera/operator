@@ -189,7 +189,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		_, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
 		Expect(ok).To(BeFalse())
 		dp := apiServerDeployment(objs)
-		Expect(container(dp, string(render.TigeraAPIServerQueryServerContainerName))).To(BeNil())
+		Expect(container(dp, render.TigeraAPIServerQueryServerContainerName)).To(BeNil())
 	})
 
 	It("layers the query server, enterprise RBAC, audit policy, and query server port on", func() {
@@ -202,7 +202,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		// The query server container is layered onto the deployment.
 		dp := apiServerDeployment(objs)
-		Expect(container(dp, string(render.TigeraAPIServerQueryServerContainerName))).NotTo(BeNil())
+		Expect(container(dp, render.TigeraAPIServerQueryServerContainerName)).NotTo(BeNil())
 
 		// Enterprise RBAC.
 		for _, name := range []string{"calico-apiserver", "tigera-ui-user", "tigera-network-admin", "calico-uisettingsgroup-getter", "calico-uisettings-passthrough"} {
@@ -284,7 +284,7 @@ var _ = Describe("API server enterprise modifier", func() {
 			objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
 
 			dp := apiServerDeployment(objs)
-			apiCtr := container(dp, string(render.APIServerContainerName))
+			apiCtr := container(dp, render.APIServerContainerName)
 			Expect(apiCtr).NotTo(BeNil())
 			Expect(apiCtr.Args).To(ContainElement("--enable-managed-clusters-create-api=true"))
 			Expect(apiCtr.Args).To(ContainElement("--managementClusterAddr=example.com:1234"))
@@ -315,7 +315,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 			dp := apiServerDeployment(objs)
 			Expect(dp.Spec.Template.Spec.Volumes).To(ContainElement(HaveField("Name", render.LinseedTokenVolumeName)))
-			qs := container(dp, string(render.TigeraAPIServerQueryServerContainerName))
+			qs := container(dp, render.TigeraAPIServerQueryServerContainerName)
 			Expect(qs).NotTo(BeNil())
 			Expect(qs.Env).To(ContainElement(HaveField("Name", "LINSEED_TOKEN")))
 		})
@@ -444,7 +444,7 @@ var _ = Describe("API server enterprise modifier", func() {
 			// create list and out of the delete list.
 			dp, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName)
 			Expect(ok).To(BeTrue())
-			Expect(container(dp, string(render.TigeraAPIServerQueryServerContainerName))).NotTo(BeNil())
+			Expect(container(dp, render.TigeraAPIServerQueryServerContainerName)).NotTo(BeNil())
 			_, ok = extensions.FindObject[*appsv1.Deployment](del, render.APIServerName)
 			Expect(ok).To(BeFalse())
 		})
@@ -498,7 +498,7 @@ var _ = Describe("API server enterprise modifier", func() {
 			objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
 
 			dp := apiServerDeployment(objs)
-			Expect(container(dp, string(render.L7AdmissionControllerContainerName))).NotTo(BeNil())
+			Expect(container(dp, render.L7AdmissionControllerContainerName)).NotTo(BeNil())
 
 			_, ok := extensions.FindObject[*admregv1.MutatingWebhookConfiguration](objs, common.SidecarMutatingWebhookConfigName)
 			Expect(ok).To(BeTrue())

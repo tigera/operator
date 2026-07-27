@@ -35,9 +35,9 @@
 // the inputs the modifier receives, so one written against a different component
 // won't compile.
 //
-// controller.Inputs and render.Inputs are a pair: controller.Inputs embeds
-// render.Inputs and adds the cluster-access deps, which is why modifiers, given
-// only a render.Inputs, can't do I/O.
+// controller.Inputs and render.Inputs are a pair: controller.Inputs carries a
+// render.Inputs plus the cluster-access deps, which is why modifiers, given only
+// a render.Inputs, can't do I/O.
 //
 // A variant wires up its controller extension and modifiers in one place at
 // startup - see pkg/enterprise.

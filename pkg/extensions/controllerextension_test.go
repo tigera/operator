@@ -39,31 +39,31 @@ var _ = Describe("controller extension", func() {
 
 	It("returns the base render inputs when the variant has no extension", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		ri, _, err := s.ExtendInputs(ctx, controller.Inputs{
+		eci, _, err := s.ExtendInputs(ctx, controller.Inputs{
 			Inputs:     render.Inputs{Installation: install, ClusterDomain: "cluster.local"},
 			Controller: controller.Installation,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ri.Installation).To(BeIdenticalTo(install))
-		Expect(ri.ClusterDomain).To(Equal("cluster.local"))
-		Expect(ri.Extension).To(BeNil())
+		Expect(eci.Installation).To(BeIdenticalTo(install))
+		Expect(eci.ClusterDomain).To(Equal("cluster.local"))
+		Expect(eci.Extension).To(BeNil())
 	})
 
 	It("runs the extension registered for the installation variant", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, fakeController{})
-		ri, _, err := s.ExtendInputs(ctx, enterpriseInputs())
+		eci, _, err := s.ExtendInputs(ctx, enterpriseInputs())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ri.ClusterDomain).To(Equal("from-fake"))
+		Expect(eci.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores an extension registered for a different variant", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, fakeController{})
-		ri, _, err := s.ExtendInputs(ctx, controller.Inputs{
+		eci, _, err := s.ExtendInputs(ctx, controller.Inputs{
 			Inputs:     render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
 			Controller: controller.Installation,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ri.ClusterDomain).To(Equal("real"))
+		Expect(eci.ClusterDomain).To(Equal("real"))
 	})
 
 	It("surfaces the extension error", func() {
@@ -88,9 +88,9 @@ var _ = Describe("controller extension", func() {
 		var nilSet *extensions.Set
 		ci := enterpriseInputs()
 		ci.ClusterDomain = "real"
-		ri, _, err := nilSet.ExtendInputs(ctx, ci)
+		eci, _, err := nilSet.ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(ri.ClusterDomain).To(Equal("real"))
+		Expect(eci.ClusterDomain).To(Equal("real"))
 		Expect(nilSet.Validate(ctx, ci)).NotTo(HaveOccurred())
 	})
 })

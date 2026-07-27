@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -38,6 +39,54 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 )
+
+var _ = Describe("Waypoint controller Gateway event filtering", func() {
+	gateway := func(class string) *gapi.Gateway {
+		return &gapi.Gateway{
+			ObjectMeta: metav1.ObjectMeta{Name: "gw", Namespace: "user-ns"},
+			Spec:       gapi.GatewaySpec{GatewayClassName: gapi.ObjectName(class)},
+		}
+	}
+
+	It("should reconcile on any Gateway create", func() {
+		// At startup the informer replays every Gateway as a create, and the sweep uses
+		// those to catch class flips that happened while the operator was down.
+		Expect(gatewayEventPredicate.Create(event.CreateEvent{Object: gateway("some-other-class")})).To(BeTrue())
+		Expect(gatewayEventPredicate.Create(event.CreateEvent{Object: gateway(IstioWaypointClassName)})).To(BeTrue())
+	})
+
+	It("should reconcile on any Gateway delete, whatever its class", func() {
+		// A gateway-class Gateway delete can strand a shared namespace: the gateway-API
+		// controller owns the same RoleBinding and pull secret copies by its Gateways, so
+		// losing the last of them lets garbage collection take objects a waypoint in that
+		// namespace still needs. Filtering this by class would leave them missing until the
+		// periodic reconcile.
+		Expect(gatewayEventPredicate.Delete(event.DeleteEvent{Object: gateway("tigera-gateway-class")})).To(BeTrue())
+		Expect(gatewayEventPredicate.Delete(event.DeleteEvent{Object: gateway(IstioWaypointClassName)})).To(BeTrue())
+	})
+
+	It("should reconcile on a class change in either direction", func() {
+		Expect(gatewayEventPredicate.Update(event.UpdateEvent{
+			ObjectOld: gateway(IstioWaypointClassName),
+			ObjectNew: gateway("some-other-class"),
+		})).To(BeTrue())
+		Expect(gatewayEventPredicate.Update(event.UpdateEvent{
+			ObjectOld: gateway("some-other-class"),
+			ObjectNew: gateway(IstioWaypointClassName),
+		})).To(BeTrue())
+	})
+
+	It("should reconcile on other updates to waypoint Gateways only", func() {
+		Expect(gatewayEventPredicate.Update(event.UpdateEvent{
+			ObjectOld: gateway(IstioWaypointClassName),
+			ObjectNew: gateway(IstioWaypointClassName),
+		})).To(BeTrue())
+		Expect(gatewayEventPredicate.Update(event.UpdateEvent{
+			ObjectOld: gateway("some-other-class"),
+			ObjectNew: gateway("some-other-class"),
+		})).To(BeFalse())
+	})
+})
 
 var _ = Describe("Waypoint controller pull secret tests", func() {
 	var (
@@ -157,6 +206,37 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 
 	doReconcile := func() (reconcile.Result, error) {
 		return r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+	}
+
+	// An owner reference of the shape the gateway-API controller sets on the per-namespace
+	// resources it manages.
+	gatewayOwnerRef := metav1.OwnerReference{
+		APIVersion: "gateway.networking.k8s.io/v1",
+		Kind:       "Gateway",
+		Name:       "ingress",
+		UID:        types.UID("ingress-gw-uid"),
+	}
+
+	// The Gateway gatewayOwnerRef points at. Deferring to the gateway-API controller only
+	// holds while that Gateway is live, so a test that expects deferral has to create it.
+	createOwningGateway := func(namespace string) {
+		Expect(cli.Create(ctx, &gapi.Gateway{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayOwnerRef.Name,
+				Namespace: namespace,
+				UID:       gatewayOwnerRef.UID,
+			},
+			Spec: gapi.GatewaySpec{
+				GatewayClassName: "tigera-gateway-class",
+				Listeners: []gapi.Listener{
+					{
+						Name:     "http",
+						Port:     80,
+						Protocol: gapi.HTTPProtocolType,
+					},
+				},
+			},
+		})).NotTo(HaveOccurred())
 	}
 
 	istioOwnerRef := func(obj client.Object) *metav1.OwnerReference {
@@ -331,6 +411,145 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(kinds).To(HaveKey("Istio"))
 		})
 
+		It("should mark every object it creates for merged ownership", func() {
+			// MultipleOwnersLabel is what makes the component handler merge the Istio owner
+			// reference into an object's existing owners instead of replacing them. Every
+			// object lands in a namespace that may be shared with another feature, so all of
+			// them need it — including any object type added later.
+			createPullSecret("second-pull-secret")
+			inst := &operatorv1.Installation{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, inst)).NotTo(HaveOccurred())
+			inst.Spec.ImagePullSecrets = []corev1.LocalObjectReference{
+				{Name: "my-pull-secret"},
+				{Name: "second-pull-secret"},
+			}
+			Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint-a", "ns-a")
+			createWaypointGateway("waypoint-b", "ns-b")
+
+			objs, err := r.pullSecretResources(ctx, logr.Discard())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(objs).To(HaveLen(6))
+			for _, obj := range objs {
+				Expect(obj.GetLabels()).To(HaveKeyWithValue(common.MultipleOwnersLabel, "true"),
+					"%T %s/%s is missing the label", obj, obj.GetNamespace(), obj.GetName())
+			}
+		})
+
+		It("should leave objects the gateway-API controller already owns alone", func() {
+			// A namespace shared with a gateway-class Gateway gets the same RoleBinding and
+			// the same pull secret copies from the gateway-API controller, owned by its
+			// Gateways. It rewrites those owner references wholesale, so writing them here
+			// too would just have the two controllers overwrite each other every reconcile.
+			createNamespace("shared-ns")
+			createOwningGateway("shared-ns")
+			rb := render.CreateOperatorSecretsRoleBinding("shared-ns")
+			rb.OwnerReferences = []metav1.OwnerReference{gatewayOwnerRef}
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "my-pull-secret",
+					Namespace:       "shared-ns",
+					OwnerReferences: []metav1.OwnerReference{gatewayOwnerRef},
+				},
+			})).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint", "shared-ns")
+
+			objs, err := r.pullSecretResources(ctx, logr.Discard())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(objs).To(BeEmpty())
+		})
+
+		It("should take over objects whose owning gateway is gone", func() {
+			// Deleting that Gateway hands the objects to garbage collection, and this
+			// controller is woken by the delete before garbage collection gets to them: they
+			// are still present, still carrying the owner reference. Deferring on the
+			// reference alone would skip the only reconcile that can save them and leave the
+			// waypoint without pull secrets until the periodic one. Writing them instead
+			// merges in an Istio owner reference, which is a live owner, so they survive.
+			createNamespace("shared-ns")
+			rb := render.CreateOperatorSecretsRoleBinding("shared-ns")
+			rb.OwnerReferences = []metav1.OwnerReference{gatewayOwnerRef}
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:            "my-pull-secret",
+					Namespace:       "shared-ns",
+					OwnerReferences: []metav1.OwnerReference{gatewayOwnerRef},
+				},
+			})).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint", "shared-ns")
+
+			// No owning Gateway exists: the reference is stale.
+			objs, err := r.pullSecretResources(ctx, logr.Discard())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(objs).To(HaveLen(2))
+		})
+
+		It("should take over objects whose owning gateway is terminating", func() {
+			// A Gateway held by a finalizer still exists, so existence alone is not enough:
+			// garbage collection is already coming for what it owns.
+			createNamespace("shared-ns")
+			createOwningGateway("shared-ns")
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ingress", Namespace: "shared-ns"}, gw)).NotTo(HaveOccurred())
+			gw.Finalizers = []string{"example.com/block-deletion"}
+			Expect(cli.Update(ctx, gw)).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, gw)).NotTo(HaveOccurred())
+
+			rb := render.CreateOperatorSecretsRoleBinding("shared-ns")
+			rb.OwnerReferences = []metav1.OwnerReference{gatewayOwnerRef}
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint", "shared-ns")
+
+			objs, err := r.pullSecretResources(ctx, logr.Discard())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(objs).To(HaveLen(2))
+		})
+
+		It("should still create objects the gateway-API controller has not written", func() {
+			// That controller writes the RoleBinding and the copies in sequence and returns
+			// early on error, so it can leave a partial set behind. Deferring is per object.
+			createNamespace("shared-ns")
+			createOwningGateway("shared-ns")
+			rb := render.CreateOperatorSecretsRoleBinding("shared-ns")
+			rb.OwnerReferences = []metav1.OwnerReference{gatewayOwnerRef}
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint", "shared-ns")
+
+			objs, err := r.pullSecretResources(ctx, logr.Discard())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(objs).To(HaveLen(1))
+			Expect(objs[0]).To(BeAssignableToTypeOf(&corev1.Secret{}))
+			Expect(objs[0].GetName()).To(Equal("my-pull-secret"))
+		})
+
+		It("should not defer to an egress gateway sharing the namespace", func() {
+			// The egress gateway marks its copies for merged ownership as well, so both
+			// controllers coexist there. Deferring would mean losing the objects to garbage
+			// collection when the EgressGateway CR is deleted.
+			createNamespace("shared-ns")
+			rb := render.CreateOperatorSecretsRoleBinding("shared-ns")
+			rb.OwnerReferences = []metav1.OwnerReference{{
+				APIVersion: "operator.tigera.io/v1",
+				Kind:       "EgressGateway",
+				Name:       "egw",
+				UID:        types.UID("egw-uid"),
+			}}
+			Expect(cli.Create(ctx, rb)).NotTo(HaveOccurred())
+
+			createWaypointGateway("waypoint", "shared-ns")
+
+			objs, err := r.pullSecretResources(ctx, logr.Discard())
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(objs).To(HaveLen(2))
+		})
+
 		It("should order the RoleBinding ahead of the secret copies", func() {
 			// The RoleBinding grants the operator permission to write secrets in
 			// the namespace, so it must be created first.
@@ -343,11 +562,11 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(objs[1]).To(BeAssignableToTypeOf(&corev1.Secret{}))
 		})
 
-		It("should not create resources for gateways in reserved namespaces", func() {
-			// calico-system's pull secrets and RoleBinding are managed by the
-			// installation controller, and tigera-gateway's are torn down by the
-			// gateway-API controller's legacy cleanup.
-			createWaypointGateway("waypoint-calico-system", common.CalicoNamespace)
+		It("should not create resources for a gateway in the legacy gateway namespace", func() {
+			// The gateway-API controller's legacy teardown queues tigera-gateway's copies
+			// and RoleBinding for deletion whenever no Gateway of a class it owns lives
+			// there, so anything created here would be deleted and recreated for as long as
+			// both controllers keep reconciling.
 			createWaypointGateway("waypoint-legacy-gateway", "tigera-gateway")
 
 			_, err := doReconcile()

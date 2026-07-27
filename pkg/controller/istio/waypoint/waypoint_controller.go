@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -50,20 +51,72 @@ const (
 	legacyGatewayNamespace = "tigera-gateway"
 )
 
-// reservedNamespace returns true for namespaces whose pull secrets and
-// tigera-operator-secrets RoleBinding this controller must not manage: the operator
-// namespace holds the source secrets, calico-system's are managed by the installation
-// controller, and tigera-gateway's are actively torn down by the gateway-API controller's
-// legacy cleanup, which would fight copies created here.
+// reservedNamespace returns true for namespaces whose pull secrets and tigera-operator-secrets
+// RoleBinding this controller must not manage.
+//
+// Waypoints belong in user-managed namespaces, so a waypoint Gateway should never appear in an
+// operator-managed one.
+//
+// The operator namespace holds the source secrets, and a copy keeps the source's name: the
+// handler would update the user's own secret in place and add an Istio owner reference to it.
+// That is the only owner a hand-created secret has, so deleting the Istio CR would garbage
+// collect the user's pull secret, and only the user can put it back.
+//
+// tigera-gateway's are queued for deletion by the gateway-API controller's legacy teardown, in
+// legacyTeardownObjects, which runs whenever no Gateway of a class that controller owns lives
+// there. Copies created here would be deleted and recreated for as long as both keep reconciling.
 func reservedNamespace(ns string) bool {
 	switch ns {
-	case common.OperatorNamespace(), common.CalicoNamespace, legacyGatewayNamespace:
+	case common.OperatorNamespace(), legacyGatewayNamespace:
 		return true
 	}
 	return false
 }
 
 var log = logf.Log.WithName("controller_istio_waypoint")
+
+// gatewayEventPredicate filters Gateway events down to the ones that change what this
+// controller has to do.
+var gatewayEventPredicate = predicate.Funcs{
+	// Any create can matter: a waypoint-class Gateway needs pull secrets,
+	// and when the informer syncs at operator startup every Gateway is
+	// replayed as a create — the sweep uses those to catch class flips
+	// that happened while the operator was down.
+	CreateFunc: func(e event.CreateEvent) bool { return true },
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		old, okOld := e.ObjectOld.(*gapi.Gateway)
+		curr, okNew := e.ObjectNew.(*gapi.Gateway)
+		if !okOld || !okNew {
+			return false
+		}
+		// A class change strands the resource set istiod rendered for the
+		// previous class, and moves pull secrets in or out of scope.
+		if old.Spec.GatewayClassName != curr.Spec.GatewayClassName {
+			return true
+		}
+		// Other updates only matter for waypoint Gateways, which drive
+		// pull-secret placement.
+		return string(curr.Spec.GatewayClassName) == IstioWaypointClassName
+	},
+	// Any delete can matter, whatever the class. In a namespace shared with a Gateway of a
+	// class the gateway-API controller owns, that controller writes the same
+	// tigera-operator-secrets RoleBinding and pull secret copies, owned by its Gateways, and
+	// rewrites their owner references wholesale — dropping ours. Deleting the last of those
+	// Gateways then lets garbage collection take objects a waypoint in that namespace still
+	// needs, and filtering this event by class would leave them missing until the periodic
+	// reconcile. Reconciling on every delete restores them promptly instead — that reconcile
+	// gets there before garbage collection does, which is why managedByGatewayAPI keys the
+	// decision on whether the owning Gateway is still live and not on the owner reference
+	// the objects are still carrying at that point.
+	//
+	// A waypoint Gateway's own delete still triggers no cleanup of that namespace's copies;
+	// those are only GC'd with the Istio CR, matching the egress gateway pattern.
+	DeleteFunc: func(e event.DeleteEvent) bool { return true },
+	GenericFunc: func(e event.GenericEvent) bool {
+		gw, ok := e.Object.(*gapi.Gateway)
+		return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
+	},
+}
 
 // Add creates the waypoint controller and adds it to the Manager. The
 // controller reconciles the per-Gateway state the Istio feature needs beyond
@@ -96,41 +149,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	gatewayObj := &gapi.Gateway{
 		TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
 	}
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, gatewayWatchReady, []client.Object{gatewayObj}, predicate.Funcs{
-		// Any create can matter: a waypoint-class Gateway needs pull secrets,
-		// and when the informer syncs at operator startup every Gateway is
-		// replayed as a create — the sweep uses those to catch class flips
-		// that happened while the operator was down.
-		CreateFunc: func(e event.CreateEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			old, okOld := e.ObjectOld.(*gapi.Gateway)
-			curr, okNew := e.ObjectNew.(*gapi.Gateway)
-			if !okOld || !okNew {
-				return false
-			}
-			// A class change strands the resource set istiod rendered for the
-			// previous class, and moves pull secrets in or out of scope.
-			if old.Spec.GatewayClassName != curr.Spec.GatewayClassName {
-				return true
-			}
-			// Other updates only matter for waypoint Gateways, which drive
-			// pull-secret placement.
-			return string(curr.Spec.GatewayClassName) == IstioWaypointClassName
-		},
-		// The resource sets istiod rendered are removed by Kubernetes garbage
-		// collection via owner references. A waypoint Gateway delete currently
-		// triggers no cleanup of that namespace's pull secret copies (they are
-		// only GC'd with the Istio CR, matching the egress gateway pattern);
-		// the watch is kept so the planned cleanup work has the events it needs.
-		DeleteFunc: func(e event.DeleteEvent) bool {
-			gw, ok := e.Object.(*gapi.Gateway)
-			return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
-		},
-		GenericFunc: func(e event.GenericEvent) bool {
-			gw, ok := e.Object.(*gapi.Gateway)
-			return ok && string(gw.Spec.GatewayClassName) == IstioWaypointClassName
-		},
-	})
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, gatewayWatchReady, []client.Object{gatewayObj}, gatewayEventPredicate)
 
 	// Watch the Istio CR for pull secret config changes and feature enablement.
 	err = c.WatchObject(&operatorv1.Istio{}, &handler.EnqueueRequestForObject{})
@@ -199,10 +218,10 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{}, err
 	}
 
-	// Pass the Istio CR as the owner: created objects carry an owner reference to it
-	// (merged with any other owners, such as an egress gateway CR sharing the namespace,
-	// via the multiple-owners label) and are garbage collected by owner reference —
-	// the same pattern the egress gateway uses with its CRs.
+	// Pass the Istio CR as the owner: created objects carry an owner reference to it and are
+	// garbage collected by owner reference — the same pattern the egress gateway uses with its
+	// CRs. markSharedOwnership has labelled them, so that reference is merged into the owners
+	// already on the object instead of replacing them.
 	hdlr := utils.NewComponentHandler(log, r, r.scheme, instance)
 	component := render.NewPassthrough(toCreate, toDelete)
 	if err := hdlr.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
@@ -244,34 +263,88 @@ func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger l
 	}
 
 	targetNamespaces := map[string]bool{}
+	liveGateways := map[types.UID]bool{}
 	for i := range gatewayList.Items {
 		gw := &gatewayList.Items[i]
 		if string(gw.Spec.GatewayClassName) == IstioWaypointClassName && !reservedNamespace(gw.Namespace) {
 			targetNamespaces[gw.Namespace] = true
 		}
+		// Gateways that can still be managing resources of their own, for the ownership
+		// check below. One that is gone or being deleted takes what it owns with it.
+		if gw.DeletionTimestamp.IsZero() {
+			liveGateways[gw.UID] = true
+		}
 	}
 
 	// Build the objects for each target namespace. The RoleBinding comes first: it grants
 	// the operator permission to write secrets in the namespace, so it must exist before
-	// the secret copies are created. Both carry MultipleOwnersLabel so the component
-	// handler merges owner references with any other owners (e.g. an egress gateway CR
-	// sharing the namespace) rather than replacing them.
+	// the secret copies are created.
 	var objs []client.Object
 	for ns := range targetNamespaces {
-		rb := render.CreateOperatorSecretsRoleBinding(ns)
-		rb.Labels = common.MapExistsOrInitialize(rb.Labels)
-		rb.Labels[common.MultipleOwnersLabel] = "true"
-		objs = append(objs, rb)
+		candidates := []client.Object{render.CreateOperatorSecretsRoleBinding(ns)}
+		candidates = append(candidates, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pullSecrets...)...)...)
 
-		copied := secret.CopyToNamespace(ns, pullSecrets...)
-		for _, s := range copied {
-			if s.Labels == nil {
-				s.Labels = map[string]string{}
+		// Defer per object, not per namespace: the gateway-API controller writes the
+		// RoleBinding and the copies in sequence and returns early on error, so it can
+		// leave some of them in place and not others.
+		for _, obj := range candidates {
+			managed, err := r.managedByGatewayAPI(ctx, obj, liveGateways)
+			if err != nil {
+				return nil, err
 			}
-			s.Labels[common.MultipleOwnersLabel] = "true"
-			objs = append(objs, s)
+			if managed {
+				reqLogger.V(1).Info("Object is managed by the gateway-API controller, leaving it alone",
+					"kind", fmt.Sprintf("%T", obj), "namespace", obj.GetNamespace(), "name", obj.GetName())
+				continue
+			}
+			objs = append(objs, obj)
 		}
 	}
 
+	markSharedOwnership(objs)
+
 	return objs, nil
+}
+
+// managedByGatewayAPI reports whether obj already exists owned by a Gateway, which means the
+// gateway-API controller manages it for that namespace and this controller must leave it alone.
+//
+// A namespace holding both a waypoint Gateway and a Gateway of a class the gateway-API
+// controller owns gets the same tigera-operator-secrets RoleBinding and the same copies of the
+// Installation pull secrets from that controller — it renders them from the same helper and the
+// same source secrets. But it owns them by its Gateways and rewrites their owner references
+// wholesale, dropping any this controller adds, so writing them here as well would leave the
+// two controllers overwriting each other's ownership on every reconcile. The waypoint needs
+// only that the objects exist, so where that controller has already provided them, defer.
+//
+// Only references to Gateways in liveGateways count. Deleting the last of those Gateways wakes
+// this controller before garbage collection has removed what they owned, so the objects are
+// still there carrying the reference: deferring on the reference alone would skip the one
+// reconcile that can replace them and leave the namespace without pull secrets until the
+// periodic one.
+func (r *ReconcileWaypoint) managedByGatewayAPI(ctx context.Context, obj client.Object, liveGateways map[types.UID]bool) (bool, error) {
+	live := obj.DeepCopyObject().(client.Object)
+	if err := r.Get(ctx, client.ObjectKeyFromObject(obj), live); err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	for _, ref := range live.GetOwnerReferences() {
+		if ref.Kind == "Gateway" && liveGateways[ref.UID] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// markSharedOwnership stamps MultipleOwnersLabel on every object, which makes the component
+// handler merge the Istio owner reference into the object's existing owners instead of
+// replacing them.
+func markSharedOwnership(objs []client.Object) {
+	for _, obj := range objs {
+		labels := common.MapExistsOrInitialize(obj.GetLabels())
+		labels[common.MultipleOwnersLabel] = "true"
+		obj.SetLabels(labels)
+	}
 }

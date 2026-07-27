@@ -218,6 +218,53 @@ var _ = Describe("Typha rendering tests", func() {
 		Expect(d.Spec.Template.Spec.Containers[0].ReadinessProbe.ProbeHandler.HTTPGet.Host).To(BeEmpty())
 	})
 
+	It("should mark the non-cluster-host Typha objects for deletion when no NonClusterHost resource exists", func() {
+		cfg.NonClusterHost = nil
+		component := render.Typha(&cfg)
+		create, del := component.Objects()
+
+		// Not rendered for creation...
+		Expect(rtest.GetResource(create, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")).To(BeNil())
+		// ...but returned for deletion so the operator garbage-collects any leftovers
+		// (Serval runs Typha in-process; there is no separate non-cluster-host Typha).
+		Expect(rtest.GetResource(del, "calico-typha-noncluster-host", "calico-system", "apps", "v1", "Deployment")).NotTo(BeNil())
+		Expect(rtest.GetResource(del, "calico-typha-noncluster-host", "calico-system", "", "v1", "Service")).NotTo(BeNil())
+		// The v3 policy is deliberately absent here: it is only reconcilable while
+		// the API server is healthy, so the core controller deletes it alongside
+		// the other v3 policies. Including it here made every reconcile fail on a
+		// cluster without the Calico API server.
+		Expect(rtest.GetResource(del, render.TyphaNonClusterHostNetworkPolicyName, "calico-system", "projectcalico.org", "v3", "NetworkPolicy")).To(BeNil())
+	})
+
+	It("should tell Typha to count Serval's endpoints on enterprise", func() {
+		installation.Variant = operatorv1.CalicoEnterprise
+
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		d := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(d.Spec.Template.Spec.Containers[0].Env).To(ContainElements(
+			corev1.EnvVar{Name: "TYPHA_K8SEXTRACLIENTSERVICENAME", Value: "serval"},
+			corev1.EnvVar{Name: "TYPHA_K8SEXTRACLIENTPORTNAME", Value: "https"},
+		))
+	})
+
+	It("should not count Serval's endpoints on Calico", func() {
+		component := render.Typha(&cfg)
+		resources, _ := component.Objects()
+
+		d := rtest.GetResource(resources, "calico-typha", "calico-system", "apps", "v1", "Deployment").(*appsv1.Deployment)
+		for _, e := range d.Spec.Template.Spec.Containers[0].Env {
+			Expect(e.Name).ToNot(HavePrefix("TYPHA_K8SEXTRACLIENT"))
+		}
+	})
+
+	It("should offer the non-cluster-host Typha policy as a separate deletion stub", func() {
+		policy := render.TyphaNonClusterHostPolicyForDeletion()
+		Expect(policy.GetName()).To(Equal(render.TyphaNonClusterHostNetworkPolicyName))
+		Expect(policy.GetNamespace()).To(Equal("calico-system"))
+	})
+
 	It("should strip the host-network apiserver endpoint from the non-cluster-host Typha and fall back to the default Service", func() {
 		cfg.K8sServiceEp = k8sapi.ServiceEndpoint{Host: "proxy.local", Port: "6444"}
 

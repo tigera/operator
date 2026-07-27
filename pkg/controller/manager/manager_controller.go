@@ -945,6 +945,7 @@ func (r *ReconcileManager) resolveGateway(
 		TLSKeyPair:                   gwTLSKeyPair,
 		ResourcePrefix:               ManagerGatewayResourcePrefix,
 		Enterprise:                   true,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 	}
 
 	return rgateway.Component(gwCfg), reconcile.Result{}, nil

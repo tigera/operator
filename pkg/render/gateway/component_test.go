@@ -39,21 +39,22 @@ var _ = Describe("Gateway component render", func() {
 		hostname   = "manager.example.com"
 		prefix     = "calico-manager"
 		className  = "calico-gateway"
-		svcName    = "tigera-manager"
+		svcName    = "calico-manager"
 		svcPort    = int32(9443)
 		caBundleCM = "tigera-ca-bundle"
 		tlsName    = "calico-manager-gateway-tls"
 	)
 
 	var (
-		cfg *gateway.Configuration
-		kp  certificatemanagement.KeyPairInterface
+		cfg      *gateway.Configuration
+		toCreate []client.Object
+		toDelete []client.Object
 	)
 
 	BeforeEach(func() {
 		secret, err := certificatemanagement.CreateSelfSignedSecret(tlsName, common.OperatorNamespace(), tlsName, nil)
 		Expect(err).NotTo(HaveOccurred())
-		kp = certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		kp := certificatemanagement.NewKeyPair(secret, []string{""}, "")
 
 		cfg = &gateway.Configuration{
 			Hostname:                     hostname,
@@ -71,16 +72,17 @@ var _ = Describe("Gateway component render", func() {
 	})
 
 	Context("same namespace (gateway == backend)", func() {
-		It("returns objects to create and nothing to delete", func() {
+		JustBeforeEach(func() {
 			comp := gateway.Component(cfg)
-			toCreate, toDelete := comp.Objects()
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("returns objects to create and nothing to delete", func() {
 			Expect(toDelete).To(BeNil())
 			Expect(toCreate).NotTo(BeEmpty())
 		})
 
 		It("does not include cross-namespace resources", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			for _, obj := range toCreate {
 				if _, ok := obj.(*gapi.ReferenceGrant); ok {
 					Fail("ReferenceGrant should not be rendered when gateway and backend share a namespace")
@@ -88,38 +90,13 @@ var _ = Describe("Gateway component render", func() {
 			}
 		})
 
-		It("renders the operator Role with gateway and backend rules", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
-			role := findObject[*rbacv1.Role](toCreate, gateway.OperatorGatewayRoleName, gwNS)
-			Expect(role).NotTo(BeNil())
-			Expect(role.Rules).To(HaveLen(2))
-			Expect(role.Rules[0].Resources).To(ConsistOf("gateways", "httproutes"))
-			Expect(role.Rules[1].Resources).To(ConsistOf("backends"))
-		})
-
-		It("binds the Role to the operator service account", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
-			rb := findObject[*rbacv1.RoleBinding](toCreate, gateway.OperatorGatewayRoleName, gwNS)
-			Expect(rb).NotTo(BeNil())
-			Expect(rb.RoleRef.Name).To(Equal(gateway.OperatorGatewayRoleName))
-			Expect(rb.Subjects).To(HaveLen(1))
-			Expect(rb.Subjects[0].Name).To(Equal(common.OperatorServiceAccount()))
-			Expect(rb.Subjects[0].Namespace).To(Equal(common.OperatorNamespace()))
-		})
-
 		It("renders a TLS secret in the gateway namespace", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			secret := findObject[*corev1.Secret](toCreate, tlsName, gwNS)
 			Expect(secret).NotTo(BeNil())
 			Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
 		})
 
 		It("renders a Gateway with the correct listener", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			gw := findObject[*gapi.Gateway](toCreate, prefix+"-gateway", gwNS)
 			Expect(gw).NotTo(BeNil())
 			Expect(string(gw.Spec.GatewayClassName)).To(Equal(className))
@@ -130,8 +107,6 @@ var _ = Describe("Gateway component render", func() {
 		})
 
 		It("renders an HTTPRoute targeting the Backend", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			route := findObject[*gapi.HTTPRoute](toCreate, prefix+"-route", gwNS)
 			Expect(route).NotTo(BeNil())
 			Expect(route.Spec.Rules).To(HaveLen(1))
@@ -141,8 +116,6 @@ var _ = Describe("Gateway component render", func() {
 		})
 
 		It("renders a Backend with TLS to the service", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			backend := findObject[*envoyapi.Backend](toCreate, prefix+"-backend", bkNS)
 			Expect(backend).NotTo(BeNil())
 			Expect(backend.Spec.Endpoints).To(HaveLen(1))
@@ -155,37 +128,41 @@ var _ = Describe("Gateway component render", func() {
 	})
 
 	Context("Enterprise resources", func() {
-		It("renders SA, RoleBinding, and NetworkPolicy when Enterprise is true", func() {
+		JustBeforeEach(func() {
 			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("renders SA, RoleBinding, and NetworkPolicy when Enterprise is true", func() {
 			sa := findObject[*corev1.ServiceAccount](toCreate, "waf-http-filter", gwNS)
 			Expect(sa).NotTo(BeNil())
 			np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
 			Expect(np).NotTo(BeNil())
 		})
 
-		It("skips Enterprise resources when Enterprise is false", func() {
-			cfg.Enterprise = false
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
-			for _, obj := range toCreate {
-				if _, ok := obj.(*corev1.ServiceAccount); ok {
-					Fail("ServiceAccount should not be rendered when Enterprise is false")
-				}
-				if _, ok := obj.(*v3.NetworkPolicy); ok {
-					Fail("NetworkPolicy should not be rendered when Enterprise is false")
-				}
-			}
-		})
-
 		It("includes IPv4 and IPv6 ingress rules in the proxy NetworkPolicy", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
 			Expect(np).NotTo(BeNil())
 			Expect(np.Spec.Ingress).To(HaveLen(2))
 			Expect(np.Spec.Ingress[0].Source.Nets).To(ConsistOf("0.0.0.0/0"))
 			Expect(np.Spec.Ingress[1].Source.Nets).To(ConsistOf("::/0"))
+		})
+
+		Context("when Enterprise is false", func() {
+			BeforeEach(func() {
+				cfg.Enterprise = false
+			})
+
+			It("skips SA and NetworkPolicy", func() {
+				for _, obj := range toCreate {
+					if _, ok := obj.(*corev1.ServiceAccount); ok {
+						Fail("ServiceAccount should not be rendered when Enterprise is false")
+					}
+					if _, ok := obj.(*v3.NetworkPolicy); ok {
+						Fail("NetworkPolicy should not be rendered when Enterprise is false")
+					}
+				}
+			})
 		})
 	})
 
@@ -194,49 +171,38 @@ var _ = Describe("Gateway component render", func() {
 			cfg.GatewayNamespace = "custom-gateway-ns"
 		})
 
-		It("includes ReferenceGrant in the backend namespace", func() {
+		JustBeforeEach(func() {
 			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("includes ReferenceGrant in the backend namespace", func() {
 			rg := findObject[*gapi.ReferenceGrant](toCreate, prefix+"-allow-gateway", bkNS)
 			Expect(rg).NotTo(BeNil())
 			Expect(rg.Spec.From).To(HaveLen(1))
 			Expect(string(rg.Spec.From[0].Namespace)).To(Equal("custom-gateway-ns"))
 		})
 
-		It("creates a separate backend Role in the backend namespace", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
-			roles := findAllObjects[*rbacv1.Role](toCreate)
-			gwRole := findObject[*rbacv1.Role](toCreate, gateway.OperatorGatewayRoleName, "custom-gateway-ns")
-			bkRole := findObject[*rbacv1.Role](toCreate, gateway.OperatorGatewayRoleName, bkNS)
-			Expect(gwRole).NotTo(BeNil())
-			Expect(bkRole).NotTo(BeNil())
-			Expect(roles).To(HaveLen(2))
-
-			// Gateway Role should only have gateways + httproutes (no backends).
-			Expect(gwRole.Rules).To(HaveLen(1))
-			Expect(gwRole.Rules[0].Resources).To(ConsistOf("gateways", "httproutes"))
-
-			// Backend Role should have backends + referencegrants.
-			Expect(bkRole.Rules).To(HaveLen(2))
-			Expect(bkRole.Rules[0].Resources).To(ConsistOf("backends"))
-			Expect(bkRole.Rules[1].Resources).To(ConsistOf("referencegrants"))
-		})
-
-		It("creates a backend RoleBinding in the backend namespace", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
-			rb := findObject[*rbacv1.RoleBinding](toCreate, gateway.OperatorGatewayRoleName, bkNS)
-			Expect(rb).NotTo(BeNil())
-			Expect(rb.Subjects[0].Name).To(Equal(common.OperatorServiceAccount()))
+		It("does not include operator Roles", func() {
+			for _, obj := range toCreate {
+				if _, ok := obj.(*rbacv1.Role); ok {
+					Fail("Role should not be rendered — operator uses ClusterRole")
+				}
+			}
 		})
 	})
 
 	Context("OpenShift", func() {
-		It("includes OpenShift DNS egress rules in NetworkPolicy", func() {
+		BeforeEach(func() {
 			cfg.OpenShift = true
+		})
+
+		JustBeforeEach(func() {
 			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("includes OpenShift DNS egress rules in NetworkPolicy", func() {
 			np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
 			Expect(np).NotTo(BeNil())
 			Expect(len(np.Spec.Egress)).To(BeNumerically(">", 2))
@@ -245,32 +211,30 @@ var _ = Describe("Gateway component render", func() {
 
 	Context("component interface", func() {
 		It("implements ResolveImages without error", func() {
-			comp := gateway.Component(cfg)
-			Expect(comp.ResolveImages(nil)).To(Succeed())
+			Expect(gateway.Component(cfg).ResolveImages(nil)).To(Succeed())
 		})
 
 		It("reports Ready", func() {
-			comp := gateway.Component(cfg)
-			Expect(comp.Ready()).To(BeTrue())
+			Expect(gateway.Component(cfg).Ready()).To(BeTrue())
 		})
 
 		It("reports Linux OS type", func() {
-			comp := gateway.Component(cfg)
-			Expect(string(comp.SupportedOSType())).To(Equal("linux"))
+			Expect(string(gateway.Component(cfg).SupportedOSType())).To(Equal("linux"))
 		})
 	})
 
 	Context("Gateway listener hostname", func() {
-		It("sets the hostname on the listener", func() {
+		JustBeforeEach(func() {
 			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("sets the hostname on the listener", func() {
 			gw := findObject[*gapi.Gateway](toCreate, prefix+"-gateway", gwNS)
 			Expect(gw.Spec.Listeners[0].Hostname).To(Equal(ptr.To(gapi.Hostname(hostname))))
 		})
 
 		It("sets AllowedRoutes to Same namespace", func() {
-			comp := gateway.Component(cfg)
-			toCreate, _ := comp.Objects()
 			gw := findObject[*gapi.Gateway](toCreate, prefix+"-gateway", gwNS)
 			Expect(*gw.Spec.Listeners[0].AllowedRoutes.Namespaces.From).To(Equal(gapi.NamespacesFromSame))
 		})
@@ -285,48 +249,44 @@ var _ = Describe("Gateway deletion component", func() {
 		tlsSecret = "calico-manager-gateway-tls"
 	)
 
+	var (
+		delCfg   *gateway.DeletionConfiguration
+		toCreate []client.Object
+		toDelete []client.Object
+	)
+
+	BeforeEach(func() {
+		delCfg = &gateway.DeletionConfiguration{
+			ResourcePrefix:   prefix,
+			GatewayNamespace: gwNS,
+			BackendNamespace: bkNS,
+			TLSSecretName:    tlsSecret,
+			Enterprise:       true,
+		}
+	})
+
+	JustBeforeEach(func() {
+		comp := gateway.DeletionComponent(delCfg)
+		toCreate, toDelete = comp.Objects()
+	})
+
 	Context("same namespace", func() {
 		It("returns all objects in objsToDelete and nothing in objsToCreate", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-				Enterprise:       true,
-			})
-			toCreate, toDelete := comp.Objects()
 			Expect(toCreate).To(BeNil())
 			Expect(toDelete).NotTo(BeEmpty())
 		})
 
 		It("targets the correct resource names", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-				Enterprise:       true,
-			})
-			_, toDelete := comp.Objects()
 			names := objectNames(toDelete)
 			Expect(names).To(ContainElements(
 				prefix+"-gateway",
 				prefix+"-route",
 				prefix+"-backend",
-				gateway.OperatorGatewayRoleName,
 				tlsSecret,
 			))
 		})
 
 		It("does not include cross-namespace resources", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-				Enterprise:       true,
-			})
-			_, toDelete := comp.Objects()
 			for _, obj := range toDelete {
 				if _, ok := obj.(*gapi.ReferenceGrant); ok {
 					Fail("ReferenceGrant should not appear when namespaces match")
@@ -334,30 +294,20 @@ var _ = Describe("Gateway deletion component", func() {
 			}
 		})
 
-		It("includes Enterprise resources when Enterprise is true", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-				Enterprise:       true,
-			})
-			_, toDelete := comp.Objects()
+		It("includes Enterprise resources", func() {
 			sa := findObject[*corev1.ServiceAccount](toDelete, "waf-http-filter", gwNS)
 			Expect(sa).NotTo(BeNil())
 			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
 			Expect(np).NotTo(BeNil())
 		})
+	})
 
-		It("skips Enterprise resources when Enterprise is false", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-				Enterprise:       false,
-			})
-			_, toDelete := comp.Objects()
+	Context("Enterprise false", func() {
+		BeforeEach(func() {
+			delCfg.Enterprise = false
+		})
+
+		It("skips Enterprise resources", func() {
 			for _, obj := range toDelete {
 				if _, ok := obj.(*corev1.ServiceAccount); ok {
 					Fail("ServiceAccount should not appear when Enterprise is false")
@@ -370,50 +320,28 @@ var _ = Describe("Gateway deletion component", func() {
 	})
 
 	Context("cross-namespace", func() {
-		const customGWNS = "custom-gateway-ns"
+		BeforeEach(func() {
+			delCfg.GatewayNamespace = "custom-gateway-ns"
+			delCfg.Enterprise = false
+		})
 
-		It("includes ReferenceGrant and backend-namespace Role/RoleBinding", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: customGWNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-				Enterprise:       false,
-			})
-			_, toDelete := comp.Objects()
+		It("includes ReferenceGrant in the backend namespace", func() {
 			rg := findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)
 			Expect(rg).NotTo(BeNil())
-			bkRole := findObject[*rbacv1.Role](toDelete, gateway.OperatorGatewayRoleName, bkNS)
-			Expect(bkRole).NotTo(BeNil())
-			bkRB := findObject[*rbacv1.RoleBinding](toDelete, gateway.OperatorGatewayRoleName, bkNS)
-			Expect(bkRB).NotTo(BeNil())
 		})
 	})
 
 	Context("component interface", func() {
 		It("implements ResolveImages without error", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-			})
-			Expect(comp.ResolveImages(nil)).To(Succeed())
+			Expect(gateway.DeletionComponent(delCfg).ResolveImages(nil)).To(Succeed())
 		})
 
 		It("reports Ready", func() {
-			comp := gateway.DeletionComponent(&gateway.DeletionConfiguration{
-				ResourcePrefix:   prefix,
-				GatewayNamespace: gwNS,
-				BackendNamespace: bkNS,
-				TLSSecretName:    tlsSecret,
-			})
-			Expect(comp.Ready()).To(BeTrue())
+			Expect(gateway.DeletionComponent(delCfg).Ready()).To(BeTrue())
 		})
 	})
 })
 
-// findObject returns the first object of type T matching name and namespace.
 func findObject[T client.Object](objs []client.Object, name, ns string) T {
 	for _, obj := range objs {
 		if t, ok := obj.(T); ok && obj.GetName() == name && obj.GetNamespace() == ns {
@@ -424,18 +352,6 @@ func findObject[T client.Object](objs []client.Object, name, ns string) T {
 	return zero
 }
 
-// findAllObjects returns all objects of type T.
-func findAllObjects[T client.Object](objs []client.Object) []T {
-	var result []T
-	for _, obj := range objs {
-		if t, ok := obj.(T); ok {
-			result = append(result, t)
-		}
-	}
-	return result
-}
-
-// objectNames returns all object names from a slice.
 func objectNames(objs []client.Object) []string {
 	names := make([]string, len(objs))
 	for i, obj := range objs {

@@ -969,6 +969,15 @@ func (r *ReconcileManager) resolveGateway(
 		}
 	}
 
+	// Create the gateway namespace if it does not exist. calico-system is
+	// skipped: the Installation controller owns it.
+	if gwNS := gw.NamespaceOrDefault(); gwNS != common.CalicoNamespace {
+		if err := r.ensureGatewayNamespace(ctx, gwNS); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, logc)
+			return nil, reconcile.Result{}, err
+		}
+	}
+
 	// Provision TLS keypair for the gateway listener.
 	gwTLSKeyPair, err := certManager.GetOrCreateKeyPair(
 		r.client,
@@ -995,6 +1004,27 @@ func (r *ReconcileManager) resolveGateway(
 	}
 
 	return rgateway.Component(gwCfg), reconcile.Result{}, nil
+}
+
+// ensureGatewayNamespace creates the gateway namespace if it does not exist.
+// The namespace is created without an owner reference and is never deleted by
+// the operator: a user-provided namespace may hold other workloads.
+func (r *ReconcileManager) ensureGatewayNamespace(ctx context.Context, name string) error {
+	err := r.client.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
+	if err == nil || !errors.IsNotFound(err) {
+		return err
+	}
+	ns := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{"name": name},
+		},
+	}
+	if err := r.client.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
 }
 
 // checkGatewayStatus reads the Gateway and HTTPRoute status conditions and

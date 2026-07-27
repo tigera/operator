@@ -39,7 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/istio"
 )
 
 const (
@@ -220,8 +220,8 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 
 	// Pass the Istio CR as the owner: created objects carry an owner reference to it and are
 	// garbage collected by owner reference — the same pattern the egress gateway uses with its
-	// CRs. markSharedOwnership has labelled them, so that reference is merged into the owners
-	// already on the object instead of replacing them.
+	// CRs. The objects are rendered carrying MultipleOwnersLabel, so that reference is merged
+	// into the owners already on the object instead of replacing them.
 	hdlr := utils.NewComponentHandler(log, r, r.scheme, instance)
 	component := render.NewPassthrough(toCreate, toDelete)
 	if err := hdlr.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
@@ -276,18 +276,13 @@ func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger l
 		}
 	}
 
-	// Build the objects for each target namespace. The RoleBinding comes first: it grants
-	// the operator permission to write secrets in the namespace, so it must exist before
-	// the secret copies are created.
+	// Keep the objects each target namespace needs, minus the ones the gateway-API
+	// controller has already provided there. Deferral is decided per object, not per
+	// namespace: that controller writes the RoleBinding and the copies in sequence and
+	// returns early on error, so it can leave some of them in place and not others.
 	var objs []client.Object
 	for ns := range targetNamespaces {
-		candidates := []client.Object{render.CreateOperatorSecretsRoleBinding(ns)}
-		candidates = append(candidates, secret.ToRuntimeObjects(secret.CopyToNamespace(ns, pullSecrets...)...)...)
-
-		// Defer per object, not per namespace: the gateway-API controller writes the
-		// RoleBinding and the copies in sequence and returns early on error, so it can
-		// leave some of them in place and not others.
-		for _, obj := range candidates {
+		for _, obj := range istio.WaypointPullSecretObjects(ns, pullSecrets) {
 			managed, err := r.managedByGatewayAPI(ctx, obj, liveGateways)
 			if err != nil {
 				return nil, err
@@ -300,8 +295,6 @@ func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger l
 			objs = append(objs, obj)
 		}
 	}
-
-	markSharedOwnership(objs)
 
 	return objs, nil
 }
@@ -336,15 +329,4 @@ func (r *ReconcileWaypoint) managedByGatewayAPI(ctx context.Context, obj client.
 		}
 	}
 	return false, nil
-}
-
-// markSharedOwnership stamps MultipleOwnersLabel on every object, which makes the component
-// handler merge the Istio owner reference into the object's existing owners instead of
-// replacing them.
-func markSharedOwnership(objs []client.Object) {
-	for _, obj := range objs {
-		labels := common.MapExistsOrInitialize(obj.GetLabels())
-		labels[common.MultipleOwnersLabel] = "true"
-		obj.SetLabels(labels)
-	}
 }

@@ -52,8 +52,6 @@ const (
 
 	TyphaContainerName = "calico-typha"
 
-	// TyphaClusterRoleName is the typha ClusterRole. A modifier reaches for it by
-	// name, so it is declared here rather than inline at the object it names.
 	TyphaClusterRoleName = "calico-typha"
 
 	TyphaNonClusterHostSuffix            = "-noncluster-host"

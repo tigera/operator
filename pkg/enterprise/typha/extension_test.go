@@ -35,10 +35,9 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// These tests run the real typha render output through the registered enterprise
-// modifier rather than a hand-built Deployment. A fixture only matches the shape
-// render had when it was written, so it would keep passing if render renamed the
-// container or the ClusterRole the modifier reaches for.
+// These run the real typha render output through the registered modifier. A
+// hand-built fixture would keep passing if render renamed what the modifier
+// reaches for.
 var _ = Describe("typha enterprise modifier", func() {
 	multiMode := operatorv1.MultiInterfaceModeMultus
 

@@ -20,14 +20,12 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
@@ -37,8 +35,6 @@ import (
 const (
 	EnvoyGatewayGroup = "gateway.envoyproxy.io"
 	BackendKind       = "Backend"
-
-	OperatorGatewayRoleName = "tigera-operator-gateway"
 )
 
 // Configuration holds everything the shared gateway component needs to render
@@ -91,8 +87,6 @@ func (c *gatewayComponent) Ready() bool {
 
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs := []client.Object{
-		c.operatorGatewayRole(),
-		c.operatorGatewayRoleBinding(),
 		c.tlsSecret(),
 		c.gateway(),
 		c.backend(),
@@ -100,11 +94,7 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 	}
 
 	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
-		objs = append(objs,
-			c.referenceGrant(),
-			c.operatorBackendRole(),
-			c.operatorBackendRoleBinding(),
-		)
+		objs = append(objs, c.referenceGrant())
 	}
 
 	if c.cfg.Enterprise {
@@ -265,97 +255,6 @@ func (c *gatewayComponent) referenceGrant() *gapi.ReferenceGrant {
 	}
 }
 
-func (c *gatewayComponent) operatorGatewayRole() *rbacv1.Role {
-	rules := []rbacv1.PolicyRule{
-		{
-			APIGroups: []string{"gateway.networking.k8s.io"},
-			Resources: []string{"gateways", "httproutes"},
-			Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
-		},
-	}
-	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
-		rules = append(rules, rbacv1.PolicyRule{
-			APIGroups: []string{EnvoyGatewayGroup},
-			Resources: []string{"backends"},
-			Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
-		})
-	}
-	return &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      OperatorGatewayRoleName,
-			Namespace: c.cfg.GatewayNamespace,
-		},
-		Rules: rules,
-	}
-}
-
-func (c *gatewayComponent) operatorGatewayRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      OperatorGatewayRoleName,
-			Namespace: c.cfg.GatewayNamespace,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     OperatorGatewayRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      common.OperatorServiceAccount(),
-				Namespace: common.OperatorNamespace(),
-			},
-		},
-	}
-}
-
-func (c *gatewayComponent) operatorBackendRole() *rbacv1.Role {
-	return &rbacv1.Role{
-		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      OperatorGatewayRoleName,
-			Namespace: c.cfg.BackendNamespace,
-		},
-		Rules: []rbacv1.PolicyRule{
-			{
-				APIGroups: []string{EnvoyGatewayGroup},
-				Resources: []string{"backends"},
-				Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
-			},
-			{
-				APIGroups: []string{"gateway.networking.k8s.io"},
-				Resources: []string{"referencegrants"},
-				Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
-			},
-		},
-	}
-}
-
-func (c *gatewayComponent) operatorBackendRoleBinding() *rbacv1.RoleBinding {
-	return &rbacv1.RoleBinding{
-		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      OperatorGatewayRoleName,
-			Namespace: c.cfg.BackendNamespace,
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "Role",
-			Name:     OperatorGatewayRoleName,
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      common.OperatorServiceAccount(),
-				Namespace: common.OperatorNamespace(),
-			},
-		},
-	}
-}
-
 // proxyNetworkPolicy creates a Calico NetworkPolicy that allows the Envoy
 // proxy pod to function in calico-system (which has a default deny).
 func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
@@ -447,14 +346,6 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 	prefix := c.cfg.ResourcePrefix
 
 	objs := []client.Object{
-		&rbacv1.Role{
-			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: gwNS},
-		},
-		&rbacv1.RoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: gwNS},
-		},
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: c.cfg.TLSSecretName, Namespace: gwNS},
@@ -478,14 +369,6 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 			&gapi.ReferenceGrant{
 				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1"},
 				ObjectMeta: metav1.ObjectMeta{Name: prefix + "-allow-gateway", Namespace: bkNS},
-			},
-			&rbacv1.Role{
-				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: bkNS},
-			},
-			&rbacv1.RoleBinding{
-				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-				ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: bkNS},
 			},
 		)
 	}

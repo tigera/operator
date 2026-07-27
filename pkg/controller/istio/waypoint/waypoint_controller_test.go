@@ -159,20 +159,6 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 		return r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 	}
 
-	listTrackedSecrets := func() []corev1.Secret {
-		secretList := &corev1.SecretList{}
-		err := cli.List(ctx, secretList, client.MatchingLabels{WaypointPullSecretLabel: "true"})
-		Expect(err).NotTo(HaveOccurred())
-		return secretList.Items
-	}
-
-	listTrackedRoleBindings := func() []rbacv1.RoleBinding {
-		rbList := &rbacv1.RoleBindingList{}
-		err := cli.List(ctx, rbList, client.MatchingLabels{WaypointPullSecretLabel: "true"})
-		Expect(err).NotTo(HaveOccurred())
-		return rbList.Items
-	}
-
 	istioOwnerRef := func(obj client.Object) *metav1.OwnerReference {
 		for _, ref := range obj.GetOwnerReferences() {
 			if ref.Kind == "Istio" {
@@ -180,6 +166,34 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			}
 		}
 		return nil
+	}
+
+	// The objects this controller creates are identified by their Istio owner reference,
+	// the same way Kubernetes garbage collection finds them. The source pull secrets and
+	// the certificate manager secret in the operator namespace carry no owner reference,
+	// so they are excluded.
+	listOwnedSecrets := func() []corev1.Secret {
+		secretList := &corev1.SecretList{}
+		Expect(cli.List(ctx, secretList)).NotTo(HaveOccurred())
+		var owned []corev1.Secret
+		for _, s := range secretList.Items {
+			if istioOwnerRef(&s) != nil {
+				owned = append(owned, s)
+			}
+		}
+		return owned
+	}
+
+	listOwnedRoleBindings := func() []rbacv1.RoleBinding {
+		rbList := &rbacv1.RoleBindingList{}
+		Expect(cli.List(ctx, rbList)).NotTo(HaveOccurred())
+		var owned []rbacv1.RoleBinding
+		for _, rb := range rbList.Items {
+			if istioOwnerRef(&rb) != nil {
+				owned = append(owned, rb)
+			}
+		}
+		return owned
 	}
 
 	Context("when no pull secrets are configured", func() {
@@ -191,8 +205,8 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(listTrackedSecrets()).To(BeEmpty())
-			Expect(listTrackedRoleBindings()).To(BeEmpty())
+			Expect(listOwnedSecrets()).To(BeEmpty())
+			Expect(listOwnedRoleBindings()).To(BeEmpty())
 		})
 	})
 
@@ -212,11 +226,12 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(1))
 			Expect(secrets[0].Namespace).To(Equal("user-ns"))
 			Expect(secrets[0].Name).To(Equal("my-pull-secret"))
-			Expect(secrets[0].Labels[WaypointPullSecretLabel]).To(Equal("true"))
+			// The MultipleOwnersLabel is a directive to the component handler and must not persist.
+			Expect(secrets[0].Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
 		})
 
 		It("should create a tigera-operator-secrets RoleBinding in the waypoint namespace", func() {
@@ -225,7 +240,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			rbs := listTrackedRoleBindings()
+			rbs := listOwnedRoleBindings()
 			Expect(rbs).To(HaveLen(1))
 			rb := rbs[0]
 			Expect(rb.Namespace).To(Equal("user-ns"))
@@ -247,14 +262,14 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(1))
 			ref := istioOwnerRef(&secrets[0])
 			Expect(ref).NotTo(BeNil())
 			Expect(ref.Name).To(Equal("default"))
 			Expect(ref.APIVersion).To(Equal("operator.tigera.io/v1"))
 
-			rbs := listTrackedRoleBindings()
+			rbs := listOwnedRoleBindings()
 			Expect(rbs).To(HaveLen(1))
 			ref = istioOwnerRef(&rbs[0])
 			Expect(ref).NotTo(BeNil())
@@ -267,7 +282,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(listTrackedSecrets()).To(HaveLen(1))
+			Expect(listOwnedSecrets()).To(HaveLen(1))
 
 			// Rotate the base pull secret in the operator namespace.
 			base := &corev1.Secret{}
@@ -279,7 +294,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err = doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(1))
 			Expect(secrets[0].Data[".dockerconfigjson"]).To(Equal(newData))
 		})
@@ -338,8 +353,8 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(listTrackedSecrets()).To(BeEmpty())
-			Expect(listTrackedRoleBindings()).To(BeEmpty())
+			Expect(listOwnedSecrets()).To(BeEmpty())
+			Expect(listOwnedRoleBindings()).To(BeEmpty())
 		})
 
 		It("should copy pull secrets only once for multiple gateways in same namespace", func() {
@@ -349,7 +364,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(1))
 			Expect(secrets[0].Namespace).To(Equal("user-ns"))
 		})
@@ -361,7 +376,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(2))
 
 			namespaces := map[string]bool{}
@@ -378,7 +393,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(BeEmpty())
 		})
 
@@ -388,7 +403,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(1))
 			Expect(secrets[0].Name).To(Equal("my-pull-secret"))
 
@@ -407,7 +422,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			// The new copy exists; the old one is stranded until the Istio CR is
 			// deleted — the same behaviour the egress gateway has today.
 			names := map[string]bool{}
-			for _, s := range listTrackedSecrets() {
+			for _, s := range listOwnedSecrets() {
 				Expect(s.Namespace).To(Equal("user-ns"))
 				names[s.Name] = true
 			}
@@ -430,7 +445,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(HaveLen(2))
 
 			names := map[string]bool{}
@@ -449,8 +464,8 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			// Pull secrets already exist in the operator namespace; the controller
-			// should skip it to avoid overwriting source secrets with labeled copies.
-			secrets := listTrackedSecrets()
+			// should skip it rather than overwrite the source secrets with copies.
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(BeEmpty())
 		})
 	})
@@ -467,8 +482,8 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
-			Expect(listTrackedSecrets()).To(HaveLen(1))
-			Expect(listTrackedRoleBindings()).To(HaveLen(1))
+			Expect(listOwnedSecrets()).To(HaveLen(1))
+			Expect(listOwnedRoleBindings()).To(HaveLen(1))
 
 			// Delete the Istio CR and reconcile again: the controller takes no
 			// action. On a real cluster the copies and RoleBindings are removed
@@ -505,7 +520,7 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			_, err := doReconcile()
 			Expect(err).ShouldNot(HaveOccurred())
 
-			secrets := listTrackedSecrets()
+			secrets := listOwnedSecrets()
 			Expect(secrets).To(BeEmpty())
 		})
 	})

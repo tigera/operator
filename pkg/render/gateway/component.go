@@ -416,16 +416,93 @@ func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
 	}
 }
 
-// ResourceNames returns the names of all gateway resources that this component
-// manages. Used by controllers to clean up resources when gateway is removed.
-func ResourceNames(prefix, gatewayNS, backendNS string) []client.ObjectKey {
-	keys := []client.ObjectKey{
-		{Name: prefix + "-gateway", Namespace: gatewayNS},
-		{Name: prefix + "-route", Namespace: gatewayNS},
-		{Name: prefix + "-backend", Namespace: backendNS},
+// DeletionConfiguration is the minimal config needed to identify gateway
+// resources for cleanup. No TLS keypair, hostname, or class is required.
+type DeletionConfiguration struct {
+	ResourcePrefix   string
+	GatewayNamespace string
+	BackendNamespace string
+	TLSSecretName    string
+	Enterprise       bool
+}
+
+// DeletionComponent returns a render.Component whose Objects() puts every
+// gateway-managed resource into objsToDelete. The objects carry only TypeMeta
+// and ObjectMeta — enough for the component handler to issue Delete calls.
+func DeletionComponent(cfg *DeletionConfiguration) *gatewayDeletionComponent {
+	return &gatewayDeletionComponent{cfg: cfg}
+}
+
+type gatewayDeletionComponent struct {
+	cfg *DeletionConfiguration
+}
+
+func (c *gatewayDeletionComponent) ResolveImages(_ *operatorv1.ImageSet) error { return nil }
+func (c *gatewayDeletionComponent) SupportedOSType() rmeta.OSType              { return rmeta.OSTypeLinux }
+func (c *gatewayDeletionComponent) Ready() bool                                { return true }
+
+func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
+	gwNS := c.cfg.GatewayNamespace
+	bkNS := c.cfg.BackendNamespace
+	prefix := c.cfg.ResourcePrefix
+
+	objs := []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: gwNS},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: gwNS},
+		},
+		&corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: c.cfg.TLSSecretName, Namespace: gwNS},
+		},
+		&gapi.Gateway{
+			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
+		},
+		&envoyapi.Backend{
+			TypeMeta:   metav1.TypeMeta{Kind: BackendKind, APIVersion: "gateway.envoyproxy.io/v1alpha1"},
+			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-backend", Namespace: bkNS},
+		},
+		&gapi.HTTPRoute{
+			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: gwNS},
+		},
 	}
-	if gatewayNS != backendNS {
-		keys = append(keys, client.ObjectKey{Name: prefix + "-allow-gateway", Namespace: backendNS})
+
+	if gwNS != bkNS {
+		objs = append(objs,
+			&gapi.ReferenceGrant{
+				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: prefix + "-allow-gateway", Namespace: bkNS},
+			},
+			&rbacv1.Role{
+				TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: bkNS},
+			},
+			&rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: OperatorGatewayRoleName, Namespace: bkNS},
+			},
+		)
 	}
-	return keys
+
+	if c.cfg.Enterprise {
+		objs = append(objs,
+			rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
+			rgatewayapi.GatewayNamespaceRoleBinding(gwNS),
+			&v3.NetworkPolicy{
+				TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      networkpolicy.CalicoComponentPolicyPrefix + prefix + "-gateway-proxy",
+					Namespace: gwNS,
+				},
+			},
+		)
+	}
+
+	return nil, objs
 }

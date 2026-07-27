@@ -83,6 +83,19 @@ const (
 	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
 	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
 
+	// The rbac-ui-config ConfigMap is the whole configuration surface for the RBAC
+	// management UI. The operator seeds it disabled in each cluster; an admin with
+	// access to that cluster edits the value to toggle the feature there. ui-apis and
+	// the rbacsync controller both read it live, per cluster, so toggling takes effect
+	// without rolling any workload. Keep these in sync with ui-apis rbacmanagement/gate
+	// (ConfigMapName, ConfigMapKey, ConfigMapEnabledValue).
+	RBACManagementConfigMapName = "rbac-ui-config"
+	RBACManagementConfigMapKey  = "rbac-ui-enabled"
+	RBACManagementEnabledValue  = "true"
+	// Any value other than RBACManagementEnabledValue reads as disabled; the operator
+	// seeds this one so the switch shows an explicit "off".
+	RBACManagementDisabledValue = "false"
+
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
 	VoltronLinseedTLS              = "calico-voltron-linseed-tls"
@@ -284,11 +297,16 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.cfg.Manager.RBACManagementEnabled()),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
-	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() {
+	// Rendered on every non-multi-tenant cluster: rbac-ui-config decides at runtime
+	// whether the feature is active, so the access has to already be in place for a
+	// toggle to take effect immediately. Multi-tenant management clusters are excluded —
+	// the feature is force-disabled there, and the IdP resources this grants access to
+	// are pinned to calico-system.
+	if !c.cfg.Tenant.MultiTenant() {
 		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
 	}
 	if c.cfg.Tenant.MultiTenant() {
@@ -756,7 +774,6 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
-		{Name: "RBAC_UI_ENABLED", Value: strconv.FormatBool(c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant())},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,
@@ -966,8 +983,8 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-// When rbacManagementEnabled is true it also carries the RBAC management UI rules.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementEnabled bool) *rbacv1.ClusterRole {
+// On non-multi-tenant clusters it also carries the RBAC management UI rules.
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -1176,7 +1193,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	// Not rendered on multi-tenant management clusters. Keep this condition in
 	// sync with the rbacManagementUINamespacedRole gate; the cluster rules and
 	// the namespaced grant are rendered together.
-	if rbacManagementEnabled && !tenant.MultiTenant() {
+	if !tenant.MultiTenant() {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}
 
@@ -1212,6 +1229,21 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
+}
+
+// RBACManagementConfigMap returns the rbac-ui-config ConfigMap seeded with the feature
+// disabled. Created once per cluster and never updated, so an admin's edit to the value
+// is authoritative. Created even where the feature is never turned on, so the admin
+// always has a switch to find.
+func RBACManagementConfigMap() *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      RBACManagementConfigMapName,
+			Namespace: common.CalicoNamespace,
+		},
+		Data: map[string]string{RBACManagementConfigMapKey: RBACManagementDisabledValue},
+	}
 }
 
 // rbacManagementUIRules returns the cluster-scoped rules the RBAC management
@@ -1258,6 +1290,15 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 					Resources:     []string{"configmaps"},
 					ResourceNames: []string{"tigera-idp-groups"},
 					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+				},
+				{
+					// The gate ui-apis reads and watches to decide whether the RBAC
+					// management UI is active on this cluster. Read-only: the value is
+					// the admin's to set.
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{RBACManagementConfigMapName},
+					Verbs:         []string{"get", "list", "watch"},
 				},
 			},
 		},
@@ -1350,7 +1391,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if c.cfg.Manager.RBACManagementEnabled() && !c.cfg.Tenant.MultiTenant() &&
+	if !c.cfg.Tenant.MultiTenant() &&
 		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
 		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
 		// being configured on the Authentication CR. The destination is scoped to

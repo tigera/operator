@@ -15,15 +15,21 @@
 package gateway
 
 import (
+	"fmt"
+
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -31,6 +37,8 @@ import (
 const (
 	EnvoyGatewayGroup = "gateway.envoyproxy.io"
 	BackendKind       = "Backend"
+
+	OperatorGatewayRoleName = "tigera-operator-gateway"
 )
 
 // Configuration holds everything the shared gateway component needs to render
@@ -51,11 +59,13 @@ type Configuration struct {
 	// "calico-manager-gateway", "calico-manager-route", etc.
 	ResourcePrefix string
 
-	// Enterprise controls whether the proxy SA and RoleBinding are rendered.
-	// The GatewayAPI controller creates these in user namespaces but skips
-	// calico-system (lifecycle guard); when we place a Gateway there, we
-	// render them operator-owned on the main path.
+	// Enterprise controls whether the proxy SA, RoleBinding, and NetworkPolicy
+	// are rendered. The GatewayAPI controller creates SA/RoleBinding in user
+	// namespaces but skips calico-system (lifecycle guard); when we place a
+	// Gateway there, we render them operator-owned on the main path.
 	Enterprise bool
+
+	OpenShift bool
 }
 
 // Component renders Gateway API resources for CIG access to a UI component.
@@ -81,20 +91,27 @@ func (c *gatewayComponent) Ready() bool {
 
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	objs := []client.Object{
+		c.operatorGatewayRole(),
+		c.operatorGatewayRoleBinding(),
 		c.tlsSecret(),
 		c.gateway(),
 		c.backend(),
 		c.httpRoute(),
 	}
 
-	if rg := c.referenceGrant(); rg != nil {
-		objs = append(objs, rg)
+	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
+		objs = append(objs,
+			c.referenceGrant(),
+			c.operatorBackendRole(),
+			c.operatorBackendRoleBinding(),
+		)
 	}
 
 	if c.cfg.Enterprise {
 		objs = append(objs,
 			rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
 			rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
+			c.proxyNetworkPolicy(),
 		)
 	}
 
@@ -220,14 +237,7 @@ func (c *gatewayComponent) backend() *envoyapi.Backend {
 	}
 }
 
-// referenceGrant creates a ReferenceGrant when the gateway namespace differs
-// from the backend namespace, allowing the HTTPRoute to reference the Backend
-// across namespaces.
 func (c *gatewayComponent) referenceGrant() *gapi.ReferenceGrant {
-	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
-		return nil
-	}
-
 	backendName := gapi.ObjectName(c.cfg.ResourcePrefix + "-backend")
 
 	return &gapi.ReferenceGrant{
@@ -251,6 +261,157 @@ func (c *gatewayComponent) referenceGrant() *gapi.ReferenceGrant {
 					Name:  &backendName,
 				},
 			},
+		},
+	}
+}
+
+func (c *gatewayComponent) operatorGatewayRole() *rbacv1.Role {
+	rules := []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
+		},
+	}
+	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
+		rules = append(rules, rbacv1.PolicyRule{
+			APIGroups: []string{EnvoyGatewayGroup},
+			Resources: []string{"backends"},
+			Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
+		})
+	}
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OperatorGatewayRoleName,
+			Namespace: c.cfg.GatewayNamespace,
+		},
+		Rules: rules,
+	}
+}
+
+func (c *gatewayComponent) operatorGatewayRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OperatorGatewayRoleName,
+			Namespace: c.cfg.GatewayNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     OperatorGatewayRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      common.OperatorServiceAccount(),
+				Namespace: common.OperatorNamespace(),
+			},
+		},
+	}
+}
+
+func (c *gatewayComponent) operatorBackendRole() *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OperatorGatewayRoleName,
+			Namespace: c.cfg.BackendNamespace,
+		},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{EnvoyGatewayGroup},
+				Resources: []string{"backends"},
+				Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
+			},
+			{
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"referencegrants"},
+				Verbs:     []string{"create", "get", "list", "update", "patch", "delete", "watch"},
+			},
+		},
+	}
+}
+
+func (c *gatewayComponent) operatorBackendRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      OperatorGatewayRoleName,
+			Namespace: c.cfg.BackendNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     OperatorGatewayRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      common.OperatorServiceAccount(),
+				Namespace: common.OperatorNamespace(),
+			},
+		},
+	}
+}
+
+// proxyNetworkPolicy creates a Calico NetworkPolicy that allows the Envoy
+// proxy pod to function in calico-system (which has a default deny).
+func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
+	gatewayName := c.cfg.ResourcePrefix + "-gateway"
+	policyName := networkpolicy.CalicoComponentPolicyPrefix + gatewayName + "-proxy"
+
+	egressRules := networkpolicy.AppendDNSEgressRules(nil, c.cfg.OpenShift)
+	egressRules = append(egressRules,
+		v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateEntityRule(
+				c.cfg.GatewayNamespace, "calico-gateway-api-controller",
+				18000, 18001,
+			),
+		},
+		v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateEntityRule(
+				c.cfg.BackendNamespace, c.cfg.BackendServiceName,
+				uint16(c.cfg.BackendPort),
+			),
+		},
+	)
+
+	return &v3.NetworkPolicy{
+		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      policyName,
+			Namespace: c.cfg.GatewayNamespace,
+		},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: fmt.Sprintf("gateway.envoyproxy.io/owning-gateway-name == '%s'", gatewayName),
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			Ingress: []v3.Rule{
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(443),
+					},
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Source:   v3.EntityRule{Nets: []string{"::/0"}},
+					Destination: v3.EntityRule{
+						Ports: networkpolicy.Ports(443),
+					},
+				},
+			},
+			Egress: egressRules,
 		},
 	}
 }

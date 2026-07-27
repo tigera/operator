@@ -113,7 +113,9 @@ func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *typhaComponent) ModifierKey() string { return ComponentNameTypha }
+func (c *typhaComponent) ModifierKey() string { return TyphaKey.String() }
+
+func (c *typhaComponent) ExtensionInputs() any { return TyphaExtensionInputs{} }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	pdb := c.typhaPodDisruptionBudget()

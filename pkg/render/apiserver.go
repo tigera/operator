@@ -123,7 +123,7 @@ type apiServerPolicyComponent struct {
 	cfg *APIServerConfiguration
 }
 
-func (apiServerPolicyComponent) ModifierKey() string { return ComponentNameAPIServerPolicy }
+func (apiServerPolicyComponent) ModifierKey() string { return APIServerPolicyKey.String() }
 
 // ExtensionInputs hands the policy modifier the config it needs to look up container
 // ports.
@@ -178,9 +178,16 @@ type APIServerExtensionInputs struct {
 	CalicoImage string
 }
 
+// The API server's two extension points. Both hand over the same inputs: the
+// policy modifier reads the config to decide which rules to add.
+var (
+	APIServerKey       = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServer}
+	APIServerPolicyKey = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServerPolicy}
+)
+
 // ModifierKey implements render.Extensible: the API server's variant-specific objects are
 // applied by the modifier registered under this key.
-func (c *apiServerComponent) ModifierKey() string { return ComponentNameAPIServer }
+func (c *apiServerComponent) ModifierKey() string { return APIServerKey.String() }
 
 // ExtensionInputs implements render.ExtensionInputsProvider, handing the modifier the
 // config and resolved image it needs.

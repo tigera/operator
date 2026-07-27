@@ -20,13 +20,13 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// Modifier post-processes the objects a render component produced. It receives
-// the component's create and delete lists and returns the (possibly extended)
-// lists. A modifier may mutate matched objects, append objects to create, and
-// append objects to delete (e.g. to clean up resources a prior variant left
-// behind). It runs only for the variant it is registered under, so it need not
-// re-check the variant.
-type Modifier func(ri render.Inputs, create, delete []client.Object) (newCreate, newDelete []client.Object)
+// modifier post-processes the objects a render component produced, after Modify
+// has bound the component's typed inputs into it. It receives the component's
+// create and delete lists and returns the (possibly extended) lists. A modifier
+// may mutate matched objects, append objects to create, and append objects to
+// delete (e.g. to clean up resources a prior variant left behind). It runs only
+// for the variant it is registered under, so it need not re-check the variant.
+type modifier func(ri render.Inputs, create, delete []client.Object) (newCreate, newDelete []client.Object)
 
 // FindObject returns the first object of type T with the given name.
 func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {

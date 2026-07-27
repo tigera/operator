@@ -54,15 +54,15 @@ import (
 // no image override: kube-controllers runs from the combined calico image, which
 // resolves by variant in the base render.
 func registerKubeControllers(v *extensions.Variant) {
-	v.Modify(render.ComponentNameKubeControllers, modifyKubeControllers)
-	v.Modify(render.ComponentNameKubeControllersPolicy, modifyKubeControllersPolicy)
+	extensions.Modify(v, render.KubeControllersKey, modifyKubeControllers)
+	extensions.Modify(v, render.KubeControllersPolicyKey, modifyKubeControllersPolicy)
 }
 
 // modifyKubeControllersPolicy adds the WAF admission webhook ingress rule to the
 // calico-kube-controllers calico-system network policy, so the kube-apiserver can
 // reach the in-process webhook on :9443 (EV-6386). Without it the calico-system
 // default-deny drops the apiserver->:9443 call and WAF admission times out.
-func modifyKubeControllersPolicy(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyKubeControllersPolicy(ri render.Inputs, _ render.KubeControllersPolicyExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if !installationData(ri).waf.enabled {
 		return objs, del
 	}
@@ -87,7 +87,7 @@ func modifyKubeControllersPolicy(ri render.Inputs, objs, del []client.Object) ([
 // is enterprise-only by construction - the base render carries none of it. The
 // controller-side inputs (keypairs, the resolved wasm image, the pull secret) are
 // produced by the installation hook and handed in through ri.
-func modifyKubeControllers(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyKubeControllers(ri render.Inputs, _ render.KubeControllersExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	data := installationData(ri)
 
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole); ok {

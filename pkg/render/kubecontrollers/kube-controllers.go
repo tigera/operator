@@ -139,7 +139,11 @@ type calicoKubeControllersPolicyComponent struct {
 }
 
 func (calicoKubeControllersPolicyComponent) ModifierKey() string {
-	return render.ComponentNameKubeControllersPolicy
+	return render.KubeControllersPolicyKey.String()
+}
+
+func (calicoKubeControllersPolicyComponent) ExtensionInputs() any {
+	return render.KubeControllersPolicyExtensionInputs{}
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -177,7 +181,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) render.Componen
 	cfg.RoleName = KubeControllerRole
 	cfg.RoleBindingName = KubeControllerRoleBinding
 	cfg.MetricsName = KubeControllerMetrics
-	cfg.ModifierKey = render.ComponentNameKubeControllers
+	cfg.ModifierKey = render.KubeControllersKey.String()
 
 	cfg.Rules = KubeControllersRoleCommonRules(cfg)
 	cfg.EnabledControllers = []string{"node", "loadbalancer"}
@@ -268,6 +272,10 @@ func (c *kubeControllersComponent) Ready() bool {
 // (never decorated) and set for calico-kube-controllers.
 func (c *kubeControllersComponent) ModifierKey() string {
 	return c.cfg.ModifierKey
+}
+
+func (c *kubeControllersComponent) ExtensionInputs() any {
+	return render.KubeControllersExtensionInputs{}
 }
 
 func KubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {

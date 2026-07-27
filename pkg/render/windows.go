@@ -94,7 +94,9 @@ func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeWindows
 }
 
-func (c *windowsComponent) ModifierKey() string { return ComponentNameWindows }
+func (c *windowsComponent) ModifierKey() string { return WindowsKey.String() }
+
+func (c *windowsComponent) ExtensionInputs() any { return WindowsExtensionInputs{} }
 
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	// Clean up old windows upgrader daemonset if present

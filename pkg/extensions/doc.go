@@ -32,12 +32,13 @@
 // component builds its objects. An image override swaps the component's image
 // (resolved during ResolveImages); a Modifier post-processes the rendered
 // objects (run at the componentHandler, which renders the decorated component).
-// Register a modifier with Variant.Modify, or with RegisterModifier when it
-// needs the component's own typed config.
+// Register a modifier with extensions.Modify, passing the component's key: the
+// key pins the type of the inputs the modifier receives, so one written against
+// a different component won't compile.
 //
-// Inputs (controller phase) and Inputs (render phase) are a
-// pair: Inputs embeds Inputs and adds the cluster-access deps,
-// which is why modifiers, given only a Inputs, can't do I/O.
+// controller.Inputs (controller phase) and render.Inputs (render phase) are a
+// pair: controller.Inputs embeds render.Inputs and adds the cluster-access deps,
+// which is why modifiers, given only a render.Inputs, can't do I/O.
 //
 // A variant wires up its controller extension and modifiers in one place at
 // startup - see pkg/enterprise.

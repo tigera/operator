@@ -58,11 +58,12 @@ func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 	ExpectWithOffset(1, g.ResolveImages(nil)).To(BeNil())
 	objs, _ := g.Objects()
 	ri := render.Inputs{Installation: cfg.Installation}
-	var extIn any
+	var extIn render.GuardianExtensionInputs
 	if p, ok := g.(render.ExtensionInputsProvider); ok {
-		extIn = p.ExtensionInputs()
+		extIn, ok = p.ExtensionInputs().(render.GuardianExtensionInputs)
+		ExpectWithOffset(1, ok).To(BeTrue())
 	}
-	out, _ := extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianName, ri, extIn, objs, nil)
+	out, _ := extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianKey, ri, extIn, objs, nil)
 	return out
 }
 
@@ -121,11 +122,12 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 			// Apply the registered enterprise modifier the way the componentHandler
 			// does, so these enterprise tests exercise the integrated output.
 			ri := render.Inputs{Installation: cfg.Installation}
-			var extIn any
+			var extIn render.GuardianExtensionInputs
 			if p, ok := g.(render.ExtensionInputsProvider); ok {
-				extIn = p.ExtensionInputs()
+				extIn, ok = p.ExtensionInputs().(render.GuardianExtensionInputs)
+				Expect(ok).To(BeTrue())
 			}
-			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianName, ri, extIn, resources, nil)
+			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianKey, ri, extIn, resources, nil)
 		}
 
 		BeforeEach(func() {
@@ -358,11 +360,12 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 			// Apply the registered enterprise modifier the way the componentHandler
 			// does, so the enterprise policy is exercised.
 			ri := render.Inputs{Installation: cfg.Installation}
-			var extIn any
+			var extIn render.GuardianPolicyExtensionInputs
 			if p, ok := g.(render.ExtensionInputsProvider); ok {
-				extIn = p.ExtensionInputs()
+				extIn, ok = p.ExtensionInputs().(render.GuardianPolicyExtensionInputs)
+				Expect(ok).To(BeTrue())
 			}
-			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.ComponentNameGuardianPolicy, ri, extIn, objs, nil)
+			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianPolicyKey, ri, extIn, objs, nil)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

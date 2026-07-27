@@ -96,7 +96,7 @@ type guardianPolicyComponent struct {
 func (c *guardianPolicyComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
 func (c *guardianPolicyComponent) SupportedOSType() rmeta.OSType            { return rmeta.OSTypeAny }
 func (c *guardianPolicyComponent) Ready() bool                              { return true }
-func (c *guardianPolicyComponent) ModifierKey() string                      { return ComponentNameGuardianPolicy }
+func (c *guardianPolicyComponent) ModifierKey() string                      { return GuardianPolicyKey.String() }
 
 // GuardianPolicyExtensionInputs is the per-component context the guardian
 // policy modifier reads (via Inputs.Component). The enterprise guardian
@@ -107,6 +107,9 @@ type GuardianPolicyExtensionInputs struct {
 	OpenShift                  bool
 	IncludeEgressNetworkPolicy bool
 }
+
+// GuardianPolicyKey is the guardian network policy's extension point.
+var GuardianPolicyKey = ModifierKey[GuardianPolicyExtensionInputs]{ComponentNameGuardianPolicy}
 
 func (c *guardianPolicyComponent) ExtensionInputs() any {
 	return GuardianPolicyExtensionInputs{
@@ -192,7 +195,7 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *GuardianComponent) ModifierKey() string { return GuardianName }
+func (c *GuardianComponent) ModifierKey() string { return GuardianKey.String() }
 
 // GuardianExtensionInputs is the per-component context the guardian modifier
 // reads (via Inputs.Component). It carries the inputs the enterprise
@@ -204,6 +207,9 @@ type GuardianExtensionInputs struct {
 	Impersonation          *operatorv1.Impersonation
 	TrustedBundleMountPath string
 }
+
+// GuardianKey is the guardian deployment's extension point.
+var GuardianKey = ModifierKey[GuardianExtensionInputs]{GuardianName}
 
 func (c *GuardianComponent) ExtensionInputs() any {
 	var impersonation *operatorv1.Impersonation

@@ -50,7 +50,7 @@ const (
 
 func registerNode(v *extensions.Variant) {
 	v.Image(render.ComponentNameNode, components.ComponentTigeraNode)
-	v.Modify(render.ComponentNameNode, modifyNode)
+	extensions.Modify(v, render.NodeKey, modifyNode)
 
 	// The node component renders the cni-plugins init container; its image
 	// resolves through its own override key.
@@ -61,7 +61,7 @@ func registerNode(v *extensions.Variant) {
 // objects: the extra RBAC rules, the node-metrics Service, and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, BGP metrics
 // readiness check, multi-interface mode, and the calico log volume).
-func modifyNode(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyNode(ri render.Inputs, _ render.NodeExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName); ok {
 		role.Rules = append(role.Rules, nodeEnterpriseRules()...)
 	}

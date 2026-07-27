@@ -70,7 +70,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -90,7 +90,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -149,7 +149,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, create, del)
+		out, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, create, del)
 		return out
 	}
 
@@ -231,7 +231,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		_, toDelete := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, create, del)
+		_, toDelete := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, create, del)
 
 		_, ok := extensions.FindObject[*corev1.Service](toDelete, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeTrue(), "the webhook Service should be queued for deletion")
@@ -274,7 +274,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 		comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(ci), nil)
 		create, del := comp.Objects()
-		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllersPolicy, ri, create, del)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersPolicyKey, ri, create, del)
 
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, kubecontrollers.KubeControllerNetworkPolicyName)
 		Expect(ok).To(BeTrue())

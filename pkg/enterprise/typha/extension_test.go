@@ -48,7 +48,7 @@ var _ = Describe("typha enterprise modifier", func() {
 			Variant:       operatorv1.CalicoEnterprise,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, ctx, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, ctx, newObjs(), nil)
 
 		role := out[0].(*rbacv1.ClusterRole)
 		Expect(role.Rules).To(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
@@ -68,14 +68,14 @@ var _ = Describe("typha enterprise modifier", func() {
 			Variant:       operatorv1.Calico,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, ctx, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, ctx, newObjs(), nil)
 		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
 		dep := out[1].(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(BeEmpty())
 	})
 
 	It("does not panic on a zero Context (nil Installation)", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, render.Inputs{}, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, render.Inputs{}, newObjs(), nil)
 		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
 	})
 })

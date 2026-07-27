@@ -103,8 +103,8 @@ type apiServer struct {
 // Register wires the API server controller hook and modifiers into the variant.
 func Register(v *extensions.Variant) {
 	v.Controller(controller.APIServer, apiServerControllerExtension{})
-	extensions.RegisterModifier(v, render.ComponentNameAPIServer, modifyAPIServer)
-	extensions.RegisterModifier(v, render.ComponentNameAPIServerPolicy, modifyAPIServerPolicy)
+	extensions.Modify(v, render.APIServerKey, modifyAPIServer)
+	extensions.Modify(v, render.APIServerPolicyKey, modifyAPIServerPolicy)
 }
 
 func (c *apiServer) isSidecarInjectionEnabled() bool {
@@ -301,7 +301,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 // deletes the Enterprise API server objects left behind by a prior Enterprise
 // installation.
 func RegisterCalicoCleanup(v *extensions.Variant) {
-	extensions.RegisterModifier(v, render.ComponentNameAPIServer, cleanupAPIServer)
+	extensions.Modify(v, render.APIServerKey, cleanupAPIServer)
 }
 
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:

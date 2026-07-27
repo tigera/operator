@@ -49,18 +49,62 @@ type Extensible interface {
 	ModifierKey() string
 }
 
-// ExtensionInputsProvider is an optional companion to Extensible. A component
-// implements it to hand its modifier component-specific context that can't be
-// derived from the shared Inputs - config only the component's controller
-// has, such as a keypair the controller created. extensions.RegisterModifier
-// asserts the returned value to the modifier's config type and passes it through,
-// so the modifier body needs no assertion.
+// ExtensionInputsProvider is a companion to Extensible. A component implements it
+// to hand its modifier the inputs only that component can supply - config its own
+// controller gathered, such as a keypair the controller created. A component with
+// nothing to hand over still implements it and returns its empty inputs type, so
+// that every extension point has a type to key on. extensions.Modify asserts the
+// returned value to the key's config type, so the modifier body needs no assertion.
 type ExtensionInputsProvider interface {
 	ExtensionInputs() any
 }
 
-// Component names used as keys into the extension modifier registry. Keep these
-// in sync with the ModifierKey() methods that return them.
+// ModifierKey names a component's extension point and pins the type of the inputs
+// its modifier receives, which is whatever that component's ExtensionInputs
+// returns.
+//
+// name is unexported, so keys can only be declared here, next to the component
+// they belong to. Registration takes a key rather than a bare name, and
+// extensions.Modify infers Cfg from the key rather than from the modifier - that
+// is what lets the compiler reject a modifier written against a different
+// component.
+type ModifierKey[Cfg any] struct {
+	name string
+}
+
+// String returns the registry key. The modifier registry holds every component's
+// modifier together, so it is keyed by this rather than by the typed key.
+func (k ModifierKey[Cfg]) String() string {
+	return k.name
+}
+
+// Extension inputs for the components whose modifiers need nothing beyond Inputs.
+// They are empty today and exist so each extension point has a distinct type -
+// sharing one empty type between components would let the compiler accept a
+// modifier registered against the wrong one. A component that later needs to hand
+// something to its modifier gains a field here and no signature changes.
+type (
+	TyphaExtensionInputs                 struct{}
+	NodeExtensionInputs                  struct{}
+	WindowsExtensionInputs               struct{}
+	KubeControllersExtensionInputs       struct{}
+	KubeControllersPolicyExtensionInputs struct{}
+)
+
+// The extension point of each component that exposes one. A component's
+// ModifierKey returns its key from here and the variant registers against that
+// same key, so the two cannot drift onto different components without failing to
+// compile.
+var (
+	TyphaKey                 = ModifierKey[TyphaExtensionInputs]{ComponentNameTypha}
+	NodeKey                  = ModifierKey[NodeExtensionInputs]{ComponentNameNode}
+	WindowsKey               = ModifierKey[WindowsExtensionInputs]{ComponentNameWindows}
+	KubeControllersKey       = ModifierKey[KubeControllersExtensionInputs]{ComponentNameKubeControllers}
+	KubeControllersPolicyKey = ModifierKey[KubeControllersPolicyExtensionInputs]{ComponentNameKubeControllersPolicy}
+)
+
+// Component names. Those that key an extension point are wrapped by the keys
+// above; the rest key image overrides, which carry no inputs type.
 const (
 	ComponentNameTypha = "typha"
 	ComponentNameNode  = "node"

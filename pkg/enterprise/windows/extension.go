@@ -48,7 +48,7 @@ func Register(v *extensions.Variant) {
 	v.Controller(controller.Windows, windowsControllerExtension{})
 	v.Image(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
 	v.Image(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
-	v.Modify(render.ComponentNameWindows, modifyWindows)
+	extensions.Modify(v, render.WindowsKey, modifyWindows)
 }
 
 // windowsControllerExtension is the Calico Enterprise controller-side hook for the
@@ -105,7 +105,7 @@ func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controlle
 // calico-node-windows objects: the node-metrics Service and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
-func modifyWindows(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyWindows(ri render.Inputs, _ render.WindowsExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
 		modifyWindowsDaemonSet(ri, ds)
 	}

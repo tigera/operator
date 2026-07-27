@@ -33,9 +33,9 @@ import (
 // itself part of the extension mechanism.
 //
 // Per-component config a modifier needs but can't derive from these fields is
-// not carried here; it flows to the modifier as a typed argument (see
-// extensions.RegisterModifier), supplied by the component via
-// ExtensionInputsProvider.
+// not carried here; it flows to the modifier as a typed argument pinned by the
+// component's ModifierKey (see extensions.Modify) and supplied by the component
+// via ExtensionInputsProvider.
 type Inputs struct {
 	Installation       *operatorv1.InstallationSpec
 	FelixConfiguration *v3.FelixConfiguration

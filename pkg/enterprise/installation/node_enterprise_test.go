@@ -151,7 +151,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameNode, ri, objs, nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.NodeKey, ri, objs, nil)
 		return out
 	}
 
@@ -234,7 +234,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		})
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		objs, _ = extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, renderInputs, objs, nil)
+		objs, _ = extensionstest.ApplyExtensions(ext, render.TyphaKey, renderInputs, objs, nil)
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha")
 		Expect(ok).To(BeTrue())

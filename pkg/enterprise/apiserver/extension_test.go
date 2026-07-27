@@ -156,8 +156,9 @@ var _ = Describe("API server enterprise modifier", func() {
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
 
-		ec := comp.(render.ExtensionInputsProvider).ExtensionInputs()
-		return extensionstest.ApplyExtensionsWithInputs(ext, render.ComponentNameAPIServer, ri, ec, create, del)
+		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+		Expect(ok).To(BeTrue())
+		return extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
 	}
 
 	apiServerDeployment := func(objs []client.Object) *appsv1.Deployment {
@@ -339,8 +340,9 @@ var _ = Describe("API server enterprise modifier", func() {
 			Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 			create, del := comp.Objects()
 
-			ec := comp.(render.ExtensionInputsProvider).ExtensionInputs()
-			return extensionstest.ApplyExtensionsWithInputs(ext, render.ComponentNameAPIServer, ri, ec, create, del)
+			ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+			Expect(ok).To(BeTrue())
+			return extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
 		}
 
 		tenant := func(namespace string) *operatorv1.Tenant {
@@ -434,8 +436,9 @@ var _ = Describe("API server enterprise modifier", func() {
 			_, ok := extensions.FindObject[*appsv1.Deployment](del, render.APIServerName)
 			Expect(ok).To(BeTrue())
 
-			ec := comp.(render.ExtensionInputsProvider).ExtensionInputs()
-			create, del = extensionstest.ApplyExtensionsWithInputs(ext, render.ComponentNameAPIServer, ri, ec, create, del)
+			ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+			Expect(ok).To(BeTrue())
+			create, del = extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
 
 			// After the modifier, the deployment (with the query server container) is in the
 			// create list and out of the delete list.
@@ -498,8 +501,9 @@ var _ = Describe("API server enterprise policy modifier", func() {
 		}
 		comp := render.APIServerPolicy(cfg)
 		create, del := comp.Objects()
-		ec := comp.(render.ExtensionInputsProvider).ExtensionInputs()
-		objs, _ := extensionstest.ApplyExtensionsWithInputs(ext, render.ComponentNameAPIServerPolicy, ri, ec, create, del)
+		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+		Expect(ok).To(BeTrue())
+		objs, _ := extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerPolicyKey, ri, ec, create, del)
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.APIServerPolicyName)
 		Expect(ok).To(BeTrue())
 		return policy
@@ -563,10 +567,11 @@ var _ = Describe("API server Calico-variant cleanup", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		ec := comp.(render.ExtensionInputsProvider).ExtensionInputs()
-		_, del = extensionstest.ApplyExtensionsWithInputs(ext, render.ComponentNameAPIServer, ri, ec, create, del)
+		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+		Expect(ok).To(BeTrue())
+		_, del = extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
 
-		_, ok := extensions.FindObject[*rbacv1.ClusterRole](del, "tigera-ui-user")
+		_, ok = extensions.FindObject[*rbacv1.ClusterRole](del, "tigera-ui-user")
 		Expect(ok).To(BeTrue())
 		_, ok = extensions.FindObject[*rbacv1.ClusterRole](del, "calico-apiserver")
 		Expect(ok).To(BeTrue())

@@ -201,7 +201,11 @@ func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *nodeComponent) ModifierKey() string {
-	return ComponentNameNode
+	return NodeKey.String()
+}
+
+func (c *nodeComponent) ExtensionInputs() any {
+	return NodeExtensionInputs{}
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {

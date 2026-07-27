@@ -55,35 +55,29 @@ func (v *Variant) Image(component string, image components.Component) {
 	v.images.Register(v.variant, component, image)
 }
 
-// Modify registers a modifier for a component that needs no per-component
-// config. For components whose modifier needs the component's own typed config,
-// use RegisterModifier.
-func (v *Variant) Modify(component string, m Modifier) {
-	v.modifiers[component] = func(base render.Component, ri render.Inputs) render.Component {
-		return &decoratedComponent{Component: base, ri: ri, modify: m}
-	}
-}
-
-// RegisterModifier registers a modifier for component whose modifier needs the
-// component's own typed config. The component supplies it via
-// render.ExtensionInputsProvider; RegisterModifier asserts it to Cfg once, here,
-// and hands the typed value to modify - so the modifier body needs no assertion.
-// It is a free function because Go has no generic methods.
-func RegisterModifier[Cfg any](
+// Modify registers v's modifier for the component that owns key. Cfg comes from
+// the key, not from modify, so a modifier written against a different component
+// does not compile - the key is the component's own declaration of what it hands
+// over, and only the component's package can declare one.
+//
+// The component supplies the value through render.ExtensionInputsProvider; Modify
+// asserts it to Cfg once, here, so the modifier body needs no assertion. It is a
+// free function because Go has no generic methods.
+func Modify[Cfg any](
 	v *Variant,
-	component string,
+	key render.ModifierKey[Cfg],
 	modify func(ri render.Inputs, cfg Cfg, create, delete []client.Object) ([]client.Object, []client.Object),
 ) {
-	v.modifiers[component] = func(base render.Component, ri render.Inputs) render.Component {
+	v.modifiers[key.String()] = func(base render.Component, ri render.Inputs) render.Component {
 		provider, ok := base.(render.ExtensionInputsProvider)
 		if !ok {
-			logrus.Errorf("BUG: component %q has a registered modifier but provides no extension context; leaving it unmodified", component)
+			logrus.Errorf("BUG: component %q has a registered modifier but provides no extension inputs; leaving it unmodified", key)
 			return base
 		}
 		cfg, ok := provider.ExtensionInputs().(Cfg)
 		if !ok {
 			var want Cfg
-			logrus.Errorf("BUG: component %q extension context is %T, want %T; leaving it unmodified", component, provider.ExtensionInputs(), want)
+			logrus.Errorf("BUG: component %q extension inputs are %T, want %T; leaving it unmodified", key, provider.ExtensionInputs(), want)
 			return base
 		}
 		bound := func(ri render.Inputs, create, delete []client.Object) ([]client.Object, []client.Object) {
@@ -136,7 +130,7 @@ func (v *Variant) extendInputs(ctx context.Context, ci controller.Inputs) (contr
 type decoratedComponent struct {
 	render.Component
 	ri     render.Inputs
-	modify Modifier
+	modify modifier
 }
 
 func (d *decoratedComponent) Objects() ([]client.Object, []client.Object) {

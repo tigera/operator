@@ -210,7 +210,7 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 
 	// Pass the Istio CR as the owner: created objects carry an owner reference to it
 	// (merged with any other owners, such as an egress gateway CR sharing the namespace,
-	// via the multiple-owners label) and are garbage collected when the CR is deleted —
+	// via the multiple-owners label) and are garbage collected by owner reference —
 	// the same pattern the egress gateway uses with its CRs.
 	hdlr := utils.NewComponentHandler(log, r, r.scheme, instance)
 	component := render.NewPassthrough(toCreate, toDelete)

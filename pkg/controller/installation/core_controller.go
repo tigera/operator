@@ -1503,7 +1503,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		NonClusterHost:         nonclusterhost,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
 	}
-	components = append(components, render.Typha(&typhaCfg))
+	typhaComponent := render.Typha(&typhaCfg)
 
 	// See the section 'Use of Finalizers for graceful termination' at the top of this file for terminating details.
 	canRemoveCNI := false
@@ -1613,6 +1613,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	components = append(components, typhaComponent)
+
 	// Build a configuration for rendering calico/node.
 	nodeCfg := render.NodeConfiguration{
 		GoldmaneRunning:               goldmaneRunning,
@@ -1671,7 +1673,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		warnOnce.Reset()
 	}
 
-	components = append(components, render.Node(&nodeCfg))
+	nodeComponent := render.Node(&nodeCfg)
 
 	csiCfg := render.CSIConfiguration{
 		Installation: &instance.Spec,
@@ -1771,6 +1773,42 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// Apply calico-node before the remaining components so that its rollout
+	// status can be checked before Typha is applied. Per the Calico version
+	// skew policy, Felix may be at most one minor version ahead of Typha, but
+	// not behind it. Updating Typha while older calico-node pods are still
+	// running would leave those pods unable to sync, marking them NotReady
+	// and allowing the DaemonSet controller to exceed the configured surge
+	// limits when replacing them.
+	if err = imageset.ResolveImages(imageSet, nodeComponent); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for calico-node", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if err := handler.CreateOrUpdateOrDelete(ctx, nodeComponent, nil); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating calico-node", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Check whether the calico-node rollout is complete; Typha is only
+	// applied once it is. Read the DaemonSet directly from the API server
+	// rather than the informer cache: immediately after the update above,
+	// the cache may still hold the pre-update object whose status reports
+	// fully rolled out, which would open the gate before the rollout has
+	// started.
+	nodeRolledOut := true
+	nodeDS, err := r.clientset.AppsV1().DaemonSets(common.CalicoNamespace).Get(ctx, common.NodeDaemonSetName, metav1.GetOptions{})
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read calico-node DaemonSet", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	} else {
+		nodeRolledOut = nodeDS.Status.ObservedGeneration >= nodeDS.Generation &&
+			nodeDS.Status.UpdatedNumberScheduled == nodeDS.Status.DesiredNumberScheduled &&
+			nodeDS.Status.NumberReady == nodeDS.Status.DesiredNumberScheduled
+	}
+	typhaCfg.NodeRolledOut = nodeRolledOut
 
 	if err = imageset.ResolveImages(imageSet, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)

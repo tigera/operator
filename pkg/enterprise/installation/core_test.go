@@ -35,7 +35,7 @@ var _ = Describe("installation controller extension", func() {
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
 		ci := newControllerInputs(operatorv1.CalicoEnterprise)
-		ci.FelixConfiguration = &v3.FelixConfiguration{
+		ci.RenderInputs.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
 		Expect(ext.Validate(ctx, ci)).To(HaveOccurred())
@@ -95,7 +95,7 @@ func newControllerInputs(variant operatorv1.ProductVariant) controller.Inputs {
 	trustedBundle := certManager.CreateTrustedBundle()
 
 	return controller.Inputs{
-		Inputs: render.Inputs{
+		RenderInputs: render.Inputs{
 			Installation:       &operatorv1.InstallationSpec{Variant: variant},
 			FelixConfiguration: &v3.FelixConfiguration{},
 			TrustedBundle:      trustedBundle,

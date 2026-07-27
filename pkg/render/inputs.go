@@ -20,22 +20,12 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// Inputs carries reconcile-derived inputs from controllers into render
-// modifiers. Core operator code never reads these fields - only registered
-// modifiers do. It carries raw cluster state gathered generically (Installation,
-// FelixConfiguration, ClusterDomain) that modifiers derive their own values from,
-// the shared TrustedBundle, and an opaque Extension slot for controller-produced
-// data specific to one extension.
+// Inputs is the raw cluster state a controller gathered, carried into render
+// modifiers. Only registered modifiers read it; core operator code never does.
 //
-// It lives in render (not the extensions package) because it is the render-phase
-// input a modifier consumes - the render-side corollary to the controller-phase
-// controller.Inputs. The extensions package wires modifiers to it; it is not
-// itself part of the extension mechanism.
-//
-// Per-component config a modifier needs but can't derive from these fields is
-// not carried here; it flows to the modifier as a typed argument pinned by the
-// component's ModifierKey (see extensions.Modify) and supplied by the component
-// via ExtensionInputsProvider.
+// Per-component config a modifier can't derive from these fields is not carried
+// here. It reaches the modifier as a typed argument pinned by the component's
+// ModifierKey.
 type Inputs struct {
 	Installation       *operatorv1.InstallationSpec
 	FelixConfiguration *v3.FelixConfiguration
@@ -44,21 +34,15 @@ type Inputs struct {
 	// TrustedBundle is the shared CA bundle for the calico-system namespace.
 	TrustedBundle certificatemanagement.TrustedBundle
 
-	// Extension is opaque, extension-owned data that the controller extension
-	// produced. Usually a modifier reads it back out (an artifact that can only be
-	// created controller-side because it has cluster side effects, e.g. a keypair),
-	// in which case it holds an extension-package type core code never names. When a
-	// controller needs the extension's reconcile-derived inputs back (e.g. the
-	// clusterconnection controller's variant-specific Guardian inputs), the payload
-	// is instead a render-package type the controller reads generically without
-	// depending on the extension. Nil when no extension is active.
+	// Extension is opaque data the controller extension produced, usually an artifact
+	// that can only be created controller-side because it has cluster side effects
+	// (a keypair, say). Where a controller needs to read it back, the payload is a
+	// render type so it does not depend on the extension. Nil when none is active.
 	Extension any
 }
 
-// ExtractExtensionData returns the extension-owned data a controller extension
-// stashed in the render inputs, asserted to T, or the zero value of T when the
-// slot is empty or holds a different type. Extensions use it instead of repeating
-// the type assertion in a per-component accessor.
+// ExtractExtensionData returns the Extension slot asserted to T, or the zero value
+// of T when it is empty or holds a different type.
 func ExtractExtensionData[T any](ri Inputs) T {
 	data, _ := ri.Extension.(T)
 	return data

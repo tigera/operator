@@ -164,7 +164,7 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
 func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
-	in := ci.Installation
+	in := ci.RenderInputs.Installation
 
 	trustedBundle, err := ci.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, ci.Client, common.OperatorNamespace(), false)
 	if err != nil {
@@ -230,7 +230,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 			}
 			trustedBundle.AddCertificates(certificate)
 		}
-		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, ci.Client, authenticationCR, ci.ClusterDomain)
+		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, ci.Client, authenticationCR, ci.RenderInputs.ClusterDomain)
 		if err != nil {
 			return ci, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
 		}
@@ -244,7 +244,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 			ci.Client,
 			"query-server-tls",
 			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, ci.ClusterDomain),
+			dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, ci.RenderInputs.ClusterDomain),
 		)
 		if err != nil {
 			return ci, nil, fmt.Errorf("unable to get or create query server tls key pair: %w", err)
@@ -283,8 +283,8 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 		}
 	}
 
-	ci.TrustedBundle = trustedBundle
-	ci.Extension = apiServerRenderData{
+	ci.RenderInputs.TrustedBundle = trustedBundle
+	ci.RenderInputs.Extension = apiServerRenderData{
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		applicationLayer:            applicationLayer,
@@ -435,7 +435,8 @@ func (c *apiServer) layerDeployment(d *appsv1.Deployment) {
 	// Audit logging and the management-cluster tunnel args are layered onto the
 	// aggregation API server container, which is only present when that server runs.
 	if c.cfg.RequiresAggregationServer {
-		if ctr, ok := render.Container(spec, string(render.APIServerContainerName)); ok {
+		{
+			ctr := render.MustContainer(spec, render.APIServerContainerName)
 			ctr.VolumeMounts = append(ctr.VolumeMounts,
 				corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 				corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},
@@ -577,7 +578,7 @@ func (c *apiServer) l7AdmissionControllerContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:    string(render.L7AdmissionControllerContainerName),
+		Name:    render.L7AdmissionControllerContainerName,
 		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "l7-admission-controller"},
 		Env: []corev1.EnvVar{
@@ -840,7 +841,7 @@ func (c *apiServer) queryServerContainer() corev1.Container {
 	}
 
 	container := corev1.Container{
-		Name:    string(render.TigeraAPIServerQueryServerContainerName),
+		Name:    render.TigeraAPIServerQueryServerContainerName,
 		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "queryserver"},
 		Env:     env,

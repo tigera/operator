@@ -281,7 +281,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// the license-gated egress policy flag). For the core operator this is a no-op and
 	// the render inputs carries no extension data, so the OSS defaults apply.
 	ci := controller.Inputs{
-		Inputs:             render.Inputs{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
+		RenderInputs:       render.Inputs{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
 		Controller:         controller.ClusterConnection,
 		Client:             r.cli,
 		CertificateManager: certificateManager,
@@ -295,7 +295,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	guardianData, haveGuardianData := render.GuardianRenderDataFromInputs(ci.Inputs)
+	guardianData, haveGuardianData := render.GuardianRenderDataFromInputs(ci.RenderInputs)
 
 	includeSystem := false
 	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {

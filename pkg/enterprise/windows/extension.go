@@ -65,7 +65,7 @@ func windowsData(ri render.Inputs) windowsRenderData {
 
 // Validate rejects windows installation config Calico Enterprise does not support.
 func (windowsControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
-	return installation.ValidateReporterPort(ci.FelixConfiguration)
+	return installation.ValidateReporterPort(ci.RenderInputs.FelixConfiguration)
 }
 
 // Watches registers the enterprise secrets the windows controller reconciles on.
@@ -88,12 +88,12 @@ func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controlle
 		ci.Client,
 		render.NodePrometheusTLSServerSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, ci.ClusterDomain),
+		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, ci.RenderInputs.ClusterDomain),
 	)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error getting node prometheus TLS certificate: %w", err)
 	}
-	ci.Extension = windowsRenderData{prometheusServerTLS: tls}
+	ci.RenderInputs.Extension = windowsRenderData{prometheusServerTLS: tls}
 	return ci, nil, nil
 }
 
@@ -109,6 +109,16 @@ func modifyWindows(ri render.Inputs, _ render.WindowsExtensionInputs, objs, del 
 	return append(objs, windowsNodeMetricsService(ri)), del
 }
 
+// windowsNodeContainers are the containers the enterprise layering applies to.
+// Confd only renders when BGP is enabled.
+func windowsNodeContainers(spec *corev1.PodSpec) []*corev1.Container {
+	cs := render.MustContainers(spec, render.WindowsNodeContainerNames...)
+	if confd, ok := render.Container(spec, render.WindowsConfdContainerName); ok {
+		cs = append(cs, confd)
+	}
+	return cs
+}
+
 func modifyWindowsDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	spec := &ds.Spec.Template.Spec
@@ -118,7 +128,7 @@ func modifyWindowsDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 		VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
 	})
 
-	for _, c := range render.Containers(spec, render.WindowsNodeContainerNames...) {
+	for _, c := range windowsNodeContainers(spec) {
 		c.Env = append(c.Env, windowsEnterpriseEnv(ri)...)
 
 		// Enterprise mounts the calico log directory in place of the OSS CNI log
@@ -178,7 +188,7 @@ func mountWindowsPrometheusTLS(ri render.Inputs, ds *appsv1.DaemonSet) {
 
 	spec.Volumes = append(spec.Volumes, tls.Volume())
 
-	for _, c := range render.Containers(spec, render.WindowsNodeContainerNames...) {
+	for _, c := range windowsNodeContainers(spec) {
 		c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeWindows))
 	}
 

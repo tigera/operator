@@ -45,8 +45,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-type ContainerName string
-
 const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
@@ -61,9 +59,6 @@ const (
 	// carries neither.
 	ComponentNameAPIServerPolicy = "apiserver-policy"
 
-	// TieredPolicyPassthruClusterRoleName is the tiered policy passthrough
-	// ClusterRole. A modifier reaches for it by name, so it is declared here
-	// rather than inline at the object it names.
 	TieredPolicyPassthruClusterRoleName = "calico-tiered-policy-passthrough"
 )
 
@@ -76,20 +71,20 @@ const (
 	QueryserverServiceName = "calico-api"
 
 	// Use the same API server container name for both OSS and Enterprise.
-	APIServerName                                         = "calico-apiserver"
-	APIServerContainerName                  ContainerName = "calico-apiserver"
-	TigeraAPIServerQueryServerContainerName ContainerName = "tigera-queryserver"
+	APIServerName                           = "calico-apiserver"
+	APIServerContainerName                  = "calico-apiserver"
+	TigeraAPIServerQueryServerContainerName = "tigera-queryserver"
 
 	CalicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	APIServerServiceName         = "calico-api"
 	APIServerServiceAccountName  = "calico-apiserver"
 
-	APIServerSecretsRBACName                                      = "calico-extension-apiserver-secrets-access"
-	MultiTenantManagedClustersAccessClusterRoleName               = "calico-managed-cluster-access"
-	ManagedClustersWatchClusterRoleName                           = "calico-managed-cluster-watch"
-	L7AdmissionControllerContainerName              ContainerName = "calico-l7-admission-controller"
-	L7AdmissionControllerPort                                     = 6443
-	L7AdmissionControllerPortName                                 = "l7admctrl"
+	APIServerSecretsRBACName                        = "calico-extension-apiserver-secrets-access"
+	MultiTenantManagedClustersAccessClusterRoleName = "calico-managed-cluster-access"
+	ManagedClustersWatchClusterRoleName             = "calico-managed-cluster-watch"
+	L7AdmissionControllerContainerName              = "calico-l7-admission-controller"
+	L7AdmissionControllerPort                       = 6443
+	L7AdmissionControllerPortName                   = "l7admctrl"
 )
 
 var (
@@ -183,8 +178,7 @@ type APIServerExtensionInputs struct {
 	CalicoImage string
 }
 
-// The API server's two extension points. Both hand over the same inputs: the
-// policy modifier reads the config to decide which rules to add.
+// Both extension points hand over the same inputs.
 var (
 	APIServerKey       = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServer}
 	APIServerPolicyKey = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServerPolicy}
@@ -809,7 +803,7 @@ func (c *apiServerComponent) webhookReaderClusterRoleBinding() client.Object {
 	}
 }
 
-func GetContainerPort(cfg *APIServerConfiguration, containerName ContainerName) *operatorv1.APIServerDeploymentContainerPort {
+func GetContainerPort(cfg *APIServerConfiguration, containerName string) *operatorv1.APIServerDeploymentContainerPort {
 	// Try to get the override port
 	if cfg != nil &&
 		cfg.APIServer != nil &&
@@ -1018,7 +1012,7 @@ func (c *apiServerComponent) apiServerContainer() corev1.Container {
 	apiServerTargetPort := GetContainerPort(c.cfg, APIServerContainerName).ContainerPort
 
 	apiServer := corev1.Container{
-		Name:         string(APIServerContainerName),
+		Name:         APIServerContainerName,
 		Image:        c.calicoImage,
 		Command:      []string{components.CalicoBinaryPath, "component", "apiserver"},
 		Args:         c.startUpArgs(),

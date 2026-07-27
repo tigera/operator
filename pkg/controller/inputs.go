@@ -12,11 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package controller holds the controller-phase inputs passed between a
-// controller's reconcile and a variant extension. They live here, not in the
-// extensions package, because they are controller concepts (the data and
-// machinery a controller gathers), not part of the extension mechanism itself -
-// the extensions package consumes them.
+// Package controller holds the controller-phase inputs a reconcile hands to a
+// variant extension. They live here rather than in the extensions package because
+// they are what a controller gathers, not part of the extension mechanism.
 package controller
 
 import (
@@ -27,8 +25,7 @@ import (
 )
 
 // Name identifies the controller a ControllerExtension extends, so a variant can
-// register a different hook per controller. Use the constants below rather than
-// bare strings so registration and lookup stay in sync.
+// register a different hook per controller.
 type Name string
 
 const (
@@ -38,19 +35,11 @@ const (
 	ClusterConnection Name = "clusterconnection"
 )
 
-// Inputs is what a controller hands its variant extension, the corollary to the
-// render-phase render.Inputs. It is the embedded render.Inputs (the same data the
-// render phase sees) plus the controller-side machinery a ControllerExtension needs
-// to produce artifacts: a client and a certificate manager. Those deps live here,
-// not on render.Inputs, so the modifiers that read render.Inputs can't do I/O -
-// they only transform objects.
-//
-// Controller names which controller is reconciling, selecting that controller's
-// extension hook. The controller fills the embedded render.Inputs data fields, the
-// deps, and Controller; ExtendInputs does its work, sets the produced artifacts on
-// the embedded render.Inputs, and returns it.
+// Inputs is what a controller hands its variant extension: the render-phase inputs
+// plus the deps needed to produce artifacts. The deps live here and not on
+// render.Inputs so that modifiers, which only see render.Inputs, can't do I/O.
 type Inputs struct {
-	render.Inputs
+	RenderInputs render.Inputs
 
 	// Controller identifies the reconciling controller, selecting its hook.
 	Controller Name
@@ -58,9 +47,8 @@ type Inputs struct {
 	Client             client.Client
 	CertificateManager certificatemanager.CertificateManager
 
-	// Options carries the active variant's computed controller-phase options. The
-	// extension Set fills it before dispatching to a hook (Validate/ExtendInputs).
-	// It's opaque so core never names a variant-only option; the variant's hooks
-	// assert it back out. Nil for the core operator.
+	// Options is the variant's computed controller-phase options, filled in by the
+	// extension Set before it dispatches. Opaque so core never names a variant-only
+	// option; the variant's hooks assert it back out. Nil for the core operator.
 	Options any
 }

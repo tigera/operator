@@ -51,7 +51,8 @@ func modifyTypha(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []cl
 	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, common.TyphaDeploymentName); ok {
 		net := ri.Installation.CalicoNetwork
 		if net != nil && net.MultiInterfaceMode != nil {
-			if c, ok := render.Container(&dep.Spec.Template.Spec, render.TyphaContainerName); ok {
+			{
+				c := render.MustContainer(&dep.Spec.Template.Spec, render.TyphaContainerName)
 				c.Env = append(c.Env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: net.MultiInterfaceMode.Value()})
 			}
 		}

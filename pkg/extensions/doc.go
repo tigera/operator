@@ -23,22 +23,21 @@
 //
 // A ControllerExtension is the controller-side hook. It runs once per reconcile
 // in the installation controller, has cluster access (Client,
-// CertificateManager) via the Inputs, and does the side-effecting
-// work a pure render hook can't: rejecting unsupported config (Validate) and
-// creating certificates / extending the trusted bundle (ExtendInputs). It
-// returns the Inputs, the read-only baton passed to the render phase.
+// CertificateManager) via controller.Inputs, and does the side-effecting work a
+// pure render hook can't: rejecting unsupported config (Validate) and creating
+// certificates / extending the trusted bundle (ExtendInputs). It returns the
+// render.Inputs passed on to the render phase.
 //
 // Per-component modifiers are the render phase: pure hooks that run after a
-// component builds its objects. An image override swaps the component's image
-// (resolved during ResolveImages); a Modifier post-processes the rendered
-// objects (run at the componentHandler, which renders the decorated component).
-// Register a modifier with extensions.Modify, passing the component's key: the
-// key pins the type of the inputs the modifier receives, so one written against
-// a different component won't compile.
+// component builds its objects. An image override swaps the component's image;
+// a modifier post-processes the rendered objects at the componentHandler.
+// Register one with Modify, passing the component's key: the key pins the type of
+// the inputs the modifier receives, so one written against a different component
+// won't compile.
 //
-// controller.Inputs (controller phase) and render.Inputs (render phase) are a
-// pair: controller.Inputs embeds render.Inputs and adds the cluster-access deps,
-// which is why modifiers, given only a render.Inputs, can't do I/O.
+// controller.Inputs and render.Inputs are a pair: controller.Inputs carries a
+// render.Inputs plus the cluster-access deps, which is why modifiers, given only
+// a render.Inputs, can't do I/O.
 //
 // A variant wires up its controller extension and modifiers in one place at
 // startup - see pkg/enterprise.

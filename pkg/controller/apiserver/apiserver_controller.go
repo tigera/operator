@@ -312,7 +312,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// management cluster CRs, the OIDC config, and the resolved L7 sidecar images). For
 	// the core operator this is a no-op and the render inputs carries no extension data.
 	ci := controller.Inputs{
-		Inputs: render.Inputs{
+		RenderInputs: render.Inputs{
 			Installation:  installationSpec,
 			ClusterDomain: r.opts.ClusterDomain,
 		},
@@ -329,7 +329,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	trustedBundle := ci.TrustedBundle
+	trustedBundle := ci.RenderInputs.TrustedBundle
 
 	// The webhooks component (v3-CRD mode) needs the ManagementCluster to register the
 	// managed-cluster webhook. Reading it requires the enterprise CRDs.
@@ -379,7 +379,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderInputs(ci.Inputs),
+		utils.WithRenderInputs(ci.RenderInputs),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 

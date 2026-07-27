@@ -70,7 +70,7 @@ func (clusterConnectionControllerExtension) ExtendInputs(ctx context.Context, ci
 		return ci, nil, fmt.Errorf("error querying license: %w", err)
 	}
 
-	ci.Extension = render.GuardianRenderData{
+	ci.RenderInputs.Extension = render.GuardianRenderData{
 		Version:                    clusterInformation.Spec.CNXVersion,
 		IncludeEgressNetworkPolicy: includeEgressNetworkPolicy,
 	}

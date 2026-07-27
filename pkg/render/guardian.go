@@ -108,7 +108,6 @@ type GuardianPolicyExtensionInputs struct {
 	IncludeEgressNetworkPolicy bool
 }
 
-// GuardianPolicyKey is the guardian network policy's extension point.
 var GuardianPolicyKey = ModifierKey[GuardianPolicyExtensionInputs]{ComponentNameGuardianPolicy}
 
 func (c *guardianPolicyComponent) ExtensionInputs() any {
@@ -208,7 +207,6 @@ type GuardianExtensionInputs struct {
 	TrustedBundleMountPath string
 }
 
-// GuardianKey is the guardian deployment's extension point.
 var GuardianKey = ModifierKey[GuardianExtensionInputs]{GuardianName}
 
 func (c *GuardianComponent) ExtensionInputs() any {

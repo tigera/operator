@@ -123,10 +123,10 @@ func (s *Set) Validate(ctx context.Context, ci controller.Inputs) error {
 	if s != nil {
 		ci.Options = s.options
 	}
-	if ci.Installation == nil {
+	if ci.RenderInputs.Installation == nil {
 		return nil
 	}
-	return s.variant(ci.Installation.Variant).validate(ctx, ci)
+	return s.variant(ci.RenderInputs.Installation.Variant).validate(ctx, ci)
 }
 
 // ExtendInputs runs the ci.Controller extension for the installation's variant
@@ -137,10 +137,10 @@ func (s *Set) ExtendInputs(ctx context.Context, ci controller.Inputs) (controlle
 	if s != nil {
 		ci.Options = s.options
 	}
-	if ci.Installation == nil {
+	if ci.RenderInputs.Installation == nil {
 		return ci, nil, nil
 	}
-	return s.variant(ci.Installation.Variant).extendInputs(ctx, ci)
+	return s.variant(ci.RenderInputs.Installation.Variant).extendInputs(ctx, ci)
 }
 
 // SetupWatches registers the watches every variant's extension declares for the

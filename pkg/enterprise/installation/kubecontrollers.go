@@ -139,7 +139,8 @@ func modifyKubeControllersDeployment(ri render.Inputs, dp *appsv1.Deployment, da
 		spec.Volumes = append(spec.Volumes, waf.webhookTLS.Volume())
 	}
 
-	if c, ok := render.Container(spec, kubecontrollers.KubeController); ok {
+	{
+		c := render.MustContainer(spec, kubecontrollers.KubeController)
 
 		appendEnabledControllers(c, data.kubeControllerControllers)
 		c.Env = append(c.Env, enterpriseEnv(ri)...)
@@ -560,7 +561,7 @@ func buildWAFData(ctx context.Context, ci controller.Inputs) (wafRenderData, cer
 		return wafRenderData{gatewayAPIPresent: true}, nil, nil
 	}
 
-	in := ci.Installation
+	in := ci.RenderInputs.Installation
 	// The wasm is baked into the gateway envoy-proxy image. Resolve it with the same
 	// GetReference the base render uses for every image; the hook has the ImageSet here.
 	imageSet, err := imageset.GetImageSet(ctx, ci.Client, in.Variant)
@@ -576,7 +577,7 @@ func buildWAFData(ctx context.Context, ci controller.Inputs) (wafRenderData, cer
 		ci.Client,
 		applicationlayer.WAFWebhookServerTLSSecretName,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, ci.ClusterDomain),
+		dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, ci.RenderInputs.ClusterDomain),
 	)
 	if err != nil {
 		return wafRenderData{}, nil, err
@@ -592,8 +593,8 @@ func buildWAFData(ctx context.Context, ci controller.Inputs) (wafRenderData, cer
 	}
 
 	var caCert *corev1.ConfigMap
-	if ci.TrustedBundle != nil {
-		caCert = ci.TrustedBundle.ConfigMap(common.CalicoNamespace)
+	if ci.RenderInputs.TrustedBundle != nil {
+		caCert = ci.RenderInputs.TrustedBundle.ConfigMap(common.CalicoNamespace)
 		caCert.Name = WASMCACertName
 	}
 

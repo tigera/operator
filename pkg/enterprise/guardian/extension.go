@@ -295,13 +295,12 @@ func guardianEnterpriseServicePorts() []corev1.ServicePort {
 }
 
 func addGuardianEnterpriseEnv(gc render.GuardianExtensionInputs, dep *appsv1.Deployment) {
-	if c, ok := render.Container(&dep.Spec.Template.Spec, render.GuardianContainerName); ok {
-		c.Env = append(c.Env,
-			corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
-			corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
-			corev1.EnvVar{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
-		)
-	}
+	c := render.MustContainer(&dep.Spec.Template.Spec, render.GuardianContainerName)
+	c.Env = append(c.Env,
+		corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
+		corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
+		corev1.EnvVar{Name: "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
+	)
 }
 
 // guardianSecretsRole creates a Role that allows the management cluster to

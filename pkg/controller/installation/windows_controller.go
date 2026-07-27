@@ -341,7 +341,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	// Run the variant's windows controller extension to build the render inputs
 	// (creating no enterprise artifacts in core).
 	ci := controller.Inputs{
-		Inputs: render.Inputs{
+		RenderInputs: render.Inputs{
 			Installation:       &instance.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
@@ -394,7 +394,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderInputs(ci.Inputs),
+		utils.WithRenderInputs(ci.RenderInputs),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {

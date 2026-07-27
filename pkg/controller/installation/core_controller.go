@@ -1153,7 +1153,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	ci := controller.Inputs{
-		Inputs: render.Inputs{
+		RenderInputs: render.Inputs{
 			Installation:       &instance.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
@@ -1191,7 +1191,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderInputs(ci.Inputs),
+		utils.WithRenderInputs(ci.RenderInputs),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 

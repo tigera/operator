@@ -348,15 +348,14 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
 		Controller:         contexts.WindowsController,
-		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, _, err = r.opts.Extensions.ExtendContext(cc)
+	cc, _, err = r.opts.Extensions.ExtendContext(ctx, cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing windows extension", err, reqLogger)
 		return reconcile.Result{}, err

@@ -283,15 +283,14 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	cc := contexts.ControllerContext{
 		RenderContext:      render.RenderContext{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
 		Controller:         contexts.ClusterConnectionController,
-		Ctx:                ctx,
 		Client:             r.cli,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, _, err = r.opts.Extensions.ExtendContext(cc)
+	cc, _, err = r.opts.Extensions.ExtendContext(ctx, cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)
 		return reconcile.Result{}, err

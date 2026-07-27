@@ -15,6 +15,7 @@
 package apiserver
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"slices"
@@ -121,12 +122,12 @@ type apiServerControllerExtension struct{}
 
 // Validate rejects an API server configuration Calico Enterprise does not support: a
 // cluster cannot be both a management cluster and a managed cluster.
-func (apiServerControllerExtension) Validate(cc contexts.ControllerContext) error {
-	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
+func (apiServerControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
+	managementCluster, err := utils.GetManagementCluster(ctx, cc.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
-	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, cc.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
@@ -162,7 +163,7 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetches the enterprise CRs, creates the query server certificate, resolves the L7
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
-func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	in := cc.Installation
 
 	trustedBundle, err := cc.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, cc.Client, common.OperatorNamespace(), false)
@@ -170,17 +171,17 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 		return cc, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
 	}
 
-	applicationLayer, err := utils.GetApplicationLayer(cc.Ctx, cc.Client)
+	applicationLayer, err := utils.GetApplicationLayer(ctx, cc.Client)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
 	}
 
-	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
+	managementCluster, err := utils.GetManagementCluster(ctx, cc.Client)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
 
-	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, cc.Client)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
@@ -189,7 +190,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	// certificates for managed clusters. The manager controller writes it once
 	// ManagementCluster.Spec.TLS is defaulted; degrade until it exists.
 	if managementCluster != nil && managementCluster.Spec.TLS != nil && !eoptions.From(cc).MultiTenant {
-		if _, err := utils.GetSecret(cc.Ctx, cc.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
+		if _, err := utils.GetSecret(ctx, cc.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
 			return cc, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
 		}
 	}
@@ -215,7 +216,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	// Authentication: when a Dex-backed Authentication CR is ready, add its cert to the
 	// bundle and build the key validator config for the query server and the policy.
 	var keyValidatorConfig authentication.KeyValidatorConfig
-	authenticationCR, err := utils.GetAuthentication(cc.Ctx, cc.Client)
+	authenticationCR, err := utils.GetAuthentication(ctx, cc.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return cc, nil, fmt.Errorf("error while fetching Authentication: %w", err)
 	}
@@ -229,7 +230,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 			}
 			trustedBundle.AddCertificates(certificate)
 		}
-		keyValidatorConfig, err = utils.GetKeyValidatorConfig(cc.Ctx, cc.Client, authenticationCR, cc.ClusterDomain)
+		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, cc.Client, authenticationCR, cc.ClusterDomain)
 		if err != nil {
 			return cc, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
 		}
@@ -256,7 +257,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	if applicationLayer != nil &&
 		applicationLayer.Spec.SidecarInjection != nil &&
 		*applicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled {
-		imageSet, err := imageset.GetImageSet(cc.Ctx, cc.Client, in.Variant)
+		imageSet, err := imageset.GetImageSet(ctx, cc.Client, in.Variant)
 		if err != nil {
 			return cc, nil, err
 		}
@@ -276,7 +277,7 @@ func (apiServerControllerExtension) ExtendContext(cc contexts.ControllerContext)
 	// is covered by its own binding.
 	var bindingNamespaces []string
 	if eoptions.From(cc).MultiTenant {
-		bindingNamespaces, err = utils.TenantNamespaces(cc.Ctx, cc.Client, nil)
+		bindingNamespaces, err = utils.TenantNamespaces(ctx, cc.Client, nil)
 		if err != nil {
 			return cc, nil, fmt.Errorf("error reading tenant namespaces: %w", err)
 		}

@@ -1160,15 +1160,14 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
 		Controller:         contexts.InstallationController,
-		Ctx:                ctx,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, managedKeyPairs, err := r.opts.Extensions.ExtendContext(cc)
+	cc, managedKeyPairs, err := r.opts.Extensions.ExtendContext(ctx, cc)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err

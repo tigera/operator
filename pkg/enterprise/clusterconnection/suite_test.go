@@ -15,6 +15,7 @@
 package clusterconnection_test
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -27,6 +28,9 @@ import (
 // ext is the enterprise extension Set under test, shared across the suite. It is
 // immutable once built and the specs only read it, so a single instance is safe.
 var ext *extensions.Set = enterprise.New()
+
+// ctx is the reconcile context the specs pass to the extension hooks.
+var ctx = context.Background()
 
 func TestClusterConnection(t *testing.T) {
 	RegisterFailHandler(Fail)

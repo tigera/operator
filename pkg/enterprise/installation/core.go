@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -89,7 +90,7 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
-func (coreControllerExtension) Validate(cc contexts.ControllerContext) error {
+func (coreControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
 	return ValidateReporterPort(cc.FelixConfiguration)
 }
 
@@ -151,8 +152,7 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetching the certificates that feed the trusted bundle. It returns the render
 // context carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
-func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
-
+func (coreControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	nodePrometheusTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
 		cc.Client,
 		render.NodePrometheusTLSServerSecret,
@@ -182,7 +182,7 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (con
 		cc.TrustedBundle.AddCertificates(kubeControllerTLS)
 	}
 
-	logCollector, err := utils.GetLogCollector(cc.Ctx, cc.Client)
+	logCollector, err := utils.GetLogCollector(ctx, cc.Client)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error reading LogCollector: %w", err)
 	}
@@ -190,18 +190,18 @@ func (coreControllerExtension) ExtendContext(cc contexts.ControllerContext) (con
 	// calico-kube-controllers enterprise additions: the WAF surface, the enterprise
 	// cluster role rules, and the enterprise enabled controllers. A managed cluster's
 	// kube-controllers needs an extra license-push rule.
-	managementClusterConnection, err := utils.GetManagementClusterConnection(cc.Ctx, cc.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, cc.Client)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
-	waf, wafWebhookTLS, err := buildWAFData(cc)
+	waf, wafWebhookTLS, err := buildWAFData(ctx, cc)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
 	}
 
 	// The rbacsync controller reconciles the ClusterRoles backing the Manager UI's RBAC
 	// management feature; it runs only when Manager.spec.rbacUI is enabled.
-	managerCR, err := utils.GetManager(cc.Ctx, cc.Client, false, "")
+	managerCR, err := utils.GetManager(ctx, cc.Client, false, "")
 	if err != nil {
 		return cc, nil, fmt.Errorf("error reading Manager: %w", err)
 	}

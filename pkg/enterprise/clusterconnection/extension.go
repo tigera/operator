@@ -15,6 +15,7 @@
 package clusterconnection
 
 import (
+	"context"
 	"fmt"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -38,8 +39,8 @@ type clusterConnectionControllerExtension struct{}
 
 // Validate rejects clusterconnection configuration Calico Enterprise does not
 // support: a cluster cannot be both a management cluster and a managed cluster.
-func (clusterConnectionControllerExtension) Validate(cc contexts.ControllerContext) error {
-	managementCluster, err := utils.GetManagementCluster(cc.Ctx, cc.Client)
+func (clusterConnectionControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
+	managementCluster, err := utils.GetManagementCluster(ctx, cc.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
@@ -54,8 +55,8 @@ func (clusterConnectionControllerExtension) Validate(cc contexts.ControllerConte
 // permits the domain-based egress network policy. It creates no certificates, so it
 // returns no managed keypairs. The OSS controller path supplies its own defaults
 // when this hook is absent.
-func (clusterConnectionControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
-	clusterInformation, err := utils.FetchClusterInformation(cc.Ctx, cc.Client)
+func (clusterConnectionControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+	clusterInformation, err := utils.FetchClusterInformation(ctx, cc.Client)
 	if err != nil {
 		return cc, nil, fmt.Errorf("error querying ClusterInformation: %w", err)
 	}
@@ -63,7 +64,7 @@ func (clusterConnectionControllerExtension) ExtendContext(cc contexts.Controller
 	// Ensure the license can support enterprise policy before enabling the
 	// domain-based egress rules. A missing license simply leaves them disabled.
 	var includeEgressNetworkPolicy bool
-	if license, err := utils.FetchLicenseKey(cc.Ctx, cc.Client); err == nil {
+	if license, err := utils.FetchLicenseKey(ctx, cc.Client); err == nil {
 		includeEgressNetworkPolicy = utils.IsFeatureActive(license, common.EgressAccessControlFeature)
 	} else if !k8serrors.IsNotFound(err) {
 		return cc, nil, fmt.Errorf("error querying license: %w", err)

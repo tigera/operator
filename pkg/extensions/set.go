@@ -110,37 +110,37 @@ func (s *Set) variant(v operatorv1.ProductVariant) *Variant {
 // objects are post-processed by that modifier. A decorated component is itself a
 // render.Component, so it flows through the component handler like any other.
 // Returns component unchanged when no extension applies. Nil-safe.
-func (s *Set) Decorate(component render.Component, ctx render.RenderContext) render.Component {
-	if ctx.Installation == nil {
+func (s *Set) Decorate(component render.Component, rc render.RenderContext) render.Component {
+	if rc.Installation == nil {
 		return component
 	}
-	return s.variant(ctx.Installation.Variant).decorate(component, ctx)
+	return s.variant(rc.Installation.Variant).decorate(component, rc)
 }
 
 // Validate runs the cc.Controller extension's validation for the installation's
 // variant, or returns nil when no extension is registered. Nil-safe.
-func (s *Set) Validate(cc contexts.ControllerContext) error {
+func (s *Set) Validate(ctx context.Context, cc contexts.ControllerContext) error {
 	if s != nil {
 		cc.Options = s.options
 	}
 	if cc.Installation == nil {
 		return nil
 	}
-	return s.variant(cc.Installation.Variant).validate(cc)
+	return s.variant(cc.Installation.Variant).validate(ctx, cc)
 }
 
 // ExtendContext runs the cc.Controller extension for the installation's variant
 // and returns the updated ControllerContext plus any keypairs the extension wants
-// the controller to manage, or the context unchanged and no keypairs when no
-// extension is registered. Nil-safe.
-func (s *Set) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+// the controller to manage, or cc unchanged and no keypairs when no extension is
+// registered. Nil-safe.
+func (s *Set) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	if s != nil {
 		cc.Options = s.options
 	}
 	if cc.Installation == nil {
 		return cc, nil, nil
 	}
-	return s.variant(cc.Installation.Variant).extendContext(cc)
+	return s.variant(cc.Installation.Variant).extendContext(ctx, cc)
 }
 
 // SetupWatches registers the watches every variant's extension declares for the

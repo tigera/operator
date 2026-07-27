@@ -15,8 +15,6 @@
 package clusterconnection_test
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -45,7 +43,6 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 				Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
 			},
 			Controller: contexts.ClusterConnectionController,
-			Ctx:        context.Background(),
 			Client:     cli,
 		}
 	}
@@ -66,12 +63,12 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	Describe("Validate", func() {
 		It("passes when no ManagementCluster exists", func() {
 			cli = newClient()
-			Expect(ext.Validate(controllerContext())).NotTo(HaveOccurred())
+			Expect(ext.Validate(ctx, controllerContext())).NotTo(HaveOccurred())
 		})
 
 		It("rejects a cluster that is both a management and a managed cluster", func() {
 			cli = newClient(&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
-			err := ext.Validate(controllerContext())
+			err := ext.Validate(ctx, controllerContext())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not supported"))
 		})
@@ -80,7 +77,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	Describe("ExtendContext", func() {
 		It("reports the managed cluster CNX version", func() {
 			cli = newClient(clusterInformation())
-			ecc, managed, err := ext.ExtendContext(controllerContext())
+			ecc, managed, err := ext.ExtendContext(ctx, controllerContext())
 			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 			Expect(managed).To(BeEmpty())
@@ -97,7 +94,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 				Status:     v3.LicenseKeyStatus{Features: []string{common.EgressAccessControlFeature}},
 			}
 			cli = newClient(clusterInformation(), license)
-			ecc, _, err := ext.ExtendContext(controllerContext())
+			ecc, _, err := ext.ExtendContext(ctx, controllerContext())
 			rc := ecc.RenderContext
 			Expect(err).NotTo(HaveOccurred())
 
@@ -108,7 +105,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 
 		It("errors when ClusterInformation is missing", func() {
 			cli = newClient()
-			_, _, err := ext.ExtendContext(controllerContext())
+			_, _, err := ext.ExtendContext(ctx, controllerContext())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("ClusterInformation"))
 		})

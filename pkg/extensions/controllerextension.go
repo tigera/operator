@@ -15,6 +15,8 @@
 package extensions
 
 import (
+	"context"
+
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -30,14 +32,14 @@ import (
 type ControllerExtension interface {
 	// Validate rejects configuration the extension does not support, before any
 	// rendering happens.
-	Validate(cc contexts.ControllerContext) error
+	Validate(ctx context.Context, cc contexts.ControllerContext) error
 
 	// ExtendContext does the controller-side reconcile work the render phase
 	// cannot, returning the updated ControllerContext (its embedded RenderContext is
 	// what the render phase consumes) plus any keypairs the extension created that the
 	// controller should manage (add to certificate management and BYO-expiry
 	// warnings), or an error that aborts the reconcile.
-	ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error)
+	ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error)
 }
 
 // Watcher is an optional companion to ControllerExtension. A controller's Add()

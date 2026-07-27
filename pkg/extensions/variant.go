@@ -15,6 +15,8 @@
 package extensions
 
 import (
+	"context"
+
 	"github.com/sirupsen/logrus"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -111,20 +113,20 @@ func (v *Variant) decorate(component render.Component, rc render.RenderContext) 
 
 // validate runs the cc.Controller extension's validation, or nil when the
 // variant has none for it. Nil-safe.
-func (v *Variant) validate(cc contexts.ControllerContext) error {
+func (v *Variant) validate(ctx context.Context, cc contexts.ControllerContext) error {
 	if v == nil || v.controllers[cc.Controller] == nil {
 		return nil
 	}
-	return v.controllers[cc.Controller].Validate(cc)
+	return v.controllers[cc.Controller].Validate(ctx, cc)
 }
 
-// extendContext runs the cc.Controller extension, or returns the context unchanged
-// and no managed keypairs when the variant has none for it. Nil-safe.
-func (v *Variant) extendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+// extendContext runs the cc.Controller extension, or returns cc unchanged and no
+// managed keypairs when the variant has none for it. Nil-safe.
+func (v *Variant) extendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	if v == nil || v.controllers[cc.Controller] == nil {
 		return cc, nil, nil
 	}
-	return v.controllers[cc.Controller].ExtendContext(cc)
+	return v.controllers[cc.Controller].ExtendContext(ctx, cc)
 }
 
 // decoratedComponent is the render.Component produced by decorate: it renders

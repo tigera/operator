@@ -15,8 +15,6 @@
 package installation_test
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -40,7 +38,7 @@ var _ = Describe("installation controller extension", func() {
 		cc.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		Expect(ext.Validate(cc)).To(HaveOccurred())
+		Expect(ext.Validate(ctx, cc)).To(HaveOccurred())
 	})
 
 	DescribeTable("defaults dnsTrustedServers for providers whose DNS service isn't kube-dns",
@@ -71,7 +69,7 @@ var _ = Describe("installation controller extension", func() {
 	})
 
 	It("manages the node prometheus and kube-controllers metrics keypairs for the enterprise variant", func() {
-		_, managed, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		_, managed, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
 		for _, kp := range managed {
@@ -81,7 +79,7 @@ var _ = Describe("installation controller extension", func() {
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		_, managed, err := ext.ExtendContext(newControllerContext(operatorv1.Calico))
+		_, managed, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(managed).To(BeEmpty())
 	})
@@ -104,7 +102,6 @@ func newControllerContext(variant operatorv1.ProductVariant) contexts.Controller
 			ClusterDomain:      "cluster.local",
 		},
 		Controller:         contexts.InstallationController,
-		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,
 	}

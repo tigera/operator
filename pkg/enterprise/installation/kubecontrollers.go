@@ -15,6 +15,7 @@
 package installation
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
@@ -547,8 +548,8 @@ type wafRenderData struct {
 // produces everything the modifier needs that it can't compute itself: the resolved
 // wasm image, the webhook serving keypair (also returned as a managed keypair), the
 // merged wasm pull secret, the wasm CA bundle ConfigMap, and the operator CA PEM.
-func buildWAFData(cc contexts.ControllerContext) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
-	gw, _, err := gatewayapi.GetGatewayAPI(cc.Ctx, cc.Client)
+func buildWAFData(ctx context.Context, cc contexts.ControllerContext) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
+	gw, _, err := gatewayapi.GetGatewayAPI(ctx, cc.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return wafRenderData{}, nil, err
 	}
@@ -566,7 +567,7 @@ func buildWAFData(cc contexts.ControllerContext) (wafRenderData, certificatemana
 	in := cc.Installation
 	// The wasm is baked into the gateway envoy-proxy image. Resolve it with the same
 	// GetReference the base render uses for every image; the hook has the ImageSet here.
-	imageSet, err := imageset.GetImageSet(cc.Ctx, cc.Client, in.Variant)
+	imageSet, err := imageset.GetImageSet(ctx, cc.Client, in.Variant)
 	if err != nil {
 		return wafRenderData{}, nil, err
 	}

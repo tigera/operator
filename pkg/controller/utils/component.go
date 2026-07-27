@@ -85,8 +85,8 @@ type ComponentHandlerOption func(*componentHandler)
 
 // WithRenderContext supplies the render.RenderContext passed to registered
 // render modifiers.
-func WithRenderContext(ctx render.RenderContext) ComponentHandlerOption {
-	return func(c *componentHandler) { c.renderCtx = ctx }
+func WithRenderContext(rc render.RenderContext) ComponentHandlerOption {
+	return func(c *componentHandler) { c.renderCtx = rc }
 }
 
 // WithExtensions supplies the operator's extension Set, whose modifiers the

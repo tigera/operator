@@ -15,6 +15,7 @@
 package windows
 
 import (
+	"context"
 	"fmt"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -67,7 +68,7 @@ func windowsData(rc render.RenderContext) windowsRenderData {
 }
 
 // Validate rejects windows installation config Calico Enterprise does not support.
-func (windowsControllerExtension) Validate(cc contexts.ControllerContext) error {
+func (windowsControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
 	return installation.ValidateReporterPort(cc.FelixConfiguration)
 }
 
@@ -86,7 +87,7 @@ func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
 
 // ExtendContext fetches the node prometheus keypair the installation controller
 // created and stashes it in the render context for the windows modifier.
-func (windowsControllerExtension) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+func (windowsControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	tls, err := cc.CertificateManager.GetKeyPair(
 		cc.Client,
 		render.NodePrometheusTLSServerSecret,

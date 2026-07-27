@@ -40,7 +40,6 @@ import (
 )
 
 var _ = Describe("windows enterprise image override", func() {
-
 	ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 	calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
 
@@ -56,7 +55,6 @@ var _ = Describe("windows enterprise image override", func() {
 })
 
 var _ = Describe("windows enterprise modifier", func() {
-
 	// newObjs returns a windows daemonset with the node containers and the OSS
 	// cni-log-dir mount the modifier swaps out.
 	newObjs := func() []client.Object {
@@ -147,11 +145,10 @@ var _ = Describe("windows enterprise modifier", func() {
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
 			Controller:         contexts.WindowsController,
-			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: cm,
 		}
-		ecc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(ctx, cc)
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 

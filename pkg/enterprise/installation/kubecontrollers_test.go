@@ -66,7 +66,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	}
 
 	It("mounts the metrics serving TLS keypair onto the deployment", func() {
-		ecc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		ecc, _, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.CalicoEnterprise))
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
@@ -86,7 +86,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	})
 
 	It("adds the cert-management init container when certificate management is enabled", func() {
-		ecc, _, err := ext.ExtendContext(certManagementControllerContext())
+		ecc, _, err := ext.ExtendContext(ctx, certManagementControllerContext())
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
@@ -126,7 +126,6 @@ func certManagementControllerContext() contexts.ControllerContext {
 			ClusterDomain:      "cluster.local",
 		},
 		Controller:         contexts.InstallationController,
-		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,
 	}
@@ -161,7 +160,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	}
 
 	It("layers the enterprise rules, controllers, and metrics TLS on (WAF off)", func() {
-		ecc, _, err := ext.ExtendContext(newControllerContext(operatorv1.CalicoEnterprise))
+		ecc, _, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.CalicoEnterprise))
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(newControllerContext(operatorv1.CalicoEnterprise), rc)
@@ -186,7 +185,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("layers the full WAF surface on when the GatewayAPI extension is enabled", func() {
 		cc := wafControllerContext()
-		ecc, managed, err := ext.ExtendContext(cc)
+		ecc, managed, err := ext.ExtendContext(ctx, cc)
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
@@ -225,7 +224,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("deletes the WAF webhook surface when the extension is disabled", func() {
 		cc := newControllerContext(operatorv1.CalicoEnterprise)
-		ecc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(ctx, cc)
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
@@ -240,7 +239,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("keeps the WAF controller wired but de-programs when GatewayAPI is present and WAF is disabled", func() {
 		cc := gatewayNoWAFControllerContext()
-		ecc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(ctx, cc)
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(cc, rc)
@@ -269,7 +268,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("adds the WAF webhook ingress rule to the network policy when enabled", func() {
 		cc := wafControllerContext()
-		ecc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(ctx, cc)
 		rc := ecc.RenderContext
 		Expect(err).NotTo(HaveOccurred())
 
@@ -325,7 +324,6 @@ func wafControllerContext() contexts.ControllerContext {
 			ClusterDomain:      "cluster.local",
 		},
 		Controller:         contexts.InstallationController,
-		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,
 	}
@@ -369,7 +367,6 @@ func gatewayNoWAFControllerContext() contexts.ControllerContext {
 			ClusterDomain:      "cluster.local",
 		},
 		Controller:         contexts.InstallationController,
-		Ctx:                context.Background(),
 		Client:             c,
 		CertificateManager: certManager,
 	}

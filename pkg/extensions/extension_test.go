@@ -36,7 +36,7 @@ var _ = Describe("extension registry", func() {
 	entCtx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 
 	It("applies a registered modifier to the matching component and variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Modify("test", func(ctx render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+		s.Variant(operatorv1.CalicoEnterprise).Modify("test", func(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
 			cm, ok := extensions.FindObject[*corev1.ConfigMap](objs, "cm")
 			Expect(ok).To(BeTrue())
 			cm.Data = map[string]string{"k": "v"}

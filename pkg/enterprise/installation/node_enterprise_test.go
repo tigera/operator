@@ -129,11 +129,10 @@ var _ = Describe("node enterprise modifier integration", func() {
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
 			Controller:         contexts.InstallationController,
-			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: certManager,
 		}
-		ecc, _, err := ext.ExtendContext(cc)
+		ecc, _, err := ext.ExtendContext(ctx, cc)
 		Expect(err).NotTo(HaveOccurred())
 		renderCtx = ecc.RenderContext
 	})
@@ -206,14 +205,13 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Spec:       operatorv1.LogCollectorSpec{CollectProcessPath: &enable},
 		})).NotTo(HaveOccurred())
 
-		ecc, _, err := ext.ExtendContext(contexts.ControllerContext{
+		ecc, _, err := ext.ExtendContext(ctx, contexts.ControllerContext{
 			RenderContext: render.RenderContext{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
 			Controller:         contexts.InstallationController,
-			Ctx:                context.Background(),
 			Client:             cli,
 			CertificateManager: certManager,
 		})

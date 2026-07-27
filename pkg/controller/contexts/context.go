@@ -20,8 +20,6 @@
 package contexts
 
 import (
-	"context"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
@@ -43,9 +41,9 @@ const (
 // ControllerContext is the controller-phase context, the corollary to the
 // render-phase render.RenderContext. It is the embedded RenderContext (the same
 // data the render phase sees) plus the controller-side machinery a
-// ControllerExtension needs to produce artifacts: a client, a certificate
-// manager, a context. Those deps live here, not on RenderContext, so the
-// modifiers that read RenderContext can't do I/O - they only transform objects.
+// ControllerExtension needs to produce artifacts: a client and a certificate
+// manager. Those deps live here, not on RenderContext, so the modifiers that read
+// RenderContext can't do I/O - they only transform objects.
 //
 // Controller names which controller is reconciling, selecting that controller's
 // extension hook. The controller fills the embedded RenderContext's data fields,
@@ -57,7 +55,6 @@ type ControllerContext struct {
 	// Controller identifies the reconciling controller, selecting its hook.
 	Controller ControllerName
 
-	Ctx                context.Context
 	Client             client.Client
 	CertificateManager certificatemanager.CertificateManager
 

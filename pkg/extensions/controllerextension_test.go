@@ -15,6 +15,7 @@
 package extensions_test
 
 import (
+	"context"
 	"errors"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -29,6 +30,8 @@ import (
 )
 
 var _ = Describe("controller extension", func() {
+	ctx := context.Background()
+
 	var s *extensions.Set
 	BeforeEach(func() {
 		s = extensions.NewSet()
@@ -36,7 +39,7 @@ var _ = Describe("controller extension", func() {
 
 	It("returns the base render context when the variant has no extension", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		rc, _, err := s.ExtendContext(contexts.ControllerContext{
+		rc, _, err := s.ExtendContext(ctx, contexts.ControllerContext{
 			RenderContext: render.RenderContext{Installation: install, ClusterDomain: "cluster.local"},
 			Controller:    contexts.InstallationController,
 		})
@@ -48,14 +51,14 @@ var _ = Describe("controller extension", func() {
 
 	It("runs the extension registered for the installation variant", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{})
-		rc, _, err := s.ExtendContext(enterpriseContext())
+		rc, _, err := s.ExtendContext(ctx, enterpriseContext())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("ignores an extension registered for a different variant", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{})
-		rc, _, err := s.ExtendContext(contexts.ControllerContext{
+		rc, _, err := s.ExtendContext(ctx, contexts.ControllerContext{
 			RenderContext: render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
 			Controller:    contexts.InstallationController,
 		})
@@ -65,13 +68,13 @@ var _ = Describe("controller extension", func() {
 
 	It("surfaces the extension error", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{err: errors.New("boom")})
-		_, _, err := s.ExtendContext(enterpriseContext())
+		_, _, err := s.ExtendContext(ctx, enterpriseContext())
 		Expect(err).To(MatchError("boom"))
 	})
 
 	It("runs the extension's validation", func() {
 		s.Variant(operatorv1.CalicoEnterprise).Controller(contexts.InstallationController, fakeController{validateErr: errors.New("invalid")})
-		Expect(s.Validate(enterpriseContext())).To(MatchError("invalid"))
+		Expect(s.Validate(ctx, enterpriseContext())).To(MatchError("invalid"))
 	})
 
 	It("runs the watch hook of an extension that implements Watcher", func() {
@@ -85,10 +88,10 @@ var _ = Describe("controller extension", func() {
 		var nilSet *extensions.Set
 		cc := enterpriseContext()
 		cc.ClusterDomain = "real"
-		rc, _, err := nilSet.ExtendContext(cc)
+		rc, _, err := nilSet.ExtendContext(ctx, cc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(rc.ClusterDomain).To(Equal("real"))
-		Expect(nilSet.Validate(cc)).NotTo(HaveOccurred())
+		Expect(nilSet.Validate(ctx, cc)).NotTo(HaveOccurred())
 	})
 })
 
@@ -106,11 +109,11 @@ type fakeController struct {
 	validateErr error
 }
 
-func (f fakeController) Validate(_ contexts.ControllerContext) error {
+func (f fakeController) Validate(_ context.Context, _ contexts.ControllerContext) error {
 	return f.validateErr
 }
 
-func (f fakeController) ExtendContext(cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+func (f fakeController) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
 	if f.err != nil {
 		return cc, nil, f.err
 	}

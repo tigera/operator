@@ -45,15 +45,6 @@ const (
 	// IstioWaypointClassName is the GatewayClass name used by Istio waypoints.
 	IstioWaypointClassName = "istio-waypoint"
 
-	// WaypointPullSecretLabel identifies the pull secret copies and tigera-operator-secrets
-	// RoleBindings created by this controller. Cleanup follows the egress gateway pattern:
-	// the objects carry an owner reference to the Istio CR and are removed by Kubernetes
-	// garbage collection when the CR is deleted. Objects stranded while the CR still exists
-	// (a namespace losing its last waypoint Gateway, or a pull secret being renamed in
-	// Installation) are not yet cleaned up — that gap is shared with the egress gateway and
-	// will be addressed for both together; the label marks the objects for that work.
-	WaypointPullSecretLabel = "operator.tigera.io/istio-waypoint-pull-secret"
-
 	// legacyGatewayNamespace is the pre-namespaced gateway-API install namespace, kept in
 	// sync with the const of the same name in the gatewayapi controller.
 	legacyGatewayNamespace = "tigera-gateway"
@@ -269,7 +260,6 @@ func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger l
 	for ns := range targetNamespaces {
 		rb := render.CreateOperatorSecretsRoleBinding(ns)
 		rb.Labels = common.MapExistsOrInitialize(rb.Labels)
-		rb.Labels[WaypointPullSecretLabel] = "true"
 		rb.Labels[common.MultipleOwnersLabel] = "true"
 		objs = append(objs, rb)
 
@@ -278,7 +268,6 @@ func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger l
 			if s.Labels == nil {
 				s.Labels = map[string]string{}
 			}
-			s.Labels[WaypointPullSecretLabel] = "true"
 			s.Labels[common.MultipleOwnersLabel] = "true"
 			objs = append(objs, s)
 		}

@@ -225,8 +225,8 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 // pull images from private registries: a tigera-operator-secrets RoleBinding granting the
 // operator permission to write secrets in the namespace, followed by copies of the
 // Installation pull secrets. Cleanup mirrors the egress gateway pattern: the objects are
-// owned by the Istio CR and garbage collected when it is deleted. Objects stranded while
-// the CR still exists (a removed Gateway, a renamed pull secret) are not yet cleaned up.
+// garbage collected by owner reference. Objects stranded while the CR still exists and
+// is the only owner (a removed Gateway, a renamed pull secret) are not yet cleaned up.
 func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger logr.Logger) ([]client.Object, error) {
 	_, installationSpec, err := utils.GetInstallationSpec(ctx, r)
 	if err != nil {

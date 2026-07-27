@@ -91,7 +91,7 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 
 // Validate rejects installation config Calico Enterprise does not support.
 func (coreControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
-	return ValidateReporterPort(ci.FelixConfiguration)
+	return ValidateReporterPort(ci.RenderInputs.FelixConfiguration)
 }
 
 // DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.
@@ -157,13 +157,13 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		ci.Client,
 		render.NodePrometheusTLSServerSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, ci.ClusterDomain),
+		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, ci.RenderInputs.ClusterDomain),
 	)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
 	}
 	if nodePrometheusTLS != nil {
-		ci.TrustedBundle.AddCertificates(nodePrometheusTLS)
+		ci.RenderInputs.TrustedBundle.AddCertificates(nodePrometheusTLS)
 	}
 
 	// The calico-kube-controllers metrics endpoint is served with mTLS in
@@ -173,13 +173,13 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		ci.Client,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, ci.ClusterDomain),
+		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, ci.RenderInputs.ClusterDomain),
 	)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error creating kube-controllers metrics TLS certificate: %w", err)
 	}
 	if kubeControllerTLS != nil {
-		ci.TrustedBundle.AddCertificates(kubeControllerTLS)
+		ci.RenderInputs.TrustedBundle.AddCertificates(kubeControllerTLS)
 	}
 
 	logCollector, err := utils.GetLogCollector(ctx, ci.Client)
@@ -207,7 +207,7 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 	}
 	rbacManagementEnabled := managerCR.RBACManagementEnabled()
 
-	ci.Extension = installationRenderData{
+	ci.RenderInputs.Extension = installationRenderData{
 		nodePrometheusTLS:         nodePrometheusTLS,
 		kubeControllerTLS:         kubeControllerTLS,
 		collectProcessPath:        collectProcessPathEnabled(logCollector),
@@ -222,7 +222,7 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		return ci, nil, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
 	}
 	if prometheusClientCert != nil {
-		ci.TrustedBundle.AddCertificates(prometheusClientCert)
+		ci.RenderInputs.TrustedBundle.AddCertificates(prometheusClientCert)
 	}
 
 	esgwCertificate, err := ci.CertificateManager.GetCertificate(ci.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
@@ -230,7 +230,7 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		return ci, nil, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
 	}
 	if esgwCertificate != nil {
-		ci.TrustedBundle.AddCertificates(esgwCertificate)
+		ci.RenderInputs.TrustedBundle.AddCertificates(esgwCertificate)
 	}
 
 	// es-kube-controllers talks to Voltron, so the shared bundle must trust the
@@ -240,7 +240,7 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		return ci, nil, fmt.Errorf("failed to retrieve %s: %w", render.ManagerInternalTLSSecretName, err)
 	}
 	if managerInternalTLS != nil {
-		ci.TrustedBundle.AddCertificates(managerInternalTLS)
+		ci.RenderInputs.TrustedBundle.AddCertificates(managerInternalTLS)
 	}
 
 	var managed []certificatemanagement.KeyPairInterface

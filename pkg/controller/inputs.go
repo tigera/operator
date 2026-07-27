@@ -39,7 +39,7 @@ const (
 // plus the deps needed to produce artifacts. The deps live here and not on
 // render.Inputs so that modifiers, which only see render.Inputs, can't do I/O.
 type Inputs struct {
-	render.Inputs
+	RenderInputs render.Inputs
 
 	// Controller identifies the reconciling controller, selecting its hook.
 	Controller Name

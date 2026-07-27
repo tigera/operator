@@ -123,7 +123,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		// controller extension, which stashes the node prometheus keypair in the
 		// context for the node modifier to read.
 		ci := controller.Inputs{
-			Inputs: render.Inputs{
+			RenderInputs: render.Inputs{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
@@ -134,7 +134,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		}
 		eci, _, err := ext.ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
-		renderInputs = eci.Inputs
+		renderInputs = eci.RenderInputs
 	})
 
 	// renderNodeObjects renders the real node component and applies the registered
@@ -222,7 +222,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		})).NotTo(HaveOccurred())
 
 		eci, _, err := ext.ExtendInputs(ctx, controller.Inputs{
-			Inputs: render.Inputs{
+			RenderInputs: render.Inputs{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
@@ -232,7 +232,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 			CertificateManager: certManager,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 
 		ds, ok := extensions.FindObject[*appsv1.DaemonSet](renderNodeObjects(ri), common.NodeDaemonSetName)
 		Expect(ok).To(BeTrue())

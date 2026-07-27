@@ -39,7 +39,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	// clusterconnection hook against the given client.
 	controllerInputs := func() controller.Inputs {
 		return controller.Inputs{
-			Inputs: render.Inputs{
+			RenderInputs: render.Inputs{
 				Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
 			},
 			Controller: controller.ClusterConnection,
@@ -78,7 +78,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 		It("reports the managed cluster CNX version", func() {
 			cli = newClient(clusterInformation())
 			eci, managed, err := ext.ExtendInputs(ctx, controllerInputs())
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 			Expect(managed).To(BeEmpty())
 
@@ -95,7 +95,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 			}
 			cli = newClient(clusterInformation(), license)
 			eci, _, err := ext.ExtendInputs(ctx, controllerInputs())
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			data, ok := render.GuardianRenderDataFromInputs(ri)

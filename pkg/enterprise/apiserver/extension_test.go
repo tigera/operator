@@ -70,7 +70,7 @@ func apiServerControllerInputs(variant operatorv1.ProductVariant, install *opera
 	Expect(err).NotTo(HaveOccurred())
 
 	return controller.Inputs{
-		Inputs: render.Inputs{
+		RenderInputs: render.Inputs{
 			Installation:  install,
 			ClusterDomain: apiServerClusterDomain,
 			TrustedBundle: certManager.CreateTrustedBundle(),
@@ -84,7 +84,7 @@ func apiServerControllerInputs(variant operatorv1.ProductVariant, install *opera
 // apiServerKeyPair issues the API server TLS keypair from the inputs' certificate
 // manager, the way the controller does before rendering.
 func apiServerKeyPair(ci controller.Inputs) certificatemanagement.KeyPairInterface {
-	dnsNames := dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, ci.ClusterDomain)
+	dnsNames := dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, ci.RenderInputs.ClusterDomain)
 	kp, err := ci.CertificateManager.GetOrCreateKeyPair(ci.Client, render.CalicoAPIServerTLSSecretName, common.OperatorNamespace(), dnsNames)
 	Expect(err).NotTo(HaveOccurred())
 	return kp
@@ -145,7 +145,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
-			Installation:              ci.Installation,
+			Installation:              ci.RenderInputs.Installation,
 			APIServer:                 &operatorv1.APIServerSpec{},
 			TLSKeyPair:                kp,
 			TrustedBundle:             ri.TrustedBundle,
@@ -179,7 +179,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	It("is a no-op for the Calico variant (no enterprise objects added)", func() {
 		ci := apiServerControllerInputs(operatorv1.Calico, nil)
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -195,7 +195,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	It("layers the query server, enterprise RBAC, audit policy, and query server port on", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -254,7 +254,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	It("queues the enterprise RBAC for deletion when not a management cluster", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		_, del := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -278,7 +278,7 @@ var _ = Describe("API server enterprise modifier", func() {
 				},
 			)
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -305,7 +305,7 @@ var _ = Describe("API server enterprise modifier", func() {
 				},
 			)
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -328,7 +328,7 @@ var _ = Describe("API server enterprise modifier", func() {
 			cfg := &render.APIServerConfiguration{
 				RequiresAggregationServer: true,
 				K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
-				Installation:              ci.Installation,
+				Installation:              ci.RenderInputs.Installation,
 				APIServer:                 &operatorv1.APIServerSpec{},
 				TLSKeyPair:                kp,
 				TrustedBundle:             ri.TrustedBundle,
@@ -367,7 +367,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		It("grants each tenant's calico-apiserver service account least-privilege Linseed access", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, tenant("tenant-a"), tenant("tenant-b"))
 			eci, _, err := multiTenantExt().ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderMultiTenantAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -400,7 +400,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		It("queues the Linseed-access RBAC for deletion in zero-tenant mode", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			_, del := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -415,13 +415,13 @@ var _ = Describe("API server enterprise modifier", func() {
 		It("renders the deployment skeleton with the query server and pulls it out of the delete list", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg := &render.APIServerConfiguration{
 				RequiresAggregationServer: false,
 				K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
-				Installation:              ci.Installation,
+				Installation:              ci.RenderInputs.Installation,
 				APIServer:                 &operatorv1.APIServerSpec{},
 				TLSKeyPair:                apiServerKeyPair(ci),
 				TrustedBundle:             ri.TrustedBundle,
@@ -452,13 +452,13 @@ var _ = Describe("API server enterprise modifier", func() {
 		It("registers no APIService", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			cfg := &render.APIServerConfiguration{
 				RequiresAggregationServer: false,
 				K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
-				Installation:              ci.Installation,
+				Installation:              ci.RenderInputs.Installation,
 				APIServer:                 &operatorv1.APIServerSpec{},
 				TLSKeyPair:                apiServerKeyPair(ci),
 				TrustedBundle:             ri.TrustedBundle,
@@ -492,7 +492,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		It("adds the L7 admission controller container, the sidecar webhook, and the L7 service port", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, applicationLayerSidecar())
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -511,7 +511,7 @@ var _ = Describe("API server enterprise modifier", func() {
 		It("pulls the sidecar webhook out of the delete list", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, applicationLayerSidecar())
 			eci, _, err := ext.ExtendInputs(ctx, ci)
-			ri := eci.Inputs
+			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
 			_, del := renderAPIServer(ci, ri, apiServerKeyPair(ci))
@@ -526,7 +526,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
-			Installation:              ci.Installation,
+			Installation:              ci.RenderInputs.Installation,
 			APIServer:                 &operatorv1.APIServerSpec{},
 		}
 		comp := render.APIServerPolicy(cfg)
@@ -542,7 +542,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 	It("leaves the egress rules as the base when no OIDC key validator is configured", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		policy := applyPolicy(ci, ri)
@@ -559,7 +559,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 			Spec:       operatorv1.ApplicationLayerSpec{SidecarInjection: &enabled},
 		})
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		policy := applyPolicy(ci, ri)
@@ -582,13 +582,13 @@ var _ = Describe("API server Calico-variant cleanup", func() {
 	It("queues the enterprise RBAC for deletion", func() {
 		ci := apiServerControllerInputs(operatorv1.Calico, nil)
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
-			Installation:              ci.Installation,
+			Installation:              ci.RenderInputs.Installation,
 			APIServer:                 &operatorv1.APIServerSpec{},
 			TLSKeyPair:                apiServerKeyPair(ci),
 			KubernetesVersion:         &common.VersionInfo{Major: 1, Minor: 31},

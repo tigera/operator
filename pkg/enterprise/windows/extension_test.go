@@ -139,7 +139,7 @@ var _ = Describe("windows enterprise modifier", func() {
 		// Build the render inputs the way the windows controller does: run the
 		// windows extension, which fetches the keypair into the inputs.
 		ci := controller.Inputs{
-			Inputs: render.Inputs{
+			RenderInputs: render.Inputs{
 				Installation:  ctxFor(operatorv1.ProviderNone).Installation,
 				TrustedBundle: bundle,
 				ClusterDomain: dns.DefaultClusterDomain,
@@ -149,7 +149,7 @@ var _ = Describe("windows enterprise modifier", func() {
 			CertificateManager: cm,
 		}
 		eci, _, err := ext.ExtendInputs(ctx, ci)
-		ri := eci.Inputs
+		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		out, _ := extensionstest.ApplyExtensions(ext, render.WindowsKey, ri, newObjs(), nil)

@@ -65,7 +65,7 @@ func windowsData(ri render.Inputs) windowsRenderData {
 
 // Validate rejects windows installation config Calico Enterprise does not support.
 func (windowsControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
-	return installation.ValidateReporterPort(ci.FelixConfiguration)
+	return installation.ValidateReporterPort(ci.RenderInputs.FelixConfiguration)
 }
 
 // Watches registers the enterprise secrets the windows controller reconciles on.
@@ -88,12 +88,12 @@ func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controlle
 		ci.Client,
 		render.NodePrometheusTLSServerSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, ci.ClusterDomain),
+		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, ci.RenderInputs.ClusterDomain),
 	)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error getting node prometheus TLS certificate: %w", err)
 	}
-	ci.Extension = windowsRenderData{prometheusServerTLS: tls}
+	ci.RenderInputs.Extension = windowsRenderData{prometheusServerTLS: tls}
 	return ci, nil, nil
 }
 

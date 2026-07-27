@@ -44,8 +44,6 @@ const (
 	// defaultFelixMetricsPort is the Felix prometheus metrics port used when
 	// FelixConfiguration does not override prometheusMetricsPort.
 	defaultFelixMetricsPort = 9091
-
-	installCNIContainerName = "install-cni"
 )
 
 func registerNode(v *extensions.Variant) {
@@ -127,18 +125,13 @@ func modifyNodeDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 
 	multiInterfaceMode := multiInterfaceModeEnv(ri.Installation)
 
-	for i := range spec.InitContainers {
-		if spec.InitContainers[i].Name == installCNIContainerName && multiInterfaceMode != nil {
-			spec.InitContainers[i].Env = append(spec.InitContainers[i].Env, *multiInterfaceMode)
+	if multiInterfaceMode != nil {
+		if cni, ok := render.Container(spec, render.InstallCNIContainerName); ok {
+			cni.Env = append(cni.Env, *multiInterfaceMode)
 		}
 	}
 
-	for i := range spec.Containers {
-		c := &spec.Containers[i]
-		if c.Name != render.CalicoNodeObjectName {
-			continue
-		}
-
+	if c, ok := render.Container(spec, render.CalicoNodeObjectName); ok {
 		c.Env = append(c.Env, nodeEnterpriseEnv(ri)...)
 
 		// Add the BGP metrics readiness check, but only when the base render kept
@@ -167,11 +160,7 @@ func mountNodePrometheusTLS(ri render.Inputs, ds *appsv1.DaemonSet) {
 
 	spec.Volumes = append(spec.Volumes, tls.Volume())
 
-	for i := range spec.Containers {
-		c := &spec.Containers[i]
-		if c.Name != render.CalicoNodeObjectName {
-			continue
-		}
+	if c, ok := render.Container(spec, render.CalicoNodeObjectName); ok {
 		c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeLinux))
 		if tls.UseCertificateManagement() {
 			spec.InitContainers = append(spec.InitContainers, tls.InitContainer(common.CalicoNamespace, c.SecurityContext))

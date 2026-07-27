@@ -69,6 +69,11 @@ const (
 	CalicoCNIPluginObjectName     = "calico-cni-plugin"
 	BPFVolumeName                 = "bpffs"
 
+	// InstallCNIContainerName is the calico-node init container that installs the
+	// CNI plugin. Modifiers reach for it by name, so it is declared here rather
+	// than inline at the container it names.
+	InstallCNIContainerName = "install-cni"
+
 	goldmaneDomainName = "goldmane.calico-system.svc"
 )
 
@@ -1163,7 +1168,7 @@ func (c *nodeComponent) cniContainer() corev1.Container {
 	}
 
 	return corev1.Container{
-		Name:            "install-cni",
+		Name:            InstallCNIContainerName,
 		Image:           c.calicoImage,
 		Command:         []string{components.CalicoBinaryPath, "component", "cni", "install"},
 		Env:             cniEnv,

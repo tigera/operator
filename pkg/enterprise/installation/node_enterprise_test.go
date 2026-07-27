@@ -162,6 +162,22 @@ var _ = Describe("node enterprise modifier integration", func() {
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
 	})
 
+	It("adds MULTI_INTERFACE_MODE to the real node and install-cni containers", func() {
+		mode := operatorv1.MultiInterfaceModeMultus
+		instance.CalicoNetwork.MultiInterfaceMode = &mode
+
+		objs := renderNodeObjects(renderInputs)
+		ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.NodeDaemonSetName)
+		Expect(ok).To(BeTrue())
+
+		want := corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: mode.Value()}
+		Expect(nodeContainer(ds).Env).To(ContainElement(want))
+
+		cni, ok := render.Container(&ds.Spec.Template.Spec, render.InstallCNIContainerName)
+		Expect(ok).To(BeTrue())
+		Expect(cni.Env).To(ContainElement(want))
+	})
+
 	It("adds the enterprise rules to the real cluster roles", func() {
 		objs := renderNodeObjects(renderInputs)
 

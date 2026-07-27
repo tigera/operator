@@ -134,6 +134,15 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 			renderGuardian(operatorv1.InstallationSpec{Registry: "my-reg/"})
 		})
 
+		It("should layer the enterprise CA bundle env onto the guardian container", func() {
+			deployment := rtest.GetResource(resources, render.GuardianDeploymentName, render.GuardianNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			c, ok := render.Container(&deployment.Spec.Template.Spec, render.GuardianContainerName)
+			Expect(ok).To(BeTrue())
+			Expect(c.Env).To(ContainElement(HaveField("Name", "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH")))
+			Expect(c.Env).To(ContainElement(HaveField("Name", "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH")))
+			Expect(c.Env).To(ContainElement(HaveField("Name", "GUARDIAN_QUERYSERVER_CA_BUNDLE_PATH")))
+		})
+
 		It("should render all resources for a managed cluster", func() {
 			expectedResources := []client.Object{
 				&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.GuardianServiceAccountName, Namespace: render.GuardianNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},

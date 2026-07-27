@@ -39,10 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// windowsNodeContainers are the calico-node-windows containers that share the
-// felix env and node volume mounts, so they receive the same enterprise layering.
-var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd": true}
-
 // Register wires the windows controller hook and modifiers into the variant.
 func Register(v *extensions.Variant) {
 	v.Controller(controller.Windows, windowsControllerExtension{})
@@ -122,12 +118,7 @@ func modifyWindowsDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 		VolumeSource: corev1.VolumeSource{HostPath: &corev1.HostPathVolumeSource{Path: "/var/log/calico", Type: &dirOrCreate}},
 	})
 
-	for i := range spec.Containers {
-		c := &spec.Containers[i]
-		if !windowsNodeContainers[c.Name] {
-			continue
-		}
-
+	for _, c := range render.Containers(spec, render.WindowsNodeContainerNames...) {
 		c.Env = append(c.Env, windowsEnterpriseEnv(ri)...)
 
 		// Enterprise mounts the calico log directory in place of the OSS CNI log
@@ -187,11 +178,8 @@ func mountWindowsPrometheusTLS(ri render.Inputs, ds *appsv1.DaemonSet) {
 
 	spec.Volumes = append(spec.Volumes, tls.Volume())
 
-	for i := range spec.Containers {
-		c := &spec.Containers[i]
-		if windowsNodeContainers[c.Name] {
-			c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeWindows))
-		}
+	for _, c := range render.Containers(spec, render.WindowsNodeContainerNames...) {
+		c.VolumeMounts = append(c.VolumeMounts, tls.VolumeMount(rmeta.OSTypeWindows))
 	}
 
 	if ds.Spec.Template.Annotations == nil {

@@ -295,11 +295,7 @@ func guardianEnterpriseServicePorts() []corev1.ServicePort {
 }
 
 func addGuardianEnterpriseEnv(gc render.GuardianExtensionInputs, dep *appsv1.Deployment) {
-	for i := range dep.Spec.Template.Spec.Containers {
-		c := &dep.Spec.Template.Spec.Containers[i]
-		if c.Name != render.GuardianContainerName {
-			continue
-		}
+	if c, ok := render.Container(&dep.Spec.Template.Spec, render.GuardianContainerName); ok {
 		c.Env = append(c.Env,
 			corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},
 			corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},

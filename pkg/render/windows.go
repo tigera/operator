@@ -39,7 +39,23 @@ import (
 const (
 	WindowsNodeObjectName     = "calico-node-windows"
 	WindowsNodeMetricsService = "calico-node-metrics-windows"
+
+	// The calico-node-windows containers. Modifiers reach for these by name, so
+	// they are declared here rather than inline at the containers they name.
+	WindowsInstallCNIContainerName = "install-cni"
+	WindowsNodeContainerName       = "node"
+	WindowsFelixContainerName      = "felix"
+	WindowsConfdContainerName      = "confd"
 )
+
+// WindowsNodeContainerNames are the calico-node-windows containers that share the
+// felix environment and the node volume mounts, so a modifier layering enterprise
+// settings onto the daemonset applies them to all three.
+var WindowsNodeContainerNames = []string{
+	WindowsNodeContainerName,
+	WindowsFelixContainerName,
+	WindowsConfdContainerName,
+}
 
 func Windows(
 	cfg *WindowsConfiguration,
@@ -405,7 +421,7 @@ func (c *windowsComponent) cniContainer() corev1.Container {
 	// which ships the same binary at /CalicoWindows/calico.exe. Keep each
 	// command's path in sync with the image it runs in.
 	return corev1.Container{
-		Name:            "install-cni",
+		Name:            WindowsInstallCNIContainerName,
 		Image:           c.cniImage,
 		Command:         []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/opt/cni/bin/calico.exe", "component", "cni", "install"},
 		Env:             cniEnv,
@@ -417,7 +433,7 @@ func (c *windowsComponent) cniContainer() corev1.Container {
 // nodeContainer creates the windows node startup container.
 func (c *windowsComponent) nodeContainer() corev1.Container {
 	return corev1.Container{
-		Name:            "node",
+		Name:            WindowsNodeContainerName,
 		Image:           c.nodeImage,
 		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/node-service.ps1"},
 		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/",
@@ -433,7 +449,7 @@ func (c *windowsComponent) felixContainer() corev1.Container {
 	lp, rp := c.windowsLivenessReadinessProbes()
 
 	return corev1.Container{
-		Name:            "felix",
+		Name:            WindowsFelixContainerName,
 		Image:           c.nodeImage,
 		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/felix-service.ps1"},
 		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/",
@@ -450,7 +466,7 @@ func (c *windowsComponent) felixContainer() corev1.Container {
 // confdContainer creates the windows confd container (used only for the windows-bgp backend).
 func (c *windowsComponent) confdContainer() corev1.Container {
 	return corev1.Container{
-		Name:            "confd",
+		Name:            WindowsConfdContainerName,
 		Image:           c.nodeImage,
 		Args:            []string{"$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/confd/confd-service.ps1"},
 		WorkingDir:      "$env:CONTAINER_SANDBOX_MOUNT_POINT/CalicoWindows/",

@@ -60,6 +60,11 @@ const (
 	// OIDC egress rule and the L7 admission controller ingress port). The base policy
 	// carries neither.
 	ComponentNameAPIServerPolicy = "apiserver-policy"
+
+	// TieredPolicyPassthruClusterRoleName is the tiered policy passthrough
+	// ClusterRole. A modifier reaches for it by name, so it is declared here
+	// rather than inline at the object it names.
+	TieredPolicyPassthruClusterRoleName = "calico-tiered-policy-passthrough"
 )
 
 const (
@@ -1129,7 +1134,7 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRo
 	return &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-tiered-policy-passthrough",
+			Name: TieredPolicyPassthruClusterRoleName,
 		},
 		// If tiered policy is enabled we allow all authenticated users to access the main tier resource, instead
 		// restricting access using the tier.xxx resource type. Kubernetes NetworkPolicy and
@@ -1149,7 +1154,7 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRolebinding() *rbacv1.Cl
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-tiered-policy-passthrough",
+			Name: TieredPolicyPassthruClusterRoleName,
 		},
 		Subjects: []rbacv1.Subject{
 			{
@@ -1160,7 +1165,7 @@ func (c *apiServerComponent) calicoPolicyPassthruClusterRolebinding() *rbacv1.Cl
 		},
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
-			Name:     "calico-tiered-policy-passthrough",
+			Name:     TieredPolicyPassthruClusterRoleName,
 			APIGroup: "rbac.authorization.k8s.io",
 		},
 	}

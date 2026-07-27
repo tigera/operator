@@ -20,6 +20,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
@@ -30,7 +31,7 @@ func Register(v *extensions.Variant) {
 }
 
 func modifyTypha(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
-	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha"); ok {
+	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.TyphaClusterRoleName); ok {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
 			Resources: []string{
@@ -47,14 +48,11 @@ func modifyTypha(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []cl
 		})
 	}
 
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, "calico-typha"); ok {
+	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, common.TyphaDeploymentName); ok {
 		net := ri.Installation.CalicoNetwork
 		if net != nil && net.MultiInterfaceMode != nil {
-			for i := range dep.Spec.Template.Spec.Containers {
-				if dep.Spec.Template.Spec.Containers[i].Name == render.TyphaContainerName {
-					c := &dep.Spec.Template.Spec.Containers[i]
-					c.Env = append(c.Env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: net.MultiInterfaceMode.Value()})
-				}
+			if c, ok := render.Container(&dep.Spec.Template.Spec, render.TyphaContainerName); ok {
+				c.Env = append(c.Env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: net.MultiInterfaceMode.Value()})
 			}
 		}
 	}

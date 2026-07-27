@@ -323,7 +323,7 @@ func modifyAPIServer(ri render.Inputs, ec render.APIServerExtensionInputs, creat
 		c.addServicePorts(svc)
 	}
 	// Enterprise serves staged policies through the tiered-policy passthrough role.
-	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, "calico-tiered-policy-passthrough"); ok {
+	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, render.TieredPolicyPassthruClusterRoleName); ok {
 		for i := range role.Rules {
 			if slices.Contains(role.Rules[i].Resources, "networkpolicies") {
 				role.Rules[i].Resources = append(role.Rules[i].Resources, "stagednetworkpolicies", "stagedglobalnetworkpolicies")
@@ -435,11 +435,7 @@ func (c *apiServer) layerDeployment(d *appsv1.Deployment) {
 	// Audit logging and the management-cluster tunnel args are layered onto the
 	// aggregation API server container, which is only present when that server runs.
 	if c.cfg.RequiresAggregationServer {
-		for i := range spec.Containers {
-			ctr := &spec.Containers[i]
-			if ctr.Name != string(render.APIServerContainerName) {
-				continue
-			}
+		if ctr, ok := render.Container(spec, string(render.APIServerContainerName)); ok {
 			ctr.VolumeMounts = append(ctr.VolumeMounts,
 				corev1.VolumeMount{Name: auditLogsVolumeName, MountPath: "/var/log/calico/audit"},
 				corev1.VolumeMount{Name: auditPolicyVolumeName, MountPath: "/etc/tigera/audit"},

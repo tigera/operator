@@ -20,62 +20,115 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/k8sapi"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 )
 
+// These tests run the real typha render output through the registered enterprise
+// modifier rather than a hand-built Deployment. A fixture only matches the shape
+// render had when it was written, so it would keep passing if render renamed the
+// container or the ClusterRole the modifier reaches for.
 var _ = Describe("typha enterprise modifier", func() {
 	multiMode := operatorv1.MultiInterfaceModeMultus
 
-	newObjs := func() []client.Object {
-		return []client.Object{
-			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: "calico-typha"}},
-			&appsv1.Deployment{
-				ObjectMeta: metav1.ObjectMeta{Name: "calico-typha"},
-				Spec: appsv1.DeploymentSpec{Template: corev1.PodTemplateSpec{Spec: corev1.PodSpec{
-					Containers: []corev1.Container{{Name: render.TyphaContainerName}},
-				}}},
-			},
+	var typhaNodeTLS *render.TyphaNodeTLS
+
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+		certManager, err := certificatemanager.Create(cli, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+
+		nodeKeyPair, err := certManager.GetOrCreateKeyPair(cli, render.NodeTLSSecretName, common.OperatorNamespace(), []string{render.FelixCommonName})
+		Expect(err).NotTo(HaveOccurred())
+		typhaKeyPair, err := certManager.GetOrCreateKeyPair(cli, render.TyphaTLSSecretName, common.OperatorNamespace(), []string{render.TyphaCommonName})
+		Expect(err).NotTo(HaveOccurred())
+
+		typhaNodeTLS = &render.TyphaNodeTLS{
+			TrustedBundle:   certManager.CreateTrustedBundle(nodeKeyPair, typhaKeyPair),
+			TyphaSecret:     typhaKeyPair,
+			TyphaCommonName: render.TyphaCommonName,
+			NodeSecret:      nodeKeyPair,
+			NodeCommonName:  render.FelixCommonName,
 		}
+	})
+
+	// renderTypha renders the real typha component and applies the registered
+	// modifier, exactly as the componentHandler does.
+	renderTypha := func(install *operatorv1.InstallationSpec, ri render.Inputs) []client.Object {
+		component := render.Typha(&render.TyphaConfiguration{
+			K8sServiceEp:    k8sapi.ServiceEndpoint{},
+			Installation:    install,
+			TLS:             typhaNodeTLS,
+			ClusterDomain:   dns.DefaultClusterDomain,
+			FelixHealthPort: 9099,
+		})
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		objs, del := component.Objects()
+
+		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, ri, objs, del)
+		return out
+	}
+
+	typhaClusterRole := func(objs []client.Object) *rbacv1.ClusterRole {
+		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.TyphaClusterRoleName)
+		Expect(ok).To(BeTrue())
+		return role
+	}
+
+	typhaContainer := func(objs []client.Object) *corev1.Container {
+		dep, ok := extensions.FindObject[*appsv1.Deployment](objs, common.TyphaDeploymentName)
+		Expect(ok).To(BeTrue())
+		c, ok := render.Container(&dep.Spec.Template.Spec, render.TyphaContainerName)
+		Expect(ok).To(BeTrue())
+		return c
 	}
 
 	It("adds enterprise RBAC and MULTI_INTERFACE_MODE for the enterprise variant", func() {
-		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{
+		install := &operatorv1.InstallationSpec{
 			Variant:       operatorv1.CalicoEnterprise,
+			CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
-		}}
-		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, ctx, newObjs(), nil)
-
-		role := out[0].(*rbacv1.ClusterRole)
-		Expect(role.Rules).To(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
-
-		dep := out[1].(*appsv1.Deployment)
-		var c *corev1.Container
-		for i := range dep.Spec.Template.Spec.Containers {
-			if dep.Spec.Template.Spec.Containers[i].Name == render.TyphaContainerName {
-				c = &dep.Spec.Template.Spec.Containers[i]
-			}
 		}
-		Expect(c.Env).To(ContainElement(corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: multiMode.Value()}))
+		objs := renderTypha(install, render.Inputs{Installation: install})
+
+		Expect(typhaClusterRole(objs).Rules).To(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
+		Expect(typhaContainer(objs).Env).To(ContainElement(corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: multiMode.Value()}))
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{
+		install := &operatorv1.InstallationSpec{
 			Variant:       operatorv1.Calico,
+			CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
-		}}
-		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, ctx, newObjs(), nil)
-		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
-		dep := out[1].(*appsv1.Deployment)
-		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(BeEmpty())
+		}
+		objs := renderTypha(install, render.Inputs{Installation: install})
+
+		Expect(typhaClusterRole(objs).Rules).NotTo(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
+		Expect(typhaContainer(objs).Env).NotTo(ContainElement(HaveField("Name", "MULTI_INTERFACE_MODE")))
 	})
 
-	It("does not panic on a zero Context (nil Installation)", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, render.Inputs{}, newObjs(), nil)
-		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
+	It("does not panic on zero Inputs (nil Installation)", func() {
+		install := &operatorv1.InstallationSpec{
+			Variant:       operatorv1.CalicoEnterprise,
+			CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
+			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
+		}
+		objs := renderTypha(install, render.Inputs{})
+
+		Expect(typhaClusterRole(objs).Rules).NotTo(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
 	})
 })

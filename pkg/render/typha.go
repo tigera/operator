@@ -52,6 +52,10 @@ const (
 
 	TyphaContainerName = "calico-typha"
 
+	// TyphaClusterRoleName is the typha ClusterRole. A modifier reaches for it by
+	// name, so it is declared here rather than inline at the object it names.
+	TyphaClusterRoleName = "calico-typha"
+
 	TyphaNonClusterHostSuffix            = "-noncluster-host"
 	TyphaNonClusterHostNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "typha-noncluster-host-access"
 
@@ -211,7 +215,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-typha",
+			Name:   TyphaClusterRoleName,
 			Labels: map[string]string{},
 		},
 

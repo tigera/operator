@@ -36,6 +36,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -1381,6 +1382,19 @@ var _ = Describe("Testing core-controller installation", func() {
 			))
 		})
 
+		// The RBAC management UI is Calico Enterprise only.
+		It("should not seed the RBAC management UI feature gate for Calico", func() {
+			cr.Spec.Variant = operator.Calico
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			err = c.Get(ctx, client.ObjectKey{
+				Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+			}, &corev1.ConfigMap{})
+			Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected no rbac-ui-config on a Calico cluster")
+		})
+
 		It("should Reconcile with default config", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -2400,6 +2414,71 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			Expect(c.Get(ctx, client.ObjectKey{Name: render.TyphaTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).ShouldNot(HaveOccurred())
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
+		})
+
+		// The operator seeds the switch disabled; the admin owns the value from then
+		// on, so it must never be overwritten or garbage-collected.
+		Context("RBAC management UI feature gate", func() {
+			gateKey := client.ObjectKey{Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace}
+
+			It("seeds the ConfigMap disabled, without an owner reference", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cm := &corev1.ConfigMap{}
+				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
+				Expect(cm.Data).To(HaveKeyWithValue(render.RBACManagementConfigMapKey, render.RBACManagementDisabledValue))
+				// Deleting the Installation must not take the admin's toggle with it.
+				Expect(cm.GetOwnerReferences()).To(BeEmpty())
+			})
+
+			It("preserves an admin's enabled value across reconciles", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cm := &corev1.ConfigMap{}
+				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
+				cm.Data[render.RBACManagementConfigMapKey] = render.RBACManagementEnabledValue
+				Expect(c.Update(ctx, cm)).ShouldNot(HaveOccurred())
+
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
+				Expect(cm.Data).To(HaveKeyWithValue(render.RBACManagementConfigMapKey, render.RBACManagementEnabledValue))
+			})
+
+			It("does not overwrite a ConfigMap that already exists when the operator first sees it", func() {
+				// Created out-of-band (an admin, or the e2e harness) before the
+				// operator first reconciles.
+				preexisting := render.RBACManagementConfigMap()
+				preexisting.Data[render.RBACManagementConfigMapKey] = render.RBACManagementEnabledValue
+				Expect(c.Create(ctx, preexisting)).ShouldNot(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cm := &corev1.ConfigMap{}
+				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
+				Expect(cm.Data).To(HaveKeyWithValue(render.RBACManagementConfigMapKey, render.RBACManagementEnabledValue))
+			})
+
+			It("re-seeds the ConfigMap disabled after it is deleted", func() {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				cm := &corev1.ConfigMap{}
+				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
+				Expect(c.Delete(ctx, cm)).ShouldNot(HaveOccurred())
+
+				// Fail-closed: the switch comes back off; the operator does not track
+				// the previous value.
+				_, err = r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
+				Expect(cm.Data).To(HaveKeyWithValue(render.RBACManagementConfigMapKey, render.RBACManagementDisabledValue))
+			})
 		})
 	})
 

@@ -87,6 +87,11 @@ type Configuration struct {
 	TrustedBundle   certificatemanagement.TrustedBundleRO
 	UnusedTLSSecret *corev1.Secret
 	Enabled         bool
+
+	// CloudConfigOverrides holds Calico Cloud Kibana config overrides parsed from the
+	// cloud-kibana-config ConfigMap by the cloud-gated controller path. It is merged over the default
+	// Kibana configuration. For regular Calico/Calico Enterprise it is nil and is a no-op.
+	CloudConfigOverrides map[string]interface{}
 }
 
 type kibana struct {
@@ -254,6 +259,11 @@ func (k *kibana) kibanaCR() *kbv1.Kibana {
 		// "[INFO ][plugins.observabilityAIAssistant] Knowledge base index does not exist. Aborting updating index assets"
 		// "[ERROR][plugins.taskManager] Failed to poll for work: Response aborted while reading the body"
 		"xpack.productDocBase.artifactRepositoryUrl": "http://localhost:5601",
+	}
+
+	// Merge any Calico Cloud Kibana config overrides over the defaults. Nil (a no-op) for non-cloud.
+	for k, v := range k.cfg.CloudConfigOverrides {
+		config[k] = v
 	}
 
 	var initContainers []corev1.Container

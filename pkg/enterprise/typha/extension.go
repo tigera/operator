@@ -29,7 +29,7 @@ func Register(v *extensions.Variant) {
 	v.Modify(render.ComponentNameTypha, modifyTypha)
 }
 
-func modifyTypha(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyTypha(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha"); ok {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
@@ -48,7 +48,7 @@ func modifyTypha(rc render.RenderContext, objs, del []client.Object) ([]client.O
 	}
 
 	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, "calico-typha"); ok {
-		net := rc.Installation.CalicoNetwork
+		net := ri.Installation.CalicoNetwork
 		if net != nil && net.MultiInterfaceMode != nil {
 			for i := range dep.Spec.Template.Spec.Containers {
 				if dep.Spec.Template.Spec.Containers[i].Name == render.TyphaContainerName {

@@ -26,7 +26,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
@@ -41,7 +41,7 @@ import (
 // Register wires the installation controller hook and the node and
 // calico-kube-controllers modifiers into the variant.
 func Register(v *extensions.Variant) {
-	v.Controller(contexts.InstallationController, coreControllerExtension{})
+	v.Controller(controller.Installation, coreControllerExtension{})
 	registerNode(v)
 	registerKubeControllers(v)
 }
@@ -51,7 +51,7 @@ func Register(v *extensions.Variant) {
 type coreControllerExtension struct{}
 
 // installationRenderData is the controller-produced data the installation
-// extension hands to its modifiers through RenderContext.Extension. The node
+// extension hands to its modifiers through Inputs.Extension. The node
 // modifier type-asserts it back out.
 type installationRenderData struct {
 	nodePrometheusTLS certificatemanagement.KeyPairInterface
@@ -78,9 +78,9 @@ type installationRenderData struct {
 }
 
 // installationData pulls the installation extension's render data back out of the
-// render context, returning the zero value when none is set.
-func installationData(rc render.RenderContext) installationRenderData {
-	return render.ExtractExtensionData[installationRenderData](rc)
+// render inputs, returning the zero value when none is set.
+func installationData(ri render.Inputs) installationRenderData {
+	return render.ExtractExtensionData[installationRenderData](ri)
 }
 
 func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
@@ -90,8 +90,8 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
-func (coreControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
-	return ValidateReporterPort(cc.FelixConfiguration)
+func (coreControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
+	return ValidateReporterPort(ci.FelixConfiguration)
 }
 
 // DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.
@@ -148,66 +148,66 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 	return utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 }
 
-// ExtendContext does the controller-side work the modifiers can't: creating and
+// ExtendInputs does the controller-side work the modifiers can't: creating and
 // fetching the certificates that feed the trusted bundle. It returns the render
-// context carrying the produced node prometheus keypair, and that keypair as one
+// inputs carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
-func (coreControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
-	nodePrometheusTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
-		cc.Client,
+func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	nodePrometheusTLS, err := ci.CertificateManager.GetOrCreateKeyPair(
+		ci.Client,
 		render.NodePrometheusTLSServerSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, cc.ClusterDomain),
+		dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, ci.ClusterDomain),
 	)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
+		return ci, nil, fmt.Errorf("error creating node prometheus TLS certificate: %w", err)
 	}
 	if nodePrometheusTLS != nil {
-		cc.TrustedBundle.AddCertificates(nodePrometheusTLS)
+		ci.TrustedBundle.AddCertificates(nodePrometheusTLS)
 	}
 
 	// The calico-kube-controllers metrics endpoint is served with mTLS in
 	// Enterprise; the keypair is created here (cluster side effect) and mounted by
 	// the kube-controllers modifier.
-	kubeControllerTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
-		cc.Client,
+	kubeControllerTLS, err := ci.CertificateManager.GetOrCreateKeyPair(
+		ci.Client,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, cc.ClusterDomain),
+		dns.GetServiceDNSNames(kubecontrollers.KubeControllerMetrics, common.CalicoNamespace, ci.ClusterDomain),
 	)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error creating kube-controllers metrics TLS certificate: %w", err)
+		return ci, nil, fmt.Errorf("error creating kube-controllers metrics TLS certificate: %w", err)
 	}
 	if kubeControllerTLS != nil {
-		cc.TrustedBundle.AddCertificates(kubeControllerTLS)
+		ci.TrustedBundle.AddCertificates(kubeControllerTLS)
 	}
 
-	logCollector, err := utils.GetLogCollector(ctx, cc.Client)
+	logCollector, err := utils.GetLogCollector(ctx, ci.Client)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error reading LogCollector: %w", err)
+		return ci, nil, fmt.Errorf("error reading LogCollector: %w", err)
 	}
 
 	// calico-kube-controllers enterprise additions: the WAF surface, the enterprise
 	// cluster role rules, and the enterprise enabled controllers. A managed cluster's
 	// kube-controllers needs an extra license-push rule.
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, cc.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, ci.Client)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+		return ci, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
-	waf, wafWebhookTLS, err := buildWAFData(ctx, cc)
+	waf, wafWebhookTLS, err := buildWAFData(ctx, ci)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
+		return ci, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
 	}
 
 	// The rbacsync controller reconciles the ClusterRoles backing the Manager UI's RBAC
 	// management feature; it runs only when Manager.spec.rbacUI is enabled.
-	managerCR, err := utils.GetManager(ctx, cc.Client, false, "")
+	managerCR, err := utils.GetManager(ctx, ci.Client, false, "")
 	if err != nil {
-		return cc, nil, fmt.Errorf("error reading Manager: %w", err)
+		return ci, nil, fmt.Errorf("error reading Manager: %w", err)
 	}
 	rbacManagementEnabled := managerCR.RBACManagementEnabled()
 
-	cc.Extension = installationRenderData{
+	ci.Extension = installationRenderData{
 		nodePrometheusTLS:         nodePrometheusTLS,
 		kubeControllerTLS:         kubeControllerTLS,
 		collectProcessPath:        collectProcessPathEnabled(logCollector),
@@ -217,30 +217,30 @@ func (coreControllerExtension) ExtendContext(ctx context.Context, cc contexts.Co
 		waf:                       waf,
 	}
 
-	prometheusClientCert, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	prometheusClientCert, err := ci.CertificateManager.GetCertificate(ci.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return cc, nil, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
+		return ci, nil, fmt.Errorf("unable to fetch prometheus certificate: %w", err)
 	}
 	if prometheusClientCert != nil {
-		cc.TrustedBundle.AddCertificates(prometheusClientCert)
+		ci.TrustedBundle.AddCertificates(prometheusClientCert)
 	}
 
-	esgwCertificate, err := cc.CertificateManager.GetCertificate(cc.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
+	esgwCertificate, err := ci.CertificateManager.GetCertificate(ci.Client, relasticsearch.PublicCertSecret, common.OperatorNamespace())
 	if err != nil {
-		return cc, nil, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
+		return ci, nil, fmt.Errorf("failed to retrieve / validate %s: %w", relasticsearch.PublicCertSecret, err)
 	}
 	if esgwCertificate != nil {
-		cc.TrustedBundle.AddCertificates(esgwCertificate)
+		ci.TrustedBundle.AddCertificates(esgwCertificate)
 	}
 
 	// es-kube-controllers talks to Voltron, so the shared bundle must trust the
 	// manager internal cert.
-	managerInternalTLS, err := cc.CertificateManager.GetCertificate(cc.Client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
+	managerInternalTLS, err := ci.CertificateManager.GetCertificate(ci.Client, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return cc, nil, fmt.Errorf("failed to retrieve %s: %w", render.ManagerInternalTLSSecretName, err)
+		return ci, nil, fmt.Errorf("failed to retrieve %s: %w", render.ManagerInternalTLSSecretName, err)
 	}
 	if managerInternalTLS != nil {
-		cc.TrustedBundle.AddCertificates(managerInternalTLS)
+		ci.TrustedBundle.AddCertificates(managerInternalTLS)
 	}
 
 	var managed []certificatemanagement.KeyPairInterface
@@ -253,5 +253,5 @@ func (coreControllerExtension) ExtendContext(ctx context.Context, cc contexts.Co
 	if wafWebhookTLS != nil {
 		managed = append(managed, wafWebhookTLS)
 	}
-	return cc, managed, nil
+	return ci, managed, nil
 }

@@ -21,7 +21,7 @@ import (
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
@@ -30,7 +30,7 @@ import (
 
 // Register wires the clusterconnection controller hook into the variant.
 func Register(v *extensions.Variant) {
-	v.Controller(contexts.ClusterConnectionController, clusterConnectionControllerExtension{})
+	v.Controller(controller.ClusterConnection, clusterConnectionControllerExtension{})
 }
 
 // clusterConnectionControllerExtension is the Calico Enterprise controller-side hook
@@ -39,8 +39,8 @@ type clusterConnectionControllerExtension struct{}
 
 // Validate rejects clusterconnection configuration Calico Enterprise does not
 // support: a cluster cannot be both a management cluster and a managed cluster.
-func (clusterConnectionControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
-	managementCluster, err := utils.GetManagementCluster(ctx, cc.Client)
+func (clusterConnectionControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
+	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
@@ -50,29 +50,29 @@ func (clusterConnectionControllerExtension) Validate(ctx context.Context, cc con
 	return nil
 }
 
-// ExtendContext computes the Enterprise-specific Guardian inputs the controller
+// ExtendInputs computes the Enterprise-specific Guardian inputs the controller
 // reads back: the managed cluster version (CNXVersion) and whether the license
 // permits the domain-based egress network policy. It creates no certificates, so it
 // returns no managed keypairs. The OSS controller path supplies its own defaults
 // when this hook is absent.
-func (clusterConnectionControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
-	clusterInformation, err := utils.FetchClusterInformation(ctx, cc.Client)
+func (clusterConnectionControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	clusterInformation, err := utils.FetchClusterInformation(ctx, ci.Client)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error querying ClusterInformation: %w", err)
+		return ci, nil, fmt.Errorf("error querying ClusterInformation: %w", err)
 	}
 
 	// Ensure the license can support enterprise policy before enabling the
 	// domain-based egress rules. A missing license simply leaves them disabled.
 	var includeEgressNetworkPolicy bool
-	if license, err := utils.FetchLicenseKey(ctx, cc.Client); err == nil {
+	if license, err := utils.FetchLicenseKey(ctx, ci.Client); err == nil {
 		includeEgressNetworkPolicy = utils.IsFeatureActive(license, common.EgressAccessControlFeature)
 	} else if !k8serrors.IsNotFound(err) {
-		return cc, nil, fmt.Errorf("error querying license: %w", err)
+		return ci, nil, fmt.Errorf("error querying license: %w", err)
 	}
 
-	cc.Extension = render.GuardianRenderData{
+	ci.Extension = render.GuardianRenderData{
 		Version:                    clusterInformation.Spec.CNXVersion,
 		IncludeEgressNetworkPolicy: includeEgressNetworkPolicy,
 	}
-	return cc, nil, nil
+	return ci, nil, nil
 }

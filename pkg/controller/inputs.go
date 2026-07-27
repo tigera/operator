@@ -12,12 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package contexts holds the controller-phase context types passed between a
+// Package controller holds the controller-phase inputs passed between a
 // controller's reconcile and a variant extension. They live here, not in the
 // extensions package, because they are controller concepts (the data and
 // machinery a controller gathers), not part of the extension mechanism itself -
 // the extensions package consumes them.
-package contexts
+package controller
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,40 +26,40 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// ControllerName identifies the controller a ControllerExtension extends, so a
-// variant can register a different hook per controller. Use the constants below
-// rather than bare strings so registration and lookup stay in sync.
-type ControllerName string
+// Name identifies the controller a ControllerExtension extends, so a variant can
+// register a different hook per controller. Use the constants below rather than
+// bare strings so registration and lookup stay in sync.
+type Name string
 
 const (
-	InstallationController      ControllerName = "installation"
-	WindowsController           ControllerName = "windows"
-	APIServerController         ControllerName = "apiserver"
-	ClusterConnectionController ControllerName = "clusterconnection"
+	Installation      Name = "installation"
+	Windows           Name = "windows"
+	APIServer         Name = "apiserver"
+	ClusterConnection Name = "clusterconnection"
 )
 
-// ControllerContext is the controller-phase context, the corollary to the
-// render-phase render.RenderContext. It is the embedded RenderContext (the same
-// data the render phase sees) plus the controller-side machinery a
-// ControllerExtension needs to produce artifacts: a client and a certificate
-// manager. Those deps live here, not on RenderContext, so the modifiers that read
-// RenderContext can't do I/O - they only transform objects.
+// Inputs is what a controller hands its variant extension, the corollary to the
+// render-phase render.Inputs. It is the embedded render.Inputs (the same data the
+// render phase sees) plus the controller-side machinery a ControllerExtension needs
+// to produce artifacts: a client and a certificate manager. Those deps live here,
+// not on render.Inputs, so the modifiers that read render.Inputs can't do I/O -
+// they only transform objects.
 //
 // Controller names which controller is reconciling, selecting that controller's
-// extension hook. The controller fills the embedded RenderContext's data fields,
-// the deps, and Controller; ExtendContext does its work, sets the produced
-// artifacts on the embedded context, and returns it.
-type ControllerContext struct {
-	render.RenderContext
+// extension hook. The controller fills the embedded render.Inputs data fields, the
+// deps, and Controller; ExtendInputs does its work, sets the produced artifacts on
+// the embedded render.Inputs, and returns it.
+type Inputs struct {
+	render.Inputs
 
 	// Controller identifies the reconciling controller, selecting its hook.
-	Controller ControllerName
+	Controller Name
 
 	Client             client.Client
 	CertificateManager certificatemanager.CertificateManager
 
 	// Options carries the active variant's computed controller-phase options. The
-	// extension Set fills it before dispatching to a hook (Validate/ExtendContext).
+	// extension Set fills it before dispatching to a hook (Validate/ExtendInputs).
 	// It's opaque so core never names a variant-only option; the variant's hooks
 	// assert it back out. Nil for the core operator.
 	Options any

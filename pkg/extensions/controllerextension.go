@@ -20,26 +20,26 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // ControllerExtension extends a controller's reconcile: it validates the
-// configuration and builds the RenderContext the render phase consumes. The core
+// configuration and builds the Inputs the render phase consumes. The core
 // operator registers none and runs with the base behavior; an extension build
 // registers one per controller it extends.
 type ControllerExtension interface {
 	// Validate rejects configuration the extension does not support, before any
 	// rendering happens.
-	Validate(ctx context.Context, cc contexts.ControllerContext) error
+	Validate(ctx context.Context, ci controller.Inputs) error
 
-	// ExtendContext does the controller-side reconcile work the render phase
-	// cannot, returning the updated ControllerContext (its embedded RenderContext is
+	// ExtendInputs does the controller-side reconcile work the render phase
+	// cannot, returning the updated Inputs (its embedded Inputs is
 	// what the render phase consumes) plus any keypairs the extension created that the
 	// controller should manage (add to certificate management and BYO-expiry
 	// warnings), or an error that aborts the reconcile.
-	ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error)
+	ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error)
 }
 
 // Watcher is an optional companion to ControllerExtension. A controller's Add()
@@ -55,8 +55,8 @@ type Watcher interface {
 // which invokes this on a registered extension that implements it, so the variant's
 // FelixConfiguration defaults (e.g. the provider-specific dnsTrustedServers) live in
 // the extension instead of the controller. It returns whether it changed fc. Felix
-// defaulting persists early in reconcile, before ExtendContext runs, so it can't fold
-// into ExtendContext.
+// defaulting persists early in reconcile, before ExtendInputs runs, so it can't fold
+// into ExtendInputs.
 type FelixConfigDefaulter interface {
 	DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error)
 }

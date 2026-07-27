@@ -26,7 +26,7 @@ import (
 // append objects to delete (e.g. to clean up resources a prior variant left
 // behind). It runs only for the variant it is registered under, so it need not
 // re-check the variant.
-type Modifier func(rc render.RenderContext, create, delete []client.Object) (newCreate, newDelete []client.Object)
+type Modifier func(ri render.Inputs, create, delete []client.Object) (newCreate, newDelete []client.Object)
 
 // FindObject returns the first object of type T with the given name.
 func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {

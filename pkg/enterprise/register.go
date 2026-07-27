@@ -59,7 +59,7 @@ func New() *extensions.Set {
 
 // computeOptions discovers the Calico Enterprise controller-phase options at
 // startup. extensions.Set.ComputeOptions runs it from main; the result rides on
-// each ControllerContext for the enterprise hooks to read.
+// each Inputs for the enterprise hooks to read.
 func computeOptions(ctx context.Context, cli kubernetes.Interface) (any, error) {
 	multiTenant, err := discovery.MultiTenant(ctx, cli)
 	if err != nil {

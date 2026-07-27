@@ -22,7 +22,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
@@ -36,7 +36,7 @@ import (
 // registries, so nothing is wired by import side effect.
 //
 // Per reconcile the controller selects one Variant from the installation's
-// variant. The methods the controller calls (Decorate, Validate, ExtendContext,
+// variant. The methods the controller calls (Decorate, Validate, ExtendInputs,
 // Images, ResolveImage) are nil-safe, so the core operator's nil Set yields base
 // behavior.
 type Set struct {
@@ -48,7 +48,7 @@ type Set struct {
 	// registers none.
 	computeOptions func(context.Context, kubernetes.Interface) (any, error)
 
-	// options is the result of ComputeOptions, carried onto every ControllerContext
+	// options is the result of ComputeOptions, carried onto every Inputs
 	// so a hook can read its variant's options.
 	options any
 }
@@ -68,7 +68,7 @@ func (s *Set) RegisterOptions(f func(context.Context, kubernetes.Interface) (any
 }
 
 // ComputeOptions runs the registered options computer (if any) and stores the
-// result, which Validate and ExtendContext then carry onto the ControllerContext.
+// result, which Validate and ExtendInputs then carry onto the Inputs.
 // It's meant to be called once at startup, before any reconcile. Nil-safe.
 func (s *Set) ComputeOptions(ctx context.Context, cli kubernetes.Interface) error {
 	if s == nil || s.computeOptions == nil {
@@ -88,7 +88,7 @@ func (s *Set) Variant(v operatorv1.ProductVariant) *Variant {
 	if s.variants[v] == nil {
 		s.variants[v] = &Variant{
 			variant:     v,
-			controllers: map[contexts.ControllerName]ControllerExtension{},
+			controllers: map[controller.Name]ControllerExtension{},
 			modifiers:   map[string]decorator{},
 			images:      s.images,
 		}
@@ -110,44 +110,44 @@ func (s *Set) variant(v operatorv1.ProductVariant) *Variant {
 // objects are post-processed by that modifier. A decorated component is itself a
 // render.Component, so it flows through the component handler like any other.
 // Returns component unchanged when no extension applies. Nil-safe.
-func (s *Set) Decorate(component render.Component, rc render.RenderContext) render.Component {
-	if rc.Installation == nil {
+func (s *Set) Decorate(component render.Component, ri render.Inputs) render.Component {
+	if ri.Installation == nil {
 		return component
 	}
-	return s.variant(rc.Installation.Variant).decorate(component, rc)
+	return s.variant(ri.Installation.Variant).decorate(component, ri)
 }
 
-// Validate runs the cc.Controller extension's validation for the installation's
+// Validate runs the ci.Controller extension's validation for the installation's
 // variant, or returns nil when no extension is registered. Nil-safe.
-func (s *Set) Validate(ctx context.Context, cc contexts.ControllerContext) error {
+func (s *Set) Validate(ctx context.Context, ci controller.Inputs) error {
 	if s != nil {
-		cc.Options = s.options
+		ci.Options = s.options
 	}
-	if cc.Installation == nil {
+	if ci.Installation == nil {
 		return nil
 	}
-	return s.variant(cc.Installation.Variant).validate(ctx, cc)
+	return s.variant(ci.Installation.Variant).validate(ctx, ci)
 }
 
-// ExtendContext runs the cc.Controller extension for the installation's variant
-// and returns the updated ControllerContext plus any keypairs the extension wants
-// the controller to manage, or cc unchanged and no keypairs when no extension is
+// ExtendInputs runs the ci.Controller extension for the installation's variant
+// and returns the updated Inputs plus any keypairs the extension wants
+// the controller to manage, or ci unchanged and no keypairs when no extension is
 // registered. Nil-safe.
-func (s *Set) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
+func (s *Set) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	if s != nil {
-		cc.Options = s.options
+		ci.Options = s.options
 	}
-	if cc.Installation == nil {
-		return cc, nil, nil
+	if ci.Installation == nil {
+		return ci, nil, nil
 	}
-	return s.variant(cc.Installation.Variant).extendContext(ctx, cc)
+	return s.variant(ci.Installation.Variant).extendInputs(ctx, ci)
 }
 
 // SetupWatches registers the watches every variant's extension declares for the
 // named controller. It runs at controller startup, which is variant-agnostic, so
 // it registers the union across variants (in practice the one active extension
 // build's). Nil-safe.
-func (s *Set) SetupWatches(controller contexts.ControllerName, c ctrlruntime.Controller) error {
+func (s *Set) SetupWatches(controller controller.Name, c ctrlruntime.Controller) error {
 	if s == nil {
 		return nil
 	}
@@ -167,7 +167,7 @@ func (s *Set) SetupWatches(controller contexts.ControllerName, c ctrlruntime.Con
 // defaulting for the installation's variant, returning whether it changed fc. The
 // extension implements the optional FelixConfigDefaulter companion; when it doesn't
 // (or no extension is registered) this is a no-op. Nil-safe.
-func (s *Set) DefaultFelixConfiguration(controller contexts.ControllerName, install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
+func (s *Set) DefaultFelixConfiguration(controller controller.Name, install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
 	if install == nil {
 		return false, nil
 	}

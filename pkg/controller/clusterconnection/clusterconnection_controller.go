@@ -32,7 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -42,8 +42,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -76,7 +76,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	reconciler := newReconciler(mgr.GetClient(), mgr.GetScheme(), statusManager, opts.DetectedProvider, tierWatchReady, clusterInfoWatchReady, opts)
 
 	// Create a new controller
-	c, err := ctrlruntime.NewController(controllerName, mgr, controller.Options{Reconciler: reconciler})
+	c, err := ctrlruntime.NewController(controllerName, mgr, ctrl.Options{Reconciler: reconciler})
 	if err != nil {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
@@ -279,23 +279,23 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// both a management and a managed cluster) and produces the Enterprise-specific
 	// Guardian inputs the controller reads back below (the managed cluster version and
 	// the license-gated egress policy flag). For the core operator this is a no-op and
-	// the render context carries no extension data, so the OSS defaults apply.
-	cc := contexts.ControllerContext{
-		RenderContext:      render.RenderContext{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
-		Controller:         contexts.ClusterConnectionController,
+	// the render inputs carries no extension data, so the OSS defaults apply.
+	ci := controller.Inputs{
+		Inputs:             render.Inputs{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
+		Controller:         controller.ClusterConnection,
 		Client:             r.cli,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, _, err = r.opts.Extensions.ExtendContext(ctx, cc)
+	ci, _, err = r.opts.Extensions.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	guardianData, haveGuardianData := render.GuardianRenderDataFromContext(cc.RenderContext)
+	guardianData, haveGuardianData := render.GuardianRenderDataFromInputs(ci.Inputs)
 
 	includeSystem := false
 	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
@@ -450,7 +450,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.cli,
 		r.scheme,
 		managementClusterConnection,
-		utils.WithRenderContext(render.RenderContext{Installation: installationSpec}),
+		utils.WithRenderInputs(render.Inputs{Installation: installationSpec}),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 	guardianCfg := &render.GuardianConfiguration{

@@ -47,7 +47,7 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -62,8 +62,8 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/ippool"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
@@ -132,7 +132,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create Core Reconciler: %w", err)
 	}
 
-	c, err := ctrlruntime.NewController("tigera-installation-controller", mgr, controller.Options{Reconciler: ri})
+	c, err := ctrlruntime.NewController("tigera-installation-controller", mgr, ctrl.Options{Reconciler: ri})
 	if err != nil {
 		return fmt.Errorf("failed to create tigera-installation-controller: %w", err)
 	}
@@ -222,7 +222,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.EnterpriseCRDExists {
-		if err = opts.Extensions.SetupWatches(contexts.InstallationController, c); err != nil {
+		if err = opts.Extensions.SetupWatches(controller.Installation, c); err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
 		}
 
@@ -1152,22 +1152,22 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		calicoVersion = components.EnterpriseRelease
 	}
 
-	cc := contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	ci := controller.Inputs{
+		Inputs: render.Inputs{
 			Installation:       &instance.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
-		Controller:         contexts.InstallationController,
+		Controller:         controller.Installation,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, managedKeyPairs, err := r.opts.Extensions.ExtendContext(ctx, cc)
+	ci, managedKeyPairs, err := r.opts.Extensions.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1191,7 +1191,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderContext(cc.RenderContext),
+		utils.WithRenderInputs(ci.Inputs),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 
@@ -1902,7 +1902,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 	// Variant-specific FelixConfiguration defaults (e.g. the Enterprise
 	// provider-specific dnsTrustedServers) are owned by the variant extension.
-	extUpdated, err := r.opts.Extensions.DefaultFelixConfiguration(contexts.InstallationController, &install.Spec, fc)
+	extUpdated, err := r.opts.Extensions.DefaultFelixConfiguration(controller.Installation, &install.Spec, fc)
 	if err != nil {
 		return updated, err
 	}

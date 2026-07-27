@@ -27,7 +27,7 @@ import (
 	"k8s.io/client-go/rest"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -42,8 +42,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -63,7 +63,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 		return fmt.Errorf("failed to create Windows Reconciler: %w", err)
 	}
 
-	c, err := ctrlruntime.NewController("tigera-windows-controller", mgr, controller.Options{Reconciler: ri})
+	c, err := ctrlruntime.NewController("tigera-windows-controller", mgr, ctrl.Options{Reconciler: ri})
 	if err != nil {
 		return fmt.Errorf("failed to create tigera-windows-controller: %w", err)
 	}
@@ -148,7 +148,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
 	if ri.opts.EnterpriseCRDExists {
-		if err = ri.opts.Extensions.SetupWatches(contexts.WindowsController, c); err != nil {
+		if err = ri.opts.Extensions.SetupWatches(controller.Windows, c); err != nil {
 			return fmt.Errorf("tigera-windows-controller failed to set up extension watches: %w", err)
 		}
 	}
@@ -338,24 +338,24 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Run the variant's windows controller extension to build the render context
+	// Run the variant's windows controller extension to build the render inputs
 	// (creating no enterprise artifacts in core).
-	cc := contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	ci := controller.Inputs{
+		Inputs: render.Inputs{
 			Installation:       &instance.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
-		Controller:         contexts.WindowsController,
+		Controller:         controller.Windows,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, _, err = r.opts.Extensions.ExtendContext(ctx, cc)
+	ci, _, err = r.opts.Extensions.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing windows extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -394,7 +394,7 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderContext(cc.RenderContext),
+		utils.WithRenderInputs(ci.Inputs),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {

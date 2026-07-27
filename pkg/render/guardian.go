@@ -98,18 +98,18 @@ func (c *guardianPolicyComponent) SupportedOSType() rmeta.OSType            { re
 func (c *guardianPolicyComponent) Ready() bool                              { return true }
 func (c *guardianPolicyComponent) ModifierKey() string                      { return ComponentNameGuardianPolicy }
 
-// GuardianPolicyExtensionContext is the per-component context the guardian
-// policy modifier reads (via RenderContext.Component). The enterprise guardian
+// GuardianPolicyExtensionInputs is the per-component context the guardian
+// policy modifier reads (via Inputs.Component). The enterprise guardian
 // network policy is built entirely from these inputs.
-type GuardianPolicyExtensionContext struct {
+type GuardianPolicyExtensionInputs struct {
 	URL                        string
 	PodProxies                 []*httpproxy.Config
 	OpenShift                  bool
 	IncludeEgressNetworkPolicy bool
 }
 
-func (c *guardianPolicyComponent) ExtensionContext() any {
-	return GuardianPolicyExtensionContext{
+func (c *guardianPolicyComponent) ExtensionInputs() any {
+	return GuardianPolicyExtensionInputs{
 		URL:                        c.cfg.URL,
 		PodProxies:                 c.cfg.PodProxies,
 		OpenShift:                  c.cfg.OpenShift,
@@ -150,7 +150,7 @@ type GuardianConfiguration struct {
 }
 
 // GuardianRenderData is the variant-specific Guardian input a controller extension
-// computes during reconcile and stashes in RenderContext.Extension. The
+// computes during reconcile and stashes in Inputs.Extension. The
 // clusterconnection controller reads it back to fill GuardianConfiguration without
 // depending on the extension: when present it carries the enterprise values
 // (the management-cluster version and the license-gated egress policy flag) and
@@ -166,11 +166,11 @@ type GuardianRenderData struct {
 	IncludeEgressNetworkPolicy bool
 }
 
-// GuardianRenderDataFromContext returns the GuardianRenderData a controller
-// extension stashed in the render context, and whether it was present. Absent
+// GuardianRenderDataFromInputs returns the GuardianRenderData a controller
+// extension stashed in the render inputs, and whether it was present. Absent
 // means the OSS path: the controller applies its own defaults.
-func GuardianRenderDataFromContext(rc RenderContext) (GuardianRenderData, bool) {
-	data, ok := rc.Extension.(GuardianRenderData)
+func GuardianRenderDataFromInputs(ri Inputs) (GuardianRenderData, bool) {
+	data, ok := ri.Extension.(GuardianRenderData)
 	return data, ok
 }
 
@@ -194,23 +194,23 @@ func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
 
 func (c *GuardianComponent) ModifierKey() string { return GuardianName }
 
-// GuardianExtensionContext is the per-component context the guardian modifier
-// reads (via RenderContext.Component). It carries the inputs the enterprise
+// GuardianExtensionInputs is the per-component context the guardian modifier
+// reads (via Inputs.Component). It carries the inputs the enterprise
 // guardian behavior needs that a modifier can't derive from the installation:
 // the management cluster's impersonation config, whether we're on OpenShift,
 // and the trusted bundle mount path the CA env vars reference.
-type GuardianExtensionContext struct {
+type GuardianExtensionInputs struct {
 	OpenShift              bool
 	Impersonation          *operatorv1.Impersonation
 	TrustedBundleMountPath string
 }
 
-func (c *GuardianComponent) ExtensionContext() any {
+func (c *GuardianComponent) ExtensionInputs() any {
 	var impersonation *operatorv1.Impersonation
 	if c.cfg.ManagementClusterConnection != nil {
 		impersonation = c.cfg.ManagementClusterConnection.Spec.Impersonation
 	}
-	return GuardianExtensionContext{
+	return GuardianExtensionInputs{
 		OpenShift:              c.cfg.OpenShift,
 		Impersonation:          impersonation,
 		TrustedBundleMountPath: c.cfg.TrustedCertBundle.MountPath(),

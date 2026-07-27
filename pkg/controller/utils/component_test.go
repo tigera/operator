@@ -2636,7 +2636,7 @@ func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 var _ = Describe("componentHandler modifier application", func() {
 	It("applies registered modifiers to a named component before create", func() {
 		ext := extensions.NewSet()
-		ext.Variant(operatorv1.CalicoEnterprise).Modify("fake", func(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+		ext.Variant(operatorv1.CalicoEnterprise).Modify("fake", func(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 			cm := objs[0].(*corev1.ConfigMap)
 			cm.Data = map[string]string{"patched": "yes"}
 			return objs, del
@@ -2647,8 +2647,8 @@ var _ = Describe("componentHandler modifier application", func() {
 		Expect(corev1.SchemeBuilder.AddToScheme(s)).NotTo(HaveOccurred())
 
 		c := ctrlrfake.DefaultFakeClientBuilder(s).Build()
-		renderCtx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
-		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderContext(renderCtx), WithExtensions(ext))
+		renderInputs := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderInputs(renderInputs), WithExtensions(ext))
 		comp := &namedFakeComponent{name: "fake", obj: &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},

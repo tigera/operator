@@ -30,11 +30,11 @@ import (
 
 // StubComponent adapts raw object lists to a render.Component so a registered
 // extension can be exercised through Set.Decorate. Key selects the extension;
-// ExtCtx is delivered as the component's ExtensionContext (the typed config a
+// ExtIn is delivered as the component's ExtensionInputs (the typed config a
 // RegisterModifier modifier reads).
 type StubComponent struct {
 	Key            string
-	ExtCtx         any
+	ExtIn          any
 	Create, Delete []client.Object
 }
 
@@ -58,20 +58,20 @@ func (s StubComponent) ModifierKey() string {
 	return s.Key
 }
 
-func (s StubComponent) ExtensionContext() any {
-	return s.ExtCtx
+func (s StubComponent) ExtensionInputs() any {
+	return s.ExtIn
 }
 
 // ApplyExtensions decorates a stub component holding the given objects with the
 // extension registered under key, then renders it. For a modifier that needs the
-// component's typed config, use ApplyExtensionsWithContext.
-func ApplyExtensions(s *extensions.Set, key string, rc render.RenderContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	return ApplyExtensionsWithContext(s, key, rc, nil, create, del)
+// component's typed config, use ApplyExtensionsWithInputs.
+func ApplyExtensions(s *extensions.Set, key string, ri render.Inputs, create, del []client.Object) ([]client.Object, []client.Object) {
+	return ApplyExtensionsWithInputs(s, key, ri, nil, create, del)
 }
 
-// ApplyExtensionsWithContext is ApplyExtensions for a modifier that reads the
-// component's typed config: extCtx is delivered as the stub's ExtensionContext.
-func ApplyExtensionsWithContext(s *extensions.Set, key string, rc render.RenderContext, extCtx any, create, del []client.Object) ([]client.Object, []client.Object) {
-	stub := StubComponent{Key: key, ExtCtx: extCtx, Create: create, Delete: del}
-	return s.Decorate(stub, rc).Objects()
+// ApplyExtensionsWithInputs is ApplyExtensions for a modifier that reads the
+// component's typed config: extIn is delivered as the stub's ExtensionInputs.
+func ApplyExtensionsWithInputs(s *extensions.Set, key string, ri render.Inputs, extIn any, create, del []client.Object) ([]client.Object, []client.Object) {
+	stub := StubComponent{Key: key, ExtIn: extIn, Create: create, Delete: del}
+	return s.Decorate(stub, ri).Objects()
 }

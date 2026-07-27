@@ -14,20 +14,20 @@
 
 package options
 
-import "github.com/tigera/operator/pkg/controller/contexts"
+import "github.com/tigera/operator/pkg/controller"
 
 // Options is the Calico Enterprise controller-phase options. The extension build
 // computes it once at startup (see extensions.Set.ComputeOptions) and its
-// controller hooks read it back off the ControllerContext via From. It lives in
+// controller hooks read it back off the Inputs via From. It lives in
 // its own leaf package so the hooks and the operator's main can both reference it.
 type Options struct {
 	// MultiTenant reports whether the operator runs in multi-tenant mode.
 	MultiTenant bool
 }
 
-// From returns the enterprise options carried on the controller context, or the
+// From returns the enterprise options carried on the controller inputs, or the
 // zero value when none are set.
-func From(cc contexts.ControllerContext) Options {
-	o, _ := cc.Options.(Options)
+func From(ci controller.Inputs) Options {
+	o, _ := ci.Options.(Options)
 	return o
 }

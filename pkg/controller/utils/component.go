@@ -83,10 +83,10 @@ type ComponentHandler interface {
 // ComponentHandlerOption configures a componentHandler.
 type ComponentHandlerOption func(*componentHandler)
 
-// WithRenderContext supplies the render.RenderContext passed to registered
+// WithRenderInputs supplies the render.Inputs passed to registered
 // render modifiers.
-func WithRenderContext(rc render.RenderContext) ComponentHandlerOption {
-	return func(c *componentHandler) { c.renderCtx = rc }
+func WithRenderInputs(ri render.Inputs) ComponentHandlerOption {
+	return func(c *componentHandler) { c.renderInputs = ri }
 }
 
 // WithExtensions supplies the operator's extension Set, whose modifiers the
@@ -119,7 +119,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
-	renderCtx    render.RenderContext
+	renderInputs render.Inputs
 	extensions   *extensions.Set
 }
 
@@ -466,7 +466,7 @@ func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component
 	if ext, ok := component.(render.Extensible); ok && ext.ModifierKey() != "" && c.extensions == nil {
 		c.log.Info("BUG: extensible component rendered by a handler with no extension Set; extensions will not be applied", "component", ext.ModifierKey())
 	}
-	component = c.extensions.Decorate(component, c.renderCtx)
+	component = c.extensions.Decorate(component, c.renderInputs)
 
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.

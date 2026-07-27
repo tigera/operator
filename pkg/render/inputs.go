@@ -20,7 +20,7 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// RenderContext carries reconcile-derived inputs from controllers into render
+// Inputs carries reconcile-derived inputs from controllers into render
 // modifiers. Core operator code never reads these fields - only registered
 // modifiers do. It carries raw cluster state gathered generically (Installation,
 // FelixConfiguration, ClusterDomain) that modifiers derive their own values from,
@@ -29,14 +29,14 @@ import (
 //
 // It lives in render (not the extensions package) because it is the render-phase
 // input a modifier consumes - the render-side corollary to the controller-phase
-// ControllerContext. The extensions package wires modifiers to it; it is not
+// controller.Inputs. The extensions package wires modifiers to it; it is not
 // itself part of the extension mechanism.
 //
 // Per-component config a modifier needs but can't derive from these fields is
 // not carried here; it flows to the modifier as a typed argument (see
 // extensions.RegisterModifier), supplied by the component via
-// ExtensionContextProvider.
-type RenderContext struct {
+// ExtensionInputsProvider.
+type Inputs struct {
 	Installation       *operatorv1.InstallationSpec
 	FelixConfiguration *v3.FelixConfiguration
 	ClusterDomain      string
@@ -56,10 +56,10 @@ type RenderContext struct {
 }
 
 // ExtractExtensionData returns the extension-owned data a controller extension
-// stashed in the render context, asserted to T, or the zero value of T when the
+// stashed in the render inputs, asserted to T, or the zero value of T when the
 // slot is empty or holds a different type. Extensions use it instead of repeating
 // the type assertion in a per-component accessor.
-func ExtractExtensionData[T any](rc RenderContext) T {
-	data, _ := rc.Extension.(T)
+func ExtractExtensionData[T any](ri Inputs) T {
+	data, _ := ri.Extension.(T)
 	return data
 }

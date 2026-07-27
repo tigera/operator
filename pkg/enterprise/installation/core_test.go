@@ -24,8 +24,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -34,18 +34,18 @@ import (
 var _ = Describe("installation controller extension", func() {
 	It("rejects a zero prometheus reporter port", func() {
 		port := 0
-		cc := newControllerContext(operatorv1.CalicoEnterprise)
-		cc.FelixConfiguration = &v3.FelixConfiguration{
+		ci := newControllerInputs(operatorv1.CalicoEnterprise)
+		ci.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		Expect(ext.Validate(ctx, cc)).To(HaveOccurred())
+		Expect(ext.Validate(ctx, ci)).To(HaveOccurred())
 	})
 
 	DescribeTable("defaults dnsTrustedServers for providers whose DNS service isn't kube-dns",
 		func(provider operatorv1.Provider, expected []string) {
 			fc := &v3.FelixConfiguration{}
 			install := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider}
-			updated, err := ext.DefaultFelixConfiguration(contexts.InstallationController, install, fc)
+			updated, err := ext.DefaultFelixConfiguration(controller.Installation, install, fc)
 			Expect(err).NotTo(HaveOccurred())
 			if expected == nil {
 				Expect(updated).To(BeFalse())
@@ -62,14 +62,14 @@ var _ = Describe("installation controller extension", func() {
 
 	It("does no felix defaulting for the Calico variant", func() {
 		fc := &v3.FelixConfiguration{}
-		updated, err := ext.DefaultFelixConfiguration(contexts.InstallationController, &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
+		updated, err := ext.DefaultFelixConfiguration(controller.Installation, &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeFalse())
 		Expect(fc.Spec.DNSTrustedServers).To(BeNil())
 	})
 
 	It("manages the node prometheus and kube-controllers metrics keypairs for the enterprise variant", func() {
-		_, managed, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.CalicoEnterprise))
+		_, managed, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
 		for _, kp := range managed {
@@ -79,13 +79,13 @@ var _ = Describe("installation controller extension", func() {
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		_, managed, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.Calico))
+		_, managed, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(managed).To(BeEmpty())
 	})
 })
 
-func newControllerContext(variant operatorv1.ProductVariant) contexts.ControllerContext {
+func newControllerInputs(variant operatorv1.ProductVariant) controller.Inputs {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -94,14 +94,14 @@ func newControllerContext(variant operatorv1.ProductVariant) contexts.Controller
 	Expect(err).NotTo(HaveOccurred())
 	trustedBundle := certManager.CreateTrustedBundle()
 
-	return contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	return controller.Inputs{
+		Inputs: render.Inputs{
 			Installation:       &operatorv1.InstallationSpec{Variant: variant},
 			FelixConfiguration: &v3.FelixConfiguration{},
 			TrustedBundle:      trustedBundle,
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         contexts.InstallationController,
+		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}

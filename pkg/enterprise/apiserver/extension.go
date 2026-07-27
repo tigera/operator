@@ -38,7 +38,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -66,7 +66,7 @@ const (
 )
 
 // apiServerRenderData is the controller-produced data the API server hook hands to its
-// modifiers through RenderContext.Extension. It carries the enterprise inputs the base
+// modifiers through Inputs.Extension. It carries the enterprise inputs the base
 // render no longer knows about: the management cluster / managed cluster CRs, the
 // ApplicationLayer (which drives the L7 sidecar), the cert-management-only query server
 // keypair, the OIDC key validator config, and the resolved L7 sidecar images.
@@ -85,10 +85,10 @@ type apiServerRenderData struct {
 	bindingNamespaces []string
 }
 
-// apiServerData pulls the API server hook's render data back out of the render context,
+// apiServerData pulls the API server hook's render data back out of the render inputs,
 // returning the zero value when none is set.
-func apiServerData(rc render.RenderContext) apiServerRenderData {
-	return render.ExtractExtensionData[apiServerRenderData](rc)
+func apiServerData(ri render.Inputs) apiServerRenderData {
+	return render.ExtractExtensionData[apiServerRenderData](ri)
 }
 
 // apiServer carries the rendered API server configuration, the resolved image, and the
@@ -102,7 +102,7 @@ type apiServer struct {
 
 // Register wires the API server controller hook and modifiers into the variant.
 func Register(v *extensions.Variant) {
-	v.Controller(contexts.APIServerController, apiServerControllerExtension{})
+	v.Controller(controller.APIServer, apiServerControllerExtension{})
 	extensions.RegisterModifier(v, render.ComponentNameAPIServer, modifyAPIServer)
 	extensions.RegisterModifier(v, render.ComponentNameAPIServerPolicy, modifyAPIServerPolicy)
 }
@@ -122,12 +122,12 @@ type apiServerControllerExtension struct{}
 
 // Validate rejects an API server configuration Calico Enterprise does not support: a
 // cluster cannot be both a management cluster and a managed cluster.
-func (apiServerControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
-	managementCluster, err := utils.GetManagementCluster(ctx, cc.Client)
+func (apiServerControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
+	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, cc.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, ci.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
@@ -159,54 +159,54 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 	return utils.AddSecretsWatch(c, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 }
 
-// ExtendContext does the enterprise controller-side work: it builds the trusted bundle,
+// ExtendInputs does the enterprise controller-side work: it builds the trusted bundle,
 // fetches the enterprise CRs, creates the query server certificate, resolves the L7
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
-func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
-	in := cc.Installation
+func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	in := ci.Installation
 
-	trustedBundle, err := cc.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, cc.Client, common.OperatorNamespace(), false)
+	trustedBundle, err := ci.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, ci.Client, common.OperatorNamespace(), false)
 	if err != nil {
-		return cc, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
+		return ci, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
 	}
 
-	applicationLayer, err := utils.GetApplicationLayer(ctx, cc.Client)
+	applicationLayer, err := utils.GetApplicationLayer(ctx, ci.Client)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
+		return ci, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, cc.Client)
+	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
+		return ci, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
 
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, cc.Client)
+	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, ci.Client)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+		return ci, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
 
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
 	// certificates for managed clusters. The manager controller writes it once
 	// ManagementCluster.Spec.TLS is defaulted; degrade until it exists.
-	if managementCluster != nil && managementCluster.Spec.TLS != nil && !eoptions.From(cc).MultiTenant {
-		if _, err := utils.GetSecret(ctx, cc.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
-			return cc, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
+	if managementCluster != nil && managementCluster.Spec.TLS != nil && !eoptions.From(ci).MultiTenant {
+		if _, err := utils.GetSecret(ctx, ci.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
+			return ci, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
 		}
 	}
 
-	prometheusCertificate, err := cc.CertificateManager.GetCertificate(cc.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
+	prometheusCertificate, err := ci.CertificateManager.GetCertificate(ci.Client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
 	if err != nil {
-		return cc, nil, fmt.Errorf("failed to get certificate: %w", err)
+		return ci, nil, fmt.Errorf("failed to get certificate: %w", err)
 	}
 	if prometheusCertificate != nil {
 		trustedBundle.AddCertificates(prometheusCertificate)
 	}
 
 	if managementClusterConnection != nil {
-		voltronLinseedCert, err := cc.CertificateManager.GetCertificate(cc.Client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
+		voltronLinseedCert, err := ci.CertificateManager.GetCertificate(ci.Client, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 		if err != nil {
-			return cc, nil, fmt.Errorf("failed to retrieve %s: %w", render.VoltronLinseedPublicCert, err)
+			return ci, nil, fmt.Errorf("failed to retrieve %s: %w", render.VoltronLinseedPublicCert, err)
 		}
 		if voltronLinseedCert != nil {
 			trustedBundle.AddCertificates(voltronLinseedCert)
@@ -216,23 +216,23 @@ func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contex
 	// Authentication: when a Dex-backed Authentication CR is ready, add its cert to the
 	// bundle and build the key validator config for the query server and the policy.
 	var keyValidatorConfig authentication.KeyValidatorConfig
-	authenticationCR, err := utils.GetAuthentication(ctx, cc.Client)
+	authenticationCR, err := utils.GetAuthentication(ctx, ci.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return cc, nil, fmt.Errorf("error while fetching Authentication: %w", err)
+		return ci, nil, fmt.Errorf("error while fetching Authentication: %w", err)
 	}
 	if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
 		if utils.DexEnabled(authenticationCR) {
-			certificate, err := cc.CertificateManager.GetCertificate(cc.Client, render.DexTLSSecretName, common.OperatorNamespace())
+			certificate, err := ci.CertificateManager.GetCertificate(ci.Client, render.DexTLSSecretName, common.OperatorNamespace())
 			if err != nil {
-				return cc, nil, fmt.Errorf("failed to retrieve %s: %w", render.DexTLSSecretName, err)
+				return ci, nil, fmt.Errorf("failed to retrieve %s: %w", render.DexTLSSecretName, err)
 			} else if certificate == nil {
-				return cc, nil, fmt.Errorf("waiting for secret %q to become available", render.DexTLSSecretName)
+				return ci, nil, fmt.Errorf("waiting for secret %q to become available", render.DexTLSSecretName)
 			}
 			trustedBundle.AddCertificates(certificate)
 		}
-		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, cc.Client, authenticationCR, cc.ClusterDomain)
+		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, ci.Client, authenticationCR, ci.ClusterDomain)
 		if err != nil {
-			return cc, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
+			return ci, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
 		}
 	}
 
@@ -240,14 +240,14 @@ func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contex
 	// with different permissions than the apiserver.
 	var queryServerTLS certificatemanagement.KeyPairInterface
 	if in.CertificateManagement != nil {
-		queryServerTLS, err = cc.CertificateManager.GetOrCreateKeyPair(
-			cc.Client,
+		queryServerTLS, err = ci.CertificateManager.GetOrCreateKeyPair(
+			ci.Client,
 			"query-server-tls",
 			common.OperatorNamespace(),
-			dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, cc.ClusterDomain),
+			dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, ci.ClusterDomain),
 		)
 		if err != nil {
-			return cc, nil, fmt.Errorf("unable to get or create query server tls key pair: %w", err)
+			return ci, nil, fmt.Errorf("unable to get or create query server tls key pair: %w", err)
 		}
 	}
 
@@ -257,17 +257,17 @@ func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contex
 	if applicationLayer != nil &&
 		applicationLayer.Spec.SidecarInjection != nil &&
 		*applicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled {
-		imageSet, err := imageset.GetImageSet(ctx, cc.Client, in.Variant)
+		imageSet, err := imageset.GetImageSet(ctx, ci.Client, in.Variant)
 		if err != nil {
-			return cc, nil, err
+			return ci, nil, err
 		}
 		l7EnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 		if err != nil {
-			return cc, nil, err
+			return ci, nil, err
 		}
 		dikastesImage, err = components.GetReference(components.ComponentDikastes, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 		if err != nil {
-			return cc, nil, err
+			return ci, nil, err
 		}
 	}
 
@@ -276,15 +276,15 @@ func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contex
 	// namespace. Zero/single-tenant clusters leave this empty - the calico-system API server
 	// is covered by its own binding.
 	var bindingNamespaces []string
-	if eoptions.From(cc).MultiTenant {
-		bindingNamespaces, err = utils.TenantNamespaces(ctx, cc.Client, nil)
+	if eoptions.From(ci).MultiTenant {
+		bindingNamespaces, err = utils.TenantNamespaces(ctx, ci.Client, nil)
 		if err != nil {
-			return cc, nil, fmt.Errorf("error reading tenant namespaces: %w", err)
+			return ci, nil, fmt.Errorf("error reading tenant namespaces: %w", err)
 		}
 	}
 
-	cc.TrustedBundle = trustedBundle
-	cc.Extension = apiServerRenderData{
+	ci.TrustedBundle = trustedBundle
+	ci.Extension = apiServerRenderData{
 		managementCluster:           managementCluster,
 		managementClusterConnection: managementClusterConnection,
 		applicationLayer:            applicationLayer,
@@ -294,7 +294,7 @@ func (apiServerControllerExtension) ExtendContext(ctx context.Context, cc contex
 		dikastesImage:               dikastesImage,
 		bindingNamespaces:           bindingNamespaces,
 	}
-	return cc, nil, nil
+	return ci, nil, nil
 }
 
 // RegisterCalicoCleanup registers, for the Calico variant, the cleanup that
@@ -307,8 +307,8 @@ func RegisterCalicoCleanup(v *extensions.Variant) {
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:
 // the query server container and its volumes, audit logging on the aggregation API server
 // container, the Enterprise RBAC objects, and the query server port on the Service.
-func modifyAPIServer(rc render.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage, data: apiServerData(rc)}
+func modifyAPIServer(ri render.Inputs, ec render.APIServerExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
+	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage, data: apiServerData(ri)}
 
 	// Ensure the deployment and its supporting objects exist. The base renders them when
 	// running an aggregation API server; in v3-CRD mode it queues them for deletion, but
@@ -405,7 +405,7 @@ func modifyAPIServer(rc render.RenderContext, ec render.APIServerExtensionContex
 
 // cleanupAPIServer deletes the Enterprise API server objects when running Calico, so a
 // cluster switched from Enterprise to Calico does not leave them behind.
-func cleanupAPIServer(rc render.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
+func cleanupAPIServer(ri render.Inputs, ec render.APIServerExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config}
 
 	del = append(del, c.tigeraAPIServerClusterRole(), c.tigeraAPIServerClusterRoleBinding())
@@ -667,8 +667,8 @@ func (c *apiServer) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConf
 // the OIDC egress rule (when an OIDC key validator is configured) and the L7 admission
 // controller ingress port (when sidecar injection is enabled). The base policy carries
 // neither.
-func modifyAPIServerPolicy(rc render.RenderContext, ec render.APIServerExtensionContext, create, del []client.Object) ([]client.Object, []client.Object) {
-	c := &apiServer{cfg: ec.Config, data: apiServerData(rc)}
+func modifyAPIServerPolicy(ri render.Inputs, ec render.APIServerExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
+	c := &apiServer{cfg: ec.Config, data: apiServerData(ri)}
 
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](create, render.APIServerPolicyName)
 	if !ok {

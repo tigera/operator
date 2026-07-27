@@ -30,8 +30,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -76,7 +76,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		certManager       certificatemanager.CertificateManager
 		typhaNodeTLS      *render.TyphaNodeTLS
 		instance          *operatorv1.InstallationSpec
-		renderCtx         render.RenderContext
+		renderInputs      render.Inputs
 		nodePrometheusTLS certificatemanagement.KeyPairInterface
 	)
 
@@ -119,27 +119,27 @@ var _ = Describe("node enterprise modifier integration", func() {
 			},
 		}
 
-		// Build the render context the way the controller does: run the enterprise
+		// Build the render inputs the way the controller does: run the enterprise
 		// controller extension, which stashes the node prometheus keypair in the
 		// context for the node modifier to read.
-		cc := contexts.ControllerContext{
-			RenderContext: render.RenderContext{
+		ci := controller.Inputs{
+			Inputs: render.Inputs{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
-			Controller:         contexts.InstallationController,
+			Controller:         controller.Installation,
 			Client:             cli,
 			CertificateManager: certManager,
 		}
-		ecc, _, err := ext.ExtendContext(ctx, cc)
+		eci, _, err := ext.ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
-		renderCtx = ecc.RenderContext
+		renderInputs = eci.Inputs
 	})
 
 	// renderNodeObjects renders the real node component and applies the registered
 	// modifier, exactly as the componentHandler does.
-	renderNodeObjects := func(rc render.RenderContext) []client.Object {
+	renderNodeObjects := func(ri render.Inputs) []client.Object {
 		cfg := &render.NodeConfiguration{
 			K8sServiceEp:    k8sapi.ServiceEndpoint{},
 			Installation:    instance,
@@ -151,19 +151,19 @@ var _ = Describe("node enterprise modifier integration", func() {
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameNode, rc, objs, nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameNode, ri, objs, nil)
 		return out
 	}
 
 	It("appends the node metrics service to the real render output", func() {
-		objs := renderNodeObjects(renderCtx)
+		objs := renderNodeObjects(renderInputs)
 		svc, ok := extensions.FindObject[*corev1.Service](objs, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeTrue(), "expected the modifier to append %s", render.CalicoNodeMetricsService)
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
 	})
 
 	It("adds the enterprise rules to the real cluster roles", func() {
-		objs := renderNodeObjects(renderCtx)
+		objs := renderNodeObjects(renderInputs)
 
 		nodeRole, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.CalicoNodeObjectName)
 		Expect(ok).To(BeTrue())
@@ -175,7 +175,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 	})
 
 	It("rewrites the real node daemonset for enterprise", func() {
-		objs := renderNodeObjects(renderCtx)
+		objs := renderNodeObjects(renderInputs)
 		ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.NodeDaemonSetName)
 		Expect(ok).To(BeTrue())
 
@@ -205,20 +205,20 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Spec:       operatorv1.LogCollectorSpec{CollectProcessPath: &enable},
 		})).NotTo(HaveOccurred())
 
-		ecc, _, err := ext.ExtendContext(ctx, contexts.ControllerContext{
-			RenderContext: render.RenderContext{
+		eci, _, err := ext.ExtendInputs(ctx, controller.Inputs{
+			Inputs: render.Inputs{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
-			Controller:         contexts.InstallationController,
+			Controller:         controller.Installation,
 			Client:             cli,
 			CertificateManager: certManager,
 		})
 		Expect(err).NotTo(HaveOccurred())
-		rc := ecc.RenderContext
+		ri := eci.Inputs
 
-		ds, ok := extensions.FindObject[*appsv1.DaemonSet](renderNodeObjects(rc), common.NodeDaemonSetName)
+		ds, ok := extensions.FindObject[*appsv1.DaemonSet](renderNodeObjects(ri), common.NodeDaemonSetName)
 		Expect(ok).To(BeTrue())
 		Expect(ds.Spec.Template.Spec.HostPID).To(BeTrue())
 		Expect(nodeContainer(ds).Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_FLOWLOGSCOLLECTPROCESSPATH", Value: "true"}))
@@ -234,7 +234,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		})
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		objs, _ = extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, renderCtx, objs, nil)
+		objs, _ = extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, renderInputs, objs, nil)
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha")
 		Expect(ok).To(BeTrue())

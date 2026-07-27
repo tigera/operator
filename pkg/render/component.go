@@ -49,14 +49,14 @@ type Extensible interface {
 	ModifierKey() string
 }
 
-// ExtensionContextProvider is an optional companion to Extensible. A component
+// ExtensionInputsProvider is an optional companion to Extensible. A component
 // implements it to hand its modifier component-specific context that can't be
-// derived from the shared RenderContext - config only the component's controller
+// derived from the shared Inputs - config only the component's controller
 // has, such as a keypair the controller created. extensions.RegisterModifier
 // asserts the returned value to the modifier's config type and passes it through,
 // so the modifier body needs no assertion.
-type ExtensionContextProvider interface {
-	ExtensionContext() any
+type ExtensionInputsProvider interface {
+	ExtensionInputs() any
 }
 
 // Component names used as keys into the extension modifier registry. Keep these

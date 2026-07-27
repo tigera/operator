@@ -47,7 +47,7 @@ func Register(v *extensions.Variant) {
 // enterprise management-cluster policy. Building the enterprise egress rules can
 // fail (proxy URL parsing); on failure we drop the policy entirely, matching the
 // core behavior of omitting it rather than installing a partial policy.
-func modifyGuardianPolicy(rc render.RenderContext, gpc render.GuardianPolicyExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyGuardianPolicy(ri render.Inputs, gpc render.GuardianPolicyExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
 	if !ok {
 		return objs, del
@@ -76,7 +76,7 @@ func removeObject(objs []client.Object, drop client.Object) []client.Object {
 // managed cluster: egress to the management cluster components and the tunnel
 // destination(s), and ingress from the management-cluster components that reach
 // back over the tunnel.
-func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3.NetworkPolicySpec, error) {
+func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionInputs) (v3.NetworkPolicySpec, error) {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -205,7 +205,7 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionContext) (v3
 // objects: the secrets Role/RoleBinding and default UI settings, the
 // elasticsearch/kibana service ports, the management-cluster-request cluster
 // role rules (which replace the OSS rules), and the CA bundle env vars.
-func modifyGuardian(rc render.RenderContext, gc render.GuardianExtensionContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyGuardian(ri render.Inputs, gc render.GuardianExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
 		role.Rules = guardianEnterpriseRules(gc)
 	}
@@ -233,7 +233,7 @@ func modifyGuardian(rc render.RenderContext, gc render.GuardianExtensionContext,
 // Enterprise. They wholly replace the OSS rules: the management cluster drives
 // guardian over the tunnel, so it needs the union of the rules its components
 // require, plus any configured impersonation and the OpenShift SCC.
-func guardianEnterpriseRules(gc render.GuardianExtensionContext) []rbacv1.PolicyRule {
+func guardianEnterpriseRules(gc render.GuardianExtensionInputs) []rbacv1.PolicyRule {
 	var rules []rbacv1.PolicyRule
 
 	if imp := gc.Impersonation; imp != nil {
@@ -294,7 +294,7 @@ func guardianEnterpriseServicePorts() []corev1.ServicePort {
 	}
 }
 
-func addGuardianEnterpriseEnv(gc render.GuardianExtensionContext, dep *appsv1.Deployment) {
+func addGuardianEnterpriseEnv(gc render.GuardianExtensionInputs, dep *appsv1.Deployment) {
 	for i := range dep.Spec.Template.Spec.Containers {
 		c := &dep.Spec.Template.Spec.Containers[i]
 		if c.Name != render.GuardianContainerName {

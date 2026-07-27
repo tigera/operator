@@ -33,7 +33,7 @@ import (
 
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -62,8 +62,8 @@ func registerKubeControllers(v *extensions.Variant) {
 // calico-kube-controllers calico-system network policy, so the kube-apiserver can
 // reach the in-process webhook on :9443 (EV-6386). Without it the calico-system
 // default-deny drops the apiserver->:9443 call and WAF admission times out.
-func modifyKubeControllersPolicy(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	if !installationData(rc).waf.enabled {
+func modifyKubeControllersPolicy(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+	if !installationData(ri).waf.enabled {
 		return objs, del
 	}
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, kubecontrollers.KubeControllerNetworkPolicyName)
@@ -86,16 +86,16 @@ func modifyKubeControllersPolicy(rc render.RenderContext, objs, del []client.Obj
 // surface. The modifier only runs for the enterprise variant, so everything it adds
 // is enterprise-only by construction - the base render carries none of it. The
 // controller-side inputs (keypairs, the resolved wasm image, the pull secret) are
-// produced by the installation hook and handed in through rc.
-func modifyKubeControllers(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
-	data := installationData(rc)
+// produced by the installation hook and handed in through ri.
+func modifyKubeControllers(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+	data := installationData(ri)
 
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole); ok {
 		role.Rules = append(role.Rules, data.kubeControllerRules...)
 	}
 
 	if dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController); ok {
-		modifyKubeControllersDeployment(rc, dp, data)
+		modifyKubeControllersDeployment(ri, dp, data)
 	}
 
 	// The WAF admission webhook surface (Service + ValidatingWebhookConfiguration),
@@ -125,7 +125,7 @@ func modifyKubeControllers(rc render.RenderContext, objs, del []client.Object) (
 	return objs, del
 }
 
-func modifyKubeControllersDeployment(rc render.RenderContext, dp *appsv1.Deployment, data installationRenderData) {
+func modifyKubeControllersDeployment(ri render.Inputs, dp *appsv1.Deployment, data installationRenderData) {
 	spec := &dp.Spec.Template.Spec
 	if dp.Spec.Template.Annotations == nil {
 		dp.Spec.Template.Annotations = map[string]string{}
@@ -146,7 +146,7 @@ func modifyKubeControllersDeployment(rc render.RenderContext, dp *appsv1.Deploym
 		}
 
 		appendEnabledControllers(c, data.kubeControllerControllers)
-		c.Env = append(c.Env, enterpriseEnv(rc)...)
+		c.Env = append(c.Env, enterpriseEnv(ri)...)
 
 		if tls := data.kubeControllerTLS; tls != nil {
 			c.Env = append(c.Env,
@@ -203,12 +203,12 @@ func appendEnabledControllers(c *corev1.Container, extra []string) {
 
 // enterpriseEnv is the static enterprise env for calico-kube-controllers. The
 // modifier runs only for the enterprise variant, so these are never rendered for core.
-func enterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
+func enterpriseEnv(ri render.Inputs) []corev1.EnvVar {
 	var env []corev1.EnvVar
-	if rc.TrustedBundle != nil {
-		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: rc.TrustedBundle.MountPath()})
+	if ri.TrustedBundle != nil {
+		env = append(env, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_CA", Value: ri.TrustedBundle.MountPath()})
 	}
-	if in := rc.Installation; in != nil && in.CalicoNetwork != nil && in.CalicoNetwork.MultiInterfaceMode != nil {
+	if in := ri.Installation; in != nil && in.CalicoNetwork != nil && in.CalicoNetwork.MultiInterfaceMode != nil {
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: in.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 	return env
@@ -523,7 +523,7 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 }
 
 // wafRenderData is the controller-produced WAF v3 (Gateway API add-on) state the
-// installation hook hands the kube-controllers modifier through the render context.
+// installation hook hands the kube-controllers modifier through the render inputs.
 // The zero value (both flags false) means the modifier deletes the webhook objects
 // and wires none of the WAF surface.
 //
@@ -548,8 +548,8 @@ type wafRenderData struct {
 // produces everything the modifier needs that it can't compute itself: the resolved
 // wasm image, the webhook serving keypair (also returned as a managed keypair), the
 // merged wasm pull secret, the wasm CA bundle ConfigMap, and the operator CA PEM.
-func buildWAFData(ctx context.Context, cc contexts.ControllerContext) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
-	gw, _, err := gatewayapi.GetGatewayAPI(ctx, cc.Client)
+func buildWAFData(ctx context.Context, ci controller.Inputs) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
+	gw, _, err := gatewayapi.GetGatewayAPI(ctx, ci.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return wafRenderData{}, nil, err
 	}
@@ -564,10 +564,10 @@ func buildWAFData(ctx context.Context, cc contexts.ControllerContext) (wafRender
 		return wafRenderData{gatewayAPIPresent: true}, nil, nil
 	}
 
-	in := cc.Installation
+	in := ci.Installation
 	// The wasm is baked into the gateway envoy-proxy image. Resolve it with the same
 	// GetReference the base render uses for every image; the hook has the ImageSet here.
-	imageSet, err := imageset.GetImageSet(ctx, cc.Client, in.Variant)
+	imageSet, err := imageset.GetImageSet(ctx, ci.Client, in.Variant)
 	if err != nil {
 		return wafRenderData{}, nil, err
 	}
@@ -576,17 +576,17 @@ func buildWAFData(ctx context.Context, cc contexts.ControllerContext) (wafRender
 		return wafRenderData{}, nil, err
 	}
 
-	webhookTLS, err := cc.CertificateManager.GetOrCreateKeyPair(
-		cc.Client,
+	webhookTLS, err := ci.CertificateManager.GetOrCreateKeyPair(
+		ci.Client,
 		applicationlayer.WAFWebhookServerTLSSecretName,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, cc.ClusterDomain),
+		dns.GetServiceDNSNames(applicationlayer.WAFWebhookServiceName, common.CalicoNamespace, ci.ClusterDomain),
 	)
 	if err != nil {
 		return wafRenderData{}, nil, err
 	}
 
-	pullSecrets, err := utils.GetInstallationPullSecrets(in, cc.Client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(in, ci.Client)
 	if err != nil {
 		return wafRenderData{}, nil, err
 	}
@@ -596,8 +596,8 @@ func buildWAFData(ctx context.Context, cc contexts.ControllerContext) (wafRender
 	}
 
 	var caCert *corev1.ConfigMap
-	if cc.TrustedBundle != nil {
-		caCert = cc.TrustedBundle.ConfigMap(common.CalicoNamespace)
+	if ci.TrustedBundle != nil {
+		caCert = ci.TrustedBundle.ConfigMap(common.CalicoNamespace)
 		caCert.Name = WASMCACertName
 	}
 
@@ -608,7 +608,7 @@ func buildWAFData(ctx context.Context, cc contexts.ControllerContext) (wafRender
 		pullSecret:        pullSecret,
 		caCert:            caCert,
 		webhookTLS:        webhookTLS,
-		caBundle:          cc.CertificateManager.KeyPair().GetCertificatePEM(),
+		caBundle:          ci.CertificateManager.KeyPair().GetCertificatePEM(),
 	}, webhookTLS, nil
 }
 

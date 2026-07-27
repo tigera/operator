@@ -30,8 +30,8 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
@@ -87,8 +87,8 @@ var _ = Describe("windows enterprise modifier", func() {
 		return nil
 	}
 
-	ctxFor := func(provider operatorv1.Provider) render.RenderContext {
-		return render.RenderContext{
+	ctxFor := func(provider operatorv1.Provider) render.Inputs {
+		return render.Inputs{
 			Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider},
 		}
 	}
@@ -136,23 +136,23 @@ var _ = Describe("windows enterprise modifier", func() {
 		Expect(cli.Create(context.Background(), tls.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 		bundle := cm.CreateTrustedBundle()
 
-		// Build the render context the way the windows controller does: run the
-		// windows extension, which fetches the keypair into the context.
-		cc := contexts.ControllerContext{
-			RenderContext: render.RenderContext{
+		// Build the render inputs the way the windows controller does: run the
+		// windows extension, which fetches the keypair into the inputs.
+		ci := controller.Inputs{
+			Inputs: render.Inputs{
 				Installation:  ctxFor(operatorv1.ProviderNone).Installation,
 				TrustedBundle: bundle,
 				ClusterDomain: dns.DefaultClusterDomain,
 			},
-			Controller:         contexts.WindowsController,
+			Controller:         controller.Windows,
 			Client:             cli,
 			CertificateManager: cm,
 		}
-		ecc, _, err := ext.ExtendContext(ctx, cc)
-		rc := ecc.RenderContext
+		eci, _, err := ext.ExtendInputs(ctx, ci)
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameWindows, rc, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameWindows, ri, newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(tls.Volume()))
@@ -162,7 +162,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("does nothing for the Calico variant", func() {
-		ctx := render.RenderContext{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
+		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
 		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameWindows, ctx, newObjs(), nil)
 		_, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeFalse())

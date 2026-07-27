@@ -27,7 +27,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 )
@@ -35,14 +35,14 @@ import (
 var _ = Describe("clusterconnection enterprise controller extension", func() {
 	var cli client.Client
 
-	// controllerContext builds a ControllerContext selecting the enterprise
+	// controllerInputs builds a Inputs selecting the enterprise
 	// clusterconnection hook against the given client.
-	controllerContext := func() contexts.ControllerContext {
-		return contexts.ControllerContext{
-			RenderContext: render.RenderContext{
+	controllerInputs := func() controller.Inputs {
+		return controller.Inputs{
+			Inputs: render.Inputs{
 				Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
 			},
-			Controller: contexts.ClusterConnectionController,
+			Controller: controller.ClusterConnection,
 			Client:     cli,
 		}
 	}
@@ -63,26 +63,26 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	Describe("Validate", func() {
 		It("passes when no ManagementCluster exists", func() {
 			cli = newClient()
-			Expect(ext.Validate(ctx, controllerContext())).NotTo(HaveOccurred())
+			Expect(ext.Validate(ctx, controllerInputs())).NotTo(HaveOccurred())
 		})
 
 		It("rejects a cluster that is both a management and a managed cluster", func() {
 			cli = newClient(&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
-			err := ext.Validate(ctx, controllerContext())
+			err := ext.Validate(ctx, controllerInputs())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not supported"))
 		})
 	})
 
-	Describe("ExtendContext", func() {
+	Describe("ExtendInputs", func() {
 		It("reports the managed cluster CNX version", func() {
 			cli = newClient(clusterInformation())
-			ecc, managed, err := ext.ExtendContext(ctx, controllerContext())
-			rc := ecc.RenderContext
+			eci, managed, err := ext.ExtendInputs(ctx, controllerInputs())
+			ri := eci.Inputs
 			Expect(err).NotTo(HaveOccurred())
 			Expect(managed).To(BeEmpty())
 
-			data, ok := render.GuardianRenderDataFromContext(rc)
+			data, ok := render.GuardianRenderDataFromInputs(ri)
 			Expect(ok).To(BeTrue())
 			Expect(data.Version).To(Equal("v3.99.0"))
 			Expect(data.IncludeEgressNetworkPolicy).To(BeFalse())
@@ -94,18 +94,18 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 				Status:     v3.LicenseKeyStatus{Features: []string{common.EgressAccessControlFeature}},
 			}
 			cli = newClient(clusterInformation(), license)
-			ecc, _, err := ext.ExtendContext(ctx, controllerContext())
-			rc := ecc.RenderContext
+			eci, _, err := ext.ExtendInputs(ctx, controllerInputs())
+			ri := eci.Inputs
 			Expect(err).NotTo(HaveOccurred())
 
-			data, ok := render.GuardianRenderDataFromContext(rc)
+			data, ok := render.GuardianRenderDataFromInputs(ri)
 			Expect(ok).To(BeTrue())
 			Expect(data.IncludeEgressNetworkPolicy).To(BeTrue())
 		})
 
 		It("errors when ClusterInformation is missing", func() {
 			cli = newClient()
-			_, _, err := ext.ExtendContext(ctx, controllerContext())
+			_, _, err := ext.ExtendInputs(ctx, controllerInputs())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("ClusterInformation"))
 		})

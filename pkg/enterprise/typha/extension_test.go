@@ -29,7 +29,6 @@ import (
 )
 
 var _ = Describe("typha enterprise modifier", func() {
-
 	multiMode := operatorv1.MultiInterfaceModeMultus
 
 	newObjs := func() []client.Object {
@@ -45,7 +44,7 @@ var _ = Describe("typha enterprise modifier", func() {
 	}
 
 	It("adds enterprise RBAC and MULTI_INTERFACE_MODE for the enterprise variant", func() {
-		ctx := render.RenderContext{Installation: &operatorv1.InstallationSpec{
+		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{
 			Variant:       operatorv1.CalicoEnterprise,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
@@ -65,7 +64,7 @@ var _ = Describe("typha enterprise modifier", func() {
 	})
 
 	It("is a no-op for the Calico variant", func() {
-		ctx := render.RenderContext{Installation: &operatorv1.InstallationSpec{
+		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{
 			Variant:       operatorv1.Calico,
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}}
@@ -76,7 +75,7 @@ var _ = Describe("typha enterprise modifier", func() {
 	})
 
 	It("does not panic on a zero Context (nil Installation)", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, render.RenderContext{}, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameTypha, render.Inputs{}, newObjs(), nil)
 		Expect(out[0].(*rbacv1.ClusterRole).Rules).To(BeEmpty())
 	})
 })

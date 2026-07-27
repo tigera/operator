@@ -23,10 +23,10 @@
 //
 // A ControllerExtension is the controller-side hook. It runs once per reconcile
 // in the installation controller, has cluster access (Client,
-// CertificateManager) via the ControllerContext, and does the side-effecting
+// CertificateManager) via the Inputs, and does the side-effecting
 // work a pure render hook can't: rejecting unsupported config (Validate) and
-// creating certificates / extending the trusted bundle (ExtendContext). It
-// returns the RenderContext, the read-only baton passed to the render phase.
+// creating certificates / extending the trusted bundle (ExtendInputs). It
+// returns the Inputs, the read-only baton passed to the render phase.
 //
 // Per-component modifiers are the render phase: pure hooks that run after a
 // component builds its objects. An image override swaps the component's image
@@ -35,9 +35,9 @@
 // Register a modifier with Variant.Modify, or with RegisterModifier when it
 // needs the component's own typed config.
 //
-// ControllerContext (controller phase) and RenderContext (render phase) are a
-// pair: ControllerContext embeds RenderContext and adds the cluster-access deps,
-// which is why modifiers, given only a RenderContext, can't do I/O.
+// Inputs (controller phase) and Inputs (render phase) are a
+// pair: Inputs embeds Inputs and adds the cluster-access deps,
+// which is why modifiers, given only a Inputs, can't do I/O.
 //
 // A variant wires up its controller extension and modifiers in one place at
 // startup - see pkg/enterprise.

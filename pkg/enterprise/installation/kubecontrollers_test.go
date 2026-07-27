@@ -33,8 +33,8 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/enterprise/installation"
 	"github.com/tigera/operator/pkg/extensions"
@@ -66,11 +66,11 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	}
 
 	It("mounts the metrics serving TLS keypair onto the deployment", func() {
-		ecc, _, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.CalicoEnterprise))
-		rc := ecc.RenderContext
+		eci, _, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -86,11 +86,11 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	})
 
 	It("adds the cert-management init container when certificate management is enabled", func() {
-		ecc, _, err := ext.ExtendContext(ctx, certManagementControllerContext())
-		rc := ecc.RenderContext
+		eci, _, err := ext.ExtendInputs(ctx, certManagementControllerInputs())
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -99,9 +99,9 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	})
 })
 
-// certManagementControllerContext builds a controller context whose certificate
+// certManagementControllerInputs builds a controller inputs whose certificate
 // manager issues cert-management (CSR-based) keypairs.
-func certManagementControllerContext() contexts.ControllerContext {
+func certManagementControllerInputs() controller.Inputs {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -118,25 +118,25 @@ func certManagementControllerContext() contexts.ControllerContext {
 	certManager, err := certificatemanager.Create(c, installation, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	return contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	return controller.Inputs{
+		Inputs: render.Inputs{
 			Installation:       installation,
 			FelixConfiguration: &v3.FelixConfiguration{},
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         contexts.InstallationController,
+		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}
 }
 
 var _ = Describe("calico-kube-controllers enterprise surface", func() {
-	calicoKubeControllersCfg := func(cc contexts.ControllerContext) *kubecontrollers.KubeControllersConfiguration {
+	calicoKubeControllersCfg := func(ci controller.Inputs) *kubecontrollers.KubeControllersConfiguration {
 		return &kubecontrollers.KubeControllersConfiguration{
-			Installation:      cc.Installation,
-			ClusterDomain:     cc.ClusterDomain,
-			TrustedBundle:     cc.TrustedBundle,
+			Installation:      ci.Installation,
+			ClusterDomain:     ci.ClusterDomain,
+			TrustedBundle:     ci.TrustedBundle,
 			MetricsPort:       9094,
 			Namespace:         common.CalicoNamespace,
 			BindingNamespaces: []string{common.CalicoNamespace},
@@ -145,11 +145,11 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	// render builds the base calico-kube-controllers objects and applies the
 	// enterprise modifier, exactly as the component handler does.
-	renderKubeControllers := func(cc contexts.ControllerContext, rc render.RenderContext) []client.Object {
-		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(cc))
+	renderKubeControllers := func(ci controller.Inputs, ri render.Inputs) []client.Object {
+		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, create, del)
+		out, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, create, del)
 		return out
 	}
 
@@ -160,10 +160,10 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	}
 
 	It("layers the enterprise rules, controllers, and metrics TLS on (WAF off)", func() {
-		ecc, _, err := ext.ExtendContext(ctx, newControllerContext(operatorv1.CalicoEnterprise))
-		rc := ecc.RenderContext
+		eci, _, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
-		objs := renderKubeControllers(newControllerContext(operatorv1.CalicoEnterprise), rc)
+		objs := renderKubeControllers(newControllerInputs(operatorv1.CalicoEnterprise), ri)
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole)
 		Expect(ok).To(BeTrue())
@@ -184,9 +184,9 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	})
 
 	It("layers the full WAF surface on when the GatewayAPI extension is enabled", func() {
-		cc := wafControllerContext()
-		ecc, managed, err := ext.ExtendContext(ctx, cc)
-		rc := ecc.RenderContext
+		ci := wafControllerInputs()
+		eci, managed, err := ext.ExtendInputs(ctx, ci)
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
 		for _, kp := range managed {
@@ -194,7 +194,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		}
 		Expect(names).To(ContainElement(applicationlayer.WAFWebhookServerTLSSecretName))
 
-		objs := renderKubeControllers(cc, rc)
+		objs := renderKubeControllers(ci, ri)
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole)
 		Expect(ok).To(BeTrue())
@@ -223,26 +223,26 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	})
 
 	It("deletes the WAF webhook surface when the extension is disabled", func() {
-		cc := newControllerContext(operatorv1.CalicoEnterprise)
-		ecc, _, err := ext.ExtendContext(ctx, cc)
-		rc := ecc.RenderContext
+		ci := newControllerInputs(operatorv1.CalicoEnterprise)
+		eci, _, err := ext.ExtendInputs(ctx, ci)
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(cc))
+		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		_, toDelete := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, rc, create, del)
+		_, toDelete := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllers, ri, create, del)
 
 		_, ok := extensions.FindObject[*corev1.Service](toDelete, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeTrue(), "the webhook Service should be queued for deletion")
 	})
 
 	It("keeps the WAF controller wired but de-programs when GatewayAPI is present and WAF is disabled", func() {
-		cc := gatewayNoWAFControllerContext()
-		ecc, _, err := ext.ExtendContext(ctx, cc)
-		rc := ecc.RenderContext
+		ci := gatewayNoWAFControllerInputs()
+		eci, _, err := ext.ExtendInputs(ctx, ci)
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
-		objs := renderKubeControllers(cc, rc)
+		objs := renderKubeControllers(ci, ri)
 
 		// The applicationlayer controller and its WAF v3 RBAC stay wired even though WAF
 		// is disabled, so the controller can tear down the EnvoyExtensionPolicies it
@@ -267,14 +267,14 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	})
 
 	It("adds the WAF webhook ingress rule to the network policy when enabled", func() {
-		cc := wafControllerContext()
-		ecc, _, err := ext.ExtendContext(ctx, cc)
-		rc := ecc.RenderContext
+		ci := wafControllerInputs()
+		eci, _, err := ext.ExtendInputs(ctx, ci)
+		ri := eci.Inputs
 		Expect(err).NotTo(HaveOccurred())
 
-		comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(cc), nil)
+		comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(ci), nil)
 		create, del := comp.Objects()
-		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllersPolicy, rc, create, del)
+		objs, _ := extensionstest.ApplyExtensions(ext, render.ComponentNameKubeControllersPolicy, ri, create, del)
 
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, kubecontrollers.KubeControllerNetworkPolicyName)
 		Expect(ok).To(BeTrue())
@@ -288,9 +288,9 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	})
 })
 
-// wafControllerContext builds a controller context with a WAF-enabled GatewayAPI CR
+// wafControllerInputs builds a controller inputs with a WAF-enabled GatewayAPI CR
 // and an install pull secret, so the installation hook produces the full WAF data.
-func wafControllerContext() contexts.ControllerContext {
+func wafControllerInputs() controller.Inputs {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -312,8 +312,8 @@ func wafControllerContext() contexts.ControllerContext {
 	certManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	return contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	return controller.Inputs{
+		Inputs: render.Inputs{
 			Installation: &operatorv1.InstallationSpec{
 				Variant:          operatorv1.CalicoEnterprise,
 				Registry:         "test-reg/",
@@ -323,17 +323,17 @@ func wafControllerContext() contexts.ControllerContext {
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         contexts.InstallationController,
+		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}
 }
 
-// gatewayNoWAFControllerContext builds a controller context with a GatewayAPI CR
+// gatewayNoWAFControllerInputs builds a controller inputs with a GatewayAPI CR
 // present but its WAF extension explicitly disabled. The applicationlayer controller
 // and its RBAC stay wired so it can de-program, but no active WAF surface is produced
 // (EV-6751).
-func gatewayNoWAFControllerContext() contexts.ControllerContext {
+func gatewayNoWAFControllerInputs() controller.Inputs {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -355,8 +355,8 @@ func gatewayNoWAFControllerContext() contexts.ControllerContext {
 	certManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())
 
-	return contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	return controller.Inputs{
+		Inputs: render.Inputs{
 			Installation: &operatorv1.InstallationSpec{
 				Variant:          operatorv1.CalicoEnterprise,
 				Registry:         "test-reg/",
@@ -366,7 +366,7 @@ func gatewayNoWAFControllerContext() contexts.ControllerContext {
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         contexts.InstallationController,
+		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}

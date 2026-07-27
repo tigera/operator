@@ -38,7 +38,7 @@ import (
 )
 
 // This exercises the full path comment-by-comment: a real render component goes
-// through CreateOrUpdateOrDelete with an enterprise RenderContext, and the
+// through CreateOrUpdateOrDelete with an enterprise Inputs, and the
 // registered modifier must match the real render output by name. If render ever
 // renames the typha ClusterRole, the modifier silently no-ops and this fails.
 var _ = Describe("componentHandler enterprise modifier integration", func() {
@@ -72,8 +72,8 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 			},
 		})
 
-		renderCtx := render.RenderContext{Installation: instance}
-		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderContext(renderCtx), utils.WithExtensions(enterprise.New()))
+		renderInputs := render.Inputs{Installation: instance}
+		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderInputs(renderInputs), utils.WithExtensions(enterprise.New()))
 		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
 
 		role := &rbacv1.ClusterRole{}

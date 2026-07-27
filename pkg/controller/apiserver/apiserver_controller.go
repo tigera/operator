@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -40,8 +40,8 @@ import (
 	"github.com/tigera/operator/pkg/common/validation"
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/contexts"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 	"github.com/tigera/operator/pkg/controller/options"
@@ -75,7 +75,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	c, err := ctrlruntime.NewController("apiserver-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("apiserver-controller", mgr, ctrl.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
@@ -106,7 +106,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if opts.EnterpriseCRDExists {
 		// The variant extension registers the enterprise watches it needs (the management
 		// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
-		if err = opts.Extensions.SetupWatches(contexts.APIServerController, c); err != nil {
+		if err = opts.Extensions.SetupWatches(controller.APIServer, c); err != nil {
 			return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
 		}
 	}
@@ -310,26 +310,26 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// Run the variant extension: it validates the configuration and produces the
 	// enterprise render data (the trusted bundle, the query server certificate, the
 	// management cluster CRs, the OIDC config, and the resolved L7 sidecar images). For
-	// the core operator this is a no-op and the render context carries no extension data.
-	cc := contexts.ControllerContext{
-		RenderContext: render.RenderContext{
+	// the core operator this is a no-op and the render inputs carries no extension data.
+	ci := controller.Inputs{
+		Inputs: render.Inputs{
 			Installation:  installationSpec,
 			ClusterDomain: r.opts.ClusterDomain,
 		},
-		Controller:         contexts.APIServerController,
+		Controller:         controller.APIServer,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, cc); err != nil {
+	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	cc, managedKeyPairs, err := r.opts.Extensions.ExtendContext(ctx, cc)
+	ci, managedKeyPairs, err := r.opts.Extensions.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	trustedBundle := cc.TrustedBundle
+	trustedBundle := ci.TrustedBundle
 
 	// The webhooks component (v3-CRD mode) needs the ManagementCluster to register the
 	// managed-cluster webhook. Reading it requires the enterprise CRDs.
@@ -379,7 +379,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderContext(cc.RenderContext),
+		utils.WithRenderInputs(ci.Inputs),
 		utils.WithExtensions(r.opts.Extensions),
 	)
 

@@ -125,10 +125,10 @@ type apiServerPolicyComponent struct {
 
 func (apiServerPolicyComponent) ModifierKey() string { return ComponentNameAPIServerPolicy }
 
-// ExtensionContext hands the policy modifier the config it needs to look up container
+// ExtensionInputs hands the policy modifier the config it needs to look up container
 // ports.
-func (c apiServerPolicyComponent) ExtensionContext() any {
-	return APIServerExtensionContext{Config: c.cfg}
+func (c apiServerPolicyComponent) ExtensionInputs() any {
+	return APIServerExtensionInputs{Config: c.cfg}
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
@@ -169,11 +169,11 @@ type apiServerComponent struct {
 	calicoImage string
 }
 
-// APIServerExtensionContext carries the API server's render configuration and resolved
+// APIServerExtensionInputs carries the API server's render configuration and resolved
 // image to a variant modifier. The modifier uses these to build variant-specific objects
 // and to layer additional containers, volumes, and configuration onto the rendered
 // deployment.
-type APIServerExtensionContext struct {
+type APIServerExtensionInputs struct {
 	Config      *APIServerConfiguration
 	CalicoImage string
 }
@@ -182,10 +182,10 @@ type APIServerExtensionContext struct {
 // applied by the modifier registered under this key.
 func (c *apiServerComponent) ModifierKey() string { return ComponentNameAPIServer }
 
-// ExtensionContext implements render.ExtensionContextProvider, handing the modifier the
+// ExtensionInputs implements render.ExtensionInputsProvider, handing the modifier the
 // config and resolved image it needs.
-func (c *apiServerComponent) ExtensionContext() any {
-	return APIServerExtensionContext{Config: c.cfg, CalicoImage: c.calicoImage}
+func (c *apiServerComponent) ExtensionInputs() any {
+	return APIServerExtensionInputs{Config: c.cfg, CalicoImage: c.calicoImage}
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {

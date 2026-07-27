@@ -27,7 +27,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/contexts"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
@@ -45,7 +45,7 @@ var windowsNodeContainers = map[string]bool{"felix": true, "node": true, "confd"
 
 // Register wires the windows controller hook and modifiers into the variant.
 func Register(v *extensions.Variant) {
-	v.Controller(contexts.WindowsController, windowsControllerExtension{})
+	v.Controller(controller.Windows, windowsControllerExtension{})
 	v.Image(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
 	v.Image(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
 	v.Modify(render.ComponentNameWindows, modifyWindows)
@@ -56,20 +56,20 @@ func Register(v *extensions.Variant) {
 type windowsControllerExtension struct{}
 
 // windowsRenderData is the controller-produced data the windows extension hands to
-// its modifier through RenderContext.Extension.
+// its modifier through Inputs.Extension.
 type windowsRenderData struct {
 	prometheusServerTLS certificatemanagement.KeyPairInterface
 }
 
 // windowsData pulls the windows extension's render data back out of the render
 // context, returning the zero value when none is set.
-func windowsData(rc render.RenderContext) windowsRenderData {
-	return render.ExtractExtensionData[windowsRenderData](rc)
+func windowsData(ri render.Inputs) windowsRenderData {
+	return render.ExtractExtensionData[windowsRenderData](ri)
 }
 
 // Validate rejects windows installation config Calico Enterprise does not support.
-func (windowsControllerExtension) Validate(ctx context.Context, cc contexts.ControllerContext) error {
-	return installation.ValidateReporterPort(cc.FelixConfiguration)
+func (windowsControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
+	return installation.ValidateReporterPort(ci.FelixConfiguration)
 }
 
 // Watches registers the enterprise secrets the windows controller reconciles on.
@@ -85,35 +85,35 @@ func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
 	return nil
 }
 
-// ExtendContext fetches the node prometheus keypair the installation controller
-// created and stashes it in the render context for the windows modifier.
-func (windowsControllerExtension) ExtendContext(ctx context.Context, cc contexts.ControllerContext) (contexts.ControllerContext, []certificatemanagement.KeyPairInterface, error) {
-	tls, err := cc.CertificateManager.GetKeyPair(
-		cc.Client,
+// ExtendInputs fetches the node prometheus keypair the installation controller
+// created and stashes it in the render inputs for the windows modifier.
+func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	tls, err := ci.CertificateManager.GetKeyPair(
+		ci.Client,
 		render.NodePrometheusTLSServerSecret,
 		common.OperatorNamespace(),
-		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, cc.ClusterDomain),
+		dns.GetServiceDNSNames(render.WindowsNodeMetricsService, common.CalicoNamespace, ci.ClusterDomain),
 	)
 	if err != nil {
-		return cc, nil, fmt.Errorf("error getting node prometheus TLS certificate: %w", err)
+		return ci, nil, fmt.Errorf("error getting node prometheus TLS certificate: %w", err)
 	}
-	cc.Extension = windowsRenderData{prometheusServerTLS: tls}
-	return cc, nil, nil
+	ci.Extension = windowsRenderData{prometheusServerTLS: tls}
+	return ci, nil, nil
 }
 
 // modifyWindows layers Calico Enterprise behavior onto the rendered
 // calico-node-windows objects: the node-metrics Service and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
-func modifyWindows(rc render.RenderContext, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyWindows(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
-		modifyWindowsDaemonSet(rc, ds)
+		modifyWindowsDaemonSet(ri, ds)
 	}
 
-	return append(objs, windowsNodeMetricsService(rc)), del
+	return append(objs, windowsNodeMetricsService(ri)), del
 }
 
-func modifyWindowsDaemonSet(rc render.RenderContext, ds *appsv1.DaemonSet) {
+func modifyWindowsDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 	dirOrCreate := corev1.HostPathDirectoryOrCreate
 	spec := &ds.Spec.Template.Spec
 
@@ -128,7 +128,7 @@ func modifyWindowsDaemonSet(rc render.RenderContext, ds *appsv1.DaemonSet) {
 			continue
 		}
 
-		c.Env = append(c.Env, windowsEnterpriseEnv(rc)...)
+		c.Env = append(c.Env, windowsEnterpriseEnv(ri)...)
 
 		// Enterprise mounts the calico log directory in place of the OSS CNI log
 		// directory, so drop the OSS mount before adding the enterprise one.
@@ -136,16 +136,16 @@ func modifyWindowsDaemonSet(rc render.RenderContext, ds *appsv1.DaemonSet) {
 		c.VolumeMounts = append(c.VolumeMounts, corev1.VolumeMount{MountPath: "/var/log/calico", Name: "var-log-calico"})
 	}
 
-	mountWindowsPrometheusTLS(rc, ds)
+	mountWindowsPrometheusTLS(ri, ds)
 }
 
 // windowsEnterpriseEnv is the Enterprise felix configuration added to the
 // calico-node-windows containers.
-func windowsEnterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
-	tls := windowsData(rc).prometheusServerTLS
+func windowsEnterpriseEnv(ri render.Inputs) []corev1.EnvVar {
+	tls := windowsData(ri).prometheusServerTLS
 	env := []corev1.EnvVar{
 		{Name: "FELIX_PROMETHEUSREPORTERENABLED", Value: "true"},
-		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", installation.NodeReporterPort(rc.FelixConfiguration))},
+		{Name: "FELIX_PROMETHEUSREPORTERPORT", Value: fmt.Sprintf("%d", installation.NodeReporterPort(ri.FelixConfiguration))},
 		{Name: "FELIX_FLOWLOGSFILEENABLED", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDELABELS", Value: "true"},
 		{Name: "FELIX_FLOWLOGSFILEINCLUDEPOLICIES", Value: "true"},
@@ -156,16 +156,16 @@ func windowsEnterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
 		{Name: "FELIX_DNSLOGSFILEPERNODELIMIT", Value: "1000"},
 	}
 
-	if tls != nil && rc.TrustedBundle != nil {
+	if tls != nil && ri.TrustedBundle != nil {
 		env = append(env,
 			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCERTFILE", Value: tls.VolumeMountCertificateFilePath()},
 			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERKEYFILE", Value: tls.VolumeMountKeyFilePath()},
-			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: rc.TrustedBundle.MountPath()},
+			corev1.EnvVar{Name: "FELIX_PROMETHEUSREPORTERCAFILE", Value: ri.TrustedBundle.MountPath()},
 		)
 	}
 
 	// Providers without a kube-dns service need a non-default trusted DNS server.
-	switch rc.Installation.KubernetesProvider {
+	switch ri.Installation.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:
 		env = append(env, corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"})
 	case operatorv1.ProviderRKE2:
@@ -178,8 +178,8 @@ func windowsEnterpriseEnv(rc render.RenderContext) []corev1.EnvVar {
 // mountWindowsPrometheusTLS mounts the node prometheus reporter keypair onto the
 // windows daemonset: the volume, the volume mount on each node container, and
 // the pod hash annotation that rolls the pods on cert rotation.
-func mountWindowsPrometheusTLS(rc render.RenderContext, ds *appsv1.DaemonSet) {
-	tls := windowsData(rc).prometheusServerTLS
+func mountWindowsPrometheusTLS(ri render.Inputs, ds *appsv1.DaemonSet) {
+	tls := windowsData(ri).prometheusServerTLS
 	if tls == nil {
 		return
 	}
@@ -202,8 +202,8 @@ func mountWindowsPrometheusTLS(rc render.RenderContext, ds *appsv1.DaemonSet) {
 
 // windowsNodeMetricsService builds the enterprise-only calico-node-metrics-windows
 // Service.
-func windowsNodeMetricsService(rc render.RenderContext) *corev1.Service {
-	reporterPort := installation.NodeReporterPort(rc.FelixConfiguration)
+func windowsNodeMetricsService(ri render.Inputs) *corev1.Service {
+	reporterPort := installation.NodeReporterPort(ri.FelixConfiguration)
 	return &corev1.Service{
 		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{

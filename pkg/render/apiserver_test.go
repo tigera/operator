@@ -252,6 +252,21 @@ var _ = Describe("API server rendering tests (Calico)", func() {
 		rtest.ExpectResourceInList(deleteResources, "calico-apiserver", "calico-system", "policy", "v1", "PodDisruptionBudget")
 	})
 
+	It("should not register the aggregation APIService when not requiring the aggregation server", func() {
+		cfg.RequiresAggregationServer = false
+
+		component, err := render.APIServer(cfg)
+		Expect(err).To(BeNil(), "Expected APIServer to create successfully %s", err)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		// The v3.projectcalico.org APIService registration must be absent in v3 CRD mode.
+		for _, r := range resources {
+			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("APIService"),
+				"unexpected APIService registered in v3 CRD mode: %s", r.GetName())
+		}
+	})
+
 	It("should render an API server with custom configuration", func() {
 		expectedResources := []client.Object{
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "calico-apiserver", Namespace: "calico-system"}, TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "ServiceAccount"}},

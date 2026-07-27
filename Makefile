@@ -104,12 +104,12 @@ LOCAL_USER_ID?=$(shell id -u $$USER)
 # The project Go version.
 GO_VERSION?=1.26.5
 # Version of Kubernetes to use for dependencies, tests, and kubectl.
-K8S_VERSION?=v1.36.2
+K8S_VERSION?=v1.37.0-beta.0
 # The version of LLVM to use for the go-build image.
 LLVM_VERSION?=21.1.8
 # Calico toolchain versions and the calico/go-build image to use.
 GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
-CALICO_BASE_VER ?= ubi9-1783525764
+CALICO_BASE_VER ?= ubi9-1784675397
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -254,7 +254,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.8.0
+ENVOY_GATEWAY_VERSION ?= v1.8.2
 ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
 $(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)

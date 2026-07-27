@@ -448,6 +448,36 @@ var _ = Describe("API server enterprise modifier", func() {
 			_, ok = extensions.FindObject[*appsv1.Deployment](del, render.APIServerName)
 			Expect(ok).To(BeFalse())
 		})
+
+		It("registers no APIService", func() {
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
+			eci, _, err := ext.ExtendInputs(ctx, ci)
+			ri := eci.Inputs
+			Expect(err).NotTo(HaveOccurred())
+
+			cfg := &render.APIServerConfiguration{
+				RequiresAggregationServer: false,
+				K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
+				Installation:              ci.Installation,
+				APIServer:                 &operatorv1.APIServerSpec{},
+				TLSKeyPair:                apiServerKeyPair(ci),
+				TrustedBundle:             ri.TrustedBundle,
+				KubernetesVersion:         &common.VersionInfo{Major: 1, Minor: 31},
+			}
+			comp, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
+			create, del := comp.Objects()
+
+			ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+			Expect(ok).To(BeTrue())
+			create, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
+
+			for _, r := range create {
+				Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("APIService"),
+					"unexpected APIService registered in v3 CRD mode: %s", r.GetName())
+			}
+		})
 	})
 
 	Context("sidecar / L7 injection", func() {

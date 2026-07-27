@@ -36,6 +36,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -314,16 +315,16 @@ var _ = Describe("Utils ElasticSearch test", func() {
 })
 
 type fakeClient struct {
-	discovery discovery.DiscoveryInterface
+	discovery discovery.DiscoveryInterfaces
 	kubernetes.Interface
 }
 
 type fakeDiscovery struct {
-	discovery.DiscoveryInterface
+	discovery.DiscoveryInterfaces
 	mock.Mock
 }
 
-func (m fakeClient) Discovery() discovery.DiscoveryInterface {
+func (m fakeClient) Discovery() discovery.DiscoveryInterfaces {
 	return m.discovery
 }
 
@@ -339,6 +340,11 @@ type mockController struct {
 
 func (m *mockController) WatchObject(obj client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
 	args := m.Called(obj, eventhandler, predicates)
+	return args.Error(0)
+}
+
+func (m *mockController) WatchObjectInCache(cch cache.Cache, obj client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	args := m.Called(cch, obj, eventhandler, predicates)
 	return args.Error(0)
 }
 

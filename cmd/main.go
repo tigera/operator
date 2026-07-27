@@ -324,6 +324,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 			Cache: &client.CacheOptions{
 				DisableFor: []client.Object{
 					&v3.LicenseKey{},
+					// Pods are only listed by label/namespace selector from a handful of
+					// controllers. Caching them starts a shared informer that holds every pod
+					// in the cluster in memory (~36 MiB per 1000 pods), so read them uncached
+					// from the apiserver instead.
+					&corev1.Pod{},
 				},
 			},
 		},
@@ -536,23 +541,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// Before we start any controllers, make sure our options are valid.
 	if err := verifyConfiguration(ctx, clientset, options); err != nil {
 		setupLog.Error(err, "Invalid configuration")
-		os.Exit(1)
-	}
-
-	// Register a field-selector index on Pod spec.nodeName. The podiprecovery
-	// controller uses this to list operator-managed pods on a specific node
-	// in a single server-side query. Indexes must be registered before the
-	// manager starts (and before any controllers attempt server-side field
-	// lookups via the cached client).
-	if err := mgr.GetFieldIndexer().IndexField(
-		ctx,
-		&corev1.Pod{},
-		"spec.nodeName",
-		func(obj client.Object) []string {
-			return []string{obj.(*corev1.Pod).Spec.NodeName}
-		},
-	); err != nil {
-		setupLog.Error(err, "unable to register field index for pod spec.nodeName")
 		os.Exit(1)
 	}
 

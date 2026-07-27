@@ -204,6 +204,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
+	// Watched so that deleting the RBAC management UI feature gate re-seeds it.
+	if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
+	}
+
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
 	}
@@ -250,14 +255,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch the Manager CR so changes to spec.rbac re-run the installation
-		// reconcile (the rbacsync controller in calico-kube-controllers is
-		// gated on it).
-		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
 		}
 
 		// watch for change to primary resource LogCollector
@@ -1057,7 +1054,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
-	var managerCR *operatorv1.Manager
 	var logCollector *operatorv1.LogCollector
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
@@ -1077,12 +1073,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		managerCR, err = utils.GetManager(ctx, r.client, false, "")
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1342,6 +1332,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// Seeded right after the namespace it lives in, so the switch exists even on a
+	// cluster that is degraded for an unrelated reason.
+	if instance.Spec.Variant.IsEnterprise() {
+		if err := r.seedRBACManagementConfigMap(ctx, reqLogger); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating the RBAC management UI ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Build the list of components to render, in rendering order.
@@ -1720,8 +1719,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// the kube-controllers component (and deleted when the WAF extension is
 		// disabled); the caBundle is the operator CA that issued the serving
 		// cert above.
-		WAFWebhookCABundle:    certificateManager.KeyPair().GetCertificatePEM(),
-		RBACManagementEnabled: managerCR.RBACManagementEnabled(),
+		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
@@ -2361,6 +2359,32 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 	} else {
 		return nil, nil
 	}
+}
+
+// seedRBACManagementConfigMap creates the rbac-ui-config ConfigMap, disabled, if it is
+// not already present. This controller owns it because every cluster needs one in order
+// to control its own access to the RBAC management UI.
+//
+// Create-only and ownerless, so an admin's toggle survives both reconciles and
+// Installation deletion. Deleting the ConfigMap is fail-closed: consumers read a missing
+// one as disabled and this re-seeds it disabled, since the previous value is not tracked.
+func (r *ReconcileInstallation) seedRBACManagementConfigMap(ctx context.Context, log logr.Logger) error {
+	cm := render.RBACManagementConfigMap()
+
+	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
+	handler.SetCreateOnly()
+	err := handler.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(cm), nil)
+	if err != nil {
+		if apierrors.IsAlreadyExists(err) {
+			// The value is the admin's, so there is nothing to do.
+			return nil
+		}
+		return err
+	}
+
+	log.Info("Seeded the RBAC management UI feature gate, disabled",
+		"configMap", fmt.Sprintf("%s/%s", cm.Namespace, cm.Name), "key", render.RBACManagementConfigMapKey)
+	return nil
 }
 
 func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {

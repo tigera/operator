@@ -251,6 +251,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: kubecontrollers.WASMPullSecretName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Secret"},
 			{name: kubecontrollers.WASMCACertName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ConfigMap"},
@@ -294,7 +296,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.ImagePullSecrets).To(ContainElement(corev1.LocalObjectReference{Name: "tigera-pull-secret"}))
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
-			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
+			Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer,rbacsync",
 		}))
 		// Application-layer reconcilers consume these env vars to program WAF
 		// EnvoyExtensionPolicy attachments.
@@ -315,7 +317,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(38), "cluster role should have 38 rules")
+		Expect(clusterRole.Rules).To(HaveLen(53), "cluster role should have 53 rules")
 
 		// Application-layer reconciler RBAC: WAF CRDs (resources, /status, /finalizers).
 		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
@@ -421,6 +423,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: "calico-kube-controllers-endpoint-controller", ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
@@ -437,27 +441,14 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
-	Context("RBAC management UI gate", func() {
+	// rbacsync runs on every Enterprise cluster and decides per cluster whether to
+	// reconcile by reading that cluster's rbac-ui-config ConfigMap.
+	Context("RBAC management UI", func() {
 		BeforeEach(func() {
 			instance.Variant = operatorv1.CalicoEnterprise
 		})
 
-		It("does not enable rbacsync when RBACManagementEnabled is false", func() {
-			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			envs := dp.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{
-				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer,service,federatedservices,usage",
-			}))
-
-			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
-		})
-
-		It("enables rbacsync and adds the controller's RBAC when RBACManagementEnabled is true", func() {
-			cfg.RBACManagementEnabled = true
+		It("enables rbacsync and grants it read access to both ConfigMaps it depends on", func() {
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
@@ -475,6 +466,27 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				ResourceNames: []string{"tigera-idp-groups"},
 				Verbs:         []string{"get", "list", "watch"},
 			}), "expected read-only access to tigera-idp-groups in calico-system")
+			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{render.RBACManagementConfigMapName},
+				Verbs:         []string{"get", "list", "watch"},
+			}), "expected read-only access to the feature gate in calico-system")
+		})
+
+		It("does not enable rbacsync or grant its RBAC for Calico", func() {
+			instance.Variant = operatorv1.Calico
+			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+			Expect(component.ResolveImages(nil)).To(BeNil())
+			resources, _ := component.Objects()
+
+			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			envs := dp.Spec.Template.Spec.Containers[0].Env
+			Expect(envs).To(ContainElement(corev1.EnvVar{
+				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer",
+			}))
+
+			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
 		})
 	})
 
@@ -560,6 +572,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
 			{name: kubecontrollers.ManagedClustersWatchRoleBindingName, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: applicationlayer.WAFWebhookServiceName, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 			{name: "tigera-waf.applicationlayer.projectcalico.org", ns: "", group: "admissionregistration.k8s.io", version: "v1", kind: "ValidatingWebhookConfiguration"},
@@ -591,7 +605,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		envs := dp.Spec.Template.Spec.Containers[0].Env
 		Expect(envs).To(ContainElement(corev1.EnvVar{
 			Name:  "ENABLED_CONTROLLERS",
-			Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer",
+			Value: "node,loadbalancer,service,federatedservices,usage,applicationlayer,rbacsync",
 		}))
 
 		Expect(len(dp.Spec.Template.Spec.Containers[0].VolumeMounts)).To(Equal(1))
@@ -612,6 +626,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 			{name: kubecontrollers.KubeControllerMetrics, ns: common.CalicoNamespace, group: "", version: "v1", kind: "Service"},
 		}
@@ -829,6 +845,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			{name: kubecontrollers.KubeControllerServiceAccount, ns: common.CalicoNamespace, group: "", version: "v1", kind: "ServiceAccount"},
 			{name: kubecontrollers.KubeControllerRole, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRole"},
 			{name: kubecontrollers.KubeControllerRoleBinding, ns: "", group: "rbac.authorization.k8s.io", version: "v1", kind: "ClusterRoleBinding"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "Role"},
+			{name: "calico-kube-controllers-rbac-sync", ns: common.CalicoNamespace, group: "rbac.authorization.k8s.io", version: "v1", kind: "RoleBinding"},
 			{name: kubecontrollers.KubeController, ns: common.CalicoNamespace, group: "apps", version: "v1", kind: "Deployment"},
 		}
 

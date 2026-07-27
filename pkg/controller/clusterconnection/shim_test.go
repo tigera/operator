@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/enterprise"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -40,6 +41,7 @@ func NewReconcilerWithShims(
 ) reconcile.Reconciler {
 	opts := options.ControllerOptions{
 		ShutdownContext: context.Background(),
+		Extensions:      enterprise.New(),
 	}
 
 	return newReconciler(cli, schema, status, provider, tierWatchReady, clusterInfoWatchReady, opts)

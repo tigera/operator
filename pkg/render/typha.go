@@ -52,6 +52,10 @@ const (
 
 	TyphaContainerName = "calico-typha"
 
+	// TyphaClusterRoleName is the typha ClusterRole. A modifier reaches for it by
+	// name, so it is declared here rather than inline at the object it names.
+	TyphaClusterRoleName = "calico-typha"
+
 	TyphaNonClusterHostSuffix            = "-noncluster-host"
 	TyphaNonClusterHostNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "typha-noncluster-host-access"
 
@@ -112,6 +116,10 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
+
+func (c *typhaComponent) ModifierKey() string { return TyphaKey.String() }
+
+func (c *typhaComponent) ExtensionInputs() any { return TyphaExtensionInputs{} }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	pdb := c.typhaPodDisruptionBudget()
@@ -207,7 +215,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-typha",
+			Name:   TyphaClusterRoleName,
 			Labels: map[string]string{},
 		},
 
@@ -355,26 +363,6 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 				Verbs:     []string{"get", "list", "watch"},
 			},
 		},
-	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		extraRules := []rbacv1.PolicyRule{
-			{
-				// Tigera Secure needs to be able to read licenses, and config.
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{
-					"bfdconfigurations",
-					"deeppacketinspections",
-					"egressgatewaypolicies",
-					"externalnetworks",
-					"licensekeys",
-					"networks",
-					"packetcaptures",
-					"remoteclusterconfigurations",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-		}
-		role.Rules = append(role.Rules, extraRules...)
 	}
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
@@ -631,15 +619,6 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "gke"})
 	case operatorv1.PluginAzureVNET:
 		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
-	}
-
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			typhaEnv = append(typhaEnv, corev1.EnvVar{
-				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value(),
-			})
-		}
 	}
 
 	// If host-local IPAM is in use, we need to configure typha to use the Kubernetes pod CIDR.

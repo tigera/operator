@@ -17,9 +17,12 @@ package manager
 import (
 	"context"
 	"fmt"
+	"strings"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +31,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -35,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/compliance"
+	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -47,6 +52,7 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -157,6 +163,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch LogStorage resource: %w", err)
+	}
+	if err = c.WatchObject(&operatorv1.GatewayAPI{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch GatewayAPI resource: %w", err)
 	}
 	if opts.MultiTenant {
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
@@ -719,6 +728,28 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Resolve gateway component if spec.gateway is configured, otherwise
+	// queue a deletion component to clean up any previously created resources.
+	var gatewayComponent render.Component
+	if instance.Spec.Gateway != nil {
+		gwComp, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
+		if err != nil {
+			return result, err
+		}
+		if gwComp == nil {
+			return result, nil
+		}
+		gatewayComponent = gwComp
+	} else {
+		gatewayComponent = rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
+			ResourcePrefix:   ManagerGatewayResourcePrefix,
+			GatewayNamespace: helper.InstallNamespace(),
+			BackendNamespace: helper.InstallNamespace(),
+			TLSSecretName:    ManagerGatewayTLSSecretName,
+			Enterprise:       true,
+		})
+	}
+
 	components := []render.Component{
 		// Install manager components.
 		component,
@@ -743,11 +774,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		components = append(components, tunnelSecretPassthrough)
 	}
 
+	components = append(components, gatewayComponent)
+
 	for _, component := range components {
 		if err := defaultHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err
 		}
+	}
+
+	if instance.Spec.Gateway != nil {
+		r.checkGatewayStatus(ctx, instance.Spec.Gateway.NamespaceOrDefault())
 	}
 
 	// Check BYO certificate expiry warnings.
@@ -853,4 +890,196 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 		return nil, nil
 	}
 	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
+}
+
+const (
+	ManagerGatewayTLSSecretName  = "calico-manager-gateway-tls"
+	ManagerGatewayResourcePrefix = "calico-manager"
+)
+
+// resolveGateway validates the Manager spec.gateway configuration, resolves the
+// GatewayClass, provisions the TLS keypair, and returns a gateway render component.
+func (r *ReconcileManager) resolveGateway(
+	ctx context.Context,
+	instance *operatorv1.Manager,
+	authenticationCR *operatorv1.Authentication,
+	certManager certificatemanager.CertificateManager,
+	helper utils.NamespaceHelper,
+	logc logr.Logger,
+) (render.Component, reconcile.Result, error) {
+	gw := instance.Spec.Gateway
+
+	// Fetch GatewayAPI CR.
+	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; gateway resources will not be rendered", err, logc)
+			return nil, reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
+		return nil, reconcile.Result{}, err
+	}
+
+	// Resolve gatewayClassName.
+	gatewayClassName, err := resolveGatewayClassName(gw, gatewayAPI)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to resolve gateway class", err, logc)
+		return nil, reconcile.Result{}, err
+	}
+
+	// OIDC hostname mismatch check. Either field may include the scheme (e.g. "https://host").
+	if authenticationCR != nil && authenticationCR.Spec.ManagerDomain != "" {
+		trimScheme := func(s string) string {
+			return strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
+		}
+		if trimScheme(gw.Hostname) != trimScheme(authenticationCR.Spec.ManagerDomain) {
+			err := fmt.Errorf("spec.gateway.hostname %q does not match Authentication.spec.managerDomain — OIDC redirects will fail",
+				gw.Hostname)
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Gateway hostname mismatch", err, logc)
+			return nil, reconcile.Result{}, err
+		}
+	}
+
+	// Create the gateway namespace if it does not exist. calico-system is
+	// skipped: the Installation controller owns it.
+	if gwNS := gw.NamespaceOrDefault(); gwNS != common.CalicoNamespace {
+		if err := r.ensureGatewayNamespace(ctx, gwNS); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, logc)
+			return nil, reconcile.Result{}, err
+		}
+	}
+
+	// Provision TLS keypair for the gateway listener.
+	gwTLSKeyPair, err := certManager.GetOrCreateKeyPair(
+		r.client,
+		ManagerGatewayTLSSecretName,
+		helper.TruthNamespace(),
+		[]string{gw.Hostname})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, logc)
+		return nil, reconcile.Result{}, err
+	}
+
+	gwCfg := &rgateway.Configuration{
+		Hostname:                     gw.Hostname,
+		GatewayNamespace:             gw.NamespaceOrDefault(),
+		GatewayClassName:             gatewayClassName,
+		BackendServiceName:           render.ManagerServiceName,
+		BackendPort:                  render.ManagerPort,
+		BackendNamespace:             helper.InstallNamespace(),
+		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
+		TLSKeyPair:                   gwTLSKeyPair,
+		ResourcePrefix:               ManagerGatewayResourcePrefix,
+		Enterprise:                   true,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+	}
+
+	return rgateway.Component(gwCfg), reconcile.Result{}, nil
+}
+
+// ensureGatewayNamespace creates the gateway namespace if it does not exist.
+// The namespace is created without an owner reference and is never deleted by
+// the operator: a user-provided namespace may hold other workloads.
+func (r *ReconcileManager) ensureGatewayNamespace(ctx context.Context, name string) error {
+	err := r.client.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
+	if err == nil || !errors.IsNotFound(err) {
+		return err
+	}
+	ns := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{"name": name},
+		},
+	}
+	if err := r.client.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
+}
+
+// checkGatewayStatus reads the Gateway and HTTPRoute status conditions and
+// surfaces warnings when they are not healthy. This does not block
+// reconciliation — the operator keeps reconciling and the warning clears
+// once the conditions become healthy.
+func (r *ReconcileManager) checkGatewayStatus(ctx context.Context, gatewayNS string) {
+	const warningPrefix = "gateway-"
+	gatewayName := ManagerGatewayResourcePrefix + "-gateway"
+	routeName := ManagerGatewayResourcePrefix + "-route"
+
+	gw := &gapi.Gateway{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: gatewayName, Namespace: gatewayNS}, gw); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to read Gateway status", "gateway", gatewayName, "namespace", gatewayNS)
+			r.status.SetWarning(warningPrefix+"read", fmt.Sprintf("Failed to read Gateway %s/%s status", gatewayNS, gatewayName))
+		}
+		return
+	}
+	r.status.ClearWarning(warningPrefix + "read")
+
+	r.checkCondition(gw.Status.Conditions, string(gapi.GatewayConditionAccepted), warningPrefix+"accepted", "Gateway not accepted")
+	r.checkCondition(gw.Status.Conditions, string(gapi.GatewayConditionProgrammed), warningPrefix+"programmed", "Gateway not programmed")
+
+	route := &gapi.HTTPRoute{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: routeName, Namespace: gatewayNS}, route); err != nil {
+		if !errors.IsNotFound(err) {
+			log.Error(err, "Failed to read HTTPRoute status", "route", routeName, "namespace", gatewayNS)
+			r.status.SetWarning(warningPrefix+"route-read", fmt.Sprintf("Failed to read HTTPRoute %s/%s status", gatewayNS, routeName))
+		}
+		return
+	}
+	r.status.ClearWarning(warningPrefix + "route-read")
+
+	routeAccepted := false
+	for _, ps := range route.Status.Parents {
+		for _, cond := range ps.Conditions {
+			if cond.Type == string(gapi.RouteConditionAccepted) && cond.Status == metav1.ConditionTrue {
+				routeAccepted = true
+			}
+		}
+	}
+	if !routeAccepted && len(route.Status.Parents) > 0 {
+		log.Info("HTTPRoute not accepted by any parent gateway", "route", routeName, "namespace", gatewayNS)
+		r.status.SetWarning(warningPrefix+"route-accepted", "HTTPRoute not accepted by any parent gateway")
+	} else {
+		r.status.ClearWarning(warningPrefix + "route-accepted")
+	}
+}
+
+func (r *ReconcileManager) checkCondition(conditions []metav1.Condition, condType, warningKey, msgPrefix string) {
+	for _, cond := range conditions {
+		if cond.Type == condType {
+			if cond.Status != metav1.ConditionTrue {
+				log.Info("Gateway condition not healthy", "condition", condType, "status", cond.Status, "message", cond.Message)
+				r.status.SetWarning(warningKey, fmt.Sprintf("%s: %s", msgPrefix, cond.Message))
+			} else {
+				r.status.ClearWarning(warningKey)
+			}
+			return
+		}
+	}
+}
+
+// resolveGatewayClassName determines the GatewayClass name to use based on the
+// user's spec.gateway.gatewayClassName or the GatewayAPI CR's configured classes.
+func resolveGatewayClassName(gw *operatorv1.GatewaySpec, gatewayAPI *operatorv1.GatewayAPI) (string, error) {
+	if gw.GatewayClassName != nil && *gw.GatewayClassName != "" {
+		name := *gw.GatewayClassName
+		for _, c := range gatewayAPI.Spec.GatewayClasses {
+			if c.Name == name {
+				return name, nil
+			}
+		}
+		return "", fmt.Errorf("GatewayClass %q not found; verify GatewayAPI CR includes this class", name)
+	}
+
+	classes := gatewayAPI.Spec.GatewayClasses
+	switch len(classes) {
+	case 0:
+		return "", fmt.Errorf("no GatewayClasses configured on GatewayAPI CR")
+	case 1:
+		return classes[0].Name, nil
+	default:
+		return "", fmt.Errorf("multiple GatewayClasses configured on GatewayAPI CR; set spec.gateway.gatewayClassName to select one")
+	}
 }

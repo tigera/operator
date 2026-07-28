@@ -50,14 +50,23 @@ const (
 	legacyGatewayNamespace = "tigera-gateway"
 )
 
-// reservedNamespace returns true for namespaces whose pull secrets and
-// tigera-operator-secrets RoleBinding this controller must not manage: the operator
-// namespace holds the source secrets, calico-system's are managed by the installation
-// controller, and tigera-gateway's are actively torn down by the gateway-API controller's
-// legacy cleanup, which would fight copies created here.
+// reservedNamespace returns true for namespaces whose pull secrets and tigera-operator-secrets
+// RoleBinding this controller must not manage.
+//
+// Waypoints belong in user-managed namespaces, so a waypoint Gateway should never appear in an
+// operator-managed one.
+//
+// The operator namespace holds the source secrets, and a copy keeps the source's name: the
+// handler would update the user's own secret in place and add an Istio owner reference to it.
+// That is the only owner a hand-created secret has, so deleting the Istio CR would garbage
+// collect the user's pull secret, and only the user can put it back.
+//
+// tigera-gateway's are queued for deletion by the gateway-API controller's legacy teardown, in
+// legacyTeardownObjects, which runs whenever no Gateway of a class that controller owns lives
+// there. Copies created here would be deleted and recreated for as long as both keep reconciling.
 func reservedNamespace(ns string) bool {
 	switch ns {
-	case common.OperatorNamespace(), common.CalicoNamespace, legacyGatewayNamespace:
+	case common.OperatorNamespace(), legacyGatewayNamespace:
 		return true
 	}
 	return false

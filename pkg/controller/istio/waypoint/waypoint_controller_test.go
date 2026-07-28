@@ -343,11 +343,11 @@ var _ = Describe("Waypoint controller pull secret tests", func() {
 			Expect(objs[1]).To(BeAssignableToTypeOf(&corev1.Secret{}))
 		})
 
-		It("should not create resources for gateways in reserved namespaces", func() {
-			// calico-system's pull secrets and RoleBinding are managed by the
-			// installation controller, and tigera-gateway's are torn down by the
-			// gateway-API controller's legacy cleanup.
-			createWaypointGateway("waypoint-calico-system", common.CalicoNamespace)
+		It("should not create resources for a gateway in the legacy gateway namespace", func() {
+			// The gateway-API controller's legacy teardown queues tigera-gateway's copies
+			// and RoleBinding for deletion whenever no Gateway of a class it owns lives
+			// there, so anything created here would be deleted and recreated for as long as
+			// both controllers keep reconciling.
 			createWaypointGateway("waypoint-legacy-gateway", "tigera-gateway")
 
 			_, err := doReconcile()

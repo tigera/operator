@@ -38,7 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/istio"
 )
 
 const (
@@ -199,10 +199,10 @@ func (r *ReconcileWaypoint) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{}, err
 	}
 
-	// Pass the Istio CR as the owner: created objects carry an owner reference to it
-	// (merged with any other owners, such as an egress gateway CR sharing the namespace,
-	// via the multiple-owners label) and are garbage collected by owner reference —
-	// the same pattern the egress gateway uses with its CRs.
+	// Pass the Istio CR as the owner: created objects carry an owner reference to it and are
+	// garbage collected by owner reference — the same pattern the egress gateway uses with its
+	// CRs. The objects are rendered carrying MultipleOwnersLabel, so that reference is merged
+	// into the owners already on the object instead of replacing them.
 	hdlr := utils.NewComponentHandler(log, r, r.scheme, instance)
 	component := render.NewPassthrough(toCreate, toDelete)
 	if err := hdlr.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
@@ -251,26 +251,9 @@ func (r *ReconcileWaypoint) pullSecretResources(ctx context.Context, reqLogger l
 		}
 	}
 
-	// Build the objects for each target namespace. The RoleBinding comes first: it grants
-	// the operator permission to write secrets in the namespace, so it must exist before
-	// the secret copies are created. Both carry MultipleOwnersLabel so the component
-	// handler merges owner references with any other owners (e.g. an egress gateway CR
-	// sharing the namespace) rather than replacing them.
 	var objs []client.Object
 	for ns := range targetNamespaces {
-		rb := render.CreateOperatorSecretsRoleBinding(ns)
-		rb.Labels = common.MapExistsOrInitialize(rb.Labels)
-		rb.Labels[common.MultipleOwnersLabel] = "true"
-		objs = append(objs, rb)
-
-		copied := secret.CopyToNamespace(ns, pullSecrets...)
-		for _, s := range copied {
-			if s.Labels == nil {
-				s.Labels = map[string]string{}
-			}
-			s.Labels[common.MultipleOwnersLabel] = "true"
-			objs = append(objs, s)
-		}
+		objs = append(objs, istio.WaypointPullSecretObjects(ns, pullSecrets)...)
 	}
 
 	return objs, nil

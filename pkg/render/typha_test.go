@@ -135,6 +135,40 @@ var _ = Describe("Typha rendering tests", func() {
 		}))
 	})
 
+	It("should grant calico-typha read on hostqospolicies only for Enterprise", func() {
+		hostQoSInRules := func(role *rbacv1.ClusterRole) bool {
+			for _, rule := range role.Rules {
+				for _, res := range rule.Resources {
+					if res == "hostqospolicies" {
+						return true
+					}
+				}
+			}
+			return false
+		}
+
+		cfg.Installation.Variant = operatorv1.CalicoEnterprise
+		component := render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+		role := rtest.GetResource(resources, "calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(hostQoSInRules(role)).To(BeTrue(), "Enterprise calico-typha should read hostqospolicies")
+
+		// Typha only relays the syncer, so it never writes status.
+		Expect(role.Rules).NotTo(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"hostqospolicies/status"},
+			Verbs:     []string{"patch"},
+		}))
+
+		cfg.Installation.Variant = operatorv1.Calico
+		component = render.Typha(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ = component.Objects()
+		role = rtest.GetResource(resources, "calico-typha", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(hostQoSInRules(role)).To(BeFalse(), "Calico OSS calico-typha should not reference hostqospolicies")
+	})
+
 	It("should render all resources for a default configuration", func() {
 		expectedResources := []struct {
 			name    string

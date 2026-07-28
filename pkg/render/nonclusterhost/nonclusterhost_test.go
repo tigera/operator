@@ -122,6 +122,7 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 					"globalnetworkpolicies",
 					"globalnetworksets",
 					"hostendpoints",
+					"hostqospolicies",
 					"ipamblocks",
 					"ippools",
 					"licensekeys",
@@ -136,6 +137,11 @@ var _ = Describe("NonClusterHost rendering tests", func() {
 					"tiers",
 				},
 				Verbs: []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{"hostqospolicies/status"},
+				Verbs:     []string{"patch"},
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},

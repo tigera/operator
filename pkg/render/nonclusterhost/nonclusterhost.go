@@ -160,6 +160,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 				"globalnetworkpolicies",
 				"globalnetworksets",
 				"hostendpoints",
+				"hostqospolicies",
 				"ipamblocks",
 				"ippools",
 				"licensekeys",
@@ -174,6 +175,14 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 				"tiers",
 			},
 			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// Felix on a non-cluster host writes its own per-node entry in
+			// HostQoSPolicy status.nodes[] via Server-Side Apply, which is an
+			// HTTP PATCH.
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"hostqospolicies/status"},
+			Verbs:     []string{"patch"},
 		},
 	}
 

@@ -777,6 +777,43 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "other-ns", Name: certificatemanagement.TrustedCertConfigMapName}, &corev1.ConfigMap{}))).To(BeTrue())
 		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
 	})
+
+	It("keeps owner references another feature put on the shared RoleBinding and pull secret", func() {
+		// The Istio waypoint controller and the egress gateway render the same
+		// tigera-operator-secrets RoleBinding and the same pull secret copies, into the same
+		// namespaces, owned by their own CRs. Dropping those references would have the objects
+		// garbage collected along with the last of our Gateways while the other feature still
+		// needs them.
+		istioRef := metav1.OwnerReference{APIVersion: "operator.tigera.io/v1", Kind: "Istio", Name: "default", UID: "istio-uid"}
+		goneGatewayRef := metav1.OwnerReference{APIVersion: gatewayOwnerAPIVersion, Kind: "Gateway", Name: "gone", UID: "u-gone"}
+
+		By("seeding both objects with an Istio reference and a Gateway reference that is stale")
+		rb := render.CreateOperatorSecretsRoleBinding("app-ns")
+		rb.OwnerReferences = []metav1.OwnerReference{istioRef, goneGatewayRef}
+		Expect(c.Create(ctx, rb)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "app-ns",
+			Name:            "tigera-pull-secret",
+			OwnerReferences: []metav1.OwnerReference{istioRef, goneGatewayRef},
+		}})).NotTo(HaveOccurred())
+
+		pullSecrets := []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}}
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+		}
+		Expect(r.reconcileGatewayNamespaceResources(ctx, nil, pullSecrets, true, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+
+		By("keeping the Istio reference, adding our Gateway, and dropping the Gateway that is gone")
+		ourGatewayRef := metav1.OwnerReference{APIVersion: gatewayOwnerAPIVersion, Kind: "Gateway", Name: "gw1", UID: "u1"}
+
+		updatedRB := &rbacv1.RoleBinding{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-operator-secrets"}, updatedRB)).NotTo(HaveOccurred())
+		Expect(updatedRB.OwnerReferences).To(ConsistOf(ourGatewayRef, istioRef))
+
+		updatedSecret := &corev1.Secret{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-pull-secret"}, updatedSecret)).NotTo(HaveOccurred())
+		Expect(updatedSecret.OwnerReferences).To(ConsistOf(ourGatewayRef, istioRef))
+	})
 })
 
 var fakeComponentHandlers []*fakeComponentHandler

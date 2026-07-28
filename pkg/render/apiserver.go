@@ -128,7 +128,7 @@ func (apiServerPolicyComponent) ModifierKey() string { return APIServerPolicyKey
 // ExtensionInputs hands the policy modifier the config it needs to look up container
 // ports.
 func (c apiServerPolicyComponent) ExtensionInputs() any {
-	return APIServerExtensionInputs{Config: c.cfg}
+	return APIServerPolicyExtensionInputs{Config: c.cfg}
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
@@ -178,10 +178,16 @@ type APIServerExtensionInputs struct {
 	CalicoImage string
 }
 
-// Both extension points hand over the same inputs.
+// APIServerPolicyExtensionInputs carries the API server's render configuration to the
+// network policy modifier. It is a separate type from APIServerExtensionInputs, despite
+// overlapping, so that a modifier can't be registered against the wrong key.
+type APIServerPolicyExtensionInputs struct {
+	Config *APIServerConfiguration
+}
+
 var (
 	APIServerKey       = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServer}
-	APIServerPolicyKey = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServerPolicy}
+	APIServerPolicyKey = ModifierKey[APIServerPolicyExtensionInputs]{ComponentNameAPIServerPolicy}
 )
 
 // ModifierKey implements render.Extensible: the API server's variant-specific objects are

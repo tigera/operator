@@ -664,7 +664,7 @@ func (c *apiServer) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConf
 // the OIDC egress rule (when an OIDC key validator is configured) and the L7 admission
 // controller ingress port (when sidecar injection is enabled). The base policy carries
 // neither.
-func modifyAPIServerPolicy(ri render.Inputs, ec render.APIServerExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
+func modifyAPIServerPolicy(ri render.Inputs, ec render.APIServerPolicyExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: ec.Config, data: apiServerData(ri)}
 
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](create, render.APIServerPolicyName)

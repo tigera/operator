@@ -61,6 +61,10 @@ type ExtensionInputsProvider interface {
 // its modifier receives. extensions.Modify infers Cfg from the key rather than
 // from the modifier, so a modifier written against a different component won't
 // compile. name is unexported so keys can only be declared here.
+//
+// Every key gets its own Cfg type, even where two extension points would carry
+// the same fields. Sharing one would let a modifier be registered against the
+// wrong key and still compile.
 type ModifierKey[Cfg any] struct {
 	name string
 }
@@ -71,9 +75,7 @@ func (k ModifierKey[Cfg]) String() string {
 	return k.name
 }
 
-// Inputs for components whose modifiers need nothing beyond Inputs. Each gets its
-// own type rather than a shared empty one, so the compiler can still tell their
-// modifiers apart.
+// Inputs for components whose modifiers need nothing beyond Inputs.
 type (
 	TyphaExtensionInputs                 struct{}
 	NodeExtensionInputs                  struct{}

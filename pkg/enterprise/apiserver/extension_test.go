@@ -531,7 +531,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 		}
 		comp := render.APIServerPolicy(cfg)
 		create, del := comp.Objects()
-		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
+		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerPolicyExtensionInputs)
 		Expect(ok).To(BeTrue())
 		objs, _ := extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerPolicyKey, ri, ec, create, del)
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.APIServerPolicyName)

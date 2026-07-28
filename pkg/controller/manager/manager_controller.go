@@ -1027,14 +1027,14 @@ func (r *ReconcileManager) checkGatewayStatus(ctx context.Context, gatewayNS str
 	r.status.ClearWarning(warningPrefix + "route-read")
 
 	routeAccepted := false
-	for _, ps := range route.Status.RouteStatus.Parents {
+	for _, ps := range route.Status.Parents {
 		for _, cond := range ps.Conditions {
 			if cond.Type == string(gapi.RouteConditionAccepted) && cond.Status == metav1.ConditionTrue {
 				routeAccepted = true
 			}
 		}
 	}
-	if !routeAccepted && len(route.Status.RouteStatus.Parents) > 0 {
+	if !routeAccepted && len(route.Status.Parents) > 0 {
 		log.Info("HTTPRoute not accepted by any parent gateway", "route", routeName, "namespace", gatewayNS)
 		r.status.SetWarning(warningPrefix+"route-accepted", "HTTPRoute not accepted by any parent gateway")
 	} else {

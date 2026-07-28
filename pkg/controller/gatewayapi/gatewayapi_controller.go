@@ -60,6 +60,8 @@ import (
 
 const (
 	DefaultPolicySyncPrefix = "/var/run/nodeagent"
+
+	gatewayOwnerAPIVersion = "gateway.networking.k8s.io/v1"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -678,7 +680,7 @@ func (r *ReconcileGatewayAPI) reconcileGatewayNamespaceResources(ctx context.Con
 			continue
 		}
 		ownersByNamespace[gw.Namespace] = append(ownersByNamespace[gw.Namespace], metav1.OwnerReference{
-			APIVersion: "gateway.networking.k8s.io/v1",
+			APIVersion: gatewayOwnerAPIVersion,
 			Kind:       "Gateway",
 			Name:       gw.Name,
 			UID:        gw.UID,
@@ -751,8 +753,9 @@ func (r *ReconcileGatewayAPI) legacyGatewayOrphans(ctx context.Context, namespac
 	return orphans, nil
 }
 
-// upsertGatewayOwned creates or updates obj, refreshing its owner references (and ConfigMap/Secret
-// data) so the namespace's owner set stays current as its Gateways come and go.
+// upsertGatewayOwned creates or updates obj, refreshing the Gateway owner references (and
+// ConfigMap/Secret data) so the namespace's owner set stays current as its Gateways come and go.
+// Owner references another feature added are kept — see withForeignOwners.
 func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired client.Object, owners []metav1.OwnerReference) error {
 	desired.SetOwnerReferences(owners)
 	existing := desired.DeepCopyObject().(client.Object)
@@ -762,7 +765,7 @@ func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired cl
 	case err != nil:
 		return err
 	default:
-		existing.SetOwnerReferences(owners)
+		existing.SetOwnerReferences(withForeignOwners(owners, existing.GetOwnerReferences()))
 		switch d := desired.(type) {
 		case *corev1.ConfigMap:
 			e := existing.(*corev1.ConfigMap)
@@ -773,4 +776,30 @@ func (r *ReconcileGatewayAPI) upsertGatewayOwned(ctx context.Context, desired cl
 		}
 		return r.client.Update(ctx, existing)
 	}
+}
+
+// withForeignOwners returns ours plus every owner reference on the existing object that belongs to
+// another feature, so refreshing the Gateway references does not drop theirs.
+//
+// The tigera-operator-secrets RoleBinding and the pull secret copies are not this controller's
+// alone: the Istio waypoint controller and the egress gateway render the same objects, into the
+// same namespaces, owned by their own CRs. Replacing the owner set wholesale would drop those
+// references, and the object would then be garbage collected along with the last of our Gateways
+// while another feature still needs it. It would also leave each controller rewriting the set on
+// its next reconcile, making the object's lifetime a question of which one reconciled last.
+//
+// Only Gateway references are ours to recompute. This controller is the only thing that owns these
+// objects by Gateway, so one that is not in ours is a Gateway that has gone away or changed to a
+// class we do not own, and dropping it is what lets the garbage collector clean the namespace up.
+func withForeignOwners(ours, existing []metav1.OwnerReference) []metav1.OwnerReference {
+	merged := slices.Clone(ours)
+	for _, ref := range existing {
+		if ref.APIVersion == gatewayOwnerAPIVersion && ref.Kind == "Gateway" {
+			continue
+		}
+		if !slices.ContainsFunc(merged, func(m metav1.OwnerReference) bool { return m.UID == ref.UID }) {
+			merged = append(merged, ref)
+		}
+	}
+	return merged
 }

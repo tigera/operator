@@ -152,10 +152,6 @@ type APIServerConfiguration struct {
 	KubernetesVersion  *common.VersionInfo
 	ClusterDomain      string
 
-	// RBACManagementEnabled gates the RBAC management UI permissions on
-	// tigera-network-admin.
-	RBACManagementEnabled bool
-
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool
@@ -2145,20 +2141,18 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 	// impersonating the caller, so the apiserver enforces escalation against the
 	// user's own permissions. The UI reads the role catalogue and manages group
 	// membership through both cluster- and namespace-scoped bindings.
-	if c.cfg.RBACManagementEnabled {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterroles", "roles"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterrolebindings", "rolebindings"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
-			},
-		)
-	}
+	rules = append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "roles"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+		},
+	)
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.cfg.ManagementClusterConnection == nil {

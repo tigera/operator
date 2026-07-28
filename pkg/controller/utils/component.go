@@ -313,7 +313,9 @@ func (c *componentHandler) createOrUpdateObject(ctx context.Context, obj client.
 
 	if c.createOnly {
 		// This component handler only creates resources if they do not already exist.
-		logCtx.Info("Create-only operation, ignoring existing object")
+		// Logged at V(1): for a resource that outlives a single install this is hit on
+		// every reconcile, and the object being left alone is the expected outcome.
+		logCtx.V(1).Info("Create-only operation, ignoring existing object")
 		return errors.NewAlreadyExists(
 			schema.GroupResource{
 				Group:    obj.GetObjectKind().GroupVersionKind().Group,

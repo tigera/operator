@@ -17,6 +17,7 @@ package manager
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -926,9 +927,12 @@ func (r *ReconcileManager) resolveGateway(
 		return nil, reconcile.Result{}, err
 	}
 
-	// OIDC hostname mismatch check.
+	// OIDC hostname mismatch check. Either field may include the scheme (e.g. "https://host").
 	if authenticationCR != nil && authenticationCR.Spec.ManagerDomain != "" {
-		if gw.Hostname != authenticationCR.Spec.ManagerDomain {
+		trimScheme := func(s string) string {
+			return strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
+		}
+		if trimScheme(gw.Hostname) != trimScheme(authenticationCR.Spec.ManagerDomain) {
 			err := fmt.Errorf("spec.gateway.hostname %q does not match Authentication.spec.managerDomain — OIDC redirects will fail",
 				gw.Hostname)
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Gateway hostname mismatch", err, logc)

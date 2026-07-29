@@ -56,9 +56,12 @@ type Configuration struct {
 	ResourcePrefix string
 
 	// Enterprise controls whether the proxy SA, RoleBinding, and NetworkPolicy
-	// are rendered. The GatewayAPI controller creates SA/RoleBinding in user
-	// namespaces but skips calico-system (lifecycle guard); when we place a
-	// Gateway there, we render them operator-owned on the main path.
+	// are rendered. They are only rendered when the Gateway is placed in the
+	// backend (install) namespace: the GatewayAPI controller skips
+	// calico-system (lifecycle guard), so this component fills that gap. For
+	// custom gateway namespaces the GatewayAPI controller creates the
+	// SA/RoleBinding itself and no NetworkPolicy is rendered, matching
+	// user-brought Gateways.
 	Enterprise bool
 
 	OpenShift bool
@@ -86,18 +89,30 @@ func (c *gatewayComponent) Ready() bool {
 }
 
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	objs := []client.Object{
-		c.tlsSecret(),
-		c.gateway(),
-		c.backend(),
-		c.httpRoute(),
-	}
+	var objs []client.Object
 
 	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
 		objs = append(objs, c.referenceGrant())
 	}
 
-	if c.cfg.Enterprise {
+	// The TLS secret is rendered after the Gateway. In a custom gateway
+	// namespace the operator gains secret access through the RoleBinding the
+	// GatewayAPI controller creates once it sees the Gateway there, so the
+	// secret create fails on the first reconcile and succeeds on the retry.
+	objs = append(objs,
+		c.gateway(),
+		c.backend(),
+		c.httpRoute(),
+		c.tlsSecret(),
+	)
+
+	if c.cfg.Enterprise && c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
+		// calico-system has an operator-managed default-deny, and the
+		// GatewayAPI controller skips it (lifecycle guard), so the proxy SA,
+		// RoleBinding, and NetworkPolicy are rendered here. In a custom
+		// namespace the GatewayAPI controller creates the SA and RoleBinding,
+		// and no NetworkPolicy is rendered — the same treatment user-brought
+		// Gateways get.
 		objs = append(objs,
 			rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
 			rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
@@ -124,6 +139,11 @@ func (c *gatewayComponent) gateway() *gapi.Gateway {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.cfg.ResourcePrefix + "-gateway",
 			Namespace: c.cfg.GatewayNamespace,
+			Labels: map[string]string{
+				// Selects operator-managed UI gateways across namespaces,
+				// e.g. kubectl get gateway -A -l operator.tigera.io/gateway.
+				"operator.tigera.io/gateway": c.cfg.ResourcePrefix,
+			},
 		},
 		Spec: gapi.GatewaySpec{
 			GatewayClassName: gapi.ObjectName(c.cfg.GatewayClassName),
@@ -267,7 +287,7 @@ func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.CreateEntityRule(
-				c.cfg.GatewayNamespace, "calico-gateway-api-controller",
+				c.cfg.BackendNamespace, "calico-gateway-api-controller",
 				18000, 18001,
 			),
 		},
@@ -325,6 +345,14 @@ type DeletionConfiguration struct {
 	BackendNamespace string
 	TLSSecretName    string
 	Enterprise       bool
+
+	// MoveTargetNamespace, when set, marks this as cleanup after the gateway
+	// moved to that namespace while spec.gateway stayed configured. The
+	// Backend is kept — it lives in the backend namespace and the new render
+	// still routes to it. The ReferenceGrant is deleted only when the target
+	// is the backend namespace, where the render no longer emits it; for any
+	// other target the render updates it in place.
+	MoveTargetNamespace string
 }
 
 // DeletionComponent returns a render.Component whose Objects() puts every
@@ -347,6 +375,8 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 	bkNS := c.cfg.BackendNamespace
 	prefix := c.cfg.ResourcePrefix
 
+	move := c.cfg.MoveTargetNamespace != ""
+
 	objs := []client.Object{
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -356,17 +386,22 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
 		},
-		&envoyapi.Backend{
-			TypeMeta:   metav1.TypeMeta{Kind: BackendKind, APIVersion: "gateway.envoyproxy.io/v1alpha1"},
-			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-backend", Namespace: bkNS},
-		},
 		&gapi.HTTPRoute{
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: gwNS},
 		},
 	}
 
-	if gwNS != bkNS {
+	if !move {
+		objs = append(objs,
+			&envoyapi.Backend{
+				TypeMeta:   metav1.TypeMeta{Kind: BackendKind, APIVersion: "gateway.envoyproxy.io/v1alpha1"},
+				ObjectMeta: metav1.ObjectMeta{Name: prefix + "-backend", Namespace: bkNS},
+			},
+		)
+	}
+
+	if gwNS != bkNS && (!move || c.cfg.MoveTargetNamespace == bkNS) {
 		objs = append(objs,
 			&gapi.ReferenceGrant{
 				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1"},
@@ -375,7 +410,12 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 		)
 	}
 
-	if c.cfg.Enterprise {
+	if c.cfg.Enterprise && gwNS == bkNS {
+		// Mirrors the main path: these are only rendered when the Gateway is
+		// in the backend namespace. In a custom namespace the SA and
+		// RoleBinding belong to the GatewayAPI controller's per-namespace
+		// lifecycle — deleting them here could break other Gateways in that
+		// namespace.
 		objs = append(objs,
 			rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
 			rgatewayapi.GatewayNamespaceRoleBinding(gwNS),

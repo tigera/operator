@@ -145,7 +145,9 @@ var _ = Describe("Gateway component render", func() {
 			Expect(np).NotTo(BeNil())
 			Expect(np.Spec.Ingress).To(HaveLen(2))
 			Expect(np.Spec.Ingress[0].Source.Nets).To(ConsistOf("0.0.0.0/0"))
+			Expect(np.Spec.Ingress[0].Destination.Ports).To(Equal(networkpolicy.Ports(10443)))
 			Expect(np.Spec.Ingress[1].Source.Nets).To(ConsistOf("::/0"))
+			Expect(np.Spec.Ingress[1].Destination.Ports).To(Equal(networkpolicy.Ports(10443)))
 		})
 
 		Context("when Enterprise is false", func() {

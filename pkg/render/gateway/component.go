@@ -298,7 +298,9 @@ func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
 					Protocol: &networkpolicy.TCPProtocol,
 					Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
 					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(443),
+						// Envoy Gateway remaps privileged ports by adding 10000,
+						// so listener port 443 becomes container port 10443.
+						Ports: networkpolicy.Ports(10443),
 					},
 				},
 				{
@@ -306,7 +308,7 @@ func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
 					Protocol: &networkpolicy.TCPProtocol,
 					Source:   v3.EntityRule{Nets: []string{"::/0"}},
 					Destination: v3.EntityRule{
-						Ports: networkpolicy.Ports(443),
+						Ports: networkpolicy.Ports(10443),
 					},
 				},
 			},

@@ -17,11 +17,16 @@ package apis
 import (
 	"testing"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	ktesting "k8s.io/client-go/testing"
+
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
 
 func mapResourceList() *metav1.APIResourceList {
@@ -77,6 +82,50 @@ func TestUseV3CRDs(t *testing.T) {
 				t.Errorf("useV3CRDs() = %t, want %t", got, tc.want)
 			}
 		})
+	}
+}
+
+// TestCheckDatastoreMigrationFallsBackToLegacyGVR covers a cluster that migrated on v3.32:
+// it has a v1beta1 DatastoreMigration CR in the Converged phase, and the v1 CRD isn't
+// installed yet (the same way an apiserver 404s a List against a resource with no CRD).
+// checkDatastoreMigration has to find the legacy resource, otherwise UseV3CRDS falls
+// through to API discovery, sees both crd.projectcalico.org and projectcalico.org/v3
+// groups (the v1 CRDs live until the user deletes the migration CR), and answers "use v1
+// CRDs" for a cluster that already migrated.
+// TODO: remove in v3.34, alongside legacyDatastoreMigrationGVR.
+func TestCheckDatastoreMigrationFallsBackToLegacyGVR(t *testing.T) {
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": datastoremigration.LegacySchemeGroupVersion.String(),
+		"kind":       "DatastoreMigration",
+		"metadata":   map[string]interface{}{"name": "v1-to-v3"},
+		"status":     map[string]interface{}{"phase": datastoremigration.PhaseConverged},
+	}}
+
+	dc := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{
+			datastoreMigrationGVR:         "DatastoreMigrationList",
+			legacyDatastoreMigrationGVR(): "DatastoreMigrationList",
+		},
+		obj,
+	)
+
+	// Simulate the v1 CRD not being installed yet: a List against the v1 resource 404s,
+	// the way a real apiserver responds when the CRD doesn't exist. The v1beta1 List is
+	// left alone so it hits the tracker and finds the object above.
+	dc.PrependReactor("list", "datastoremigrations", func(action ktesting.Action) (bool, runtime.Object, error) {
+		if action.GetResource() == datastoreMigrationGVR {
+			return true, nil, apierrors.NewNotFound(datastoreMigrationGVR.GroupResource(), "")
+		}
+		return false, nil, nil
+	})
+
+	migrated, err := checkDatastoreMigration(dc)
+	if err != nil {
+		t.Fatalf("checkDatastoreMigration() error = %v", err)
+	}
+	if !migrated {
+		t.Errorf("checkDatastoreMigration() = false, want true (should fall back to the legacy v1beta1 resource)")
 	}
 }
 

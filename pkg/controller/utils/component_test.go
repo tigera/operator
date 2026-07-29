@@ -1961,6 +1961,85 @@ var _ = Describe("Component handler tests", func() {
 			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
+		It("updates jobs", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-job",
+						Namespace: "test-namespace",
+					},
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			By("checking that the job's pod template gets the standard labels")
+			expectedLabels := map[string]string{
+				"k8s-app":                      "test-job",
+				"app.kubernetes.io/name":       "test-job",
+				"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/part-of":    "Calico",
+			}
+			key := client.ObjectKey{
+				Name:      "test-job",
+				Namespace: "test-namespace",
+			}
+			j := &batchv1.Job{}
+			Expect(c.Get(ctx, key, j)).NotTo(HaveOccurred())
+			Expect(j.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+
+			By("checking that we leave the job's selector alone")
+			// A Job's selector is owned by the job controller and is immutable, so unlike
+			// Deployments and DaemonSets we must never fill it in.
+			Expect(j.Spec.Selector).To(BeNil())
+		})
+		It("keeps a k8s-app label that the render already set on a job", func() {
+			// The envoy-gateway certgen Job is the real case: the gateway render stamps a
+			// Calico-owned k8s-app on the pod template, and that must win over the
+			// name-derived default.
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&batchv1.Job{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-job",
+						Namespace: "test-namespace",
+					},
+					Spec: batchv1.JobSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{"k8s-app": "preset-app"},
+							},
+						},
+					},
+				}},
+			}
+
+			err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+			Expect(err).To(BeNil())
+
+			expectedLabels := map[string]string{
+				"k8s-app":                      "preset-app",
+				"app.kubernetes.io/name":       "preset-app",
+				"app.kubernetes.io/component":  "Manager.operator.tigera.io",
+				"app.kubernetes.io/instance":   "tigera-secure",
+				"app.kubernetes.io/managed-by": "tigera-operator",
+				"app.kubernetes.io/part-of":    "Calico",
+			}
+			key := client.ObjectKey{
+				Name:      "test-job",
+				Namespace: "test-namespace",
+			}
+			j := &batchv1.Job{}
+			Expect(c.Get(ctx, key, j)).NotTo(HaveOccurred())
+			Expect(j.Spec.Template.GetLabels()).To(Equal(expectedLabels))
+		})
 		It("adds the host-networked label to a hostNetwork Deployment pod template", func() {
 			fc := &fakeComponent{
 				supportedOSType: rmeta.OSTypeLinux,

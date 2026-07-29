@@ -132,7 +132,45 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 		objs = append(objs, c.typhaPrometheusService())
 	}
 
-	return objs, nil
+	var objsToDelete []client.Object
+	if c.cfg.NonClusterHost == nil {
+		// The non-cluster-host Typha renders only while a NonClusterHost
+		// resource exists; with Serval, Typha runs in-process instead. When the
+		// resource is absent, delete any leftover non-cluster-host Typha objects
+		// rather than orphaning them.
+		objsToDelete = append(objsToDelete, c.nonClusterHostObjectsForDeletion()...)
+	}
+
+	return objs, objsToDelete
+}
+
+// nonClusterHostObjectsForDeletion returns the non-cluster-host Typha objects as
+// deletion stubs (name and namespace only), used when no NonClusterHost
+// resource exists so the operator garbage-collects them instead of leaving them
+// orphaned. The component's v3 NetworkPolicy is deliberately not among them: v3
+// resources are only reconcilable while the API server is healthy, so it is
+// deleted by TyphaNonClusterHostPolicyForDeletion alongside the other v3
+// policies instead.
+func (c *typhaComponent) nonClusterHostObjectsForDeletion() []client.Object {
+	return []client.Object{
+		&appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: common.TyphaDeploymentName + TyphaNonClusterHostSuffix, Namespace: common.CalicoNamespace},
+		},
+		&corev1.Service{
+			TypeMeta:   metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: TyphaServiceName + TyphaNonClusterHostSuffix, Namespace: common.CalicoNamespace},
+		},
+	}
+}
+
+// TyphaNonClusterHostPolicyForDeletion returns the non-cluster-host Typha policy
+// as a deletion stub, for the modes that do not render it.
+func TyphaNonClusterHostPolicyForDeletion() client.Object {
+	return &v3.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: TyphaNonClusterHostNetworkPolicyName, Namespace: common.CalicoNamespace},
+	}
 }
 
 func NewTyphaNonClusterHostPolicy(cfg *TyphaConfiguration) Component {
@@ -640,6 +678,16 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value(),
 			})
 		}
+
+		// Serval is a Typha client per replica rather than per node, so Typha counts
+		// its Service endpoints on top of the nodes when it sizes its connection
+		// limit. Set whether or not Serval is deployed: the lookup returns zero when
+		// it is absent, and making this conditional would restart Typha whenever a
+		// cluster moves between non-cluster host modes.
+		typhaEnv = append(typhaEnv,
+			corev1.EnvVar{Name: "TYPHA_K8SEXTRACLIENTSERVICENAME", Value: common.ServalName},
+			corev1.EnvVar{Name: "TYPHA_K8SEXTRACLIENTPORTNAME", Value: common.ServalServicePortName},
+		)
 	}
 
 	// If host-local IPAM is in use, we need to configure typha to use the Kubernetes pod CIDR.

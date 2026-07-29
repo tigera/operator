@@ -301,6 +301,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
 	// are status-only updates that don't bump generation.
+	//
+	// This watch is registered at v1 only, with no v1beta1 fallback. That's deliberate:
+	// the v1 CRD serves v1 only, so upgrading a v3.32-migrated cluster requires deleting
+	// the old CRD first (Kubernetes rejects dropping a version still in
+	// status.storedVersions), and that deletion cascades to the DatastoreMigration CR.
+	// After a supported upgrade there is therefore no CR to watch. The uncovered case,
+	// upgrading the operator while a v3.32 migration is still in flight, is not a
+	// supported sequence.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
 		&datastoremigration.DatastoreMigration{
 			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: datastoremigration.SchemeGroupVersion.String()},

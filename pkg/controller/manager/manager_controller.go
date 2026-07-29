@@ -16,12 +16,15 @@ package manager
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -782,10 +785,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Resolve gateway component if spec.gateway is configured, otherwise
-	// queue a deletion component to clean up any previously created resources.
-	var gatewayComponent render.Component
-	var gatewayCleanup render.Component
+	// Resolve gateway components. Cleanup is label-driven: every Gateway
+	// carrying this component's label outside the desired namespace (or in
+	// any namespace, when spec.gateway is nil) marks leftover resources to
+	// tear down. No state is stored — each reconcile converges from what is
+	// observed on the cluster.
+	var gatewayComponents []render.Component
 	if instance.Spec.Gateway != nil {
 		gwComp, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
 		if err != nil {
@@ -794,37 +799,48 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		if gwComp == nil {
 			return result, nil
 		}
-		gatewayComponent = gwComp
 
-		// If the gateway namespace changed, tear down the previous
-		// namespace's resources in the same reconcile. The annotation is
-		// advanced only after a successful apply (below), so a failed or
-		// interrupted move retries the cleanup on the next reconcile.
 		gwNS := instance.Spec.Gateway.NamespaceOrDefault()
-		if oldNS := instance.Annotations[gatewayNamespaceAnnotation]; oldNS != "" && oldNS != gwNS {
-			gatewayCleanup = rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
+		strays, err := r.managerGatewayNamespaces(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, logc)
+			return reconcile.Result{}, err
+		}
+		for _, ns := range strays {
+			if ns == gwNS {
+				continue
+			}
+			gatewayComponents = append(gatewayComponents, rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
 				ResourcePrefix:      ManagerGatewayResourcePrefix,
-				GatewayNamespace:    oldNS,
+				GatewayNamespace:    ns,
 				BackendNamespace:    helper.InstallNamespace(),
 				TLSSecretName:       ManagerGatewayTLSSecretName,
 				Enterprise:          true,
 				MoveTargetNamespace: gwNS,
-			})
+			}))
 		}
+		gatewayComponents = append(gatewayComponents, gwComp)
 	} else {
-		// Use the stored annotation to find gateway resources; fall back to
-		// the default gateway namespace (calico-system) if unset.
-		gwNS := common.CalicoNamespace
-		if ns := instance.Annotations[gatewayNamespaceAnnotation]; ns != "" {
-			gwNS = ns
+		// Tear down every labeled Gateway's namespace. The install namespace
+		// is always included: it holds the Backend and ReferenceGrant, and
+		// this covers partial renders that never produced a labeled Gateway.
+		namespaces, err := r.managerGatewayNamespaces(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, logc)
+			return reconcile.Result{}, err
 		}
-		gatewayComponent = rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
-			ResourcePrefix:   ManagerGatewayResourcePrefix,
-			GatewayNamespace: gwNS,
-			BackendNamespace: helper.InstallNamespace(),
-			TLSSecretName:    ManagerGatewayTLSSecretName,
-			Enterprise:       true,
-		})
+		if !slices.Contains(namespaces, helper.InstallNamespace()) {
+			namespaces = append(namespaces, helper.InstallNamespace())
+		}
+		for _, ns := range namespaces {
+			gatewayComponents = append(gatewayComponents, rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
+				ResourcePrefix:   ManagerGatewayResourcePrefix,
+				GatewayNamespace: ns,
+				BackendNamespace: helper.InstallNamespace(),
+				TLSSecretName:    ManagerGatewayTLSSecretName,
+				Enterprise:       true,
+			}))
+		}
 	}
 
 	components := []render.Component{
@@ -851,10 +867,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		components = append(components, tunnelSecretPassthrough)
 	}
 
-	if gatewayCleanup != nil {
-		components = append(components, gatewayCleanup)
-	}
-	components = append(components, gatewayComponent)
+	components = append(components, gatewayComponents...)
 
 	for _, component := range components {
 		if err := defaultHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
@@ -864,21 +877,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if instance.Spec.Gateway != nil {
-		// Record where gateway resources now live so both deletion paths can
-		// find them. Written only after a successful apply: a crash mid-move
-		// keeps the old namespace in the annotation for cleanup retry.
-		gwNS := instance.Spec.Gateway.NamespaceOrDefault()
-		if instance.Annotations[gatewayNamespaceAnnotation] != gwNS {
-			if instance.Annotations == nil {
-				instance.Annotations = map[string]string{}
-			}
-			instance.Annotations[gatewayNamespaceAnnotation] = gwNS
-			if err := r.client.Update(ctx, instance); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to store gateway namespace annotation", err, logc)
-				return reconcile.Result{}, err
-			}
-		}
-		r.checkGatewayStatus(ctx, gwNS)
+		r.checkGatewayStatus(ctx, instance.Spec.Gateway.NamespaceOrDefault())
+	} else {
+		// Warnings must not outlive the gateway they describe.
+		r.clearGatewayWarnings()
 	}
 
 	// Check BYO certificate expiry warnings.
@@ -989,12 +991,34 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 const (
 	ManagerGatewayTLSSecretName  = "calico-manager-gateway-tls"
 	ManagerGatewayResourcePrefix = "calico-manager"
-
-	// gatewayNamespaceAnnotation stores the namespace where gateway resources
-	// were last rendered so the deletion path can clean up even after
-	// spec.gateway is removed.
-	gatewayNamespaceAnnotation = "operator.tigera.io/gateway-namespace"
 )
+
+// managerGatewayNamespaces returns the sorted, de-duplicated namespaces of
+// Gateways carrying this component's gateway label. A missing Gateway API CRD
+// yields an empty list — there is nothing to clean up on clusters without
+// CIG. In multi-tenant mode the list is skipped: the label value is shared
+// across tenants, so one tenant's cleanup must not see another's Gateways.
+func (r *ReconcileManager) managerGatewayNamespaces(ctx context.Context) ([]string, error) {
+	if r.opts.MultiTenant {
+		return nil, nil
+	}
+	gwList := &gapi.GatewayList{}
+	if err := r.client.List(ctx, gwList, client.MatchingLabels{rgateway.GatewayLabel: ManagerGatewayResourcePrefix}); err != nil {
+		var noMatch *apimeta.NoKindMatchError
+		if stderrors.As(err, &noMatch) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var namespaces []string
+	for _, gw := range gwList.Items {
+		if !slices.Contains(namespaces, gw.Namespace) {
+			namespaces = append(namespaces, gw.Namespace)
+		}
+	}
+	slices.Sort(namespaces)
+	return namespaces, nil
+}
 
 // resolveGateway validates the Manager spec.gateway configuration, resolves the
 // GatewayClass, provisions the TLS keypair, and returns a gateway render component.
@@ -1142,6 +1166,14 @@ func (r *ReconcileManager) checkGatewayStatus(ctx context.Context, gatewayNS str
 		r.status.SetWarning(warningPrefix+"route-accepted", "HTTPRoute not accepted by any parent gateway")
 	} else {
 		r.status.ClearWarning(warningPrefix + "route-accepted")
+	}
+}
+
+// clearGatewayWarnings removes every gateway health warning; called when
+// spec.gateway is removed so warnings do not outlive the gateway.
+func (r *ReconcileManager) clearGatewayWarnings() {
+	for _, key := range []string{"read", "accepted", "programmed", "route-read", "route-accepted"} {
+		r.status.ClearWarning("gateway-" + key)
 	}
 }
 

@@ -35,6 +35,11 @@ import (
 const (
 	EnvoyGatewayGroup = "gateway.envoyproxy.io"
 	BackendKind       = "Backend"
+
+	// GatewayLabel marks operator-managed UI Gateways; the value is the
+	// component's resource prefix. Cleanup lists Gateways by this label to
+	// find namespaces holding leftover gateway resources.
+	GatewayLabel = "operator.tigera.io/gateway"
 )
 
 // Configuration holds everything the shared gateway component needs to render
@@ -140,9 +145,7 @@ func (c *gatewayComponent) gateway() *gapi.Gateway {
 			Name:      c.cfg.ResourcePrefix + "-gateway",
 			Namespace: c.cfg.GatewayNamespace,
 			Labels: map[string]string{
-				// Selects operator-managed UI gateways across namespaces,
-				// e.g. kubectl get gateway -A -l operator.tigera.io/gateway.
-				"operator.tigera.io/gateway": c.cfg.ResourcePrefix,
+				GatewayLabel: c.cfg.ResourcePrefix,
 			},
 		},
 		Spec: gapi.GatewaySpec{

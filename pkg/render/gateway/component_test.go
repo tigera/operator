@@ -96,6 +96,12 @@ var _ = Describe("Gateway component render", func() {
 			Expect(secret.Type).To(Equal(corev1.SecretTypeTLS))
 		})
 
+		It("labels the Gateway for label-driven cleanup", func() {
+			gw := findObject[*gapi.Gateway](toCreate, prefix+"-gateway", gwNS)
+			Expect(gw).NotTo(BeNil())
+			Expect(gw.Labels).To(HaveKeyWithValue(gateway.GatewayLabel, prefix))
+		})
+
 		It("renders a Gateway with the correct listener", func() {
 			gw := findObject[*gapi.Gateway](toCreate, prefix+"-gateway", gwNS)
 			Expect(gw).NotTo(BeNil())

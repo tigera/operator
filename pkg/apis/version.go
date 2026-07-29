@@ -20,6 +20,7 @@ import (
 	"os"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -31,10 +32,12 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
 
-var datastoreMigrationGVR = schema.GroupVersionResource{
-	Group:    "migration.projectcalico.org",
-	Version:  "v1beta1",
-	Resource: "datastoremigrations",
+var datastoreMigrationGVR = datastoremigration.SchemeGroupVersion.WithResource("datastoremigrations")
+
+// legacyDatastoreMigrationGVR is the pre-GA resource, served by Calico v3.32.
+// TODO: remove in v3.34.
+func legacyDatastoreMigrationGVR() schema.GroupVersionResource {
+	return datastoremigration.LegacySchemeGroupVersion.WithResource("datastoremigrations")
 }
 
 const (
@@ -141,6 +144,14 @@ func requireMAPForV3(useV3 bool, disco discovery.DiscoveryInterface) (bool, erro
 // This is used at startup before the manager cache is available.
 func checkDatastoreMigration(dyn dynamic.Interface) (bool, error) {
 	list, err := dyn.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{})
+	if err != nil && apierrors.IsNotFound(err) {
+		// A cluster that migrated on v3.32 only has the v1beta1 resource. Without
+		// this, UseV3CRDS falls through to API discovery, which still sees both
+		// groups (the v1 CRDs live until the user deletes the migration CR) and
+		// answers "use v1 CRDs" for a cluster that has already migrated.
+		// TODO: remove in v3.34.
+		list, err = dyn.Resource(legacyDatastoreMigrationGVR()).List(context.Background(), metav1.ListOptions{})
+	}
 	if err != nil {
 		return false, err
 	}

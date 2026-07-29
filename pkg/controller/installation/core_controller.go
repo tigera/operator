@@ -303,7 +303,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// are status-only updates that don't bump generation.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
 		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: datastoremigration.SchemeGroupVersion.String()},
 		},
 	}, predicate.ResourceVersionChangedPredicate{})
 

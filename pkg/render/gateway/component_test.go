@@ -192,6 +192,34 @@ var _ = Describe("Gateway component render", func() {
 				}
 			}
 		})
+
+		It("leaves SA, RoleBinding, and NetworkPolicy to the GatewayAPI controller even when Enterprise is true", func() {
+			for _, obj := range toCreate {
+				switch obj.(type) {
+				case *corev1.ServiceAccount:
+					Fail("ServiceAccount should not be rendered for a custom gateway namespace")
+				case *rbacv1.RoleBinding:
+					Fail("RoleBinding should not be rendered for a custom gateway namespace")
+				case *v3.NetworkPolicy:
+					Fail("NetworkPolicy should not be rendered for a custom gateway namespace")
+				}
+			}
+		})
+
+		It("renders the TLS secret after the Gateway", func() {
+			gatewayIdx, secretIdx := -1, -1
+			for i, obj := range toCreate {
+				switch obj.(type) {
+				case *gapi.Gateway:
+					gatewayIdx = i
+				case *corev1.Secret:
+					secretIdx = i
+				}
+			}
+			Expect(gatewayIdx).To(BeNumerically(">=", 0))
+			Expect(secretIdx).To(BeNumerically(">", gatewayIdx),
+				"the Gateway must be created before the TLS secret so the GatewayAPI controller can grant the operator secret access in the custom namespace")
+		})
 	})
 
 	Context("OpenShift", func() {
@@ -324,12 +352,80 @@ var _ = Describe("Gateway deletion component", func() {
 	Context("cross-namespace", func() {
 		BeforeEach(func() {
 			delCfg.GatewayNamespace = "custom-gateway-ns"
-			delCfg.Enterprise = false
 		})
 
 		It("includes ReferenceGrant in the backend namespace", func() {
 			rg := findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)
 			Expect(rg).NotTo(BeNil())
+		})
+
+		It("does not delete GatewayAPI-controller-owned resources even when Enterprise is true", func() {
+			for _, obj := range toDelete {
+				switch obj.(type) {
+				case *corev1.ServiceAccount:
+					Fail("ServiceAccount in a custom namespace belongs to the GatewayAPI controller and must not be deleted here")
+				case *rbacv1.RoleBinding:
+					Fail("RoleBinding in a custom namespace belongs to the GatewayAPI controller and must not be deleted here")
+				case *v3.NetworkPolicy:
+					Fail("NetworkPolicy is not rendered for a custom namespace and must not be deleted here")
+				}
+			}
+		})
+	})
+
+	Context("namespace move cleanup", func() {
+		BeforeEach(func() {
+			delCfg.GatewayNamespace = "old-ns"
+			delCfg.MoveTargetNamespace = "new-ns"
+		})
+
+		It("deletes the gateway-namespace objects", func() {
+			Expect(findObject[*gapi.Gateway](toDelete, prefix+"-gateway", "old-ns")).NotTo(BeNil())
+			Expect(findObject[*gapi.HTTPRoute](toDelete, prefix+"-route", "old-ns")).NotTo(BeNil())
+			Expect(findObject[*corev1.Secret](toDelete, tlsSecret, "old-ns")).NotTo(BeNil())
+		})
+
+		It("never deletes the Backend on a move", func() {
+			for _, obj := range toDelete {
+				if _, ok := obj.(*envoyapi.Backend); ok {
+					Fail("Backend must not be deleted on a namespace move — the new render still routes to it")
+				}
+			}
+		})
+
+		It("keeps the ReferenceGrant when moving between custom namespaces", func() {
+			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
+		})
+
+		Context("moving into the backend namespace", func() {
+			BeforeEach(func() {
+				delCfg.MoveTargetNamespace = bkNS
+			})
+
+			It("deletes the ReferenceGrant, which is no longer rendered", func() {
+				Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
+			})
+		})
+
+		Context("moving out of the backend namespace", func() {
+			BeforeEach(func() {
+				delCfg.GatewayNamespace = bkNS
+				delCfg.MoveTargetNamespace = "new-ns"
+			})
+
+			It("deletes the Enterprise SA, RoleBinding, and NetworkPolicy from the backend namespace", func() {
+				Expect(findObject[*corev1.ServiceAccount](toDelete, "waf-http-filter", bkNS)).NotTo(BeNil())
+				np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", bkNS)
+				Expect(np).NotTo(BeNil())
+			})
+
+			It("still keeps the Backend", func() {
+				for _, obj := range toDelete {
+					if _, ok := obj.(*envoyapi.Backend); ok {
+						Fail("Backend must not be deleted on a namespace move")
+					}
+				}
+			})
 		})
 	})
 

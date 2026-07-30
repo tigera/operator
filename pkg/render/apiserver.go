@@ -159,8 +159,6 @@ type APIServerConfiguration struct {
 	Cloud bool
 
 	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
-	// The escalation-capable RBAC management UI rules are added to
-	// tigera-network-admin only while it is true.
 	RBACManagementEnabled bool
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
@@ -2193,11 +2191,26 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 	}...)
 
-	// Role/binding access for the RBAC management UI, added only while the feature is
-	// switched on for this cluster. ui-apis writes these impersonating the caller, so
-	// the apiserver enforces escalation against the user's own permissions. The UI
-	// reads the role catalogue and manages group membership through both cluster- and
-	// namespace-scoped bindings.
+	// Write access to the switch, so a network admin can enable the feature without
+	// cluster-admin. Not gated: a rule rendered only while the feature is on could never
+	// be used to turn it on. create cannot be restricted by resource name, so it admits
+	// creating any ConfigMap in the namespace.
+	rules = append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{RBACManagementConfigMapName},
+			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+		},
+	)
+
+	// Role/binding access for the RBAC management UI. ui-apis writes these impersonating
+	// the caller, so the apiserver enforces escalation against the user's own permissions.
 	if c.cfg.RBACManagementEnabled {
 		rules = append(rules,
 			rbacv1.PolicyRule{

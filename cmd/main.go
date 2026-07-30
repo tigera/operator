@@ -585,7 +585,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	// Start a watch on our bootstrap configmap so we can restart if it changes.
-	if err = utils.MonitorConfigMap(clientset, bootstrapConfigMapName, bootConfig.Data); err != nil {
+	if err = utils.MonitorConfigMap(ctx, mgr.GetCache(), bootstrapConfigMapName, bootConfig.Data); err != nil {
 		log.Error(err, "Failed to monitor bootstrap configmap")
 		os.Exit(1)
 	}

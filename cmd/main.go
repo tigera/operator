@@ -59,14 +59,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
-	"k8s.io/client-go/rest"
 	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -75,6 +72,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -593,7 +591,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	// Same for the variant, which the process can only change by restarting.
-	if err = monitorVariant(ctx, cfg, c, bootVariant); err != nil {
+	if err = monitorVariant(ctx, mgr, bootVariant); err != nil {
 		log.Error(err, "Failed to monitor the product variant")
 		os.Exit(1)
 	}
@@ -729,25 +727,18 @@ func resolveBootVariant(ctx context.Context, c client.Client, def operatortigera
 // monitorVariant restarts the operator when the effective variant moves off the one this
 // process booted with. It watches every Installation, since the overlay contributes to the
 // result and may be created or deleted independently of the default.
-func monitorVariant(ctx context.Context, cfg *rest.Config, c client.Client, booted operatortigeraiov1.ProductVariant) error {
-	// The typed clientset only speaks core APIs, so build a REST client for the operator group.
-	opCfg := rest.CopyConfig(cfg)
-	opCfg.GroupVersion = &operatortigeraiov1.GroupVersion
-	opCfg.APIPath = "/apis"
-	opCfg.NegotiatedSerializer = serializer.NewCodecFactory(scheme).WithoutConversion()
-
-	rc, err := rest.RESTClientFor(opCfg)
+func monitorVariant(ctx context.Context, mgr manager.Manager, booted operatortigeraiov1.ProductVariant) error {
+	// The cache isn't running yet, so don't wait on a sync that can't happen. The informer
+	// starts along with the manager.
+	informer, err := mgr.GetCache().GetInformer(ctx, &operatortigeraiov1.Installation{}, cache.BlockUntilSynced(false))
 	if err != nil {
 		return err
 	}
 
-	informer := clientgocache.NewSharedInformer(
-		clientgocache.NewListWatchFromClient(rc, "installations", "", fields.Everything()),
-		&operatortigeraiov1.Installation{},
-		0,
-	)
-
-	check := func(interface{}) {
+	// Re-resolve rather than reading the event's object, since the effective variant is the
+	// merge of the default Installation and the overlay.
+	c := mgr.GetClient()
+	check := func() {
 		// Exiting mid-uninstall would skip the graceful termination wait in main, which
 		// holds the process open so controllers can run their finalizers.
 		instance := &operatortigeraiov1.Installation{}
@@ -767,16 +758,12 @@ func monitorVariant(ctx context.Context, cfg *rest.Config, c client.Client, boot
 		}
 	}
 
-	if _, err := informer.AddEventHandler(clientgocache.ResourceEventHandlerFuncs{
-		AddFunc:    check,
-		UpdateFunc: func(_, newObj interface{}) { check(newObj) },
-		DeleteFunc: check,
-	}); err != nil {
-		return err
-	}
-
-	go informer.Run(ctx.Done())
-	return nil
+	_, err = informer.AddEventHandler(clientgocache.ResourceEventHandlerFuncs{
+		AddFunc:    func(any) { check() },
+		UpdateFunc: func(_, _ any) { check() },
+		DeleteFunc: func(any) { check() },
+	})
+	return err
 }
 
 func showCRDs(variant operatortigeraiov1.ProductVariant, outputType string) error {

@@ -83,11 +83,8 @@ const (
 	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
 	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
 
-	// The rbac-ui-config ConfigMap is the whole configuration surface for the RBAC
-	// management UI: the operator seeds it disabled per cluster, an admin toggles the
-	// value, and ui-apis and rbacsync read it live so a toggle takes effect without
-	// rolling any workload. The value is parsed as a boolean; missing or unparsable
-	// reads as disabled. Keep in sync with ui-apis rbacmanagement/gate.
+	// The admin-owned switch for the RBAC management UI, read by the operator, ui-apis
+	// and rbacsync. Keep in sync with ui-apis rbacmanagement/gate.
 	RBACManagementConfigMapName = "rbac-ui-config"
 	RBACManagementConfigMapKey  = "rbac-ui-enabled"
 
@@ -227,8 +224,6 @@ type ManagerConfiguration struct {
 	KibanaEnabled  bool
 
 	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
-	// The access the RBAC management UI needs is rendered only while it is true, so a
-	// cluster that never enables the feature never carries the permissions.
 	RBACManagementEnabled bool
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
@@ -1199,8 +1194,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 		},
 	}
 
-	// Keep this condition in sync with the rbacManagementUINamespacedRole gate; the
-	// cluster rules and the namespaced grant are rendered together.
+	// Keep in sync with the rbacManagementUINamespacedRole gate.
 	if rbacManagementUIActive {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}
@@ -1240,10 +1234,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 }
 
 // RBACManagementEnabled reports whether the RBAC management UI is switched on for this
-// cluster. The operator gates the feature's access on this, so anything short of an
-// explicit, parsable true reads as disabled: a missing ConfigMap, a missing key, or a
-// value the admin fat-fingered. ParseBool accepts the usual spellings ("true", "True",
-// "1"), so a reasonable edit is not silently ignored.
+// cluster. A missing ConfigMap, missing key or unparsable value reads as disabled.
 func RBACManagementEnabled(cm *corev1.ConfigMap) bool {
 	if cm == nil {
 		return false
@@ -1252,24 +1243,8 @@ func RBACManagementEnabled(cm *corev1.ConfigMap) bool {
 	return err == nil && enabled
 }
 
-// RBACManagementConfigMap returns the rbac-ui-config ConfigMap seeded with the feature
-// disabled. Seeded on every Enterprise cluster, including ones where the feature is
-// never turned on, so the admin always has a switch to find.
-func RBACManagementConfigMap() *corev1.ConfigMap {
-	return &corev1.ConfigMap{
-		TypeMeta: metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      RBACManagementConfigMapName,
-			Namespace: common.CalicoNamespace,
-		},
-		Data: map[string]string{RBACManagementConfigMapKey: "false"},
-	}
-}
-
-// rbacManagementUIActive reports whether this cluster should carry the access the RBAC
-// management UI needs: the admin has switched the feature on, and this is not a
-// multi-tenant management cluster, where the feature is force-disabled on the ui-apis
-// side and the IdP resources it reaches are pinned to calico-system.
+// rbacManagementUIActive reports whether this cluster should carry the RBAC management
+// UI access. Multi-tenant is excluded: the feature is force-disabled on the ui-apis side.
 func (c *managerComponent) rbacManagementUIActive() bool {
 	return c.cfg.RBACManagementEnabled && !c.cfg.Tenant.MultiTenant()
 }
@@ -1300,9 +1275,8 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
 			Rules: []rbacv1.PolicyRule{
 				{
-					// create carries the object name in the request body, not the
-					// URL path, so RBAC cannot restrict it by resource name; it is
-					// scoped to this namespace instead.
+					// create cannot be restricted by resource name, so it is scoped to
+					// this namespace instead.
 					APIGroups: []string{""},
 					Resources: []string{"configmaps", "secrets"},
 					Verbs:     []string{"create"},
@@ -1320,8 +1294,7 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 				{
-					// The gate ui-apis watches to decide whether the feature is active
-					// on this cluster. Read-only: the value is the admin's to set.
+					// The gate ui-apis watches; read-only, the value is the admin's.
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
 					ResourceNames: []string{RBACManagementConfigMapName},

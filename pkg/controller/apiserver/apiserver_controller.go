@@ -104,8 +104,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.Variant.IsEnterprise() {
-		// Watched so that toggling the RBAC management UI re-renders the
-		// tigera-network-admin rules gated on it.
+		// Watched so a toggle re-renders the rules gated on it.
 		if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
 		}
@@ -371,9 +370,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		// The RBAC management UI switch the admin owns. The installation controller
-		// seeds it; this controller only reads it, and is watching it so a toggle
-		// re-renders tigera-network-admin.
+		// The admin owns this ConfigMap; the operator only reads it, and an absent one
+		// reads as disabled.
 		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
 			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
 		}, r.client)

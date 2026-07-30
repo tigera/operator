@@ -1659,8 +1659,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}
 		})
 
-		// The create rule on ConfigMaps/Secrets is unique to this Role, so it
-		// identifies the RBAC management UI access without matching the whole rule set.
+		// The create rule is unique to this Role, so it identifies the access without
+		// matching the whole rule set.
 		nsCreateRule := rbacv1.PolicyRule{
 			APIGroups: []string{""},
 			Resources: []string{"configmaps", "secrets"},
@@ -1858,8 +1858,7 @@ type renderConfig struct {
 	// LDAP egress rule); ldapHost sets Authentication.spec.ldap.host (scoping it).
 	ldapConfigured bool
 	ldapHost       string
-	// rbacManagementEnabled mirrors the admin's rbac-ui-config value, which gates all
-	// of the RBAC management UI access.
+	// rbacManagementEnabled mirrors the admin's rbac-ui-config value.
 	rbacManagementEnabled bool
 	cloud                 bool
 	voltronMetricsEnabled bool
@@ -1965,9 +1964,9 @@ var _ = DescribeTable("RBACManagementEnabled",
 	func(cm *corev1.ConfigMap, expected bool) {
 		Expect(render.RBACManagementEnabled(cm)).To(Equal(expected))
 	},
-	Entry("nil ConfigMap (never seeded, or deleted)", nil, false),
+	Entry("nil ConfigMap (never created, or deleted)", nil, false),
 	Entry("missing key", &corev1.ConfigMap{Data: map[string]string{}}, false),
-	Entry("seeded value", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "false"}}, false),
+	Entry("explicitly disabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "false"}}, false),
 	Entry("enabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "true"}}, true),
 	Entry("enabled, capitalised", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "True"}}, true),
 	Entry("enabled as 1", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "1"}}, true),

@@ -711,9 +711,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
-	// The RBAC management UI switch the admin owns. The installation controller seeds
-	// it; this controller only reads it, and is watching it so a toggle re-renders the
-	// access gated on it.
+	// The admin owns this ConfigMap; the operator only reads it, and an absent one reads
+	// as disabled.
 	rbacGate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
 		Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
 	}, r.client)

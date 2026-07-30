@@ -204,7 +204,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
-	// Watched so that deleting the RBAC management UI feature gate re-seeds it.
+	// Watched so a toggle re-renders the access gated on it.
 	if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
 	}
@@ -1345,17 +1345,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Seeded right after the namespace it lives in, so the switch exists even on a
-	// cluster that is degraded for an unrelated reason.
+	// The admin owns this ConfigMap; the operator only reads it, and an absent one reads
+	// as disabled.
 	var rbacManagementEnabled bool
 	if instance.Spec.Variant.IsEnterprise() {
-		if err := r.seedRBACManagementConfigMap(ctx, reqLogger); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating the RBAC management UI ConfigMap", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Read back the switch the admin owns. The ConfigMap is watched, so flipping it
-		// re-runs this reconcile and the access below follows the new value.
 		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
 			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
 		}, r.client)
@@ -2393,32 +2386,6 @@ func (r *ReconcileInstallation) checkActive(log logr.Logger) (*corev1.ConfigMap,
 	} else {
 		return nil, nil
 	}
-}
-
-// seedRBACManagementConfigMap creates the rbac-ui-config ConfigMap, disabled, if it is
-// not already present. This controller owns it because every cluster needs one in order
-// to control its own access to the RBAC management UI.
-//
-// Create-only and ownerless, so an admin's toggle survives both reconciles and
-// Installation deletion. Deleting the ConfigMap is fail-closed: consumers read a missing
-// one as disabled and this re-seeds it disabled, since the previous value is not tracked.
-func (r *ReconcileInstallation) seedRBACManagementConfigMap(ctx context.Context, log logr.Logger) error {
-	cm := render.RBACManagementConfigMap()
-
-	handler := r.newComponentHandler(log, r.client, r.scheme, nil)
-	handler.SetCreateOnly()
-	err := handler.CreateOrUpdateOrDelete(ctx, render.NewCreationPassthrough(cm), nil)
-	if err != nil {
-		if apierrors.IsAlreadyExists(err) {
-			// The value is the admin's, so there is nothing to do.
-			return nil
-		}
-		return err
-	}
-
-	log.Info("Seeded the RBAC management UI feature gate, disabled",
-		"configMap", fmt.Sprintf("%s/%s", cm.Namespace, cm.Name), "key", render.RBACManagementConfigMapKey)
-	return nil
 }
 
 func (r *ReconcileInstallation) updateCRDs(ctx context.Context, variant operatorv1.ProductVariant, log logr.Logger) error {

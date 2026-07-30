@@ -169,6 +169,10 @@ type KubeControllersConfiguration struct {
 	// caBundle so the apiserver can verify the in-process webhook endpoint.
 	// Only consulted when WAFGatewayExtensionEnabled is true.
 	WAFWebhookCABundle []byte
+
+	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// The rbacsync controller and its access are rendered only while it is true.
+	RBACManagementEnabled bool
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {

@@ -158,6 +158,11 @@ type APIServerConfiguration struct {
 	// exactly the regular Calico/Calico Enterprise RBAC.
 	Cloud bool
 
+	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// The escalation-capable RBAC management UI rules are added to
+	// tigera-network-admin only while it is true.
+	RBACManagementEnabled bool
+
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool

@@ -438,15 +438,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	// The enterprise controllers can't register without their APIs, so stop here with something
 	// actionable rather than failing later. A restart picks it up once the CRDs are installed.
 	if bootVariant.IsEnterprise() {
-		enterpriseAPIs, err := discovery.RequiresTigeraSecure(cs)
+		enterpriseAPIs, err := discovery.EnterpriseAPIsExist(cs)
 		if err != nil {
 			setupLog.Error(err, "Failed to determine whether the Enterprise APIs are available")
 			os.Exit(1)
 		}
 		if !enterpriseAPIs {
 			setupLog.Error(
-				fmt.Errorf("missing Tigera Secure custom resource definitions"),
-				"Cannot run as Calico Enterprise, install the Enterprise CRDs first",
+				fmt.Errorf("the Calico Enterprise CRDs are not installed"),
+				"Cannot run as Calico Enterprise",
 			)
 			os.Exit(1)
 		}
@@ -537,7 +537,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
 	// Determine if we need to start the Enterprise specific controllers.
-	enterpriseCRDExists, err := discovery.RequiresTigeraSecure(clientset)
+	enterpriseCRDExists, err := discovery.EnterpriseAPIsExist(clientset)
 	if err != nil {
 		setupLog.Error(err, "Failed to determine if Enterprise controllers are required")
 		os.Exit(1)

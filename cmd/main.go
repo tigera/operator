@@ -435,6 +435,23 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 	}
 
+	// The enterprise controllers can't register without their APIs, so stop here with something
+	// actionable rather than failing later. A restart picks it up once the CRDs are installed.
+	if bootVariant.IsEnterprise() {
+		enterpriseAPIs, err := discovery.RequiresTigeraSecure(cs)
+		if err != nil {
+			setupLog.Error(err, "Failed to determine whether the Enterprise APIs are available")
+			os.Exit(1)
+		}
+		if !enterpriseAPIs {
+			setupLog.Error(
+				fmt.Errorf("missing Tigera Secure custom resource definitions"),
+				"Cannot run as Calico Enterprise, install the Enterprise CRDs first",
+			)
+			os.Exit(1)
+		}
+	}
+
 	// Start a goroutine to handle termination.
 	go func() {
 		// Cancel the main context when we are done.

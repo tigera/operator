@@ -1038,27 +1038,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	// The operator supports running in a "Calico only" mode so that it doesn't need to run enterprise-specific controllers.
-	// If we are switching from this mode to one that enables enterprise, we need to restart the operator to enable the other controllers.
-	if !r.enterpriseCRDsExist && instance.Spec.Variant.IsEnterprise() {
-		// Perform an API discovery to determine if the necessary APIs exist. If they do, we can reboot into enterprise mode.
-		// if they do not, we need to notify the user that the requested configuration is invalid.
-		b, err := discovery.RequiresTigeraSecure(r.clientset)
-		if b {
-			log.Info("Rebooting to enable TigeraSecure controllers")
-			os.Exit(0)
-		} else if err != nil {
-			r.status.SetDegraded(operatorv1.InternalServerError, "Error discovering Tigera Secure availability", err, reqLogger)
-		} else {
-			r.status.SetDegraded(operatorv1.InternalServerError, "Cannot deploy Tigera Secure", fmt.Errorf("missing Tigera Secure custom resource definitions"), reqLogger)
-		}
-
-		// Queue a retry. We don't want to watch the APIServer API since it might not exist and would cause
-		// this controller to fail.
-		reqLogger.Info("Scheduling a retry", "when", utils.StandardRetry)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
-
 	// Query for pull secrets in operator namespace
 	pullSecrets, err := utils.GetInstallationPullSecrets(&instance.Spec, r.client)
 	if err != nil {

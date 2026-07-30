@@ -69,6 +69,7 @@ type LinseedSubController struct {
 	multiTenant     bool
 	elasticExternal bool
 	cloud           bool
+	useSingleIndex  bool
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
@@ -87,6 +88,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		status:          status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
 		cloud:           opts.Cloud,
+		useSingleIndex:  opts.IndexMigration,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -468,6 +470,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ElasticClientCredentialsSecret: &credentials,
 		LogStorage:                     logStorage,
 		Cloud:                          r.cloud,
+		UseSingleIndex:                 r.useSingleIndex,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 

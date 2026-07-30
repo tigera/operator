@@ -550,10 +550,12 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	elasticIsMigrating := false
+	indexIsMigrating := false
 	useExternalElastic := discovery.UseExternalElastic(bootConfig)
 
 	if isCloudBuild() {
 		elasticIsMigrating = discovery.ElasticIsMigrating(bootConfig)
+		indexIsMigrating = discovery.IndexIsMigrating(bootConfig)
 		if !elasticIsMigrating {
 			if err := verifyElasticSearch(ctx, cs, useExternalElastic); err != nil {
 				setupLog.Error(err, "Elasticsearch configuration verification failed")
@@ -580,6 +582,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		ElasticExternal:     useExternalElastic,
 		Cloud:               isCloudBuild(),
 		ESMigration:         elasticIsMigrating,
+		IndexMigration:      indexIsMigrating,
 		UseV3CRDs:           v3CRDs,
 		APIDiscovery:        apiDiscovery,
 	}

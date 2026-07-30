@@ -204,11 +204,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("manager-controller failed to watch the secret '%s': %w", ManagerGatewayTLSSecretName, err)
 	}
 
-	// Gateway and HTTPRoute status transitions must re-run checkGatewayStatus
-	// so TigeraStatus warnings track gateway health. The watch arms once the
-	// Gateway API CRDs exist. Gateway health lives in status, which does not
-	// bump the generation, so the default generation-based predicate would
-	// drop these events — match by name and accept every event instead.
+	// Gateway and HTTPRoute status transitions must re-run
+	// gatewayUnhealthyReason so the Degraded state tracks gateway health.
+	// The watch arms once the Gateway API CRDs exist. Gateway health lives
+	// in status, which does not bump the generation, so the default
+	// generation-based predicate would drop these events — match by name
+	// and accept every event instead.
 	gatewayWatchPredicate := predicate.NewPredicateFuncs(func(o client.Object) bool {
 		return o.GetName() == ManagerGatewayResourcePrefix+"-gateway" ||
 			o.GetName() == ManagerGatewayResourcePrefix+"-route"
@@ -799,7 +800,17 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// observed on the cluster.
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
-	if instance.Spec.Gateway != nil {
+	if r.opts.MultiTenant {
+		// Multi-tenant CIG is not supported: resource names and the cleanup
+		// label carry no tenant identity, so tenants would fight over the
+		// same Gateway and could delete each other's resources — including
+		// the GatewayAPI controller's per-namespace SA and RoleBinding.
+		// Nothing is ever created, so there is nothing to clean up either.
+		if instance.Spec.Gateway != nil {
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "spec.gateway is not supported in multi-tenant clusters", nil, logc)
+			return reconcile.Result{}, nil
+		}
+	} else if instance.Spec.Gateway != nil {
 		gwComp, gwKeyPair, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
 		if err != nil {
 			return result, err

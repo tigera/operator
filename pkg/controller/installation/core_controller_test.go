@@ -1382,8 +1382,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			))
 		})
 
-		// The RBAC management UI is Calico Enterprise only, so the gate is not even read
-		// on Calico — an admin who creates one there gets nothing.
+		// The feature is Enterprise only, so the gate is not read on Calico.
 		It("should ignore the RBAC management UI feature gate for Calico", func() {
 			cr.Spec.Variant = operator.Calico
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -2431,13 +2430,12 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		// The admin owns the gate ConfigMap outright: whether it exists at all, and what
-		// it says. The operator only ever reads it, and follows whatever it finds.
+		// The admin owns whether the ConfigMap exists and what it says; the operator only
+		// reads it.
 		Context("RBAC management UI feature gate", func() {
 			gateKey := client.ObjectKey{Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace}
 
-			// enabledControllers returns the ENABLED_CONTROLLERS the reconcile handed
-			// kube-controllers, which is where the gate's value is observable.
+			// enabledControllers is where the gate's value is observable.
 			enabledControllers := func() string {
 				d := &appsv1.Deployment{}
 				Expect(c.Get(ctx, client.ObjectKey{
@@ -2467,8 +2465,6 @@ var _ = Describe("Testing core-controller installation", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 
-				// Its existence is the admin's signal, so the operator must leave the
-				// cluster without one until they say otherwise.
 				err = c.Get(ctx, gateKey, &corev1.ConfigMap{})
 				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the operator not to create rbac-ui-config")
 			})
@@ -2498,8 +2494,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				cm := &corev1.ConfigMap{}
 				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
 				Expect(cm.Data).To(HaveKeyWithValue(render.RBACManagementConfigMapKey, "true"))
-				// No owner reference either: deleting the Installation must not take the
-				// admin's toggle with it.
+				// Deleting the Installation must not take the admin's toggle with it.
 				Expect(cm.GetOwnerReferences()).To(BeEmpty())
 			})
 
@@ -2519,6 +2514,22 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(enabledControllers()).NotTo(ContainSubstring("rbacsync"))
 				Expect(apierrors.IsNotFound(c.Get(ctx, gateKey, cm))).To(BeTrue())
+			})
+
+			// An unreadable ConfigMap is unknown state, not absent, so it degrades rather
+			// than rendering as disabled.
+			It("degrades and requeues when the ConfigMap cannot be read", func() {
+				readErr := fmt.Errorf("the API server is having a bad day")
+				r.client = failingGateReadClient{Client: c, err: readErr}
+				mockStatus.On("SetDegraded", operator.ResourceReadError,
+					"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything).Return().Once()
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).To(MatchError(readErr))
+				// The shared mockStatus expects a full reconcile, which this returns early
+				// from, so assert the one call.
+				mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceReadError,
+					"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything)
 			})
 		})
 	})
@@ -3200,3 +3211,17 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
 	})
 })
+
+// failingGateReadClient fails the read of the gate ConfigMap and passes everything else
+// through, to distinguish an unreadable ConfigMap from an absent one.
+type failingGateReadClient struct {
+	client.Client
+	err error
+}
+
+func (f failingGateReadClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == render.RBACManagementConfigMapName {
+		return f.err
+	}
+	return f.Client.Get(ctx, key, obj, opts...)
+}

@@ -28,7 +28,12 @@ import (
 // use to determine if they should run at all, or store them and influence their
 // reconciliation loops.
 type ControllerOptions struct {
-	DetectedProvider    v1.Provider
+	DetectedProvider v1.Provider
+
+	// Variant is the product variant resolved from the Installation before any controller
+	// started. The process runs as this variant for its lifetime; a change restarts it.
+	Variant v1.ProductVariant
+
 	EnterpriseCRDExists bool
 	ClusterDomain       string
 	KubernetesVersion   *common.VersionInfo

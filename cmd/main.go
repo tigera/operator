@@ -57,12 +57,17 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	_ "k8s.io/client-go/plugin/pkg/client/auth/gcp"
+	"k8s.io/client-go/rest"
+	clientgocache "k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
@@ -413,6 +418,25 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 	}
 
+	// Resolve the variant now that the operator CRDs exist, so that every controller runs
+	// as one variant for the lifetime of the process. A change to it restarts the operator.
+	bootVariant, err := resolveBootVariant(ctx, c, operatortigeraiov1.ProductVariant(variant))
+	if err != nil {
+		setupLog.Error(err, "Failed to resolve the product variant")
+		os.Exit(1)
+	}
+	setupLog.WithValues("variant", bootVariant).Info("Resolved product variant")
+
+	// The bootstrap pass above used the flag default, which doesn't cover the enterprise APIs.
+	if manageCRDs && bootVariant != operatortigeraiov1.ProductVariant(variant) {
+		setupLog.WithValues("variant", bootVariant).Info("Ensuring CRDs are installed for the resolved variant")
+
+		if err := crds.Ensure(mgr.GetClient(), string(bootVariant), v3CRDs, setupLog); err != nil {
+			setupLog.Error(err, "Failed to ensure CRDs are created")
+			os.Exit(1)
+		}
+	}
+
 	// Start a goroutine to handle termination.
 	go func() {
 		// Cancel the main context when we are done.
@@ -568,8 +592,15 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		os.Exit(1)
 	}
 
+	// Same for the variant, which the process can only change by restarting.
+	if err = monitorVariant(ctx, cfg, c, bootVariant); err != nil {
+		log.Error(err, "Failed to monitor the product variant")
+		os.Exit(1)
+	}
+
 	options := options.ControllerOptions{
 		DetectedProvider:    provider,
+		Variant:             bootVariant,
 		EnterpriseCRDExists: enterpriseCRDExists,
 		ClusterDomain:       clusterDomain,
 		KubernetesVersion:   kubernetesVersion,
@@ -661,6 +692,90 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+// resolveBootVariant returns the variant the operator should run as. Falling back to the
+// bootstrap default rather than waiting keeps startup unblocked on a fresh cluster; the
+// variant watch restarts us once an Installation appears.
+func resolveBootVariant(ctx context.Context, c client.Client, def operatortigeraiov1.ProductVariant) (operatortigeraiov1.ProductVariant, error) {
+	spec := operatortigeraiov1.InstallationSpec{}
+
+	instance := &operatortigeraiov1.Installation{}
+	if err := c.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
+		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return "", err
+		}
+	} else {
+		spec = instance.Spec
+	}
+
+	// The overlay can set the variant like any other field, so it has to be merged in.
+	overlay := &operatortigeraiov1.Installation{}
+	if err := c.Get(ctx, utils.OverlayInstanceKey, overlay); err != nil {
+		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return "", err
+		}
+	} else {
+		spec = utils.OverrideInstallationSpec(spec, overlay.Spec)
+	}
+
+	if spec.Variant == "" {
+		return def, nil
+	}
+	return spec.Variant, nil
+}
+
+// monitorVariant restarts the operator when the effective variant moves off the one this
+// process booted with. It watches every Installation, since the overlay contributes to the
+// result and may be created or deleted independently of the default.
+func monitorVariant(ctx context.Context, cfg *rest.Config, c client.Client, booted operatortigeraiov1.ProductVariant) error {
+	// The typed clientset only speaks core APIs, so build a REST client for the operator group.
+	opCfg := rest.CopyConfig(cfg)
+	opCfg.GroupVersion = &operatortigeraiov1.GroupVersion
+	opCfg.APIPath = "/apis"
+	opCfg.NegotiatedSerializer = serializer.NewCodecFactory(scheme).WithoutConversion()
+
+	rc, err := rest.RESTClientFor(opCfg)
+	if err != nil {
+		return err
+	}
+
+	informer := clientgocache.NewSharedInformer(
+		clientgocache.NewListWatchFromClient(rc, "installations", "", fields.Everything()),
+		&operatortigeraiov1.Installation{},
+		0,
+	)
+
+	check := func(interface{}) {
+		// Exiting mid-uninstall would skip the graceful termination wait in main, which
+		// holds the process open so controllers can run their finalizers.
+		instance := &operatortigeraiov1.Installation{}
+		if err := c.Get(ctx, utils.DefaultInstanceKey, instance); err == nil && instance.DeletionTimestamp != nil {
+			return
+		}
+
+		requested, err := resolveBootVariant(ctx, c, booted)
+		if err != nil {
+			log.Error(err, "Failed to resolve the requested variant")
+			return
+		}
+
+		if requested != booted {
+			log.Info("Requested variant changed, rebooting", "booted", booted, "requested", requested)
+			os.Exit(0)
+		}
+	}
+
+	if _, err := informer.AddEventHandler(clientgocache.ResourceEventHandlerFuncs{
+		AddFunc:    check,
+		UpdateFunc: func(_, newObj interface{}) { check(newObj) },
+		DeleteFunc: check,
+	}); err != nil {
+		return err
+	}
+
+	go informer.Run(ctx.Done())
 	return nil
 }
 

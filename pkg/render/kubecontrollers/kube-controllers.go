@@ -97,7 +97,10 @@ type KubeControllersConfiguration struct {
 	TenantID string
 
 	// Cloud reports whether this is a Calico Cloud install. Only the enterprise
-	// es-kube-controllers assembler consumes it.
+	// es-kube-controllers assembler consumes it: it grants the cloud-specific RBAC,
+	// and it stops running the elasticsearchconfiguration controller because in
+	// Calico Cloud Elasticsearch configuration - including provisioning of the
+	// Linseed user - is handled by the operator's log-storage users controller.
 	Cloud bool
 
 	// ImageOverrides lets a variant swap the kube-controllers image. The controller

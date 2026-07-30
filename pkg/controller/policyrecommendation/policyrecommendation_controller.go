@@ -349,7 +349,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, logc)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant()
+		tenant = cloudConfig.ToTenant(false)
 	}
 
 	// Create a component handler to manage the rendered component.

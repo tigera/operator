@@ -306,3 +306,19 @@ func ElasticIsMigrating(config *corev1.ConfigMap) bool {
 	}
 	return false
 }
+
+// IndexIsMigrating returns true if this cluster is in the last phase of a migration to single-index
+// storage, during which the operator must reconfigure Linseed to use the single-index names.
+func IndexIsMigrating(config *corev1.ConfigMap) bool {
+	if config == nil {
+		return false
+	}
+
+	// Load the operator bootstrap configuration from its configmap.
+	if val, ok := config.Data["INDEX_MIGRATION"]; ok && val != "" {
+		if strings.ToLower(val) == "true" {
+			return true
+		}
+	}
+	return false
+}

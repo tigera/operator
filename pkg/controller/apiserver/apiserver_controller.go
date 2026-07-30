@@ -104,6 +104,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.EnterpriseCRDExists {
+		// Watched so that toggling the RBAC management UI re-renders the
+		// tigera-network-admin rules gated on it.
+		if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
+		}
+
 		// Watch for changes to ApplicationLayer
 		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -354,6 +360,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var keyValidatorConfig authentication.KeyValidatorConfig
+	var rbacManagementEnabled bool
 	includeV3NetworkPolicy := false
 
 	if installationSpec.Variant.IsEnterprise() {
@@ -363,6 +370,18 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+
+		// The RBAC management UI switch the admin owns. The installation controller
+		// seeds it; this controller only reads it, and is watching it so a toggle
+		// re-renders tigera-network-admin.
+		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+		}, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		rbacManagementEnabled = render.RBACManagementEnabled(gate)
 
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {
@@ -524,6 +543,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		ClusterDomain:                r.opts.ClusterDomain,
 		Cloud:                        r.opts.Cloud,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
+		RBACManagementEnabled:        rbacManagementEnabled,
 		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}
 

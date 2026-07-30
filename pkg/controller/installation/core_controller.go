@@ -1347,11 +1347,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Seeded right after the namespace it lives in, so the switch exists even on a
 	// cluster that is degraded for an unrelated reason.
+	var rbacManagementEnabled bool
 	if instance.Spec.Variant.IsEnterprise() {
 		if err := r.seedRBACManagementConfigMap(ctx, reqLogger); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating the RBAC management UI ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+
+		// Read back the switch the admin owns. The ConfigMap is watched, so flipping it
+		// re-runs this reconcile and the access below follows the new value.
+		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+		}, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		rbacManagementEnabled = render.RBACManagementEnabled(gate)
 	}
 
 	// Build the list of components to render, in rendering order.
@@ -1739,8 +1751,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// the kube-controllers component (and deleted when the WAF extension is
 		// disabled); the caBundle is the operator CA that issued the serving
 		// cert above.
-		WAFWebhookCABundle: certificateManager.KeyPair().GetCertificatePEM(),
-		Cloud:              r.cloud,
+		WAFWebhookCABundle:    certificateManager.KeyPair().GetCertificatePEM(),
+		Cloud:                 r.cloud,
+		RBACManagementEnabled: rbacManagementEnabled,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

@@ -229,6 +229,11 @@ type ManagerConfiguration struct {
 	Authentication *operatorv1.Authentication
 	KibanaEnabled  bool
 
+	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// The access the RBAC management UI needs is rendered only while it is true, so a
+	// cluster that never enables the feature never carries the permissions.
+	RBACManagementEnabled bool
+
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
 	// Passed to Voltron so it can identify the correct CA issuer public key.
 	CACertCommonName string
@@ -1238,6 +1243,19 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
+}
+
+// RBACManagementEnabled reports whether the RBAC management UI is switched on for this
+// cluster. The operator gates the feature's access on this, so anything short of an
+// explicit, parsable true reads as disabled: a missing ConfigMap, a missing key, or a
+// value the admin fat-fingered. ParseBool accepts the usual spellings ("true", "True",
+// "1"), so a reasonable edit is not silently ignored.
+func RBACManagementEnabled(cm *corev1.ConfigMap) bool {
+	if cm == nil {
+		return false
+	}
+	enabled, err := strconv.ParseBool(cm.Data[RBACManagementConfigMapKey])
+	return err == nil && enabled
 }
 
 // RBACManagementConfigMap returns the rbac-ui-config ConfigMap seeded with the feature

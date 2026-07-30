@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
@@ -205,7 +206,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Gateway and HTTPRoute status transitions must re-run checkGatewayStatus
 	// so TigeraStatus warnings track gateway health. The watch arms once the
-	// Gateway API CRDs exist.
+	// Gateway API CRDs exist. Gateway health lives in status, which does not
+	// bump the generation, so the default generation-based predicate would
+	// drop these events — match by name and accept every event instead.
+	gatewayWatchPredicate := predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return o.GetName() == ManagerGatewayResourcePrefix+"-gateway" ||
+			o.GetName() == ManagerGatewayResourcePrefix+"-route"
+	})
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, nil, []client.Object{
 		&gapi.Gateway{
 			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
@@ -215,7 +222,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: ManagerGatewayResourcePrefix + "-route"},
 		},
-	})
+	}, gatewayWatchPredicate)
 
 	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
@@ -791,14 +798,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// tear down. No state is stored — each reconcile converges from what is
 	// observed on the cluster.
 	var gatewayComponents []render.Component
+	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
 	if instance.Spec.Gateway != nil {
-		gwComp, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
+		gwComp, gwKeyPair, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
 		if err != nil {
 			return result, err
 		}
 		if gwComp == nil {
 			return result, nil
 		}
+		gatewayTLSKeyPair = gwKeyPair
 
 		gwNS := instance.Spec.Gateway.NamespaceOrDefault()
 		strays, err := r.managerGatewayNamespaces(ctx)
@@ -843,6 +852,20 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	keyPairOptions := []rcertificatemanagement.KeyPairOption{
+		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+		rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
+		rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
+		rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
+		rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, true),
+	}
+	if gatewayTLSKeyPair != nil {
+		// Persist the truth-namespace copy so GetOrCreateKeyPair finds it on
+		// the next reconcile instead of minting a new certificate. The
+		// gateway component renders the gateway-namespace copy itself.
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(gatewayTLSKeyPair, true, false))
+	}
+
 	components := []render.Component{
 		// Install manager components.
 		component,
@@ -852,14 +875,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			Namespace:       helper.InstallNamespace(),
 			TruthNamespace:  helper.TruthNamespace(),
 			ServiceAccounts: []string{render.ManagerServiceAccount},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
-				rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, true),
-			},
-			TrustedBundle: bundleMaker,
+			KeyPairOptions:  keyPairOptions,
+			TrustedBundle:   bundleMaker,
 		}),
 	}
 
@@ -877,10 +894,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	if instance.Spec.Gateway != nil {
-		r.checkGatewayStatus(ctx, instance.Spec.Gateway.NamespaceOrDefault())
-	} else {
-		// Warnings must not outlive the gateway they describe.
-		r.clearGatewayWarnings()
+		// Per design: an unhealthy gateway degrades the component without
+		// tearing down deployed resources. The requeue re-checks until Envoy
+		// converges; the degraded state then clears on the pass below.
+		if msg := r.gatewayUnhealthyReason(ctx, instance.Spec.Gateway.NamespaceOrDefault()); msg != "" {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, logc)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
 	}
 
 	// Check BYO certificate expiry warnings.
@@ -1029,7 +1049,7 @@ func (r *ReconcileManager) resolveGateway(
 	certManager certificatemanager.CertificateManager,
 	helper utils.NamespaceHelper,
 	logc logr.Logger,
-) (render.Component, reconcile.Result, error) {
+) (render.Component, certificatemanagement.KeyPairInterface, reconcile.Result, error) {
 	gw := instance.Spec.Gateway
 
 	// Fetch GatewayAPI CR.
@@ -1037,17 +1057,17 @@ func (r *ReconcileManager) resolveGateway(
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; gateway resources will not be rendered", err, logc)
-			return nil, reconcile.Result{}, err
+			return nil, nil, reconcile.Result{}, err
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
-		return nil, reconcile.Result{}, err
+		return nil, nil, reconcile.Result{}, err
 	}
 
 	// Resolve gatewayClassName.
 	gatewayClassName, err := resolveGatewayClassName(gw, gatewayAPI)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to resolve gateway class", err, logc)
-		return nil, reconcile.Result{}, err
+		return nil, nil, reconcile.Result{}, err
 	}
 
 	// OIDC hostname mismatch check. Either field may include the scheme (e.g. "https://host").
@@ -1059,7 +1079,7 @@ func (r *ReconcileManager) resolveGateway(
 			err := fmt.Errorf("spec.gateway.hostname %q does not match Authentication.spec.managerDomain — OIDC redirects will fail",
 				gw.Hostname)
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Gateway hostname mismatch", err, logc)
-			return nil, reconcile.Result{}, err
+			return nil, nil, reconcile.Result{}, err
 		}
 	}
 
@@ -1068,7 +1088,7 @@ func (r *ReconcileManager) resolveGateway(
 	if gwNS := gw.NamespaceOrDefault(); gwNS != common.CalicoNamespace {
 		if err := r.ensureGatewayNamespace(ctx, gwNS); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, logc)
-			return nil, reconcile.Result{}, err
+			return nil, nil, reconcile.Result{}, err
 		}
 	}
 
@@ -1080,7 +1100,7 @@ func (r *ReconcileManager) resolveGateway(
 		[]string{gw.Hostname})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, logc)
-		return nil, reconcile.Result{}, err
+		return nil, nil, reconcile.Result{}, err
 	}
 
 	gwCfg := &rgateway.Configuration{
@@ -1097,7 +1117,7 @@ func (r *ReconcileManager) resolveGateway(
 		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 	}
 
-	return rgateway.Component(gwCfg), reconcile.Result{}, nil
+	return rgateway.Component(gwCfg), gwTLSKeyPair, reconcile.Result{}, nil
 }
 
 // ensureGatewayNamespace creates the gateway namespace if it does not exist.
@@ -1121,74 +1141,60 @@ func (r *ReconcileManager) ensureGatewayNamespace(ctx context.Context, name stri
 	return nil
 }
 
-// checkGatewayStatus reads the Gateway and HTTPRoute status conditions and
-// surfaces warnings when they are not healthy. This does not block
-// reconciliation — the operator keeps reconciling and the warning clears
-// once the conditions become healthy.
-func (r *ReconcileManager) checkGatewayStatus(ctx context.Context, gatewayNS string) {
-	const warningPrefix = "gateway-"
+// gatewayUnhealthyReason reads the Gateway and HTTPRoute status conditions
+// and returns why the gateway is not ready, or "" when every condition is
+// healthy. Per the design, an unhealthy gateway degrades the component — the
+// caller sets Degraded and requeues; deployed resources are never torn down.
+// NotFound is reported too: the requeue re-checks once the cache catches up
+// with the resources this reconcile just applied.
+func (r *ReconcileManager) gatewayUnhealthyReason(ctx context.Context, gatewayNS string) string {
 	gatewayName := ManagerGatewayResourcePrefix + "-gateway"
 	routeName := ManagerGatewayResourcePrefix + "-route"
 
 	gw := &gapi.Gateway{}
 	if err := r.client.Get(ctx, client.ObjectKey{Name: gatewayName, Namespace: gatewayNS}, gw); err != nil {
-		if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to read Gateway status", "gateway", gatewayName, "namespace", gatewayNS)
-			r.status.SetWarning(warningPrefix+"read", fmt.Sprintf("Failed to read Gateway %s/%s status", gatewayNS, gatewayName))
+		if errors.IsNotFound(err) {
+			return fmt.Sprintf("Gateway %s/%s not found yet", gatewayNS, gatewayName)
 		}
-		return
+		return fmt.Sprintf("Failed to read Gateway %s/%s status: %v", gatewayNS, gatewayName, err)
 	}
-	r.status.ClearWarning(warningPrefix + "read")
 
-	r.checkCondition(gw.Status.Conditions, string(gapi.GatewayConditionAccepted), warningPrefix+"accepted", "Gateway not accepted")
-	r.checkCondition(gw.Status.Conditions, string(gapi.GatewayConditionProgrammed), warningPrefix+"programmed", "Gateway not programmed")
+	if msg := unhealthyCondition(gw.Status.Conditions, string(gapi.GatewayConditionAccepted), "Gateway not accepted"); msg != "" {
+		return msg
+	}
+	if msg := unhealthyCondition(gw.Status.Conditions, string(gapi.GatewayConditionProgrammed), "Gateway not programmed"); msg != "" {
+		return msg
+	}
 
 	route := &gapi.HTTPRoute{}
 	if err := r.client.Get(ctx, client.ObjectKey{Name: routeName, Namespace: gatewayNS}, route); err != nil {
-		if !errors.IsNotFound(err) {
-			log.Error(err, "Failed to read HTTPRoute status", "route", routeName, "namespace", gatewayNS)
-			r.status.SetWarning(warningPrefix+"route-read", fmt.Sprintf("Failed to read HTTPRoute %s/%s status", gatewayNS, routeName))
+		if errors.IsNotFound(err) {
+			return fmt.Sprintf("HTTPRoute %s/%s not found yet", gatewayNS, routeName)
 		}
-		return
+		return fmt.Sprintf("Failed to read HTTPRoute %s/%s status: %v", gatewayNS, routeName, err)
 	}
-	r.status.ClearWarning(warningPrefix + "route-read")
-
-	routeAccepted := false
 	for _, ps := range route.Status.Parents {
-		for _, cond := range ps.Conditions {
-			if cond.Type == string(gapi.RouteConditionAccepted) && cond.Status == metav1.ConditionTrue {
-				routeAccepted = true
-			}
+		if msg := unhealthyCondition(ps.Conditions, string(gapi.RouteConditionAccepted), "HTTPRoute not accepted"); msg != "" {
+			return msg
+		}
+		if msg := unhealthyCondition(ps.Conditions, string(gapi.RouteConditionResolvedRefs), "HTTPRoute refs not resolved"); msg != "" {
+			return msg
 		}
 	}
-	if !routeAccepted && len(route.Status.Parents) > 0 {
-		log.Info("HTTPRoute not accepted by any parent gateway", "route", routeName, "namespace", gatewayNS)
-		r.status.SetWarning(warningPrefix+"route-accepted", "HTTPRoute not accepted by any parent gateway")
-	} else {
-		r.status.ClearWarning(warningPrefix + "route-accepted")
-	}
+
+	return ""
 }
 
-// clearGatewayWarnings removes every gateway health warning; called when
-// spec.gateway is removed so warnings do not outlive the gateway.
-func (r *ReconcileManager) clearGatewayWarnings() {
-	for _, key := range []string{"read", "accepted", "programmed", "route-read", "route-accepted"} {
-		r.status.ClearWarning("gateway-" + key)
-	}
-}
-
-func (r *ReconcileManager) checkCondition(conditions []metav1.Condition, condType, warningKey, msgPrefix string) {
+// unhealthyCondition returns a message when the named condition exists and is
+// not True. A missing condition is healthy: the controller has not written
+// its verdict yet, and Accepted/Programmed gate readiness once it does.
+func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix string) string {
 	for _, cond := range conditions {
-		if cond.Type == condType {
-			if cond.Status != metav1.ConditionTrue {
-				log.Info("Gateway condition not healthy", "condition", condType, "status", cond.Status, "message", cond.Message)
-				r.status.SetWarning(warningKey, fmt.Sprintf("%s: %s", msgPrefix, cond.Message))
-			} else {
-				r.status.ClearWarning(warningKey)
-			}
-			return
+		if cond.Type == condType && cond.Status != metav1.ConditionTrue {
+			return fmt.Sprintf("%s: %s", msgPrefix, cond.Message)
 		}
 	}
+	return ""
 }
 
 // resolveGatewayClassName determines the GatewayClass name to use based on the

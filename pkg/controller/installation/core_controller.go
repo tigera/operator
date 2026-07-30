@@ -301,9 +301,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
 	// are status-only updates that don't bump generation.
+	// v1 only, with no v1beta1 fallback: upgrading a v3.32-migrated cluster means
+	// deleting the old CRD, which takes the CR with it, so there is nothing to watch.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
 		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: datastoremigration.SchemeGroupVersion.String()},
 		},
 	}, predicate.ResourceVersionChangedPredicate{})
 

@@ -21,9 +21,15 @@ import (
 )
 
 var (
-	SchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1beta1"}
-	SchemeBuilder      = runtime.NewSchemeBuilder(addKnownTypes)
-	AddToScheme        = SchemeBuilder.AddToScheme
+	// SchemeGroupVersion is the group/version this operator reads DatastoreMigration at.
+	SchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1"}
+
+	// LegacySchemeGroupVersion is the pre-GA group/version, served by Calico v3.32.
+	// TODO: remove in v3.34.
+	LegacySchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1beta1"}
+
+	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
+	AddToScheme   = SchemeBuilder.AddToScheme
 )
 
 func addKnownTypes(scheme *runtime.Scheme) error {
@@ -35,7 +41,7 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	return nil
 }
 
-// DatastoreMigration is a minimal stub for the migration.projectcalico.org/v1beta1
+// DatastoreMigration is a minimal stub for the migration.projectcalico.org/v1
 // DatastoreMigration CR. It contains only the fields the operator needs to read,
 // allowing controller-runtime to cache these objects via a typed watch.
 type DatastoreMigration struct {

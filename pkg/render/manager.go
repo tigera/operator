@@ -306,11 +306,11 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.rbacManagementUIActive()),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
-	if !c.cfg.Tenant.MultiTenant() {
+	if c.rbacManagementUIActive() {
 		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
 	}
 	if c.cfg.Tenant.MultiTenant() {
@@ -992,7 +992,8 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
+// When rbacManagementUIActive is true it also carries the RBAC management UI rules.
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementUIActive bool) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -1200,7 +1201,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 
 	// Keep this condition in sync with the rbacManagementUINamespacedRole gate; the
 	// cluster rules and the namespaced grant are rendered together.
-	if !tenant.MultiTenant() {
+	if rbacManagementUIActive {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}
 
@@ -1263,6 +1264,14 @@ func RBACManagementConfigMap() *corev1.ConfigMap {
 		},
 		Data: map[string]string{RBACManagementConfigMapKey: "false"},
 	}
+}
+
+// rbacManagementUIActive reports whether this cluster should carry the access the RBAC
+// management UI needs: the admin has switched the feature on, and this is not a
+// multi-tenant management cluster, where the feature is force-disabled on the ui-apis
+// side and the IdP resources it reaches are pinned to calico-system.
+func (c *managerComponent) rbacManagementUIActive() bool {
+	return c.cfg.RBACManagementEnabled && !c.cfg.Tenant.MultiTenant()
 }
 
 // rbacManagementUIRules returns the cluster-scoped rules the RBAC management
@@ -1404,7 +1413,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if !c.cfg.Tenant.MultiTenant() &&
+	if c.rbacManagementUIActive() &&
 		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
 		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
 		// being configured on the Authentication CR. The destination is scoped to

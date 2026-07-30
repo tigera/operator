@@ -188,6 +188,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
 	}
 
+	// Watched so that toggling the RBAC management UI re-renders the access gated on it.
+	if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", render.RBACManagementConfigMapName, err)
+	}
+
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
 		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
 	}
@@ -706,6 +711,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// The admin owns this ConfigMap; the operator only reads it, and an absent one reads
+	// as disabled.
+	rbacGate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+		Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+	}, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:         routeConfig,
 		KeyValidatorConfig:         keyValidatorConfig,
@@ -735,6 +750,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Manager:                    instance,
 		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
+		RBACManagementEnabled:      render.RBACManagementEnabled(rbacGate),
 		CACertCommonName:           certificateManager.CACertCommonName(),
 		Cloud:                      r.opts.Cloud,
 		CloudResources:             mcr,

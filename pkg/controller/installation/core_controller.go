@@ -204,6 +204,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
+	// Watched so a toggle re-renders the access gated on it.
+	if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
+	}
+
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
 	}
@@ -250,14 +255,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("tigera-installation-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch the Manager CR so changes to spec.rbac re-run the installation
-		// reconcile (the rbacsync controller in calico-kube-controllers is
-		// gated on it).
-		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to watch Manager: %v", err)
 		}
 
 		// watch for change to primary resource LogCollector
@@ -1068,7 +1065,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
-	var managerCR *operatorv1.Manager
 	var logCollector *operatorv1.LogCollector
 	if r.enterpriseCRDsExist {
 		logCollector, err = utils.GetLogCollector(ctx, r.client)
@@ -1088,12 +1084,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		managerCR, err = utils.GetManager(ctx, r.client, false, "")
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -1353,6 +1343,20 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// The admin owns this ConfigMap; the operator only reads it, and an absent one reads
+	// as disabled.
+	var rbacManagementEnabled bool
+	if instance.Spec.Variant.IsEnterprise() {
+		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+		}, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		rbacManagementEnabled = render.RBACManagementEnabled(gate)
 	}
 
 	// Build the list of components to render, in rendering order.
@@ -1741,8 +1745,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// disabled); the caBundle is the operator CA that issued the serving
 		// cert above.
 		WAFWebhookCABundle:    certificateManager.KeyPair().GetCertificatePEM(),
-		RBACManagementEnabled: managerCR.RBACManagementEnabled(),
 		Cloud:                 r.cloud,
+		RBACManagementEnabled: rbacManagementEnabled,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

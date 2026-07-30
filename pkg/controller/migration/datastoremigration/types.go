@@ -21,12 +21,10 @@ import (
 )
 
 var (
-	// SchemeGroupVersion is the group/version this operator reads DatastoreMigration
-	// resources at. Everything that needs the version string derives it from here.
+	// SchemeGroupVersion is the group/version this operator reads DatastoreMigration at.
 	SchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1"}
 
 	// LegacySchemeGroupVersion is the pre-GA group/version, served by Calico v3.32.
-	// Kept so a cluster that migrated on v3.32 is still detected as migrated.
 	// TODO: remove in v3.34.
 	LegacySchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1beta1"}
 

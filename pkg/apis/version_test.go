@@ -85,13 +85,8 @@ func TestUseV3CRDs(t *testing.T) {
 	}
 }
 
-// TestCheckDatastoreMigrationFallsBackToLegacyGVR covers a cluster that migrated on v3.32:
-// it has a v1beta1 DatastoreMigration CR in the Converged phase, and the v1 CRD isn't
-// installed yet (the same way an apiserver 404s a List against a resource with no CRD).
-// checkDatastoreMigration has to find the legacy resource, otherwise UseV3CRDS falls
-// through to API discovery, sees both crd.projectcalico.org and projectcalico.org/v3
-// groups (the crd.projectcalico.org CRDs may still be present after the migration
-// converges), and answers "use v1 CRDs" for a cluster that already migrated.
+// A cluster that migrated on v3.32 has a Converged v1beta1 CR and no v1 CRD, and still
+// has to be detected as migrated.
 // TODO: remove in v3.34, alongside legacyDatastoreMigrationGVR.
 func TestCheckDatastoreMigrationFallsBackToLegacyGVR(t *testing.T) {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{
@@ -110,10 +105,7 @@ func TestCheckDatastoreMigrationFallsBackToLegacyGVR(t *testing.T) {
 		obj,
 	)
 
-	// Simulate the v1 CRD not being installed yet: a List against the v1 resource 404s.
-	// The fake dynamic client has no route table of its own, so a reactor is the only
-	// way to make a GVR return NotFound. The v1beta1 List is left alone so it hits the
-	// tracker and finds the object above.
+	// A reactor is the only way to make one GVR 404 on the fake dynamic client.
 	dc.PrependReactor("list", "datastoremigrations", func(action ktesting.Action) (bool, runtime.Object, error) {
 		if action.GetResource() == datastoreMigrationGVR {
 			return true, nil, apierrors.NewGenericServerResponse(404, "get", datastoreMigrationGVR.GroupResource(), "", "404 page not found", 0, true)

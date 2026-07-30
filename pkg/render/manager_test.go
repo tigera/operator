@@ -88,8 +88,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerNamespace}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
@@ -487,13 +485,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			// RBAC management UI: present on every non-multi-tenant cluster, since the
-			// feature is activated at runtime from the rbac-ui-config ConfigMap.
-			{
-				APIGroups: []string{"operator.tigera.io"},
-				Resources: []string{"compliances"},
-				Verbs:     []string{"get"},
-			},
 		}))
 		roleBindingWatchManagedClusters := rtest.GetResource(resourcesToCreate, render.ManagerManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingWatchManagedClusters.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
@@ -627,8 +618,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerServiceName, Namespace: render.LegacyManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerDeploymentName, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
@@ -848,13 +837,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			// RBAC management UI: present on every non-multi-tenant cluster, since the
-			// feature is activated at runtime from the rbac-ui-config ConfigMap.
-			{
-				APIGroups: []string{"operator.tigera.io"},
-				Resources: []string{"compliances"},
-				Verbs:     []string{"get"},
-			},
 		}))
 	})
 
@@ -953,8 +935,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerManagedClustersUpdateRBACName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
-			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: render.LegacyManagerNamespace}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
 			&v3.UISettingsGroup{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerUserSettings}, TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"}},
@@ -1779,15 +1759,24 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Verbs:         []string{"get", "list", "watch"},
 		}
 
-		// Activation is decided at runtime from the rbac-ui-config ConfigMap, so the
-		// access is in place on every non-multi-tenant cluster.
-		It("renders the namespaced RBAC UI role with read access to the feature gate", func() {
+		It("does not render the namespaced RBAC UI role while the feature gate is off", func() {
 			resources, _ := renderObjects(renderConfig{
 				installation: installation,
 				ns:           render.ManagerNamespace,
 			})
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		It("renders the namespaced RBAC UI role with read access to the feature gate when enabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation:          installation,
+				ns:                    render.ManagerNamespace,
+				rbacManagementEnabled: true,
+			})
 			role := rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
 			Expect(role.Rules).To(ContainElement(nsCreateRule))
+			// ui-apis keeps read access to the gate so it can observe the admin
+			// switching the feature back off.
 			Expect(role.Rules).To(ContainElement(gateReadRule))
 		})
 
@@ -1796,6 +1785,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				installation:      installation,
 				ns:                "tenant-a",
 				bindingNamespaces: []string{"tenant-a"},
+				// Enabled, to prove tenancy is what excludes these and not the gate.
+				rbacManagementEnabled: true,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
 					Spec: operatorv1.TenantSpec{
@@ -1832,7 +1823,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("adds an unscoped LDAP egress when LDAP auth is configured but no host is set", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					ldapConfigured: true,
+					rbacManagementEnabled: true, ldapConfigured: true,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(ldapEgress))
@@ -1841,8 +1832,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("scopes LDAP egress to a Domains match when the LDAP host is a hostname", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					ldapConfigured: true,
-					ldapHost:       "ad.example.com:636",
+					rbacManagementEnabled: true, ldapConfigured: true,
+					ldapHost: "ad.example.com:636",
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
@@ -1860,8 +1851,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("scopes LDAP egress to a /32 Nets match when the LDAP host is an IPv4 address", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					ldapConfigured: true,
-					ldapHost:       "10.20.30.40:389",
+					rbacManagementEnabled: true, ldapConfigured: true,
+					ldapHost: "10.20.30.40:389",
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
@@ -1879,8 +1870,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("scopes LDAP egress to a /128 Nets match when the LDAP host is an IPv6 address", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					ldapConfigured: true,
-					ldapHost:       "[2001:db8::1]:636",
+					rbacManagementEnabled: true, ldapConfigured: true,
+					ldapHost: "[2001:db8::1]:636",
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
@@ -1898,7 +1889,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			It("omits LDAP egress when LDAP auth is not configured", func() {
 				resources, _ := renderObjects(renderConfig{
 					installation: installation, ns: render.ManagerNamespace,
-					ldapConfigured: false,
+					rbacManagementEnabled: true, ldapConfigured: false,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when the feature gate is off, even with LDAP configured", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					ldapConfigured: true,
 				})
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
 				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
@@ -1942,8 +1942,11 @@ type renderConfig struct {
 	externalElastic         bool
 	// ldapConfigured, when true, sets Authentication.spec.ldap (gating the RBAC-UI
 	// LDAP egress rule); ldapHost sets Authentication.spec.ldap.host (scoping it).
-	ldapConfigured        bool
-	ldapHost              string
+	ldapConfigured bool
+	ldapHost       string
+	// rbacManagementEnabled mirrors the admin's rbac-ui-config value, which gates all
+	// of the RBAC management UI access.
+	rbacManagementEnabled bool
 	cloud                 bool
 	voltronMetricsEnabled bool
 	cloudResources        render.ManagerCloudResources
@@ -2019,6 +2022,7 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 		Manager:                 roc.manager,
 		ExternalElastic:         roc.externalElastic,
 		CACertCommonName:        certificateManager.CACertCommonName(),
+		RBACManagementEnabled:   roc.rbacManagementEnabled,
 		Cloud:                   roc.cloud,
 		CloudResources:          roc.cloudResources,
 	}
@@ -2041,3 +2045,20 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 	resourcesToCreate, resourcesToDelete := component.Objects()
 	return resourcesToCreate, resourcesToDelete
 }
+
+// The gate is hand-edited by an admin, so the parser has to be forgiving about
+// spelling and strict about everything else: anything it cannot read as an explicit
+// true leaves the feature — and all of its access — switched off.
+var _ = DescribeTable("RBACManagementEnabled",
+	func(cm *corev1.ConfigMap, expected bool) {
+		Expect(render.RBACManagementEnabled(cm)).To(Equal(expected))
+	},
+	Entry("nil ConfigMap (never seeded, or deleted)", nil, false),
+	Entry("missing key", &corev1.ConfigMap{Data: map[string]string{}}, false),
+	Entry("seeded value", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "false"}}, false),
+	Entry("enabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "true"}}, true),
+	Entry("enabled, capitalised", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "True"}}, true),
+	Entry("enabled as 1", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "1"}}, true),
+	Entry("unparsable value stays off", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "yes please"}}, false),
+	Entry("empty value stays off", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: ""}}, false),
+)

@@ -364,7 +364,16 @@ var _ = Describe("Elasticsearch users and roles", func() {
 	})
 
 	It("should generate Linseed ElasticUser with expected username and roles", func() {
-		linseedUser := LinseedUser(clusterID, tenantID)
+		tenant := &operatorv1.Tenant{
+			Spec: operatorv1.TenantSpec{
+				ID: tenantID,
+				Indices: []operatorv1.Index{
+					{DataType: operatorv1.DataTypeFlowLogs, BaseIndexName: "calico_flowlogs_standard"},
+					{DataType: operatorv1.DataTypeDNSLogs, BaseIndexName: "calico_dnslogs_standard"},
+				},
+			},
+		}
+		linseedUser := LinseedUser(clusterID, tenant)
 		expectedLinseedESName := fmt.Sprintf("%s_%s_%s", ElasticsearchUserNameLinseed, clusterID, tenantID)
 
 		Expect(linseedUser.Username).To(Equal(expectedLinseedESName))
@@ -376,14 +385,67 @@ var _ = Describe("Elasticsearch users and roles", func() {
 			Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
 			Indices: []RoleIndex{
 				{
-					// Include both single-index and multi-index name formats.
-					Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID), "calico_*"},
+					// The indices declared on the Tenant, wildcarded to cover the indices behind each alias.
+					Names:      []string{"calico_flowlogs_standard*", "calico_dnslogs_standard*"},
 					Privileges: []string{"create_index", "write", "manage", "read"},
 				},
 			},
 		}
 
 		Expect(*linseedRole.Definition).To(Equal(expectedLinseedRoleDef))
+	})
+
+	It("should grant a multi-tenant Linseed user the default single-index names when the Tenant declares none", func() {
+		tenant := &operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: tenantID}}
+		linseedUser := LinseedUser(clusterID, tenant)
+
+		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_*"}))
+	})
+
+	It("should generate a single-tenant Linseed user granted the indices its cluster stores data in", func() {
+		tenant := &operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: tenantID}}
+		expectedName := fmt.Sprintf("%s-%s-%s", ElasticsearchUserNameLinseed, tenantID, LegacySingleTenantUserSuffix)
+
+		// A cluster still on multi-index storage declares no indices, and gets access to the indices
+		// named for its tenant.
+		linseedUser := LinseedUserSingleTenant(tenant, true)
+		Expect(linseedUser.Username).To(Equal(expectedName))
+		Expect(linseedUser.Roles[0].Name).To(Equal(expectedName))
+		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID)}))
+
+		// A cluster on its own Elasticsearch is not qualified by tenant - neither its index pattern, nor
+		// its user name, which es-kube-controllers built without a tenant ID.
+		linseedUser = LinseedUserSingleTenant(tenant, false)
+		Expect(linseedUser.Username).To(Equal("tigera-ee-linseed-secure"))
+		Expect(linseedUser.Roles[0].Name).To(Equal("tigera-ee-linseed-secure"))
+		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{indexPattern("tigera_secure_ee_*", "*", ".*", "")}))
+
+		// Once it moves to single-index storage, it gets access to the declared indices instead.
+		tenant.Spec.Indices = []operatorv1.Index{{DataType: operatorv1.DataTypeFlowLogs, BaseIndexName: "calico_flowlogs_standard"}}
+		linseedUser = LinseedUserSingleTenant(tenant, true)
+		Expect(linseedUser.Username).To(Equal(expectedName))
+		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
+	})
+
+	It("should never widen the single-index pattern to all indices when a base index name is empty", func() {
+		// An index with no base index name must not be wildcarded into "*", which would grant Linseed
+		// access to every index in Elasticsearch.
+		tenant := &operatorv1.Tenant{
+			Spec: operatorv1.TenantSpec{
+				ID: tenantID,
+				Indices: []operatorv1.Index{
+					{DataType: operatorv1.DataTypeFlowLogs, BaseIndexName: "calico_flowlogs_standard"},
+					{DataType: operatorv1.DataTypeDNSLogs},
+				},
+			},
+		}
+		Expect(LinseedUser(clusterID, tenant).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
+		Expect(LinseedUserSingleTenant(tenant, true).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
+
+		// With no usable base index name at all, fall back to Linseed's default index names.
+		tenant.Spec.Indices = []operatorv1.Index{{DataType: operatorv1.DataTypeDNSLogs}}
+		Expect(LinseedUser(clusterID, tenant).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_*"}))
+		Expect(LinseedUserSingleTenant(tenant, true).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_*"}))
 	})
 })
 

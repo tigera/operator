@@ -330,7 +330,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Expect(d.Spec.Template.Spec.Volumes[3].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
+		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
 
 		clusterRole = rtest.GetResource(resources, "tigera-ui-user", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(uiUserPolicyRules))
@@ -384,16 +384,25 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
-	// Activation is decided per cluster by the rbac-ui-config ConfigMap an admin
-	// edits, so tigera-network-admin carries these rules on every Enterprise cluster.
-	It("should render the RBAC management UI rules on tigera-network-admin", func() {
+	// The escalation-capable rolebinding rules are the reason this is gated: a cluster
+	// that never switches the feature on must not carry them.
+	It("should gate the RBAC management UI rules on tigera-network-admin", func() {
+		By("omitting them while the feature gate is off")
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		resources, _ := component.Objects()
 		clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		for _, rule := range rbacManagementNetworkAdminRules {
-			Expect(clusterRole.Rules).To(ContainElement(rule))
+			Expect(clusterRole.Rules).NotTo(ContainElement(rule))
 		}
+		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
+
+		By("adding them once the admin switches the feature on")
+		cfg.RBACManagementEnabled = true
+		component, err = render.APIServer(cfg)
+		Expect(err).NotTo(HaveOccurred())
+		resources, _ = component.Objects()
+		clusterRole = rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
 	})
 

@@ -30,6 +30,13 @@ type ManagerSpec struct {
 	// RBACUI configures the RBAC management UI feature.
 	// +optional
 	RBACUI *RBACUI `json:"rbacUI,omitempty"`
+
+	// Gateway configures Calico Ingress Gateway access to the Manager UI.
+	// When set, the operator renders Gateway API resources (Gateway, HTTPRoute,
+	// Backend, ReferenceGrant, TLS Secret) to expose Manager via CIG.
+	// Requires a GatewayAPI CR to be present.
+	// +optional
+	Gateway *GatewaySpec `json:"gateway,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Enabled;Disabled

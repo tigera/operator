@@ -20,6 +20,7 @@ import (
 	"os"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
@@ -31,11 +32,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
 
-var datastoreMigrationGVR = schema.GroupVersionResource{
-	Group:    "migration.projectcalico.org",
-	Version:  "v1beta1",
-	Resource: "datastoremigrations",
-}
+var datastoreMigrationGVR = datastoremigration.SchemeGroupVersion.WithResource("datastoremigrations")
+
+// legacyDatastoreMigrationGVR is the pre-GA resource, served by Calico v3.32.
+// TODO: remove in v3.34.
+var legacyDatastoreMigrationGVR = datastoremigration.LegacySchemeGroupVersion.WithResource("datastoremigrations")
 
 const (
 	mutatingAdmissionPolicyGroup = "admissionregistration.k8s.io"
@@ -138,9 +139,20 @@ func requireMAPForV3(useV3 bool, disco discovery.DiscoveryInterface) (bool, erro
 
 // checkDatastoreMigration uses a dynamic client to look for a DatastoreMigration CR
 // and returns true if one exists in a phase that indicates v3 CRDs should be used.
-// This is used at startup before the manager cache is available.
+// It tries the v1 resource first and falls back to the legacy v1beta1 resource if
+// the v1 CRD isn't installed. This is used at startup before the manager cache is
+// available.
 func checkDatastoreMigration(dyn dynamic.Interface) (bool, error) {
 	list, err := dyn.Resource(datastoreMigrationGVR).List(context.Background(), metav1.ListOptions{})
+	if apierrors.IsNotFound(err) {
+		// A cluster that migrated on v3.32 only has the v1beta1 resource. Without
+		// this, UseV3CRDS falls through to API discovery, which still sees both
+		// groups (the crd.projectcalico.org CRDs may still be present after the
+		// migration converges) and answers "use v1 CRDs" for a cluster that has
+		// already migrated.
+		// TODO: remove in v3.34.
+		list, err = dyn.Resource(legacyDatastoreMigrationGVR).List(context.Background(), metav1.ListOptions{})
+	}
 	if err != nil {
 		return false, err
 	}

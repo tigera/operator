@@ -211,9 +211,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// to migration phase changes (e.g., goes hands-off during Migrating).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
 	// are status-only updates that don't bump generation.
+	//
+	// This is v1 only with no v1beta1 fallback; see the same watch registration in
+	// pkg/controller/installation/core_controller.go for why.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
 		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
+			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: datastoremigration.SchemeGroupVersion.String()},
 		},
 	}, predicate.ResourceVersionChangedPredicate{})
 

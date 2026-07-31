@@ -151,7 +151,7 @@ var _ = Describe("CRD management tests", func() {
 		})
 
 		It("Should create CRD if it doesn't exist", func() {
-			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, operator.CalicoEnterprise)
+			c, shutdownContext, cancel, mgr = setupManager(ManageCRDsEnable, SingleTenant, operator.Calico)
 			operatorDone = createInstallation(c, mgr, shutdownContext, nil)
 
 			np := npCRD.DeepCopy()

@@ -70,7 +70,7 @@ var _ = Describe("Mainline component function tests", func() {
 	var operatorDone chan struct{}
 
 	BeforeEach(func() {
-		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, operator.CalicoEnterprise)
+		c, shutdownContext, cancel, mgr = setupManager(ManageCRDsDisable, SingleTenant, operator.Calico)
 
 		By("Cleaning up resources before the test")
 		cleanupResources(c)

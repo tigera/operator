@@ -130,7 +130,7 @@ func main() {
 	var sgSetup bool
 	var manageCRDs bool
 	var preDelete bool
-	var variant string
+	var bootstrapVariant string
 
 	// bootstrapCRDs is a flag that can be used to install the CRDs and exit. This is useful for
 	// workflows that use an init container to install CustomResources prior to the operator starting.
@@ -169,13 +169,26 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	flag.BoolVar(&manageCRDs, "manage-crds", false, "Operator should manage the projectcalico.org and operator.tigera.io CRDs.")
 	flag.BoolVar(&preDelete, "pre-delete", false, "Run helm pre-deletion hook logic, then exit.")
 	flag.BoolVar(&bootstrapCRDs, "bootstrap-crds", false, "Install CRDs and exit")
-	flag.StringVar(&variant, "variant", string(operatortigeraiov1.Calico), "Default product variant to assume during boostrapping.")
+	flag.StringVar(
+		&bootstrapVariant, "variant", string(operatortigeraiov1.Calico),
+		`Product variant to install CRDs for before an Installation exists. Only affects CRD and
+admission policy installation; once an Installation exists it is the authority on the variant.`,
+	)
 
 	opts := zap.Options{}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
+
+	// An unrecognised variant would quietly install the Calico CRDs, which can't be corrected
+	// later because CRDs are only ever created, never updated.
+	switch v := operatortigeraiov1.ProductVariant(bootstrapVariant); {
+	case v == operatortigeraiov1.Calico, v.IsEnterprise():
+	default:
+		fmt.Printf("Invalid -variant %q\n", bootstrapVariant)
+		os.Exit(1)
+	}
 
 	if showVersion {
 		// If the following line is updated then it might be necessary to update the assertOperatorImageVersion in hack/release/build.go
@@ -395,17 +408,17 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	if bootstrapCRDs || manageCRDs {
 		setupLog.WithValues("v3", v3CRDs).Info("Ensuring CRDs are installed")
 
-		if err := crds.Ensure(mgr.GetClient(), variant, v3CRDs, setupLog); err != nil {
+		if err := crds.Ensure(mgr.GetClient(), bootstrapVariant, v3CRDs, setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
 			os.Exit(1)
 		}
 
-		if err := admission.Ensure(mgr.GetClient(), variant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy), setupLog); err != nil {
+		if err := admission.Ensure(mgr.GetClient(), bootstrapVariant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindPolicy), setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure MutatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
 
-		if err := admission.EnsureValidating(mgr.GetClient(), variant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy), setupLog); err != nil {
+		if err := admission.EnsureValidating(mgr.GetClient(), bootstrapVariant, v3CRDs, apiDiscovery.ServedVersion(admission.APIGroup, admission.KindValidatingPolicy), setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure ValidatingAdmissionPolicies are created")
 			os.Exit(1)
 		}
@@ -416,9 +429,8 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 	}
 
-	// Resolve the variant now that the operator CRDs exist, so that every controller runs
-	// as one variant for the lifetime of the process. A change to it restarts the operator.
-	bootVariant, err := resolveBootVariant(ctx, c, operatortigeraiov1.ProductVariant(variant))
+	// Resolve the variant now that the operator CRDs exist.
+	bootVariant, err := resolveBootVariant(ctx, c, operatortigeraiov1.ProductVariant(bootstrapVariant))
 	if err != nil {
 		setupLog.Error(err, "Failed to resolve the product variant")
 		os.Exit(1)
@@ -426,7 +438,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	setupLog.WithValues("variant", bootVariant).Info("Resolved product variant")
 
 	// The bootstrap pass above used the flag default, which doesn't cover the enterprise APIs.
-	if manageCRDs && bootVariant != operatortigeraiov1.ProductVariant(variant) {
+	if manageCRDs && bootVariant != operatortigeraiov1.ProductVariant(bootstrapVariant) {
 		setupLog.WithValues("variant", bootVariant).Info("Ensuring CRDs are installed for the resolved variant")
 
 		if err := crds.Ensure(mgr.GetClient(), string(bootVariant), v3CRDs, setupLog); err != nil {
@@ -435,8 +447,8 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		}
 	}
 
-	// The enterprise controllers can't register without their APIs, so stop here with something
-	// actionable rather than failing later. A restart picks it up once the CRDs are installed.
+	// The enterprise controllers can't register without their APIs. Exiting lets the kubelet
+	// retry us once the CRDs are installed.
 	if bootVariant.IsEnterprise() {
 		enterpriseAPIs, err := discovery.EnterpriseAPIsExist(cs)
 		if err != nil {
@@ -536,14 +548,6 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
 
-	// Determine if we need to start the Enterprise specific controllers.
-	enterpriseCRDExists, err := discovery.EnterpriseAPIsExist(clientset)
-	if err != nil {
-		setupLog.Error(err, "Failed to determine if Enterprise controllers are required")
-		os.Exit(1)
-	}
-	setupLog.WithValues("required", enterpriseCRDExists).Info("Checking if Enterprise controllers are required")
-
 	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
 	if err != nil {
 		clusterDomain = dns.DefaultClusterDomain
@@ -614,20 +618,19 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 	}
 
 	options := options.ControllerOptions{
-		DetectedProvider:    provider,
-		Variant:             bootVariant,
-		EnterpriseCRDExists: enterpriseCRDExists,
-		ClusterDomain:       clusterDomain,
-		KubernetesVersion:   kubernetesVersion,
-		ManageCRDs:          manageCRDs,
-		ShutdownContext:     ctx,
-		K8sClientset:        clientset,
-		MultiTenant:         multiTenant,
-		ElasticExternal:     useExternalElastic,
-		Cloud:               isCloudBuild(),
-		ESMigration:         elasticIsMigrating,
-		UseV3CRDs:           v3CRDs,
-		APIDiscovery:        apiDiscovery,
+		DetectedProvider:  provider,
+		Variant:           bootVariant,
+		ClusterDomain:     clusterDomain,
+		KubernetesVersion: kubernetesVersion,
+		ManageCRDs:        manageCRDs,
+		ShutdownContext:   ctx,
+		K8sClientset:      clientset,
+		MultiTenant:       multiTenant,
+		ElasticExternal:   useExternalElastic,
+		Cloud:             isCloudBuild(),
+		ESMigration:       elasticIsMigrating,
+		UseV3CRDs:         v3CRDs,
+		APIDiscovery:      apiDiscovery,
 	}
 
 	// Before we start any controllers, make sure our options are valid.
@@ -644,7 +647,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	// Register custom Prometheus metrics collector.
 	if common.MetricsEnabled() {
-		collector := metrics.NewOperatorCollector(mgr.GetClient(), enterpriseCRDExists)
+		collector := metrics.NewOperatorCollector(mgr.GetClient(), bootVariant.IsEnterprise())
 		ctrlmetrics.Registry.MustRegister(collector)
 	}
 
@@ -710,9 +713,9 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 	return nil
 }
 
-// resolveBootVariant returns the variant the operator should run as. Falling back to the
-// bootstrap default rather than waiting keeps startup unblocked on a fresh cluster; the
-// variant watch restarts us once an Installation appears.
+// resolveBootVariant returns the variant the operator should run as. It falls back to the
+// bootstrap default rather than waiting, so a fresh cluster isn't blocked before the
+// Installation exists; the variant watch restarts us once it appears.
 func resolveBootVariant(ctx context.Context, c client.Client, def operatortigeraiov1.ProductVariant) (operatortigeraiov1.ProductVariant, error) {
 	spec := operatortigeraiov1.InstallationSpec{}
 
@@ -742,11 +745,9 @@ func resolveBootVariant(ctx context.Context, c client.Client, def operatortigera
 }
 
 // monitorVariant restarts the operator when the effective variant moves off the one this
-// process booted with. It watches every Installation, since the overlay contributes to the
-// result and may be created or deleted independently of the default.
+// process booted with.
 func monitorVariant(ctx context.Context, mgr manager.Manager, booted operatortigeraiov1.ProductVariant) error {
-	// The cache isn't running yet, so don't wait on a sync that can't happen. The informer
-	// starts along with the manager.
+	// The cache isn't running yet, so don't wait on a sync that can't happen.
 	informer, err := mgr.GetCache().GetInformer(ctx, &operatortigeraiov1.Installation{}, cache.BlockUntilSynced(false))
 	if err != nil {
 		return err

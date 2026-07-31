@@ -640,14 +640,13 @@ func GetInstallationStatus(ctx context.Context, client client.Client) (*operator
 	return &instance.Status, nil
 }
 
-// GetInstallationSpec returns the current installation, for use by other controllers. It accounts for overlays and
-// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
-// launch enterprise-dependent components.
-func GetInstallationSpec(ctx context.Context, client client.Client) (operatorv1.ProductVariant, *operatorv1.InstallationSpec, error) {
+// GetInstallationSpec returns the current installation, accounting for overlays. Controllers take
+// the variant from their ControllerOptions instead, so that the whole process agrees on one value.
+func GetInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
-		return instance.Status.Variant, nil, err
+		return nil, err
 	}
 
 	spec := instance.Spec
@@ -656,13 +655,13 @@ func GetInstallationSpec(ctx context.Context, client client.Client) (operatorv1.
 	overlay := operatorv1.Installation{}
 	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
 		if !errors.IsNotFound(err) {
-			return instance.Status.Variant, nil, err
+			return nil, err
 		}
 	} else {
 		spec = OverrideInstallationSpec(spec, overlay.Spec)
 	}
 
-	return instance.Status.Variant, &spec, nil
+	return &spec, nil
 }
 
 // GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.
@@ -988,8 +987,7 @@ func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
 
 // MonitorConfigMap exits the operator if the given ConfigMap's data is changed.
 func MonitorConfigMap(ctx context.Context, ca ctrlcache.Cache, name string, data map[string]string) error {
-	// The cache isn't running yet, so don't wait on a sync that can't happen. The informer
-	// starts along with the manager.
+	// The cache isn't running yet, so don't wait on a sync that can't happen.
 	informer, err := ca.GetInformer(ctx, &corev1.ConfigMap{}, ctrlcache.BlockUntilSynced(false))
 	if err != nil {
 		return err

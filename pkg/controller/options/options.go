@@ -34,11 +34,10 @@ type ControllerOptions struct {
 	// started. The process runs as this variant for its lifetime; a change restarts it.
 	Variant v1.ProductVariant
 
-	EnterpriseCRDExists bool
-	ClusterDomain       string
-	KubernetesVersion   *common.VersionInfo
-	ManageCRDs          bool
-	ShutdownContext     context.Context
+	ClusterDomain     string
+	KubernetesVersion *common.VersionInfo
+	ManageCRDs        bool
+	ShutdownContext   context.Context
 
 	// Kubernetes clientset used by controllers to create watchers and informers.
 	K8sClientset *kubernetes.Clientset

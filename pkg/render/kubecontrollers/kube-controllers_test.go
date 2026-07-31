@@ -561,7 +561,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should not enable the elasticsearchconfiguration controller when migrating to single-index storage", func() {
-		instance.Variant = operatorv1.TigeraSecureEnterprise
+		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094

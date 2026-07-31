@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/cloudflare/cfssl/log"
+	"github.com/go-logr/logr"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -57,7 +58,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -430,11 +430,7 @@ admission policy installation; once an Installation exists it is the authority o
 	}
 
 	// Resolve the variant now that the operator CRDs exist.
-	bootVariant, err := resolveBootVariant(ctx, c, operatortigeraiov1.ProductVariant(bootstrapVariant))
-	if err != nil {
-		setupLog.Error(err, "Failed to resolve the product variant")
-		os.Exit(1)
-	}
+	bootVariant := waitForVariant(ctx, c, setupLog)
 	setupLog.WithValues("variant", bootVariant).Info("Resolved product variant")
 
 	// The bootstrap pass above used the flag default, which doesn't cover the enterprise APIs.
@@ -456,10 +452,7 @@ admission policy installation; once an Installation exists it is the authority o
 			os.Exit(1)
 		}
 		if !enterpriseAPIs {
-			setupLog.Error(
-				fmt.Errorf("the Calico Enterprise CRDs are not installed"),
-				"Cannot run as Calico Enterprise",
-			)
+			setupLog.Error(fmt.Errorf("the Calico Enterprise CRDs are not installed"), "Cannot run as Calico Enterprise")
 			os.Exit(1)
 		}
 	}
@@ -713,25 +706,47 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 	return nil
 }
 
-// resolveBootVariant returns the variant the operator should run as. It falls back to the
-// bootstrap default rather than waiting, so a fresh cluster isn't blocked before the
-// Installation exists; the variant watch restarts us once it appears.
-func resolveBootVariant(ctx context.Context, c client.Client, def operatortigeraiov1.ProductVariant) (operatortigeraiov1.ProductVariant, error) {
-	spec := operatortigeraiov1.InstallationSpec{}
+// waitForVariant blocks until an Installation exists and returns the variant it asks for. The
+// operator has nothing to do before then, and the bootstrap flag is only ever for the CRDs above.
+func waitForVariant(ctx context.Context, c client.Client, log logr.Logger) operatortigeraiov1.ProductVariant {
+	waiting := false
+	for {
+		variant, err := effectiveVariant(ctx, c)
+		switch {
+		case err != nil:
+			log.Error(err, "Failed to read the Installation, will retry")
+		case variant != "":
+			return variant
+		case !waiting:
+			log.Info("Waiting for an Installation")
+			waiting = true
+		}
 
+		select {
+		case <-time.After(2 * time.Second):
+		case <-ctx.Done():
+			log.Info("Requested to stop while waiting for an Installation")
+			os.Exit(0)
+		}
+	}
+}
+
+// effectiveVariant returns the variant the Installation asks for, merging in the overlay. It
+// returns an empty variant when no Installation exists.
+func effectiveVariant(ctx context.Context, c client.Client) (operatortigeraiov1.ProductVariant, error) {
 	instance := &operatortigeraiov1.Installation{}
 	if err := c.Get(ctx, utils.DefaultInstanceKey, instance); err != nil {
-		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
-			return "", err
+		if errors.IsNotFound(err) {
+			return "", nil
 		}
-	} else {
-		spec = instance.Spec
+		return "", err
 	}
+	spec := instance.Spec
 
 	// The overlay can set the variant like any other field, so it has to be merged in.
 	overlay := &operatortigeraiov1.Installation{}
 	if err := c.Get(ctx, utils.OverlayInstanceKey, overlay); err != nil {
-		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+		if !errors.IsNotFound(err) {
 			return "", err
 		}
 	} else {
@@ -739,7 +754,8 @@ func resolveBootVariant(ctx context.Context, c client.Client, def operatortigera
 	}
 
 	if spec.Variant == "" {
-		return def, nil
+		// An Installation that doesn't ask for a variant gets Calico.
+		return operatortigeraiov1.Calico, nil
 	}
 	return spec.Variant, nil
 }
@@ -764,13 +780,13 @@ func monitorVariant(ctx context.Context, mgr manager.Manager, booted operatortig
 			return
 		}
 
-		requested, err := resolveBootVariant(ctx, c, booted)
+		requested, err := effectiveVariant(ctx, c)
 		if err != nil {
 			log.Error(err, "Failed to resolve the requested variant")
 			return
 		}
 
-		if requested != booted {
+		if requested != "" && requested != booted {
 			log.Info("Requested variant changed, rebooting", "booted", booted, "requested", requested)
 			os.Exit(0)
 		}

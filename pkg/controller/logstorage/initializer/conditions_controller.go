@@ -17,8 +17,10 @@ package initializer
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,9 +43,10 @@ func AddConditionsController(mgr manager.Manager, opts options.ControllerOptions
 
 	// Create the reconciler
 	r := &LogStorageConditions{
-		client:      mgr.GetClient(),
-		scheme:      mgr.GetScheme(),
-		multiTenant: opts.MultiTenant,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		multiTenant:    opts.MultiTenant,
+		indexMigration: opts.IndexMigration,
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -62,6 +65,10 @@ type LogStorageConditions struct {
 	client      client.Client
 	scheme      *runtime.Scheme
 	multiTenant bool
+
+	// indexMigration indicates that this single-tenant cluster is migrating to single-index storage,
+	// in which case the log-storage users controller runs and reports status.
+	indexMigration bool
 }
 
 func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -88,9 +95,22 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Compare and update the current StatusCondition if there are any new changes
-	ls.Status.Conditions = updateConditions(currentConditions, desiredConditions)
+	conditions := updateConditions(currentConditions, desiredConditions)
+
+	// Skip the write if nothing changed. This controller watches LogStorage, so a no-op write would
+	// re-trigger it and spin: each reconcile would bump the resourceVersion and enqueue another one.
+	if equality.Semantic.DeepEqual(ls.Status.Conditions, conditions) {
+		return reconcile.Result{}, nil
+	}
+	ls.Status.Conditions = conditions
 
 	if err := r.client.Status().Update(ctx, ls); err != nil {
+		if errors.IsConflict(err) {
+			// The LogStorage was modified after we read it - our cached copy is stale. Requeue and
+			// recompute the conditions from the updated object instead of reporting an error.
+			reqLogger.V(1).Info("Conflict updating LogStorage status conditions, retrying")
+			return reconcile.Result{Requeue: true}, nil
+		}
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")
 		return reconcile.Result{}, err
 	}
@@ -112,6 +132,10 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
+		if r.indexMigration {
+			// While migrating to single-index storage, the users controller runs in single-tenant mode too.
+			expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
+		}
 	}
 
 	// Keep track of which instances are in which state.
@@ -197,5 +221,12 @@ func updateConditions(currentConditions, desiredConditions map[string]metav1.Con
 
 		statusConditions = append(statusConditions, desired)
 	}
+
+	// desiredConditions is a map, so iteration order is random. Sort by type to keep the stored
+	// conditions stable across reconciles - otherwise every write reorders the list, which counts
+	// as a change and triggers another reconcile.
+	sort.Slice(statusConditions, func(i, j int) bool {
+		return statusConditions[i].Type < statusConditions[j].Type
+	})
 	return statusConditions
 }

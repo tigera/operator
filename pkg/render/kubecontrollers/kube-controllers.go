@@ -124,6 +124,11 @@ type KubeControllersConfiguration struct {
 	// cloud-specific RBAC below is not granted and enterprise RBAC is unchanged.
 	Cloud bool
 
+	// IndexMigration indicates that this cluster is migrating to single-index storage. While migrating,
+	// Elasticsearch configuration - including provisioning of the Linseed user - is handled by the
+	// operator's log-storage users controller rather than by es-kube-controllers.
+	IndexMigration bool
+
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 
 	// Namespace to be installed into.
@@ -282,7 +287,12 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	var enabledControllers []string
 	if !cfg.Tenant.MultiTenant() {
 		// Zero and single tenant cluster needs elasticsearch configuration
-		enabledControllers = append(enabledControllers, "authorization", "elasticsearchconfiguration")
+		enabledControllers = append(enabledControllers, "authorization")
+		if !cfg.IndexMigration {
+			// While migrating to single-index storage, the operator's log-storage users controller
+			// provisions the Elasticsearch users so that they get the RBAC needed for the new indices.
+			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")
+		}
 		if cfg.ManagementCluster != nil && cfg.Tenant == nil {
 			// Enterprise will require the managedcluster controller to push licenses
 			enabledControllers = append(enabledControllers, "managedcluster")

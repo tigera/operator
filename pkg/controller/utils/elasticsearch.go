@@ -220,8 +220,30 @@ var (
 	ElasticsearchUserNameDashboardInstaller = "tigera-ee-dashboards-installer"
 )
 
+// ElasticsearchSecureUserSuffix is appended to the user names provisioned for single-tenant clusters.
+// It maintains the 1:1 mapping between the public user propagated to components and the private user
+// swapped in at ES gateway, which strips this suffix.
+const ElasticsearchSecureUserSuffix = "secure"
+
+// formatNameSingleTenant builds the ES user name for a single-tenant cluster: <name>-<tenantID>-secure.
+// This matches the name previously provisioned by es-kube-controllers, so that existing credentials
+// and role mappings keep resolving once the operator takes over user provisioning.
+func formatNameSingleTenant(name, tenantID string) string {
+	return fmt.Sprintf("%s-%s-%s", name, tenantID, ElasticsearchSecureUserSuffix)
+}
+
 func LinseedUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant)
+	return linseedUser(formatName(ElasticsearchUserNameLinseed, clusterID, tenant), tenant)
+}
+
+// LinseedUserSingleTenant returns the Linseed user for a single-tenant cluster. It carries the same
+// privileges as the multi-tenant user - including access to the single-index calico_* indices - but is
+// named the way es-kube-controllers named it, and needs no cluster ID.
+func LinseedUserSingleTenant(tenant string) *User {
+	return linseedUser(formatNameSingleTenant(ElasticsearchUserNameLinseed, tenant), tenant)
+}
+
+func linseedUser(username, tenant string) *User {
 	return &User{
 		Username: username,
 		Roles: []Role{
@@ -243,7 +265,16 @@ func LinseedUser(clusterID, tenant string) *User {
 }
 
 func DashboardUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant)
+	return dashboardUser(formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant))
+}
+
+// DashboardUserSingleTenant returns the Dashboards installer user for a single-tenant cluster, named
+// the way es-kube-controllers named it. See LinseedUserSingleTenant.
+func DashboardUserSingleTenant(tenant string) *User {
+	return dashboardUser(formatNameSingleTenant(ElasticsearchUserNameDashboardInstaller, tenant))
+}
+
+func dashboardUser(username string) *User {
 	return &User{
 		Username: username,
 		Roles: []Role{

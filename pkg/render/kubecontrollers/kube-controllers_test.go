@@ -560,6 +560,24 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			}))
 	})
 
+	It("should not enable the elasticsearchconfiguration controller when migrating to single-index storage", func() {
+		instance.Variant = operatorv1.CalicoEnterprise
+		cfg.LogStorageExists = true
+		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
+		cfg.MetricsPort = 9094
+		cfg.IndexMigration = true
+
+		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		dp := rtest.GetResource(resources, kubecontrollers.EsKubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		envs := dp.Spec.Template.Spec.Containers[0].Env
+		Expect(envs).To(ContainElement(corev1.EnvVar{
+			Name: "ENABLED_CONTROLLERS", Value: "authorization",
+		}))
+	})
+
 	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise and ClusterType is Management", func() {
 		expectedResources := []struct {
 			name    string

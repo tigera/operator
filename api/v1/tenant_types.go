@@ -67,6 +67,23 @@ var DataTypes = map[DataType]string{
 	DataTypePolicyActivity:       "ELASTIC_POLICY_ACTIVITY_BASE_INDEX_NAME",
 }
 
+var CloudStandardIndices = map[DataType]string{
+	DataTypeAlerts:               "calico_alerts_standard",
+	DataTypeAuditLogs:            "calico_auditlogs_standard",
+	DataTypeBGPLogs:              "calico_bgplogs_standard",
+	DataTypeComplianceBenchmarks: "calico_compliance_benchmarks_results_standard",
+	DataTypeComplianceReports:    "calico_compliance_reports_standard",
+	DataTypeComplianceSnapshots:  "calico_compliance_snapshots_standard",
+	DataTypeDNSLogs:              "calico_dnslogs_standard",
+	DataTypeFlowLogs:             "calico_flowlogs_standard",
+	DataTypeL7Logs:               "calico_l7logs_standard",
+	DataTypeRuntimeReports:       "calico_runtime_reports_standard",
+	DataTypeThreatFeedsDomainSet: "calico_threatfeeds_domainnameset_standard",
+	DataTypeThreatFeedsIPSet:     "calico_threatfeeds_ipset_standard",
+	DataTypeWAFLogs:              "calico_waflogs_standard",
+	DataTypePolicyActivity:       "calico_policy_activity_standard",
+}
+
 type TenantSpec struct {
 	// ID is the unique identifier for this tenant.
 	// +required

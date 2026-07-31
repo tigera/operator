@@ -63,6 +63,7 @@ type ESKubeControllersController struct {
 	elasticExternal bool
 	multiTenant     bool
 	cloud           bool
+	indexMigration  bool
 	tierWatchReady  *utils.ReadyFlag
 }
 
@@ -88,6 +89,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		elasticExternal: opts.ElasticExternal,
 		multiTenant:     opts.MultiTenant,
 		cloud:           opts.Cloud,
+		indexMigration:  opts.IndexMigration,
 		tierWatchReady:  &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)

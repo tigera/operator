@@ -41,9 +41,10 @@ func AddConditionsController(mgr manager.Manager, opts options.ControllerOptions
 
 	// Create the reconciler
 	r := &LogStorageConditions{
-		client:      mgr.GetClient(),
-		scheme:      mgr.GetScheme(),
-		multiTenant: opts.MultiTenant,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		multiTenant:    opts.MultiTenant,
+		indexMigration: opts.IndexMigration,
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -62,6 +63,10 @@ type LogStorageConditions struct {
 	client      client.Client
 	scheme      *runtime.Scheme
 	multiTenant bool
+
+	// indexMigration indicates that this single-tenant cluster is migrating to single-index storage,
+	// in which case the log-storage users controller runs and reports status.
+	indexMigration bool
 }
 
 func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -112,6 +117,10 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
+		if r.indexMigration {
+			// While migrating to single-index storage, the users controller runs in single-tenant mode too.
+			expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
+		}
 	}
 
 	// Keep track of which instances are in which state.

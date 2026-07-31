@@ -16,6 +16,7 @@ package cloudconfig
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 
 	v1 "github.com/tigera/operator/api/v1"
@@ -82,8 +83,12 @@ type CloudConfig struct {
 // ToTenant converts the given CloudConfig structure to a Tenant object.
 // This allows controllers that have been converted to support multi-tenancy to still leverage
 // the single-tenant CloudConfig structure using the same code path as in multi-tenancy.
-func (c CloudConfig) ToTenant() *v1.Tenant {
-	return &v1.Tenant{
+//
+// useSingleIndex declares the standard single-index base names on the returned Tenant. Only clusters
+// migrating to single-index storage should set it: index base names are otherwise not carried on the
+// artificial single-tenant Tenant, and components fall back to their default index names.
+func (c CloudConfig) ToTenant(useSingleIndex bool) *v1.Tenant {
+	tenant := &v1.Tenant{
 		// We don't specify a Namespace for this tenant because it represents a singular tenant installed
 		// in this management cluster. The signals to the render code that this is a single-tenant cluster and not
 		// a cluster capable of multi-tenancy.
@@ -98,6 +103,22 @@ func (c CloudConfig) ToTenant() *v1.Tenant {
 			},
 		},
 	}
+
+	if !useSingleIndex {
+		return tenant
+	}
+
+	for dataType := range v1.DataTypes {
+		tenant.Spec.Indices = append(tenant.Spec.Indices, v1.Index{DataType: dataType, BaseIndexName: v1.CloudStandardIndices[dataType]})
+	}
+
+	// DataTypes is a map, so iteration order is random. Sort by data type to keep the generated
+	// index list - and therefore the env vars rendered from it - stable across reconciles.
+	sort.Slice(tenant.Spec.Indices, func(i, j int) bool {
+		return tenant.Spec.Indices[i].DataType < tenant.Spec.Indices[j].DataType
+	})
+
+	return tenant
 }
 
 func (c CloudConfig) TenantId() string {

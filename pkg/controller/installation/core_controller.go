@@ -940,7 +940,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
 	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
 	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
-	if err = r.updateCRDs(ctx, instance.Spec.Variant, reqLogger); err != nil {
+	if err = r.updateCRDs(ctx, r.variant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 

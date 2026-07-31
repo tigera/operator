@@ -181,8 +181,8 @@ admission policy installation; once an Installation exists it is the authority o
 
 	ctrl.SetLogger(zap.New(zap.WriteTo(os.Stdout), zap.UseFlagOptions(&opts)))
 
-	// An unrecognised variant would quietly install the Calico CRDs, which can't be corrected
-	// later because CRDs are only ever created, never updated.
+	// An unrecognised variant is silently treated as Calico, which installs the wrong CRDs for
+	// the bootstrap-crds path where nothing runs afterwards to correct them.
 	switch v := operatortigeraiov1.ProductVariant(bootstrapVariant); {
 	case v == operatortigeraiov1.Calico, v.IsEnterprise():
 	default:

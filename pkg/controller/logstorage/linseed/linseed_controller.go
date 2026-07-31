@@ -336,7 +336,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = cloudConfig.ToTenant(r.useSingleIndex)
 		}
 
 		// Determine the host and port from the URL.
@@ -363,7 +363,8 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 
 	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
 	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
+	// For single-tenant systems, these are created by es-kube-controllers, unless the cluster is
+	// migrating to single-index storage - then the users controller creates them as well.
 	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.InstallNamespace()}
 	credentials := corev1.Secret{}
 	if err = r.client.Get(ctx, key, &credentials); err != nil && !errors.IsNotFound(err) {
@@ -420,7 +421,8 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 
 	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
 	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
+	// For single-tenant systems, these are created by es-kube-controllers, unless the cluster is
+	// migrating to single-index storage - then the users controller creates them as well.
 	// Delay installing Linseed until available.
 	// TODO: Switch single-tenant to using operator-provisioned users.
 	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.InstallNamespace()}

@@ -23,15 +23,23 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/stretchr/testify/mock"
 	apiv1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	tigeraelastic "github.com/tigera/operator/pkg/controller/logstorage/elastic"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
+	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
 )
 
 var _ = Describe("LogStorage cleanup controller", func() {
@@ -108,5 +116,126 @@ var _ = Describe("LogStorage cleanup controller", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(testESClient.AssertExpectations(t))
+	})
+})
+
+// fakeESClient records the users provisioned against Elasticsearch.
+type fakeESClient struct {
+	created []*utils.User
+}
+
+func (f *fakeESClient) SetILMPolicies(context.Context, *operatorv1.LogStorage, bool) error {
+	return nil
+}
+
+func (f *fakeESClient) CreateUser(_ context.Context, user *utils.User) error {
+	f.created = append(f.created, user)
+	return nil
+}
+
+func (f *fakeESClient) DeleteUser(context.Context, *utils.User) error { return nil }
+
+func (f *fakeESClient) GetUsers(context.Context) ([]utils.User, error) { return nil, nil }
+
+var _ = Describe("LogStorage users controller", func() {
+	const (
+		tenantID = "tenant-a"
+	)
+
+	var (
+		cli      client.Client
+		ctx      context.Context
+		scheme   *runtime.Scheme
+		esClient *fakeESClient
+		r        *UserController
+	)
+
+	BeforeEach(func() {
+		scheme = runtime.NewScheme()
+		Expect(operatorv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		ctx = context.Background()
+
+		ls := &operatorv1.LogStorage{}
+		ls.Name = "tigera-secure"
+		ls.Status.State = operatorv1.TigeraStatusReady
+		Expect(cli.Create(ctx, ls)).NotTo(HaveOccurred())
+
+		// Note that no cluster-info ConfigMap is created here: single-tenant clusters don't have one,
+		// and the controller must not require it.
+		Expect(cli.Create(ctx, cloudconfig.NewCloudConfig(tenantID, "tenant-a-name", "es.example.com", "kb.example.com", false).ConfigMap())).NotTo(HaveOccurred())
+
+		mockStatus := &status.MockStatus{}
+		mockStatus.On("OnCRFound").Return()
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+		mockStatus.On("ClearWarning", mock.Anything).Return()
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+
+		esClient = &fakeESClient{}
+		r = &UserController{
+			client: cli,
+			scheme: scheme,
+			status: mockStatus,
+			esClientFn: func(_ client.Client, _ context.Context, _ string, _ bool) (utils.ElasticClient, error) {
+				return esClient, nil
+			},
+			multiTenant:     false,
+			elasticExternal: true,
+			indexMigration:  true,
+		}
+	})
+
+	// secretValue reads a value from a Secret. The fake client doesn't convert StringData into Data
+	// the way the API server does, so we may find the value in either field.
+	secretValue := func(name, namespace, key string) string {
+		s := &corev1.Secret{}
+		ExpectWithOffset(1, cli.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, s)).NotTo(HaveOccurred())
+		if v, ok := s.StringData[key]; ok {
+			return v
+		}
+		return string(s.Data[key])
+	}
+
+	It("should provision users for a single-tenant cluster migrating to single-index storage", func() {
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// The Linseed user should be created in ES with the name es-kube-controllers used, and with
+		// privileges on the new single-index calico_* indices.
+		expected := utils.LinseedUserSingleTenant(tenantID)
+		Expect(expected.Username).To(Equal("tigera-ee-linseed-tenant-a-secure"))
+		Expect(esClient.created).To(HaveLen(2))
+		Expect(esClient.created[0].Username).To(Equal(expected.Username))
+		Expect(esClient.created[0].Roles).To(Equal(expected.Roles))
+		Expect(esClient.created[0].Roles[0].Name).To(Equal(expected.Username))
+		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(ContainElement("calico_*"))
+		Expect(esClient.created[1].Username).To(Equal("tigera-ee-dashboards-installer-tenant-a-secure"))
+
+		// The credentials should be written to the Elasticsearch namespace for Linseed to consume.
+		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal(expected.Username))
+		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "password")).NotTo(BeEmpty())
+		Expect(secretValue(dashboards.ElasticCredentialsSecret, render.ElasticsearchNamespace, "username")).To(Equal(utils.DashboardUserSingleTenant(tenantID).Username))
+	})
+
+	It("should re-point existing credentials at the operator provisioned user", func() {
+		// es-kube-controllers uses a different naming convention for the ES user.
+		Expect(cli.Create(ctx, &corev1.Secret{
+			ObjectMeta: apiv1.ObjectMeta{Name: render.ElasticsearchLinseedUserSecret, Namespace: common.OperatorNamespace()},
+			Data:       map[string][]byte{"username": []byte("tigera-ee-linseed"), "password": []byte("existing-password")},
+		})).NotTo(HaveOccurred())
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		expected := utils.LinseedUserSingleTenant(tenantID)
+		Expect(secretValue(render.ElasticsearchLinseedUserSecret, common.OperatorNamespace(), "username")).To(Equal(expected.Username))
+		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal(expected.Username))
+
+		// The existing password is preserved, and used for the user we provision.
+		Expect(secretValue(render.ElasticsearchLinseedUserSecret, common.OperatorNamespace(), "password")).To(Equal("existing-password"))
+		Expect(esClient.created[0].Username).To(Equal(expected.Username))
+		Expect(esClient.created[0].Password).To(Equal("existing-password"))
 	})
 })

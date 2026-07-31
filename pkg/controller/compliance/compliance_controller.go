@@ -463,7 +463,7 @@ func (r *ReconcileCompliance) Reconcile(ctx context.Context, request reconcile.R
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read External Elasticsearch config map", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant()
+		tenant = cloudConfig.ToTenant(false)
 	}
 
 	reqLogger.V(3).Info("rendering components")

@@ -67,6 +67,7 @@ var log = logf.Log.WithName("controller_apiserver")
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileAPIServer{
 		client:              mgr.GetClient(),
+		apiReader:           mgr.GetAPIReader(),
 		scheme:              mgr.GetScheme(),
 		status:              status.New(mgr.GetClient(), "apiserver", opts.KubernetesVersion),
 		tierWatchReady:      &utils.ReadyFlag{},
@@ -221,7 +222,13 @@ var _ reconcile.Reconciler = &ReconcileAPIServer{}
 type ReconcileAPIServer struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client              client.Client
+	client client.Client
+	// apiReader reads directly from the API server, bypassing the manager's cache.
+	// The migration decision below must not be made from cached state: a cached read of a
+	// projectcalico.org/v3 object succeeds against the informer's last known contents even
+	// when the aggregated API server is unable to serve, which would let us act on state
+	// that is no longer true.
+	apiReader           client.Reader
 	scheme              *runtime.Scheme
 	status              status.StatusManager
 	tierWatchReady      *utils.ReadyFlag
@@ -473,6 +480,76 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	// A direct upgrade from the deprecated layout (tigera-apiserver in the tigera-system
+	// namespace, allow-tigera policy tier) has to clear allow-tigera.default-deny before the
+	// calico-apiserver pod is moved into calico-system. That policy sits in the
+	// earlier-evaluated allow-tigera tier and selects all() endpoints, so it denies the moved
+	// pod at end-of-tier before the calico-system tier - whose default-deny excludes the API
+	// server - is ever reached. The installation controller removes it through the
+	// still-serving API server. Repointing the aggregated API onto a trapped pod takes that
+	// API down permanently, so the move waits.
+	//
+	// This is a no-op when the projectcalico.org/v3 API group is backed by CRDs natively:
+	// there is no aggregated API server to deadlock.
+	moveIsPending := false
+	if !r.opts.UseV3CRDs {
+		layout, aggregatedAPIAvailable, err := readAPIServiceState(ctx, r.apiReader)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the projectcalico.org/v3 APIService", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		denyPresent := false
+		if layout == layoutDeprecated && aggregatedAPIAvailable {
+			denyPresent, err = deprecatedDenyPresent(ctx, r.apiReader)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for the deprecated allow-tigera.default-deny policy", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
+		decision := decideMigration(layout, aggregatedAPIAvailable, denyPresent)
+		switch decision {
+		case decisionHoldAPIUnavailable:
+			// Do not apply anything. We cannot confirm the deprecated deny is gone, and
+			// nothing can clear it while the aggregated API is unable to serve, so moving
+			// the workload now could only make the situation harder to recover. The
+			// periodic reconcile re-runs this every utils.PeriodicReconcileTime regardless
+			// of the requeue below.
+			reqLogger.Info("The projectcalico.org/v3 API is unavailable and the API server has not been migrated; holding the migration until it can serve")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the projectcalico.org/v3 API to become available before migrating the API server", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		case decisionWaitForDenyRemoval:
+			// The deny is removed by the installation controller only after it renders v3
+			// NetworkPolicy into the calico-system tier (pkg/render/kubecontrollers/kube-controllers.go),
+			// which it only does once the tiers controller has created that tier
+			// (pkg/controller/installation/core_controller.go), which the tiers controller only
+			// does once IsProjectCalicoV3Available reports APIServer.Status.State == Ready
+			// (pkg/controller/tiers/tiers_controller.go). This controller is the only writer of
+			// that field, and it does so on a path this hold returns before reaching. On a
+			// supported upgrade that field was already persisted by the previous operator version
+			// before this reconcile ever ran, so the wait clears on its own; this is not a bug in
+			// the upgrade path. It would only spin forever if that status were never latched - for
+			// example the tigera-secure APIServer CR was deleted and recreated around the upgrade.
+			// Holding is still correct in that case: the alternative is repointing the aggregated
+			// API onto a pod the deny traps, which is a worse and equally permanent failure, while
+			// holding here leaves the cluster recoverable.
+			reqLogger.Info("Waiting for the deprecated allow-tigera.default-deny policy to be removed before migrating the API server")
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the deprecated allow-tigera.default-deny policy in calico-system to be removed before migrating the API server; this clears once the installation controller deletes that policy", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		case decisionProceed:
+			moveIsPending = layout == layoutDeprecated
+		default:
+			// Fail closed: an unrecognised decision must not fall through to applying the
+			// move. Repointing the aggregated API onto a pod we have not vouched for would be
+			// unrecoverable, so treat anything we don't explicitly know about the same as a
+			// hold.
+			reqLogger.Error(nil, "Unrecognised migration decision; holding the migration", "decision", decision)
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting to migrate the API server: unrecognised migration decision", nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+	}
+
 	err = utils.PopulateK8sServiceEndPoint(r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading services endpoint configmap", err, reqLogger)
@@ -577,6 +654,21 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
+	// If the projectcalico.org/v3 API group is being backed by our aggregated API server, then
+	// v3 NetworkPolicy will fail to reconcile until the Calico API server is healthy. Thus, we
+	// normally only render v3.NetworkPolicy after the aggregated API server becomes available,
+	// to avoid a chicken-and-egg scenario.
+	//
+	// If the projectcalico.org/v3 API group is implemented using CRDs natively, we can install
+	// network policies immediately, as there is no dependency on the API server deployment.
+	renderPolicy := r.opts.UseV3CRDs || includeV3NetworkPolicy
+
+	if policyComponentFirst(moveIsPending, renderPolicy) {
+		// On the migration pass the aggregated API has already been confirmed available, so
+		// the policy can be applied before the workload it protects rather than after it.
+		components = append(components, render.APIServerPolicy(&apiServerCfg))
+	}
+
 	components = append(components,
 		component,
 		rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
@@ -587,14 +679,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}),
 	)
 
-	// If the projectcalico.org/v3 API group is being backed by our aggregated API server, then v3 NetworkPolicy will fail to reconcile until the Calico API server is healthy.
-	// Thus, we only render v3.NetworkPolicy after the aggregated API server becomes available to avoid a chicken-and-egg scenario.
-	//
-	// If the projectcalico.org/v3 API group is implemented using CRDs natively, we can install network policies immediately, as there is no
-	// dependency on the API server deployment.
-	//
-	// We do this last to avoid transient errors with policy preventing progression of the controller.
-	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
+	if renderPolicy && !policyComponentFirst(moveIsPending, renderPolicy) {
+		// We do this last to avoid transient errors with policy preventing progression of the
+		// controller.
 		components = append(components, render.APIServerPolicy(&apiServerCfg))
 	}
 

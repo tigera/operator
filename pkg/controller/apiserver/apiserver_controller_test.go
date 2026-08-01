@@ -32,7 +32,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -49,10 +51,42 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
+
+// recordCreateOrder wraps cli with a controller-runtime interceptor client that records every
+// object Create call, in the order the calls happen, without changing their behaviour (each
+// call is still forwarded to cli). The returned indexOf looks up the position of the first
+// Create call for a given Kind/ObjectKey, or -1 if it was never created. See the "policy/
+// workload ordering" Context below for why this is the signal used to pin component ordering.
+func recordCreateOrder(cli client.WithWatch) (client.WithWatch, func(kind client.Object, key client.ObjectKey) int) {
+	type created struct {
+		kind string
+		key  client.ObjectKey
+	}
+	var order []created
+
+	wrapped := interceptor.NewClient(cli, interceptor.Funcs{
+		Create: func(ctx context.Context, c client.WithWatch, obj client.Object, opts ...client.CreateOption) error {
+			order = append(order, created{kind: fmt.Sprintf("%T", obj), key: client.ObjectKeyFromObject(obj)})
+			return c.Create(ctx, obj, opts...)
+		},
+	})
+
+	indexOf := func(kind client.Object, key client.ObjectKey) int {
+		want := created{kind: fmt.Sprintf("%T", kind), key: key}
+		for i, c := range order {
+			if c == want {
+				return i
+			}
+		}
+		return -1
+	}
+	return wrapped, indexOf
+}
 
 var _ = Describe("apiserver controller tests", func() {
 	var (
@@ -158,6 +192,145 @@ var _ = Describe("apiserver controller tests", func() {
 		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 	})
 
+	It("uses a reader that is distinct from the cached client", func() {
+		r := ReconcileAPIServer{client: cli, apiReader: cli, scheme: scheme, status: mockStatus}
+		Expect(r.apiReader).NotTo(BeNil())
+	})
+
+	It("does not apply anything while a migration is pending and the aggregated API is unavailable", func() {
+		Expect(cli.Create(ctx, installation)).To(BeNil())
+		Expect(cli.Create(ctx, apiService("tigera-system", false))).NotTo(HaveOccurred())
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		r := ReconcileAPIServer{
+			client: cli, apiReader: cli, scheme: scheme, status: mockStatus,
+			tierWatchReady: ready, migrationWatchReady: &utils.ReadyFlag{},
+			opts: options.ControllerOptions{EnterpriseCRDExists: true, DetectedProvider: operatorv1.ProviderNone},
+		}
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		// Distinguishes this hold from the early, non-gate-related nil-error returns
+		// elsewhere in Reconcile, which leave RequeueAfter at its zero value.
+		Expect(result.RequeueAfter).To(Equal(utils.StandardRetry))
+
+		// The workload must not have been applied.
+		d := &appsv1.Deployment{}
+		err = cli.Get(ctx, client.ObjectKey{Name: "calico-apiserver", Namespace: "calico-system"}, d)
+		Expect(kerror.IsNotFound(err)).To(BeTrue())
+
+		// And the APIService must not have been repointed.
+		as := &apiregv1.APIService{}
+		Expect(cli.Get(ctx, client.ObjectKey{Name: calicoAPIServiceName}, as)).NotTo(HaveOccurred())
+		Expect(as.Spec.Service.Namespace).To(Equal("tigera-system"))
+	})
+
+	It("does not apply anything while the deprecated allow-tigera.default-deny policy is still in place", func() {
+		// This is the literal bug this gate exists to prevent: the APIService still points at
+		// the deprecated namespace, the aggregated API can serve, but the deny that would trap
+		// the moved pod is still present in calico-system. The move must not happen.
+		Expect(cli.Create(ctx, installation)).To(BeNil())
+		Expect(cli.Create(ctx, apiService("tigera-system", true))).NotTo(HaveOccurred())
+		Expect(cli.Create(ctx, networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", render.APIServerNamespace))).NotTo(HaveOccurred())
+		mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		r := ReconcileAPIServer{
+			client: cli, apiReader: cli, scheme: scheme, status: mockStatus,
+			tierWatchReady: ready, migrationWatchReady: &utils.ReadyFlag{},
+			opts: options.ControllerOptions{EnterpriseCRDExists: true, DetectedProvider: operatorv1.ProviderNone},
+		}
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(Equal(utils.StandardRetry))
+
+		// The workload must not have been applied.
+		d := &appsv1.Deployment{}
+		err = cli.Get(ctx, client.ObjectKey{Name: "calico-apiserver", Namespace: "calico-system"}, d)
+		Expect(kerror.IsNotFound(err)).To(BeTrue())
+
+		// And the APIService must not have been repointed.
+		as := &apiregv1.APIService{}
+		Expect(cli.Get(ctx, client.ObjectKey{Name: calicoAPIServiceName}, as)).NotTo(HaveOccurred())
+		Expect(as.Spec.Service.Namespace).To(Equal("tigera-system"))
+	})
+
+	Context("policy/workload ordering", func() {
+		// These specs pin the actual behaviour change: which order Reconcile appends the
+		// projectcalico.org/v3 NetworkPolicy component relative to the API server workload and
+		// the certificate-management component. policyComponentFirst's own unit tests (in
+		// migration_test.go) only pin its truth table; they say nothing about whether the
+		// append call in Reconcile still uses it correctly. A refactor that collapsed the two
+		// `if`s, or spliced the policy append between the workload and certificate-management
+		// appends, would keep those unit tests green while breaking real ordering. These specs
+		// close that gap by observing Reconcile's actual effect on the client.
+		//
+		// The signal is the order in which Create calls land on the client, captured with a
+		// controller-runtime interceptor client (recordCreateOrder, below). Two more obvious
+		// signals were tried and rejected:
+		//   - fake-client ResourceVersion: rejected empirically. The fake client's object
+		//     tracker assigns ResourceVersion independently per object, so a freshly created
+		//     NetworkPolicy and a freshly created Deployment both come back "1" regardless of
+		//     which was created first - it carries no cross-object ordering information.
+		//   - parsing the "Done reconciling component" debug log line emitted by
+		//     handler.CreateOrUpdateOrDelete: this would work today, but the log message text
+		//     is not a documented contract, and ReconcileAPIServer has no field to inject a
+		//     test logger, so pinning behaviour on it would mean either regexing rendered log
+		//     output or globally overriding the package logger for the process. The
+		//     interceptor hooks a stable, public controller-runtime test extension point
+		//     instead, and records the same thing the log line reports: real Create calls, in
+		//     the order handler.CreateOrUpdateOrDelete issues them while walking the
+		//     `components` slice built by Reconcile.
+		It("creates the policy before the workload and certificate-management components on the migrating pass", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			// layoutDeprecated + available + no deny present => decisionProceed with
+			// moveIsPending true: this is the pass that performs the migration.
+			Expect(cli.Create(ctx, apiService("tigera-system", true))).NotTo(HaveOccurred())
+
+			wrapped, indexOf := recordCreateOrder(cli.(client.WithWatch))
+			r := ReconcileAPIServer{
+				client: wrapped, apiReader: wrapped, scheme: scheme, status: mockStatus,
+				tierWatchReady: ready, migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{EnterpriseCRDExists: true, DetectedProvider: operatorv1.ProviderNone},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			polIdx := indexOf(&v3.NetworkPolicy{}, client.ObjectKey{Namespace: render.APIServerNamespace, Name: render.APIServerPolicyName})
+			depIdx := indexOf(&appsv1.Deployment{}, client.ObjectKey{Namespace: render.APIServerNamespace, Name: render.APIServerName})
+			secIdx := indexOf(&corev1.Secret{}, client.ObjectKey{Namespace: render.APIServerNamespace, Name: apiSecret.Name})
+			Expect(polIdx).To(BeNumerically(">=", 0), "policy NetworkPolicy was never created")
+			Expect(depIdx).To(BeNumerically(">=", 0), "workload Deployment was never created")
+			Expect(secIdx).To(BeNumerically(">=", 0), "certificate-management Secret was never created")
+
+			Expect(polIdx).To(BeNumerically("<", depIdx), "policy must be created before the workload on the migrating pass")
+			Expect(polIdx).To(BeNumerically("<", secIdx), "policy must be created before certificate-management on the migrating pass")
+		})
+
+		It("creates the policy after the workload and certificate-management components on an ordinary reconcile", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			// No APIService at all => layoutAbsent => moveIsPending false: an ordinary pass,
+			// same as every ordinary install or upgrade that isn't performing the migration.
+
+			wrapped, indexOf := recordCreateOrder(cli.(client.WithWatch))
+			r := ReconcileAPIServer{
+				client: wrapped, apiReader: wrapped, scheme: scheme, status: mockStatus,
+				tierWatchReady: ready, migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{EnterpriseCRDExists: true, DetectedProvider: operatorv1.ProviderNone},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			polIdx := indexOf(&v3.NetworkPolicy{}, client.ObjectKey{Namespace: render.APIServerNamespace, Name: render.APIServerPolicyName})
+			depIdx := indexOf(&appsv1.Deployment{}, client.ObjectKey{Namespace: render.APIServerNamespace, Name: render.APIServerName})
+			secIdx := indexOf(&corev1.Secret{}, client.ObjectKey{Namespace: render.APIServerNamespace, Name: apiSecret.Name})
+			Expect(polIdx).To(BeNumerically(">=", 0), "policy NetworkPolicy was never created")
+			Expect(depIdx).To(BeNumerically(">=", 0), "workload Deployment was never created")
+			Expect(secIdx).To(BeNumerically(">=", 0), "certificate-management Secret was never created")
+
+			Expect(polIdx).To(BeNumerically(">", depIdx), "policy must be created after the workload on an ordinary reconcile")
+			Expect(polIdx).To(BeNumerically(">", secIdx), "policy must be created after certificate-management on an ordinary reconcile")
+		})
+	})
+
 	Context("verify reconciliation", func() {
 		It("should use builtin images", func() {
 			installation.Spec.CertificateManagement = certificateManagement
@@ -165,6 +338,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -224,6 +398,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -277,6 +452,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -302,6 +478,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -324,6 +501,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -348,6 +526,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -370,6 +549,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      notReady,
@@ -395,6 +575,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -422,6 +603,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -447,6 +629,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      notReady,
@@ -473,6 +656,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -515,6 +699,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -547,6 +732,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -599,6 +785,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -668,6 +855,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -772,6 +960,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 				r := ReconcileAPIServer{
 					client:              cli,
+					apiReader:           cli,
 					scheme:              scheme,
 					status:              mockStatus,
 					tierWatchReady:      ready,
@@ -801,6 +990,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 				r := ReconcileAPIServer{
 					client:              cli,
+					apiReader:           cli,
 					scheme:              scheme,
 					status:              mockStatus,
 					tierWatchReady:      ready,
@@ -831,6 +1021,7 @@ var _ = Describe("apiserver controller tests", func() {
 			It("Should reconcile multi-cluster setup for a management cluster for a multiple tenant", func() {
 				r := ReconcileAPIServer{
 					client:              cli,
+					apiReader:           cli,
 					scheme:              scheme,
 					status:              mockStatus,
 					tierWatchReady:      ready,
@@ -882,6 +1073,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 				r := ReconcileAPIServer{
 					client:              cli,
+					apiReader:           cli,
 					scheme:              scheme,
 					status:              mockStatus,
 					tierWatchReady:      ready,
@@ -917,6 +1109,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -961,6 +1154,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,
@@ -989,6 +1183,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			r := ReconcileAPIServer{
 				client:              cli,
+				apiReader:           cli,
 				scheme:              scheme,
 				status:              mockStatus,
 				tierWatchReady:      ready,

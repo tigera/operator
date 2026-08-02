@@ -105,7 +105,7 @@ var _ = Describe("CSR controller tests", func() {
 			provider:         operatorv1.ProviderNone,
 			clusterDomain:    dns.DefaultClusterDomain,
 			allowedTLSAssets: allowedAssets(dns.DefaultClusterDomain),
-			enterprise:       true,
+			variant:          operatorv1.TigeraSecureEnterprise,
 		}
 	})
 

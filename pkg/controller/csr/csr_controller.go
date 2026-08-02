@@ -135,7 +135,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconci
 		provider:         opts.DetectedProvider,
 		clusterDomain:    opts.ClusterDomain,
 		allowedTLSAssets: allowedAssets(opts.ClusterDomain),
-		enterprise:       opts.Variant.IsEnterprise(),
+		variant:          opts.Variant,
 	}, nil
 }
 
@@ -177,7 +177,7 @@ type reconcileCSR struct {
 	provider         operatorv1.Provider
 	clusterDomain    string
 	allowedTLSAssets map[string]tlsAsset
-	enterprise       bool
+	variant          operatorv1.ProductVariant
 }
 
 func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -194,7 +194,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	}
 
 	needsCSRRole := instance.Spec.CertificateManagement != nil
-	if !needsCSRRole && r.enterprise {
+	if !needsCSRRole && r.variant.IsEnterprise() {
 		monitorCR := &operatorv1.Monitor{}
 		if err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, monitorCR); err != nil {
 			if apierrors.IsNotFound(err) {

@@ -430,14 +430,14 @@ admission policy installation; once an Installation exists it is the authority o
 	}
 
 	// Resolve the variant now that the operator CRDs exist.
-	bootVariant := waitForVariant(ctx, c, setupLog)
-	setupLog.WithValues("variant", bootVariant).Info("Resolved product variant")
+	variant := waitForVariant(ctx, c, setupLog)
+	setupLog.WithValues("variant", variant).Info("Resolved product variant")
 
 	// The bootstrap pass above used the flag default, which doesn't cover the enterprise APIs.
-	if manageCRDs && bootVariant != operatortigeraiov1.ProductVariant(bootstrapVariant) {
-		setupLog.WithValues("variant", bootVariant).Info("Ensuring CRDs are installed for the resolved variant")
+	if manageCRDs && variant != operatortigeraiov1.ProductVariant(bootstrapVariant) {
+		setupLog.WithValues("variant", variant).Info("Ensuring CRDs are installed for the resolved variant")
 
-		if err := crds.Ensure(mgr.GetClient(), string(bootVariant), v3CRDs, setupLog); err != nil {
+		if err := crds.Ensure(mgr.GetClient(), string(variant), v3CRDs, setupLog); err != nil {
 			setupLog.Error(err, "Failed to ensure CRDs are created")
 			os.Exit(1)
 		}
@@ -445,7 +445,7 @@ admission policy installation; once an Installation exists it is the authority o
 
 	// The enterprise controllers can't register without their APIs. Exiting lets the kubelet
 	// retry us once the CRDs are installed.
-	if bootVariant.IsEnterprise() {
+	if variant.IsEnterprise() {
 		enterpriseAPIs, err := discovery.EnterpriseAPIsExist(cs)
 		if err != nil {
 			setupLog.Error(err, "Failed to determine whether the Enterprise APIs are available")
@@ -605,14 +605,14 @@ admission policy installation; once an Installation exists it is the authority o
 	}
 
 	// Same for the variant, which the process can only change by restarting.
-	if err = monitorVariant(ctx, mgr, bootVariant); err != nil {
+	if err = monitorVariant(ctx, mgr, variant); err != nil {
 		log.Error(err, "Failed to monitor the product variant")
 		os.Exit(1)
 	}
 
 	options := options.ControllerOptions{
 		DetectedProvider:  provider,
-		Variant:           bootVariant,
+		Variant:           variant,
 		ClusterDomain:     clusterDomain,
 		KubernetesVersion: kubernetesVersion,
 		ManageCRDs:        manageCRDs,
@@ -640,7 +640,7 @@ admission policy installation; once an Installation exists it is the authority o
 
 	// Register custom Prometheus metrics collector.
 	if common.MetricsEnabled() {
-		collector := metrics.NewOperatorCollector(mgr.GetClient(), bootVariant.IsEnterprise())
+		collector := metrics.NewOperatorCollector(mgr.GetClient(), variant.IsEnterprise())
 		ctrlmetrics.Registry.MustRegister(collector)
 	}
 
@@ -709,17 +709,15 @@ func setKubernetesServiceEnv(kubeconfigFile string) error {
 // waitForVariant blocks until an Installation exists and returns the variant it asks for. The
 // operator has nothing to do before then, and the bootstrap flag is only ever for the CRDs above.
 func waitForVariant(ctx context.Context, c client.Client, log logr.Logger) operatortigeraiov1.ProductVariant {
-	waiting := false
-	for {
+	for first := true; ; first = false {
 		variant, err := effectiveVariant(ctx, c)
 		switch {
 		case err != nil:
 			log.Error(err, "Failed to read the Installation, will retry")
 		case variant != "":
 			return variant
-		case !waiting:
+		case first:
 			log.Info("Waiting for an Installation")
-			waiting = true
 		}
 
 		select {

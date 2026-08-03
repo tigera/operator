@@ -234,9 +234,12 @@ func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {
 
 	var objsToDelete []client.Object
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		// Include Service for exposing node metrics.
+	// Enterprise always has its reporter ports to expose. Calico only has Felix's port, so there is
+	// nothing to expose until Felix metrics are turned on.
+	if c.cfg.Installation.Variant.IsEnterprise() || c.cfg.FelixPrometheusMetricsEnabled {
 		objs = append(objs, c.nodeMetricsService())
+	} else {
+		objsToDelete = append(objsToDelete, c.nodeMetricsService())
 	}
 
 	cniConfig := c.nodeCNIConfigMap()
@@ -1829,24 +1832,27 @@ func (c *nodeComponent) nodeLivenessReadinessProbes() (*corev1.Probe, *corev1.Pr
 	return lp, rp
 }
 
-// nodeMetricsService creates a Service which exposes two endpoints on calico/node for
-// reporting Prometheus metrics (for policy enforcement activity and BGP stats).
-// This service is used internally by Calico Enterprise and is separate from general
-// Prometheus metrics which are user-configurable.
+// nodeMetricsService creates a Service for scraping Prometheus metrics from calico/node.
 func (c *nodeComponent) nodeMetricsService() *corev1.Service {
-	ports := []corev1.ServicePort{
-		{
-			Name:       "calico-metrics-port",
-			Port:       int32(c.cfg.NodeReporterMetricsPort),
-			TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
-			Protocol:   corev1.ProtocolTCP,
-		},
-		{
-			Name:       "calico-bgp-metrics-port",
-			Port:       nodeBGPReporterPort,
-			TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
-			Protocol:   corev1.ProtocolTCP,
-		},
+	var ports []corev1.ServicePort
+
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		// Enterprise reports policy enforcement activity and BGP stats of its own, separately from
+		// the general Prometheus metrics the user configures through Felix.
+		ports = append(ports,
+			corev1.ServicePort{
+				Name:       "calico-metrics-port",
+				Port:       int32(c.cfg.NodeReporterMetricsPort),
+				TargetPort: intstr.FromInt(c.cfg.NodeReporterMetricsPort),
+				Protocol:   corev1.ProtocolTCP,
+			},
+			corev1.ServicePort{
+				Name:       "calico-bgp-metrics-port",
+				Port:       nodeBGPReporterPort,
+				TargetPort: intstr.FromInt(int(nodeBGPReporterPort)),
+				Protocol:   corev1.ProtocolTCP,
+			},
+		)
 	}
 
 	if c.cfg.FelixPrometheusMetricsEnabled {

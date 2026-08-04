@@ -30,6 +30,12 @@ type ManagerSpec struct {
 	// RBACUI configures the RBAC management UI feature.
 	// +optional
 	RBACUI *RBACUI `json:"rbacUI,omitempty"`
+
+	// WAFUI configures the WAF management UI feature. This controls visibility of
+	// the WAF management UI only; it does not enable WAF enforcement on traffic
+	// (that is configured separately via GatewayAPI.spec.extensions.waf).
+	// +optional
+	WAFUI *WAFUI `json:"wafUI,omitempty"`
 }
 
 // +kubebuilder:validation:Enum=Enabled;Disabled
@@ -57,6 +63,34 @@ func (m *Manager) RBACManagementEnabled() bool {
 		return false
 	}
 	return *m.Spec.RBACUI.State == RBACUIEnabled
+}
+
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type WAFUIStatusType string
+
+const (
+	WAFUIDisabled WAFUIStatusType = "Disabled"
+	WAFUIEnabled  WAFUIStatusType = "Enabled"
+)
+
+// WAFUI configures the WAF management UI. This turns the WAF management surface
+// in the Calico Enterprise manager on or off. It controls UI visibility only,
+// and does not enable WAF enforcement on traffic, which is configured
+// separately via GatewayAPI.spec.extensions.waf.
+type WAFUI struct {
+	// State turns the WAF management UI on or off. Defaults to Disabled.
+	// +optional
+	State *WAFUIStatusType `json:"state,omitempty"`
+}
+
+// WAFManagementEnabled returns true when the Manager CR enables the WAF
+// management UI. Safe to call on a nil receiver; returns false for a nil
+// Manager, an unset WAFUI, or any state other than Enabled.
+func (m *Manager) WAFManagementEnabled() bool {
+	if m == nil || m.Spec.WAFUI == nil || m.Spec.WAFUI.State == nil {
+		return false
+	}
+	return *m.Spec.WAFUI.State == WAFUIEnabled
 }
 
 // ManagerDeployment is the configuration for the Manager Deployment.

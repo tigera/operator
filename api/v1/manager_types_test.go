@@ -49,3 +49,37 @@ func TestRBACManagementEnabled(t *testing.T) {
 		})
 	}
 }
+
+func TestWAFManagementEnabled(t *testing.T) {
+	state := func(s WAFUIStatusType) *WAFUIStatusType { return &s }
+
+	for _, tc := range []struct {
+		name string
+		m    *Manager
+		want bool
+	}{
+		// Nil paths: WAFManagementEnabled is called as managerCR.WAFManagementEnabled()
+		// where managerCR is nil when no Manager CR exists, so a nil receiver (and each
+		// nil field below) must return false rather than panic.
+		{name: "nil Manager", m: nil, want: false},
+		{name: "nil WAFUI", m: &Manager{}, want: false},
+		{name: "nil State", m: &Manager{Spec: ManagerSpec{WAFUI: &WAFUI{}}}, want: false},
+
+		{name: "State Enabled", m: &Manager{Spec: ManagerSpec{WAFUI: &WAFUI{State: state(WAFUIEnabled)}}}, want: true},
+		{name: "State Disabled", m: &Manager{Spec: ManagerSpec{WAFUI: &WAFUI{State: state(WAFUIDisabled)}}}, want: false},
+		// Any value other than Enabled is off (the Enum marker rejects this at the
+		// apiserver, but the helper must not treat a non-empty value as enabled).
+		{name: "State unrecognized value", m: &Manager{Spec: ManagerSpec{WAFUI: &WAFUI{State: state("SomethingElse")}}}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r != nil {
+					t.Fatalf("WAFManagementEnabled panicked on %s: %v", tc.name, r)
+				}
+			}()
+			if got := tc.m.WAFManagementEnabled(); got != tc.want {
+				t.Errorf("WAFManagementEnabled() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

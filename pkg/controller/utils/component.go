@@ -79,16 +79,46 @@ type ComponentHandler interface {
 	SetCreateOnly()
 }
 
+// ComponentHandlerOption configures a componentHandler.
+type ComponentHandlerOption func(*componentHandler)
+
+// WithRenderInputs supplies the render.Inputs passed to registered
+// render modifiers.
+func WithRenderInputs(ri render.Inputs) ComponentHandlerOption {
+	return func(c *componentHandler) { c.renderInputs = ri }
+}
+
+// ComponentDecorator post-processes a component before the handler renders it.
+type ComponentDecorator interface {
+	Decorate(component render.Component, ri render.Inputs) render.Component
+}
+
+// WithDecorator supplies the decorator the handler runs each component through.
+func WithDecorator(d ComponentDecorator) ComponentHandlerOption {
+	return func(c *componentHandler) { c.decorator = d }
+}
+
+type undecorated struct{}
+
+func (undecorated) Decorate(component render.Component, _ render.Inputs) render.Component {
+	return component
+}
+
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
 // this is useful for CRD management so that they are not removed automatically.
-func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object) ComponentHandler {
-	return &componentHandler{
+func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...ComponentHandlerOption) ComponentHandler {
+	h := &componentHandler{
 		client:       cli,
 		scheme:       scheme,
 		cr:           cr,
 		log:          log,
 		apiGroupEnvs: apigroup.EnvVars(),
+		decorator:    undecorated{},
 	}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
 }
 
 type componentHandler struct {
@@ -98,6 +128,8 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
+	renderInputs render.Inputs
+	decorator    ComponentDecorator
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -440,6 +472,8 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
+	component = c.decorator.Decorate(component, c.renderInputs)
+
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.
 	cmpLog := c.log.WithValues("component", reflect.TypeOf(component))
@@ -1173,7 +1207,6 @@ func addComponentLabel(obj metav1.Object, cr metav1.Object) {
 		owner, ok := cr.(runtime.Object)
 		if ok && owner.GetObjectKind() != nil && owner.GetObjectKind() != nil {
 			obj.GetLabels()["app.kubernetes.io/component"] = sanitizeLabel(owner.GetObjectKind().GroupVersionKind().GroupKind().String())
-
 		}
 	}
 }

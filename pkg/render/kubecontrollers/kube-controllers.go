@@ -41,6 +41,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -732,7 +733,7 @@ func (c *kubeControllersComponent) rbacSyncNamespacedRole() []client.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{"tigera-idp-groups"},
+					ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
 					Verbs:         []string{"get", "list", "watch"},
 				},
 				{
@@ -740,7 +741,7 @@ func (c *kubeControllersComponent) rbacSyncNamespacedRole() []client.Object {
 					// that cluster's own client.
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{render.RBACManagementConfigMapName},
+					ResourceNames: []string{rbacmanagement.ConfigMapName},
 					Verbs:         []string{"get", "list", "watch"},
 				},
 			},

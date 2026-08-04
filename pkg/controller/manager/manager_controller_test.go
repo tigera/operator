@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -571,10 +572,10 @@ var _ = Describe("Manager controller tests", func() {
 				writeGate := func(value string) {
 					Expect(c.Create(ctx, &corev1.ConfigMap{
 						ObjectMeta: metav1.ObjectMeta{
-							Name:      render.RBACManagementConfigMapName,
+							Name:      rbacmanagement.ConfigMapName,
 							Namespace: common.CalicoNamespace,
 						},
-						Data: map[string]string{render.RBACManagementConfigMapKey: value},
+						Data: map[string]string{rbacmanagement.ConfigMapKey: value},
 					})).NotTo(HaveOccurred())
 				}
 
@@ -1477,7 +1478,7 @@ type failingGateReadClient struct {
 }
 
 func (f failingGateReadClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == render.RBACManagementConfigMapName {
+	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
 		return f.err
 	}
 	return f.Client.Get(ctx, key, obj, opts...)

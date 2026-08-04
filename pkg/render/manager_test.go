@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
@@ -1671,7 +1672,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		gateReadRule := rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{render.RBACManagementConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch"},
 		}
 

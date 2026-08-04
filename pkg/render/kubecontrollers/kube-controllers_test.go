@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -504,13 +505,13 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				ResourceNames: []string{"tigera-idp-groups"},
+				ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
 				Verbs:         []string{"get", "list", "watch"},
 			}), "expected read-only access to tigera-idp-groups in calico-system")
 			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				ResourceNames: []string{render.RBACManagementConfigMapName},
+				ResourceNames: []string{rbacmanagement.ConfigMapName},
 				Verbs:         []string{"get", "list", "watch"},
 			}), "expected read-only access to the feature gate in calico-system")
 		})

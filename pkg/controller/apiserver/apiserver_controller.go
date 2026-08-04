@@ -106,8 +106,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if opts.Variant.IsEnterprise() {
 		// Watched so a toggle re-renders the rules gated on it.
-		if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
+		if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", rbacmanagement.ConfigMapName, err)
 		}
 
 		// Watch for changes to ApplicationLayer
@@ -374,7 +374,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		// The admin owns this ConfigMap; the operator only reads it, and an absent one
 		// reads as disabled.
 		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
-			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+			Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
 		}, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)

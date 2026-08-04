@@ -206,8 +206,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Watched so a toggle re-renders the access gated on it.
-	if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
+	if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", rbacmanagement.ConfigMapName, err)
 	}
 
 	if err = imageset.AddImageSetWatch(c); err != nil {
@@ -1330,7 +1330,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	var rbacManagementEnabled bool
 	if instance.Spec.Variant.IsEnterprise() {
 		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
-			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
+			Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
 		}, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)

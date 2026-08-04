@@ -42,6 +42,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -416,7 +417,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				ResourceNames: []string{render.RBACManagementConfigMapName},
+				ResourceNames: []string{rbacmanagement.ConfigMapName},
 				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 			},
 		}
@@ -2012,7 +2013,7 @@ var (
 		{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{render.RBACManagementConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 		},
 	}

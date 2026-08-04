@@ -22,11 +22,20 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// ConfigMapName is the admin-owned switch for the RBAC management UI, read by the
-// operator, ui-apis and rbacsync. Keep in sync with ui-apis rbacmanagement/gate.
 const (
+	// ConfigMapName is the admin-owned switch for the RBAC management UI, read by the
+	// operator, ui-apis and rbacsync. Keep in sync with ui-apis rbacmanagement/gate.
 	ConfigMapName = "rbac-ui-config"
 	ConfigMapKey  = "rbac-ui-enabled"
+
+	// LDAPConfigSecretName is the RBAC-UI LDAP directory-sync config Secret
+	// (calico-system) the rbacsync process reads to perform the sync.
+	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
+	LDAPConfigSecretName = "tigera-idp-ldap-config"
+
+	// GroupsConfigMapName is the ConfigMap (calico-system) holding the IdP group
+	// mappings. The manager writes it through ui-apis; rbacsync reads it.
+	GroupsConfigMapName = "tigera-idp-groups"
 )
 
 // Enabled reports whether the RBAC management UI is switched on for this cluster.

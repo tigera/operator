@@ -63,6 +63,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
@@ -1388,10 +1389,10 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.RBACManagementConfigMapName,
+					Name:      rbacmanagement.ConfigMapName,
 					Namespace: common.CalicoNamespace,
 				},
-				Data: map[string]string{render.RBACManagementConfigMapKey: "true"},
+				Data: map[string]string{rbacmanagement.ConfigMapKey: "true"},
 			})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -2433,7 +2434,7 @@ var _ = Describe("Testing core-controller installation", func() {
 		// The admin owns whether the ConfigMap exists and what it says; the operator only
 		// reads it.
 		Context("RBAC management UI feature gate", func() {
-			gateKey := client.ObjectKey{Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace}
+			gateKey := client.ObjectKey{Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace}
 
 			// enabledControllers is where the gate's value is observable.
 			enabledControllers := func() string {
@@ -2456,7 +2457,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			writeGate := func(value string) {
 				cm := &corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{Name: gateKey.Name, Namespace: gateKey.Namespace},
-					Data:       map[string]string{render.RBACManagementConfigMapKey: value},
+					Data:       map[string]string{rbacmanagement.ConfigMapKey: value},
 				}
 				Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
 			}
@@ -2493,7 +2494,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 				cm := &corev1.ConfigMap{}
 				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
-				Expect(cm.Data).To(HaveKeyWithValue(render.RBACManagementConfigMapKey, "true"))
+				Expect(cm.Data).To(HaveKeyWithValue(rbacmanagement.ConfigMapKey, "true"))
 				// Deleting the Installation must not take the admin's toggle with it.
 				Expect(cm.GetOwnerReferences()).To(BeEmpty())
 			})
@@ -3220,7 +3221,7 @@ type failingGateReadClient struct {
 }
 
 func (f failingGateReadClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == render.RBACManagementConfigMapName {
+	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
 		return f.err
 	}
 	return f.Client.Get(ctx, key, obj, opts...)

@@ -44,6 +44,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -2204,7 +2205,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{RBACManagementConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 		},
 	)

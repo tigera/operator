@@ -79,16 +79,6 @@ const (
 	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
 	ManagerPortName              = "https"
 
-	// RBACManagementLDAPConfigSecretName is the RBAC-UI LDAP directory-sync config
-	// Secret (calico-system) the rbacsync process reads to perform the sync.
-	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
-	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
-
-	// The admin-owned switch for the RBAC management UI. Defined by, and kept in sync
-	// through, pkg/render/common/rbacmanagement.
-	RBACManagementConfigMapName = rbacmanagement.ConfigMapName
-	RBACManagementConfigMapKey  = rbacmanagement.ConfigMapKey
-
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
 	VoltronLinseedTLS              = "calico-voltron-linseed-tls"
@@ -1275,20 +1265,20 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
-					ResourceNames: []string{RBACManagementLDAPConfigSecretName},
+					ResourceNames: []string{rbacmanagement.LDAPConfigSecretName},
 					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{"tigera-idp-groups"},
+					ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
 					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 				{
 					// The gate ui-apis watches; read-only, the value is the admin's.
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{RBACManagementConfigMapName},
+					ResourceNames: []string{rbacmanagement.ConfigMapName},
 					Verbs:         []string{"get", "list", "watch"},
 				},
 			},

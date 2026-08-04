@@ -450,7 +450,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.cli,
 		r.scheme,
 		managementClusterConnection,
-		utils.WithRenderInputs(render.Inputs{Installation: installationSpec}),
+		utils.WithRenderInputs(ci.RenderInputs),
 		utils.WithDecorator(r.opts.Extensions.Decorator()),
 	)
 	guardianCfg := &render.GuardianConfiguration{

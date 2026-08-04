@@ -546,8 +546,11 @@ type wafRenderData struct {
 // wasm image, the webhook serving keypair (also returned as a managed keypair), the
 // merged wasm pull secret, the wasm CA bundle ConfigMap, and the operator CA PEM.
 func buildWAFData(ctx context.Context, ci controller.Inputs) (wafRenderData, certificatemanagement.KeyPairInterface, error) {
-	gw, _, err := gatewayapi.GetGatewayAPI(ctx, ci.Client)
+	gw, msg, err := gatewayapi.GetGatewayAPI(ctx, ci.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
+		if msg != "" {
+			return wafRenderData{}, nil, fmt.Errorf("%s: %w", msg, err)
+		}
 		return wafRenderData{}, nil, err
 	}
 	if gw == nil {

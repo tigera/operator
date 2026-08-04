@@ -152,7 +152,7 @@ func modifyNodeDaemonSet(ri render.Inputs, ds *appsv1.DaemonSet) {
 // no prometheus mount at all.
 func mountNodePrometheusTLS(ri render.Inputs, ds *appsv1.DaemonSet) {
 	tls := installationData(ri).nodePrometheusTLS
-	if tls == nil {
+	if tls == nil || ri.TrustedBundle == nil {
 		return
 	}
 	spec := &ds.Spec.Template.Spec

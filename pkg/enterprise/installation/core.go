@@ -133,6 +133,8 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
 		&operatorv1.LogCollector{},
+		// Manager.spec.rbacUI gates the rbacsync controller and its RBAC.
+		&operatorv1.Manager{},
 		// GatewayAPI.spec.extensions.waf.state gates the WAF v3 surface on calico-kube-controllers.
 		&operatorv1.GatewayAPI{},
 	} {

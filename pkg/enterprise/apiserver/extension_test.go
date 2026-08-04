@@ -28,6 +28,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -246,6 +247,21 @@ var _ = Describe("API server enterprise modifier", func() {
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		}))
 
+		// Both roles can read the Gateway API, so the WAF UI can detect it and offer
+		// Gateways and HTTPRoutes as policy attach targets.
+		for _, role := range []*rbacv1.ClusterRole{uiUser, networkAdmin} {
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"gatewayapis"},
+				Verbs:     []string{"get"},
+			}))
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{"gateway.networking.k8s.io"},
+				Resources: []string{"gateways", "httproutes"},
+				Verbs:     []string{"get", "list", "watch"},
+			}))
+		}
+
 		// Audit policy configmap.
 		_, ok := extensions.FindObject[*corev1.ConfigMap](objs, "calico-audit-policy")
 		Expect(ok).To(BeTrue())
@@ -255,6 +271,38 @@ var _ = Describe("API server enterprise modifier", func() {
 		Expect(ok).To(BeTrue())
 		Expect(svc.Spec.Ports).To(ContainElement(HaveField("Name", render.QueryServerPortName)))
 	})
+
+	DescribeTable("grants tigera-network-admin the role management verbs only when rbacUI is enabled",
+		func(rbacUI *operatorv1.RBACUI, expected bool) {
+			manager := &operatorv1.Manager{
+				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
+				Spec:       operatorv1.ManagerSpec{RBACUI: rbacUI},
+			}
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, manager)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			objs, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+
+			// ui-apis writes bindings impersonating the caller, so the caller's own role
+			// has to carry the verbs or the apiserver's escalation check rejects it.
+			matcher := ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterrolebindings", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+			})
+			if expected {
+				Expect(networkAdmin.Rules).To(matcher)
+			} else {
+				Expect(networkAdmin.Rules).NotTo(matcher)
+			}
+		},
+		Entry("enabled", &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)}, true),
+		Entry("disabled", &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIDisabled)}, false),
+		Entry("unset", nil, false),
+	)
 
 	Context("Calico Cloud", func() {
 		cloudExt := func() *extensions.Registry {

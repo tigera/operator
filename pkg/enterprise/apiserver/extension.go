@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -80,6 +81,10 @@ type apiServerRenderData struct {
 	dikastesImage               string
 	cloud                       bool
 
+	// rbacManagementEnabled mirrors Manager.spec.rbacUI. ui-apis writes role bindings
+	// impersonating the caller, so tigera-network-admin needs the verbs itself.
+	rbacManagementEnabled bool
+
 	// bindingNamespaces is the set of tenant namespaces whose calico-apiserver ServiceAccount
 	// should be granted Linseed access. Empty for zero/single-tenant clusters; every tenant
 	// namespace for multi-tenant management clusters.
@@ -130,6 +135,7 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
 		&operatorv1.Authentication{},
+		&operatorv1.Manager{},
 	} {
 		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
 			return err
@@ -174,6 +180,11 @@ func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci contr
 
 	if managementCluster != nil && managementClusterConnection != nil {
 		return ci, nil, extensions.InvalidConfigf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+	}
+
+	managerCR, err := utils.GetManager(ctx, ci.Client, false, "")
+	if err != nil {
+		return ci, nil, fmt.Errorf("error reading Manager: %w", err)
 	}
 
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
@@ -284,6 +295,7 @@ func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci contr
 		dikastesImage:               dikastesImage,
 		bindingNamespaces:           bindingNamespaces,
 		cloud:                       e.opts.Cloud,
+		rbacManagementEnabled:       managerCR.RBACManagementEnabled(),
 	}
 	return ci, nil, nil
 }
@@ -523,7 +535,7 @@ func (c *apiServer) ensureDeployment(create, del []client.Object) ([]client.Obje
 func removeByRef(del []client.Object, ref client.Object) []client.Object {
 	out := del[:0:0]
 	for _, o := range del {
-		if o.GetObjectKind().GroupVersionKind().Kind == ref.GetObjectKind().GroupVersionKind().Kind &&
+		if reflect.TypeOf(o) == reflect.TypeOf(ref) &&
 			o.GetNamespace() == ref.GetNamespace() &&
 			o.GetName() == ref.GetName() {
 			continue
@@ -1192,6 +1204,18 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get"},
 		},
+		// Allow the user to read the gatewayapis CR to detect if Gateway API is enabled/disabled.
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		},
+		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 		// Allow the user to view WAF policies, plugins, and validation policies.
 		{
 			APIGroups: []string{"applicationlayer.projectcalico.org"},
@@ -1431,6 +1455,18 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
+		// Allow the user to read the gatewayapis CR to detect if Gateway API is enabled/disabled.
+		{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		},
+		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
 		// Allow the user to manage WAF policies, plugins, and validation policies.
 		{
 			APIGroups: []string{"applicationlayer.projectcalico.org"},
@@ -1487,6 +1523,23 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			Verbs: []string{"patch"},
 		},
 	}...)
+
+	// ui-apis writes these impersonating the caller, so the apiserver enforces escalation
+	// against the user's own permissions.
+	if c.data.rbacManagementEnabled {
+		rules = append(rules,
+			rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "roles"},
+				Verbs:     []string{"get", "list", "watch"},
+			},
+			rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterrolebindings", "rolebindings"},
+				Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+			},
+		)
+	}
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.data.managementClusterConnection == nil {

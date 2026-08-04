@@ -19,18 +19,27 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 )
 
 // Decorator applies the registered component modifiers. Its zero value decorates
 // nothing.
 type Decorator struct {
+	variant   operatorv1.ProductVariant
 	modifiers map[string]decorator
 }
 
 // Decorate wraps component with the modifier registered for its extension key. The
 // result is itself a render.Component, so it flows through the handler like any other.
 func (d Decorator) Decorate(component render.Component, ri render.Inputs) render.Component {
+	// The registry is built for the variant resolved at startup. Until the process
+	// restarts onto a new one, an Installation asking for a different variant gets the
+	// base render, matching how the image overrides resolve.
+	if ri.Installation == nil || ri.Installation.Variant != d.variant {
+		return component
+	}
+
 	ext, ok := component.(render.Extensible)
 	if !ok {
 		return component

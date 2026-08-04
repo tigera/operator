@@ -319,7 +319,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ci, managedKeyPairs, err := r.opts.Extensions.Controller(controller.APIServer).ExtendInputs(ctx, ci)
+	ci, extraKeyPairs, err := r.opts.Extensions.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 	if err != nil {
 		if stderrors.Is(err, extensions.ErrInvalidConfig) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
@@ -407,7 +407,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	certKeyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 	}
-	for _, kp := range managedKeyPairs {
+	for _, kp := range extraKeyPairs {
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(kp, true, true))
 	}
 	if r.opts.UseV3CRDs {
@@ -493,7 +493,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		render.CalicoAPIServerTLSSecretName: tlsSecret,
 		webhooks.WebhooksTLSSecretName:      webhooksTLS,
 	}
-	for _, kp := range managedKeyPairs {
+	for _, kp := range extraKeyPairs {
 		keyPairWarnings[kp.GetName()] = kp
 	}
 	certificatemanagement.CheckKeyPairWarnings(keyPairWarnings, r.status)

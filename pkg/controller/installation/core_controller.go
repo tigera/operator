@@ -1147,7 +1147,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ci, managedKeyPairs, err := r.opts.Extensions.Controller(controller.Installation).ExtendInputs(ctx, ci)
+	ci, extraKeyPairs, err := r.opts.Extensions.Controller(controller.Installation).ExtendInputs(ctx, ci)
 	if err != nil {
 		if errors.Is(err, extensions.ErrInvalidConfig) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
@@ -1240,7 +1240,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		rcertificatemanagement.NewKeyPairOption(typhaNodeTLS.TyphaSecretNonClusterHost, true, true),
 	}
 	// Manage any key pairs the variant extension created controller-side.
-	for _, kp := range managedKeyPairs {
+	for _, kp := range extraKeyPairs {
 		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(kp, true, true))
 	}
 
@@ -1478,9 +1478,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	components = append(components, render.CSI(&csiCfg))
 
-	// Build a configuration for rendering calico/kube-controllers. The Calico
-	// Enterprise surface (extra RBAC, enterprise controllers, metrics TLS, and the
-	// WAF v3 / Gateway API add-on) is layered on by the enterprise extension.
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sapi.Endpoint,
 		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
@@ -1634,7 +1631,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		render.NodeTLSSecretName:                                     typhaNodeTLS.NodeSecret,
 		render.TyphaTLSSecretName + render.TyphaNonClusterHostSuffix: typhaNodeTLS.TyphaSecretNonClusterHost,
 	}
-	for _, kp := range managedKeyPairs {
+	for _, kp := range extraKeyPairs {
 		keyPairWarnings[kp.GetName()] = kp
 	}
 	certificatemanagement.CheckKeyPairWarnings(keyPairWarnings, r.status)

@@ -48,13 +48,18 @@ func modifyTypha(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []cl
 		})
 	}
 
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, common.TyphaDeploymentName); ok {
-		net := ri.Installation.CalicoNetwork
-		if net != nil && net.MultiInterfaceMode != nil {
-			{
-				c := render.MustContainer(&dep.Spec.Template.Spec, render.TyphaContainerName)
-				c.Env = append(c.Env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: net.MultiInterfaceMode.Value()})
+	// Both Typha deployments need the interface mode, or the non-cluster-host one
+	// disagrees with the cluster one.
+	net := ri.Installation.CalicoNetwork
+	if net != nil && net.MultiInterfaceMode != nil {
+		for _, name := range []string{common.TyphaDeploymentName, common.TyphaDeploymentName + render.TyphaNonClusterHostSuffix} {
+			dep, ok := extensions.FindObject[*appsv1.Deployment](objs, name)
+			if !ok {
+				continue
 			}
+
+			c := render.MustContainer(&dep.Spec.Template.Spec, render.TyphaContainerName)
+			c.Env = append(c.Env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: net.MultiInterfaceMode.Value()})
 		}
 	}
 

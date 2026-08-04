@@ -79,7 +79,7 @@ func (r *Registry) Decorator() Decorator {
 	if r == nil {
 		return Decorator{}
 	}
-	return Decorator{modifiers: r.modifiers}
+	return Decorator{variant: r.variant, modifiers: r.modifiers}
 }
 
 // Images returns the image override table, which render resolves through directly.

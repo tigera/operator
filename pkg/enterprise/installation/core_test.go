@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 )
@@ -38,7 +39,8 @@ var _ = Describe("installation controller extension", func() {
 		ci.RenderInputs.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		Expect(ext.Controller(controller.Installation).Validate(ctx, ci)).To(HaveOccurred())
+		_, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		Expect(err).To(MatchError(extensions.ErrInvalidConfig))
 	})
 
 	DescribeTable("defaults dnsTrustedServers for providers whose DNS service isn't kube-dns",

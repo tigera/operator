@@ -16,6 +16,7 @@ package installation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 
@@ -50,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -348,13 +350,12 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ext := r.opts.Extensions.Controller(controller.Windows)
-	if err := ext.Validate(ctx, ci); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	ci, _, err = ext.ExtendInputs(ctx, ci)
+	ci, _, err = r.opts.Extensions.Controller(controller.Windows).ExtendInputs(ctx, ci)
 	if err != nil {
+		if errors.Is(err, extensions.ErrInvalidConfig) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing windows extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}

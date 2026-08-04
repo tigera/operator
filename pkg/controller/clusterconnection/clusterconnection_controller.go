@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -285,13 +286,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Client:             r.cli,
 		CertificateManager: certificateManager,
 	}
-	ext := r.opts.Extensions.Controller(controller.ClusterConnection)
-	if err := ext.Validate(ctx, ci); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	ci, _, err = ext.ExtendInputs(ctx, ci)
+	ci, _, err = r.opts.Extensions.Controller(controller.ClusterConnection).ExtendInputs(ctx, ci)
 	if err != nil {
+		if errors.Is(err, extensions.ErrInvalidConfig) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}

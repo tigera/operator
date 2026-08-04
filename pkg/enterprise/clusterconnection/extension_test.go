@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -59,16 +60,11 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 		return ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(objs...).Build()
 	}
 
-	Describe("Validate", func() {
-		It("passes when no ManagementCluster exists", func() {
-			cli = newClient()
-			Expect(ext.Controller(controller.ClusterConnection).Validate(ctx, controllerInputs())).NotTo(HaveOccurred())
-		})
-
+	Describe("configuration", func() {
 		It("rejects a cluster that is both a management and a managed cluster", func() {
 			cli = newClient(&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
-			err := ext.Controller(controller.ClusterConnection).Validate(ctx, controllerInputs())
-			Expect(err).To(HaveOccurred())
+			_, _, err := ext.Controller(controller.ClusterConnection).ExtendInputs(ctx, controllerInputs())
+			Expect(err).To(MatchError(extensions.ErrInvalidConfig))
 			Expect(err.Error()).To(ContainSubstring("not supported"))
 		})
 	})

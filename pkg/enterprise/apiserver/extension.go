@@ -123,23 +123,6 @@ type apiServerControllerExtension struct {
 	opts eoptions.Options
 }
 
-// Validate rejects an API server configuration Calico Enterprise does not support: a
-// cluster cannot be both a management cluster and a managed cluster.
-func (apiServerControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
-	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
-	if err != nil {
-		return fmt.Errorf("error reading ManagementCluster: %w", err)
-	}
-	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, ci.Client)
-	if err != nil {
-		return fmt.Errorf("error reading ManagementClusterConnection: %w", err)
-	}
-	if managementCluster != nil && managementClusterConnection != nil {
-		return fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-	}
-	return nil
-}
-
 // Watches registers the enterprise resources the API server controller reconciles on.
 func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 	for _, obj := range []client.Object{
@@ -187,6 +170,10 @@ func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci contr
 	managementClusterConnection, err := utils.GetManagementClusterConnection(ctx, ci.Client)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
+	}
+
+	if managementCluster != nil && managementClusterConnection != nil {
+		return ci, nil, extensions.InvalidConfigf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 	}
 
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign

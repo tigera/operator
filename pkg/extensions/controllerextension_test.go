@@ -70,9 +70,17 @@ var _ = Describe("controller extension", func() {
 		Expect(err).To(MatchError("boom"))
 	})
 
-	It("runs the extension's validation", func() {
-		r.RegisterController(controller.Installation, fakeController{validateErr: errors.New("invalid")})
-		Expect(r.Controller(controller.Installation).Validate(ctx, inputs())).To(MatchError("invalid"))
+	It("reports unsupported configuration distinctly from any other failure", func() {
+		r.RegisterController(controller.Installation, fakeController{err: extensions.InvalidConfigf("port %d not supported", 0)})
+		_, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
+		Expect(err).To(MatchError(extensions.ErrInvalidConfig))
+		Expect(err.Error()).To(Equal("port 0 not supported"))
+	})
+
+	It("does not report an ordinary failure as unsupported configuration", func() {
+		r.RegisterController(controller.Installation, fakeController{err: errors.New("boom")})
+		_, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
+		Expect(err).NotTo(MatchError(extensions.ErrInvalidConfig))
 	})
 
 	It("runs the watch hook of an extension that implements Watcher", func() {
@@ -111,7 +119,6 @@ var _ = Describe("controller extension", func() {
 		Expect(eci.RenderInputs.ClusterDomain).To(Equal("real"))
 		Expect(managed).To(BeEmpty())
 
-		Expect(none.Controller(controller.Installation).Validate(ctx, ci)).NotTo(HaveOccurred())
 		Expect(none.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
 
 		updated, err := none.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
@@ -127,15 +134,10 @@ func inputs() controller.Inputs {
 	}
 }
 
-// fakeController is a ControllerExtension whose Validate and ExtendInputs return
-// configurable results.
+// fakeController is a ControllerExtension whose ExtendInputs returns a configurable
+// result.
 type fakeController struct {
-	err         error
-	validateErr error
-}
-
-func (f fakeController) Validate(_ context.Context, _ controller.Inputs) error {
-	return f.validateErr
+	err error
 }
 
 func (f fakeController) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {

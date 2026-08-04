@@ -39,13 +39,13 @@ type clusterConnectionControllerExtension struct{}
 
 // Validate rejects clusterconnection configuration Calico Enterprise does not
 // support: a cluster cannot be both a management cluster and a managed cluster.
-func (clusterConnectionControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
+func (clusterConnectionControllerExtension) validate(ctx context.Context, ci controller.Inputs) error {
 	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
 	if managementCluster != nil {
-		return fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+		return extensions.InvalidConfigf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 	}
 	return nil
 }
@@ -55,7 +55,11 @@ func (clusterConnectionControllerExtension) Validate(ctx context.Context, ci con
 // permits the domain-based egress network policy. It creates no certificates, so it
 // returns no managed keypairs. The OSS controller path supplies its own defaults
 // when this hook is absent.
-func (clusterConnectionControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+func (e clusterConnectionControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	if err := e.validate(ctx, ci); err != nil {
+		return ci, nil, err
+	}
+
 	clusterInformation, err := utils.FetchClusterInformation(ctx, ci.Client)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error querying ClusterInformation: %w", err)

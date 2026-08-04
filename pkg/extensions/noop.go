@@ -27,10 +27,6 @@ import (
 
 type noopExtension struct{}
 
-func (noopExtension) Validate(context.Context, controller.Inputs) error {
-	return nil
-}
-
 func (noopExtension) ExtendInputs(_ context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	return ci, nil, nil
 }

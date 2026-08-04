@@ -73,6 +73,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -1146,13 +1147,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ext := r.opts.Extensions.Controller(controller.Installation)
-	if err := ext.Validate(ctx, ci); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	ci, managedKeyPairs, err := ext.ExtendInputs(ctx, ci)
+	ci, managedKeyPairs, err := r.opts.Extensions.Controller(controller.Installation).ExtendInputs(ctx, ci)
 	if err != nil {
+		if errors.Is(err, extensions.ErrInvalidConfig) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}

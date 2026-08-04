@@ -64,10 +64,6 @@ func windowsData(ri render.Inputs) windowsRenderData {
 }
 
 // Validate rejects windows installation config Calico Enterprise does not support.
-func (windowsControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
-	return installation.ValidateReporterPort(ci.RenderInputs.FelixConfiguration)
-}
-
 // Watches registers the enterprise secrets the windows controller reconciles on.
 func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
 	for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
@@ -84,6 +80,10 @@ func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
 // ExtendInputs fetches the node prometheus keypair the installation controller
 // created and stashes it in the render inputs for the windows modifier.
 func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	if err := installation.ValidateReporterPort(ci.RenderInputs.FelixConfiguration); err != nil {
+		return ci, nil, err
+	}
+
 	tls, err := ci.CertificateManager.GetKeyPair(
 		ci.Client,
 		render.NodePrometheusTLSServerSecret,

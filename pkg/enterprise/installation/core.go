@@ -90,10 +90,6 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
-func (coreControllerExtension) Validate(ctx context.Context, ci controller.Inputs) error {
-	return ValidateReporterPort(ci.RenderInputs.FelixConfiguration)
-}
-
 // DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.
 // Some platforms run a DNS service that isn't named "kube-dns", so dnsTrustedServers
 // needs a provider-specific default for Enterprise DNS logging to work. Returns
@@ -153,6 +149,10 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 // inputs carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
 func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	if err := ValidateReporterPort(ci.RenderInputs.FelixConfiguration); err != nil {
+		return ci, nil, err
+	}
+
 	nodePrometheusTLS, err := ci.CertificateManager.GetOrCreateKeyPair(
 		ci.Client,
 		render.NodePrometheusTLSServerSecret,

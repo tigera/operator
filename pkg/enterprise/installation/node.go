@@ -15,7 +15,6 @@
 package installation
 
 import (
-	"errors"
 	"fmt"
 	"slices"
 
@@ -266,7 +265,7 @@ func nodeMetricsService(ri render.Inputs) *corev1.Service {
 // The node and windows controller extensions share it.
 func ValidateReporterPort(fc *v3.FelixConfiguration) error {
 	if fc != nil && fc.Spec.PrometheusReporterPort != nil && *fc.Spec.PrometheusReporterPort == 0 {
-		return errors.New("felixConfiguration prometheusReporterPort=0 not supported")
+		return extensions.InvalidConfigf("felixConfiguration prometheusReporterPort=0 not supported")
 	}
 	return nil
 }

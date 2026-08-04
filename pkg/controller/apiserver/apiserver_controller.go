@@ -16,6 +16,7 @@ package apiserver
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	v1 "k8s.io/api/apps/v1"
@@ -50,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -317,14 +319,13 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ext := r.opts.Extensions.Controller(controller.APIServer)
-	if err := ext.Validate(ctx, ci); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-	ci, managedKeyPairs, err := ext.ExtendInputs(ctx, ci)
+	ci, managedKeyPairs, err := r.opts.Extensions.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
+		if stderrors.Is(err, extensions.ErrInvalidConfig) {
+			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
+		} else {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
+		}
 		return reconcile.Result{}, err
 	}
 	trustedBundle := ci.RenderInputs.TrustedBundle

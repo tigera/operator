@@ -113,25 +113,28 @@ var _ = Describe("API server enterprise controller extension", func() {
 		}
 	}
 
-	Describe("Validate", func() {
+	Describe("configuration", func() {
+		extendInputs := func(objs ...client.Object) error {
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, objs...)
+			_, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
+			return err
+		}
+
 		It("accepts a cluster with neither a ManagementCluster nor a ManagementClusterConnection", func() {
-			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).NotTo(HaveOccurred())
+			Expect(extendInputs()).NotTo(HaveOccurred())
 		})
 
 		It("accepts a management cluster", func() {
-			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, managementCluster(), tunnelSecret())
-			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).NotTo(HaveOccurred())
+			Expect(extendInputs(managementCluster(), tunnelSecret())).NotTo(HaveOccurred())
 		})
 
 		It("accepts a managed cluster", func() {
-			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, managementClusterConnection())
-			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).NotTo(HaveOccurred())
+			Expect(extendInputs(managementClusterConnection())).NotTo(HaveOccurred())
 		})
 
 		It("rejects a cluster that is both a management cluster and a managed cluster", func() {
-			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, managementCluster(), tunnelSecret(), managementClusterConnection())
-			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).To(HaveOccurred())
+			err := extendInputs(managementCluster(), tunnelSecret(), managementClusterConnection())
+			Expect(err).To(MatchError(extensions.ErrInvalidConfig))
 		})
 	})
 })

@@ -25,20 +25,16 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// ControllerExtension extends a controller's reconcile: it validates the
-// configuration and builds the Inputs the render phase consumes. The core
-// operator registers none and runs with the base behavior; an extension build
-// registers one per controller it extends.
+// ControllerExtension builds the Inputs the render phase consumes. The core operator
+// registers none and runs with the base behavior; an extension build registers one
+// per controller it extends.
 type ControllerExtension interface {
-	// Validate rejects configuration the extension does not support, before any
-	// rendering happens.
-	Validate(ctx context.Context, ci controller.Inputs) error
-
 	// ExtendInputs does the controller-side reconcile work the render phase
 	// cannot, returning the updated Inputs (its embedded Inputs is
 	// what the render phase consumes) plus any keypairs the extension created that the
 	// controller should manage (add to certificate management and BYO-expiry
-	// warnings), or an error that aborts the reconcile.
+	// warnings), or an error that aborts the reconcile. Configuration the extension
+	// does not support is rejected here too, with InvalidConfigf.
 	ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error)
 }
 

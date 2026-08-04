@@ -159,7 +159,9 @@ type APIServerConfiguration struct {
 	// exactly the regular Calico/Calico Enterprise RBAC.
 	Cloud bool
 
-	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// RBACManagementEnabled reports whether the RBAC management UI access should be
+	// rendered. The controller has already folded in the product variant, the admin's
+	// gate and tenancy.
 	RBACManagementEnabled bool
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs

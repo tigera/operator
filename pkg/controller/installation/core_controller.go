@@ -205,11 +205,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", active.ActiveConfigMapName, err)
 	}
 
-	// Watched so a toggle re-renders the access gated on it.
-	if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", rbacmanagement.ConfigMapName, err)
-	}
-
 	if err = imageset.AddImageSetWatch(c); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to watch ImageSet: %w", err)
 	}
@@ -246,6 +241,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.Variant.IsEnterprise() {
+		// Watched so a toggle re-renders the access gated on it.
+		if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch ConfigMap %s: %w", rbacmanagement.ConfigMapName, err)
+		}
+
 		// Watch for changes to primary resource ManagementCluster
 		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -1325,18 +1325,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// The admin owns this ConfigMap; the operator only reads it, and an absent one reads
-	// as disabled.
-	var rbacManagementEnabled bool
-	if instance.Spec.Variant.IsEnterprise() {
-		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
-			Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
-		}, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		rbacManagementEnabled = rbacmanagement.Enabled(gate)
+	// kube-controllers is cluster-scoped, so it is never multi-tenant.
+	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, r.client, instance.Spec.Variant, false)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	// Build the list of components to render, in rendering order.

@@ -371,16 +371,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		// The admin owns this ConfigMap; the operator only reads it, and an absent one
-		// reads as disabled.
-		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
-			Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
-		}, r.client)
+		rbacManagementEnabled, err = utils.RBACManagementEnabled(ctx, r.client, installationSpec.Variant, r.opts.MultiTenant)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		rbacManagementEnabled = rbacmanagement.Enabled(gate)
 
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {

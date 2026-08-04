@@ -1697,13 +1697,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).To(ContainElement(gateReadRule))
 		})
 
-		It("does not add the manager-side RBAC rules in multi-tenant mode", func() {
+		// A tenant reaches the renderer with the switch already off: multi-tenant
+		// force-disables the feature on the ui-apis side.
+		It("does not add the manager-side RBAC rules when the switch is off in multi-tenant mode", func() {
 			resources, _ := renderObjects(renderConfig{
-				installation:      installation,
-				ns:                "tenant-a",
-				bindingNamespaces: []string{"tenant-a"},
-				// Enabled, to prove tenancy is what excludes these and not the gate.
-				rbacManagementEnabled: true,
+				installation:          installation,
+				ns:                    "tenant-a",
+				bindingNamespaces:     []string{"tenant-a"},
+				rbacManagementEnabled: false,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
 					Spec: operatorv1.TenantSpec{

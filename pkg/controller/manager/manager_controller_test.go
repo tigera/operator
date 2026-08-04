@@ -1322,6 +1322,24 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(clusterRoleBinding.Subjects).To(HaveLen(2))
 			})
 
+			// Multi-tenant force-disables the RBAC management UI on the ui-apis side, so
+			// the controller must resolve the switch to off even with the admin's gate on.
+			It("withholds the RBAC management UI access even when the admin enables the gate", func() {
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      rbacmanagement.ConfigMapName,
+						Namespace: common.CalicoNamespace,
+					},
+					Data: map[string]string{rbacmanagement.ConfigMapKey: "true"},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = c.Get(ctx, client.ObjectKey{Name: render.ManagerClusterRole, Namespace: tenantANamespace}, &rbacv1.Role{})
+				Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no RBAC management UI Role in a tenant namespace")
+			})
+
 			Context("with both OSS and Enterprise managed clusters", func() {
 				tenantCNamespace := "tenant-c"
 

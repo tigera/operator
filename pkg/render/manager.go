@@ -214,7 +214,9 @@ type ManagerConfiguration struct {
 	Authentication *operatorv1.Authentication
 	KibanaEnabled  bool
 
-	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// RBACManagementEnabled reports whether the RBAC management UI access should be
+	// rendered. The controller has already folded in the product variant, the admin's
+	// gate and tenancy.
 	RBACManagementEnabled bool
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
@@ -292,11 +294,11 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.rbacManagementUIActive()),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.cfg.RBACManagementEnabled),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
-	if c.rbacManagementUIActive() {
+	if c.cfg.RBACManagementEnabled {
 		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
 	}
 	if c.cfg.Tenant.MultiTenant() {
@@ -978,8 +980,8 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-// When rbacManagementUIActive is true it also carries the RBAC management UI rules.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementUIActive bool) *rbacv1.ClusterRole {
+// When rbacManagementEnabled is true it also carries the RBAC management UI rules.
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementEnabled bool) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -1186,7 +1188,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	// Keep in sync with the rbacManagementUINamespacedRole gate.
-	if rbacManagementUIActive {
+	if rbacManagementEnabled {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}
 
@@ -1222,12 +1224,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
-}
-
-// rbacManagementUIActive reports whether this cluster should carry the RBAC management
-// UI access. Multi-tenant is excluded: the feature is force-disabled on the ui-apis side.
-func (c *managerComponent) rbacManagementUIActive() bool {
-	return c.cfg.RBACManagementEnabled && !c.cfg.Tenant.MultiTenant()
 }
 
 // rbacManagementUIRules returns the cluster-scoped rules the RBAC management
@@ -1367,7 +1363,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if c.rbacManagementUIActive() &&
+	if c.cfg.RBACManagementEnabled &&
 		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
 		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
 		// being configured on the Authentication CR. The destination is scoped to

@@ -513,8 +513,8 @@ var _ = Describe("apiserver controller tests", func() {
 			})).NotTo(HaveOccurred())
 		}
 
-		// networkAdminRules reconciles and returns the rendered rules.
-		networkAdminRules := func() []rbacv1.PolicyRule {
+		// reconcileAPIServer reconciles at the given tenancy.
+		reconcileAPIServer := func(multiTenant bool) {
 			r := ReconcileAPIServer{
 				client:              cli,
 				scheme:              scheme,
@@ -522,12 +522,19 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					MultiTenant:      multiTenant,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+		}
+
+		// networkAdminRules reconciles a single-tenant cluster -- the only tenancy that
+		// renders tigera-network-admin -- and returns its rules.
+		networkAdminRules := func() []rbacv1.PolicyRule {
+			reconcileAPIServer(false)
 
 			cr := rbacv1.ClusterRole{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-network-admin"}, &cr)).NotTo(HaveOccurred())
@@ -550,6 +557,16 @@ var _ = Describe("apiserver controller tests", func() {
 		It("withholds the rules when the admin sets the value to false", func() {
 			writeGate("false")
 			Expect(networkAdminRules()).NotTo(ContainElement(gatedRule))
+		})
+
+		// The gated rules ride on tigera-network-admin, which a multi-tenant cluster
+		// never renders -- which is why the gate needs no tenancy term of its own.
+		It("does not render tigera-network-admin at all on a multi-tenant management cluster", func() {
+			writeGate("true")
+			reconcileAPIServer(true)
+
+			err := cli.Get(ctx, client.ObjectKey{Name: "tigera-network-admin"}, &rbacv1.ClusterRole{})
+			Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no tigera-network-admin ClusterRole under multi-tenancy")
 		})
 
 		// A managed cluster carries tigera-network-admin too, so the read must not be
@@ -603,8 +620,8 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})

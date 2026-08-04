@@ -468,27 +468,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
 		})
 
-		// Multi-tenant force-disables the feature on the ui-apis side, so the controller
-		// must not be wired up there even with the gate on.
-		It("does not enable rbacsync on a multi-tenant management cluster", func() {
-			cfg.RBACManagementEnabled = true
-			cfg.Tenant = &operatorv1.Tenant{
-				ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
-				Spec:       operatorv1.TenantSpec{ID: "tenant-a"},
-			}
-			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			for _, e := range dp.Spec.Template.Spec.Containers[0].Env {
-				if e.Name == "ENABLED_CONTROLLERS" {
-					Expect(e.Value).NotTo(ContainSubstring("rbacsync"))
-				}
-			}
-			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
-		})
-
 		It("enables rbacsync and grants it read access to both ConfigMaps it depends on", func() {
 			cfg.RBACManagementEnabled = true
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
@@ -514,22 +493,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				ResourceNames: []string{rbacmanagement.ConfigMapName},
 				Verbs:         []string{"get", "list", "watch"},
 			}), "expected read-only access to the feature gate in calico-system")
-		})
-
-		It("does not enable rbacsync or grant its RBAC for Calico", func() {
-			instance.Variant = operatorv1.Calico
-			cfg.RBACManagementEnabled = true
-			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
-			Expect(component.ResolveImages(nil)).To(BeNil())
-			resources, _ := component.Objects()
-
-			dp := rtest.GetResource(resources, kubecontrollers.KubeController, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			envs := dp.Spec.Template.Spec.Containers[0].Env
-			Expect(envs).To(ContainElement(corev1.EnvVar{
-				Name: "ENABLED_CONTROLLERS", Value: "node,loadbalancer",
-			}))
-
-			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
 		})
 	})
 

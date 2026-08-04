@@ -44,6 +44,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -158,7 +159,8 @@ type APIServerConfiguration struct {
 	// exactly the regular Calico/Calico Enterprise RBAC.
 	Cloud bool
 
-	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// RBACManagementEnabled reports whether to render the RBAC management UI access.
+	// The controller has already applied the variant, the admin's gate and tenancy.
 	RBACManagementEnabled bool
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
@@ -2204,7 +2206,7 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{RBACManagementConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 		},
 	)

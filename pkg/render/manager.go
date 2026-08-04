@@ -41,6 +41,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -77,16 +78,6 @@ const (
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
 	ManagerPortName              = "https"
-
-	// RBACManagementLDAPConfigSecretName is the RBAC-UI LDAP directory-sync config
-	// Secret (calico-system) the rbacsync process reads to perform the sync.
-	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
-	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
-
-	// The admin-owned switch for the RBAC management UI, read by the operator, ui-apis
-	// and rbacsync. Keep in sync with ui-apis rbacmanagement/gate.
-	RBACManagementConfigMapName = "rbac-ui-config"
-	RBACManagementConfigMapKey  = "rbac-ui-enabled"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -223,7 +214,8 @@ type ManagerConfiguration struct {
 	Authentication *operatorv1.Authentication
 	KibanaEnabled  bool
 
-	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// RBACManagementEnabled reports whether to render the RBAC management UI access.
+	// The controller has already applied the variant, the admin's gate and tenancy.
 	RBACManagementEnabled bool
 
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
@@ -301,11 +293,11 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.rbacManagementUIActive()),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.cfg.RBACManagementEnabled),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
-	if c.rbacManagementUIActive() {
+	if c.cfg.RBACManagementEnabled {
 		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
 	}
 	if c.cfg.Tenant.MultiTenant() {
@@ -987,8 +979,8 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-// When rbacManagementUIActive is true it also carries the RBAC management UI rules.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementUIActive bool) *rbacv1.ClusterRole {
+// When rbacManagementEnabled is true it also carries the RBAC management UI rules.
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementEnabled bool) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -1195,7 +1187,7 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	// Keep in sync with the rbacManagementUINamespacedRole gate.
-	if rbacManagementUIActive {
+	if rbacManagementEnabled {
 		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}
 
@@ -1233,22 +1225,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	return cr
 }
 
-// RBACManagementEnabled reports whether the RBAC management UI is switched on for this
-// cluster. A missing ConfigMap, missing key or unparsable value reads as disabled.
-func RBACManagementEnabled(cm *corev1.ConfigMap) bool {
-	if cm == nil {
-		return false
-	}
-	enabled, err := strconv.ParseBool(cm.Data[RBACManagementConfigMapKey])
-	return err == nil && enabled
-}
-
-// rbacManagementUIActive reports whether this cluster should carry the RBAC management
-// UI access. Multi-tenant is excluded: the feature is force-disabled on the ui-apis side.
-func (c *managerComponent) rbacManagementUIActive() bool {
-	return c.cfg.RBACManagementEnabled && !c.cfg.Tenant.MultiTenant()
-}
-
 // rbacManagementUIRules returns the cluster-scoped rules the RBAC management
 // UI adds to calico-manager-role. Named-resource access is scoped separately
 // on rbacManagementUINamespacedRole.
@@ -1284,20 +1260,20 @@ func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"secrets"},
-					ResourceNames: []string{RBACManagementLDAPConfigSecretName},
+					ResourceNames: []string{rbacmanagement.LDAPConfigSecretName},
 					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{"tigera-idp-groups"},
+					ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
 					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 				},
 				{
 					// The gate ui-apis watches; read-only, the value is the admin's.
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{RBACManagementConfigMapName},
+					ResourceNames: []string{rbacmanagement.ConfigMapName},
 					Verbs:         []string{"get", "list", "watch"},
 				},
 			},
@@ -1386,7 +1362,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		})
 	}
 
-	if c.rbacManagementUIActive() &&
+	if c.cfg.RBACManagementEnabled &&
 		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
 		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
 		// being configured on the Authentication CR. The destination is scoped to

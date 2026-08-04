@@ -41,6 +41,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -170,7 +171,8 @@ type KubeControllersConfiguration struct {
 	// Only consulted when WAFGatewayExtensionEnabled is true.
 	WAFWebhookCABundle []byte
 
-	// RBACManagementEnabled is the value of the rbac-ui-config gate for this cluster.
+	// RBACManagementEnabled reports whether to render the RBAC management UI access.
+	// The controller has already applied the variant, the admin's gate and tenancy.
 	RBACManagementEnabled bool
 }
 
@@ -228,7 +230,7 @@ func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) *kubeController
 		}
 
 		// Reconciles ClusterRoles and bindings against the tigera-idp-groups ConfigMap.
-		if rbacSyncEnabled(cfg) {
+		if cfg.RBACManagementEnabled {
 			enabledControllers = append(enabledControllers, "rbacsync")
 			kubeControllerRolePolicyRules = append(kubeControllerRolePolicyRules, rbacSyncControllerRules()...)
 		}
@@ -377,7 +379,7 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 		c.controllersClusterRoleBinding(),
 	)
 	objectsToCreate = append(objectsToCreate, c.managedClusterRoleBindings()...)
-	if c.kubeControllerName == KubeController && rbacSyncEnabled(c.cfg) {
+	if c.kubeControllerName == KubeController && c.cfg.RBACManagementEnabled {
 		objectsToCreate = append(objectsToCreate, c.rbacSyncNamespacedRole()...)
 	}
 
@@ -712,14 +714,6 @@ func kubeControllersRoleEnterpriseCommonRules(cfg *KubeControllersConfiguration)
 	return rules
 }
 
-// rbacSyncEnabled reports whether the rbacsync controller and its access should be
-// rendered. Multi-tenant is excluded: the feature is force-disabled on the ui-apis side.
-func rbacSyncEnabled(cfg *KubeControllersConfiguration) bool {
-	return cfg.Installation.Variant.IsEnterprise() &&
-		cfg.RBACManagementEnabled &&
-		!cfg.Tenant.MultiTenant()
-}
-
 // rbacSyncNamespacedRole returns the Role + RoleBinding granting rbacsync read access to
 // the two ConfigMaps in calico-system it depends on: tigera-idp-groups and the gate.
 func (c *kubeControllersComponent) rbacSyncNamespacedRole() []client.Object {
@@ -732,7 +726,7 @@ func (c *kubeControllersComponent) rbacSyncNamespacedRole() []client.Object {
 				{
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{"tigera-idp-groups"},
+					ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
 					Verbs:         []string{"get", "list", "watch"},
 				},
 				{
@@ -740,7 +734,7 @@ func (c *kubeControllersComponent) rbacSyncNamespacedRole() []client.Object {
 					// that cluster's own client.
 					APIGroups:     []string{""},
 					Resources:     []string{"configmaps"},
-					ResourceNames: []string{render.RBACManagementConfigMapName},
+					ResourceNames: []string{rbacmanagement.ConfigMapName},
 					Verbs:         []string{"get", "list", "watch"},
 				},
 			},

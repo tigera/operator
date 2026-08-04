@@ -53,6 +53,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -105,8 +106,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if opts.Variant.IsEnterprise() {
 		// Watched so a toggle re-renders the rules gated on it.
-		if err = utils.AddConfigMapWatch(c, render.RBACManagementConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.RBACManagementConfigMapName, err)
+		if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", rbacmanagement.ConfigMapName, err)
 		}
 
 		// Watch for changes to ApplicationLayer
@@ -370,16 +371,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			return reconcile.Result{}, err
 		}
 
-		// The admin owns this ConfigMap; the operator only reads it, and an absent one
-		// reads as disabled.
-		gate, err := utils.GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
-			Name: render.RBACManagementConfigMapName, Namespace: common.CalicoNamespace,
-		}, r.client)
+		rbacManagementEnabled, err = utils.RBACManagementEnabled(ctx, r.client, installationSpec.Variant, r.opts.MultiTenant)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		rbacManagementEnabled = render.RBACManagementEnabled(gate)
 
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {

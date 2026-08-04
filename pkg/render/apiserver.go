@@ -284,6 +284,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Add in certificates for API server TLS.
+	//
+	// Leaving the APIService unrendered is what holds the cutover, since the component handler only
+	// writes what it is given and so leaves the one pointing at the previous API server alone.
 	if !c.cfg.HoldAPIServiceCutover {
 		if !c.cfg.TLSKeyPair.UseCertificateManagement() {
 			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))

@@ -399,6 +399,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		MultiTenant:                  r.opts.MultiTenant,
 		KubernetesVersion:            r.opts.KubernetesVersion,
 		ClusterDomain:                r.opts.ClusterDomain,
+		Cloud:                        r.opts.Cloud,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
 	}
 

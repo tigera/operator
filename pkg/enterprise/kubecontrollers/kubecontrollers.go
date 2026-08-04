@@ -61,6 +61,13 @@ func NewElasticsearchKubeControllers(cfg *rkc.KubeControllersConfiguration) rend
 
 	cfg.Rules = rkc.KubeControllersRoleCommonRules(cfg)
 	cfg.Rules = append(cfg.Rules, KubeControllersEnterpriseCommonRules(false, cfg.ManagementClusterConnection != nil)...)
+	// Calico Cloud's es-kube-controllers provisions RBAC for managed-cluster access, so it needs to
+	// create and update cluster roles and bindings. Enterprise only reads them.
+	clusterRoleVerbs := []string{"watch", "list", "get"}
+	if cfg.Cloud {
+		clusterRoleVerbs = append(clusterRoleVerbs, "create", "update")
+	}
+
 	cfg.Rules = append(cfg.Rules,
 		rbacv1.PolicyRule{
 			APIGroups: []string{"elasticsearch.k8s.elastic.co"},
@@ -70,7 +77,7 @@ func NewElasticsearchKubeControllers(cfg *rkc.KubeControllersConfiguration) rend
 		rbacv1.PolicyRule{
 			APIGroups: []string{"rbac.authorization.k8s.io"},
 			Resources: []string{"clusterroles", "clusterrolebindings"},
-			Verbs:     []string{"watch", "list", "get"},
+			Verbs:     clusterRoleVerbs,
 		},
 	)
 

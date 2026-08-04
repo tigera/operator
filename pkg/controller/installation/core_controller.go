@@ -497,6 +497,12 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 	}
 
+	// Default the CNI spec version for Calico CNI.
+	if instance.Spec.CNI.Type == operatorv1.PluginCalico && instance.Spec.CNI.SpecVersion == nil {
+		auto := operatorv1.CNISpecVersionAuto
+		instance.Spec.CNI.SpecVersion = &auto
+	}
+
 	// Default any unspecified fields within the CalicoNetworkSpec.
 	if instance.Spec.CalicoNetwork == nil {
 		instance.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
@@ -1509,6 +1515,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:               typhaNodeTLS.TrustedBundle,
 		Namespace:                   common.CalicoNamespace,
 		BindingNamespaces:           []string{common.CalicoNamespace},
+		Cloud:                       r.opts.Cloud,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

@@ -85,6 +85,7 @@ func NewElasticsearchKubeControllers(cfg *rkc.KubeControllersConfiguration) rend
 		// Zero and single tenant clusters need elasticsearch configuration.
 		cfg.EnabledControllers = append(cfg.EnabledControllers, "authorization", "elasticsearchconfiguration")
 		if cfg.ManagementCluster != nil && cfg.Tenant == nil {
+			cfg.ManagedClusterWatchBinding = true
 			// Enterprise requires the managedcluster controller to push licenses.
 			cfg.EnabledControllers = append(cfg.EnabledControllers, "managedcluster")
 		}

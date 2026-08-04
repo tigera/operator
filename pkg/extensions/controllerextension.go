@@ -44,6 +44,12 @@ type Watcher interface {
 	Watches(c ctrlruntime.Controller) error
 }
 
+// ProductVersion is an optional companion a ControllerExtension may implement to
+// report the product version the operator writes to the Installation status.
+type ProductVersion interface {
+	ProductVersion() string
+}
+
 // FelixConfigDefaulter is an optional companion a ControllerExtension may implement
 // to default FelixConfiguration fields, returning whether it changed fc. It can't
 // fold into ExtendInputs, which runs after Felix defaulting persists.

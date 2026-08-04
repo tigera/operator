@@ -68,6 +68,13 @@ func (r *Registry) Watcher(name controller.Name) Watcher {
 	return noopWatcher{}
 }
 
+func (r *Registry) ProductVersion(name controller.Name) ProductVersion {
+	if v, ok := r.controller(name).(ProductVersion); ok {
+		return v
+	}
+	return noopProductVersion{}
+}
+
 func (r *Registry) FelixConfigDefaulter(name controller.Name) FelixConfigDefaulter {
 	if d, ok := r.controller(name).(FelixConfigDefaulter); ok {
 		return d

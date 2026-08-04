@@ -34,7 +34,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) *extensions.Regi
 	switch variant {
 	case operatorv1.CalicoEnterprise:
 		typha.Register(r)
-		installation.Register(r)
+		installation.Register(r, o)
 		windows.Register(r)
 		guardian.Register(r)
 		apiserver.Register(r, o)

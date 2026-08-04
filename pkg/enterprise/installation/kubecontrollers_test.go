@@ -35,6 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/enterprise/installation"
 	"github.com/tigera/operator/pkg/extensions"
@@ -284,6 +285,57 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 				Ports: networkpolicy.Ports(uint16(applicationlayer.WAFWebhookContainerPort)),
 			},
 		}))
+	})
+
+	// The base policy has no manager egress rule; reaching the manager is enterprise-only.
+	DescribeTable("adds the manager egress rule",
+		func(objs []client.Object, expected v3.EntityRule) {
+			ci := newControllerInputs(operatorv1.CalicoEnterprise, objs...)
+			eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(ci), nil)
+			create, del := comp.Objects()
+			out, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersPolicyKey, eci.RenderInputs, create, del)
+
+			policy, ok := extensions.FindObject[*v3.NetworkPolicy](out, kubecontrollers.KubeControllerNetworkPolicyName)
+			Expect(ok).To(BeTrue())
+			Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+				Action:      v3.Allow,
+				Protocol:    &networkpolicy.TCPProtocol,
+				Destination: expected,
+			}))
+		},
+		Entry("direct to the manager on a management or standalone cluster",
+			nil, networkpolicy.DefaultHelper().ManagerEntityRule()),
+		Entry("through Guardian on a managed cluster",
+			[]client.Object{&operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}},
+			render.GuardianEntityRule),
+	)
+
+	It("binds kube-controllers to the managed-cluster watch role only on a management cluster", func() {
+		ci := newControllerInputs(operatorv1.CalicoEnterprise,
+			&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}})
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		Expect(err).NotTo(HaveOccurred())
+
+		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
+		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
+		create, del := comp.Objects()
+		out, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, eci.RenderInputs, create, del)
+		_, ok := extensions.FindObject[*rbacv1.ClusterRoleBinding](out, kubecontrollers.ManagedClustersWatchRoleBindingName)
+		Expect(ok).To(BeTrue())
+
+		// No ManagementCluster, no binding.
+		plain := newControllerInputs(operatorv1.CalicoEnterprise)
+		eci, _, err = ext.Controller(controller.Installation).ExtendInputs(ctx, plain)
+		Expect(err).NotTo(HaveOccurred())
+		comp = kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(plain))
+		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
+		create, del = comp.Objects()
+		out, _ = extensionstest.ApplyExtensions(ext, render.KubeControllersKey, eci.RenderInputs, create, del)
+		_, ok = extensions.FindObject[*rbacv1.ClusterRoleBinding](out, kubecontrollers.ManagedClustersWatchRoleBindingName)
+		Expect(ok).To(BeFalse())
 	})
 })
 

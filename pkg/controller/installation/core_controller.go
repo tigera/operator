@@ -48,7 +48,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -60,7 +59,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/ippool"
@@ -225,17 +223,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
 	}
 
-	if opts.Variant.IsEnterprise() {
-		if opts.ManageCRDs {
-			if err = addCRDWatches(c, operatorv1.CalicoEnterprise, opts.UseV3CRDs); err != nil {
-				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
-			}
-		}
-	} else {
-		if opts.ManageCRDs {
-			if err = addCRDWatches(c, operatorv1.Calico, opts.UseV3CRDs); err != nil {
-				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
-			}
+	if opts.ManageCRDs {
+		if err = utils.AddCRDWatches(c, crds.GetCRDs(operatorv1.Calico, opts.UseV3CRDs)); err != nil {
+			return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
 		}
 	}
 
@@ -262,21 +252,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		},
 	}, predicate.ResourceVersionChangedPredicate{})
 
-	return nil
-}
-
-func addCRDWatches(c ctrlruntime.Controller, v operatorv1.ProductVariant, useV3 bool) error {
-	pred := predicate.Funcs{
-		CreateFunc: func(e event.CreateEvent) bool {
-			// Create occurs because we've created it, so we can safely ignore it.
-			return false
-		},
-	}
-	for _, x := range crds.GetCRDs(v, useV3) {
-		if err := c.WatchObject(x, &handler.EnqueueRequestForObject{}, pred); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -979,28 +954,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	var managementCluster *operatorv1.ManagementCluster
-	var managementClusterConnection *operatorv1.ManagementClusterConnection
-	if r.opts.Variant.IsEnterprise() {
-		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if managementClusterConnection != nil && managementCluster != nil {
-			err = fmt.Errorf("having both a managementCluster and a managementClusterConnection is not supported")
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	includeV3NetworkPolicy := false
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
 	//
@@ -1132,10 +1085,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	calicoVersion := components.CalicoRelease
-	if instance.Spec.Variant.IsEnterprise() {
-		calicoVersion = components.EnterpriseRelease
-	}
+	calicoVersion := r.opts.Extensions.ProductVersion(controller.Installation).ProductVersion()
 
 	ci := controller.Inputs{
 		RenderInputs: render.Inputs{
@@ -1479,18 +1429,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.CSI(&csiCfg))
 
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
-		K8sServiceEp:                k8sapi.Endpoint,
-		K8sServiceEpPodNetwork:      k8sapi.PodNetworkEndpoint,
-		Installation:                &instance.Spec,
-		ManagementCluster:           managementCluster,
-		ManagementClusterConnection: managementClusterConnection,
-		ClusterDomain:               r.opts.ClusterDomain,
-		MetricsPort:                 kubeControllersMetricsPort,
-		Terminating:                 installationMarkedForDeletion,
-		TrustedBundle:               typhaNodeTLS.TrustedBundle,
-		Namespace:                   common.CalicoNamespace,
-		BindingNamespaces:           []string{common.CalicoNamespace},
-		Cloud:                       r.opts.Cloud,
+		K8sServiceEp:           k8sapi.Endpoint,
+		K8sServiceEpPodNetwork: k8sapi.PodNetworkEndpoint,
+		Installation:           &instance.Spec,
+		ClusterDomain:          r.opts.ClusterDomain,
+		MetricsPort:            kubeControllersMetricsPort,
+		Terminating:            installationMarkedForDeletion,
+		TrustedBundle:          typhaNodeTLS.TrustedBundle,
+		Namespace:              common.CalicoNamespace,
+		BindingNamespaces:      []string{common.CalicoNamespace},
+		ImageOverrides:         r.opts.Extensions.Images(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

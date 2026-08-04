@@ -616,6 +616,8 @@ admission policy installation; once an Installation exists it is the authority o
 	extensionRegistry := enterprise.New(variant, eoptions.Options{
 		MultiTenant: multiTenant,
 		Cloud:       isCloudBuild(),
+		ManageCRDs:  manageCRDs,
+		UseV3CRDs:   v3CRDs,
 	})
 
 	options := options.ControllerOptions{

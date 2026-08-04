@@ -39,6 +39,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -106,9 +108,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 	})
 
-	It("should use the tesla calico image for kube-controllers when Cloud is enabled (TSLA-11580)", func() {
+	It("resolves the kube-controllers image through the image overrides", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
-		cfg.Cloud = true
+		overrides := imageoverride.New()
+		overrides.Register(operatorv1.CalicoEnterprise, render.ComponentNameKubeControllers, components.CalicoCloudImage())
+		cfg.ImageOverrides = overrides
+
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
 		resources, _ := component.Objects()

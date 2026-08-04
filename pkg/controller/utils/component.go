@@ -27,6 +27,7 @@ import (
 
 	netv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	kbv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/kibana/v1"
@@ -42,12 +43,16 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -1311,4 +1316,21 @@ func policyManagementDisabled(installation *operatorv1.InstallationSpec) bool {
 	return installation.NetworkPolicy != nil &&
 		installation.NetworkPolicy.ManagePolicies != nil &&
 		*installation.NetworkPolicy.ManagePolicies == operatorv1.NetworkPolicyManagementDisabled
+}
+
+// AddCRDWatches watches the given CRDs, so the operator notices a managed CRD being
+// changed out from under it. A variant extension calls it for the CRDs it adds.
+func AddCRDWatches(c ctrlruntime.Controller, defs []*apiextenv1.CustomResourceDefinition) error {
+	pred := predicate.Funcs{
+		CreateFunc: func(e event.CreateEvent) bool {
+			// Create occurs because we've created it, so we can safely ignore it.
+			return false
+		},
+	}
+	for _, x := range defs {
+		if err := c.WatchObject(x, &handler.EnqueueRequestForObject{}, pred); err != nil {
+			return err
+		}
+	}
+	return nil
 }

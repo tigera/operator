@@ -15,8 +15,11 @@
 package installation_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -87,10 +90,14 @@ var _ = Describe("installation controller extension", func() {
 	})
 })
 
-func newControllerInputs(variant operatorv1.ProductVariant) controller.Inputs {
+func newControllerInputs(variant operatorv1.ProductVariant, objs ...client.Object) controller.Inputs {
 	scheme := runtime.NewScheme()
 	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+
+	for _, o := range objs {
+		Expect(c.Create(context.Background(), o)).NotTo(HaveOccurred())
+	}
 
 	certManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 	Expect(err).NotTo(HaveOccurred())

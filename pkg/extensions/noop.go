@@ -20,6 +20,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -35,6 +36,12 @@ type noopWatcher struct{}
 
 func (noopWatcher) Watches(ctrlruntime.Controller) error {
 	return nil
+}
+
+type noopProductVersion struct{}
+
+func (noopProductVersion) ProductVersion() string {
+	return components.CalicoRelease
 }
 
 type noopFelixConfigDefaulter struct{}

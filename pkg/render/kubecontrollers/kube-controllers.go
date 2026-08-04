@@ -34,6 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -68,10 +69,17 @@ type KubeControllersConfiguration struct {
 	K8sServiceEp           k8sapi.ServiceEndpoint
 	K8sServiceEpPodNetwork k8sapi.ServiceEndpoint
 
-	Installation                *operatorv1.InstallationSpec
+	Installation   *operatorv1.InstallationSpec
+	Authentication *operatorv1.Authentication
+
+	// ManagementCluster and ManagementClusterConnection are inputs for the enterprise
+	// es-kube-controllers assembler. No base rendering reads them.
 	ManagementCluster           *operatorv1.ManagementCluster
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-	Authentication              *operatorv1.Authentication
+
+	// ManagedClusterWatchBinding binds kube-controllers to the managed-cluster watch
+	// ClusterRole. The assemblers set it; multi-cluster management is not a core feature.
+	ManagedClusterWatchBinding bool
 
 	ClusterDomain string
 	MetricsPort   int
@@ -88,8 +96,13 @@ type KubeControllersConfiguration struct {
 	// TenantID is the Calico Cloud tenant. Only the enterprise assembler consumes it.
 	TenantID string
 
-	// Cloud reports whether this is a Calico Cloud install, which runs a different image.
+	// Cloud reports whether this is a Calico Cloud install. Only the enterprise
+	// es-kube-controllers assembler consumes it.
 	Cloud bool
+
+	// ImageOverrides lets a variant swap the kube-controllers image. The controller
+	// wires in the operator's image overrides; nil resolves to the core image.
+	ImageOverrides *imageoverride.Overrides
 
 	// Namespace to be installed into.
 	Namespace string
@@ -208,14 +221,8 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Cloud {
-		// Calico Cloud runs kube-controllers from the tesla-compiled variant of the combined image,
-		// which carries the Cloud behavior the enterprise mono image lacks. It is the same binary,
-		// so the container command and health probes below are unchanged. See TSLA-11580.
-		c.calicoImage, err = components.GetReference(components.CalicoCloudImage(), reg, path, prefix, is)
-	} else {
-		c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
-	}
+	image := c.cfg.ImageOverrides.Resolve(render.ComponentNameKubeControllers, components.CombinedCalicoImage(c.cfg.Installation), c.cfg.Installation)
+	c.calicoImage, err = components.GetReference(image, reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -606,7 +613,7 @@ func (c *kubeControllersComponent) controllersClusterRoleBinding() *rbacv1.Clust
 }
 
 func (c *kubeControllersComponent) managedClusterRoleBindings() []client.Object {
-	if c.cfg.ManagementCluster != nil {
+	if c.cfg.ManagedClusterWatchBinding {
 		return []client.Object{
 			rcomp.ClusterRoleBinding(ManagedClustersWatchRoleBindingName, render.ManagedClustersWatchClusterRoleName, KubeControllerServiceAccount, []string{c.cfg.Namespace}),
 		}
@@ -692,20 +699,6 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 			},
 		},
 	}...)
-
-	if cfg.ManagementClusterConnection != nil {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: render.GuardianEntityRule,
-		})
-	} else {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.DefaultHelper().ManagerEntityRule(),
-		})
-	}
 
 	ingressRules := []v3.Rule{}
 	if cfg.MetricsPort != 0 {

@@ -23,4 +23,9 @@ type Options struct {
 
 	// Cloud reports whether this is a Calico Cloud install.
 	Cloud bool
+
+	// ManageCRDs and UseV3CRDs mirror the operator's CRD management options. The
+	// installation hook watches the CRDs the variant adds.
+	ManageCRDs bool
+	UseV3CRDs  bool
 }

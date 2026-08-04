@@ -39,9 +39,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/dns"
 	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
+	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -53,7 +55,13 @@ import (
 // registerKubeControllers registers the calico-kube-controllers modifiers. There is
 // no image override: kube-controllers runs from the combined calico image, which
 // resolves by variant in the base render.
-func registerKubeControllers(r *extensions.Registry) {
+func registerKubeControllers(r *extensions.Registry, opts eoptions.Options) {
+	if opts.Cloud {
+		// Calico Cloud runs kube-controllers from the tesla-compiled variant of the
+		// combined image, which carries the Cloud behavior the mono image lacks.
+		r.RegisterImage(render.ComponentNameKubeControllers, components.CalicoCloudImage())
+	}
+
 	extensions.RegisterModifier(r, render.KubeControllersKey, modifyKubeControllers)
 	extensions.RegisterModifier(r, render.KubeControllersPolicyKey, modifyKubeControllersPolicy)
 }
@@ -63,20 +71,34 @@ func registerKubeControllers(r *extensions.Registry) {
 // reach the in-process webhook on :9443 (EV-6386). Without it the calico-system
 // default-deny drops the apiserver->:9443 call and WAF admission times out.
 func modifyKubeControllersPolicy(ri render.Inputs, _ render.KubeControllersPolicyExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
-	if !installationData(ri).waf.enabled {
-		return objs, del
-	}
+	data := installationData(ri)
+
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, kubecontrollers.KubeControllerNetworkPolicyName)
 	if !ok {
 		return objs, del
 	}
-	policy.Spec.Ingress = append(policy.Spec.Ingress, v3.Rule{
-		Action:   v3.Allow,
-		Protocol: &networkpolicy.TCPProtocol,
-		Destination: v3.EntityRule{
-			Ports: networkpolicy.Ports(uint16(applicationlayer.WAFWebhookContainerPort)),
-		},
+
+	// kube-controllers reaches the manager through Guardian on a managed cluster and
+	// directly otherwise.
+	manager := networkpolicy.DefaultHelper().ManagerEntityRule()
+	if data.managedCluster {
+		manager = render.GuardianEntityRule
+	}
+	policy.Spec.Egress = append(policy.Spec.Egress, v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: manager,
 	})
+
+	if data.waf.enabled {
+		policy.Spec.Ingress = append(policy.Spec.Ingress, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(uint16(applicationlayer.WAFWebhookContainerPort)),
+			},
+		})
+	}
 	return objs, del
 }
 
@@ -92,6 +114,16 @@ func modifyKubeControllers(ri render.Inputs, _ render.KubeControllersExtensionIn
 
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, kubecontrollers.KubeControllerRole); ok {
 		role.Rules = append(role.Rules, data.kubeControllerRules...)
+	}
+
+	// Only a management cluster watches managed clusters.
+	if data.managementCluster {
+		objs = append(objs, rcomp.ClusterRoleBinding(
+			kubecontrollers.ManagedClustersWatchRoleBindingName,
+			render.ManagedClustersWatchClusterRoleName,
+			kubecontrollers.KubeControllerServiceAccount,
+			[]string{common.CalicoNamespace},
+		))
 	}
 
 	if dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController); ok {

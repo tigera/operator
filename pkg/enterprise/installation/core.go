@@ -21,16 +21,21 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
+
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -40,15 +45,17 @@ import (
 
 // Register wires the installation controller hook and the node and
 // calico-kube-controllers modifiers into the variant.
-func Register(r *extensions.Registry) {
-	r.RegisterController(controller.Installation, coreControllerExtension{})
+func Register(r *extensions.Registry, opts eoptions.Options) {
+	r.RegisterController(controller.Installation, coreControllerExtension{opts: opts})
 	registerNode(r)
-	registerKubeControllers(r)
+	registerKubeControllers(r, opts)
 }
 
 // coreControllerExtension is the Calico Enterprise controller-side hook for the
 // installation controller.
-type coreControllerExtension struct{}
+type coreControllerExtension struct {
+	opts eoptions.Options
+}
 
 // installationRenderData is the controller-produced data the installation
 // extension hands to its modifiers through Inputs.Extension. The node
@@ -74,6 +81,14 @@ type installationRenderData struct {
 	// modifier uses it to create the rbacsync controller's namespaced Role/RoleBinding.
 	rbacManagementEnabled bool
 
+	// managedCluster reports whether this is a managed cluster, which decides whether
+	// kube-controllers reaches the manager through Guardian or directly.
+	managedCluster bool
+
+	// managementCluster reports whether this is a management cluster, which is what
+	// gives kube-controllers the managed-cluster watch binding.
+	managementCluster bool
+
 	waf wafRenderData
 }
 
@@ -90,6 +105,11 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 }
 
 // Validate rejects installation config Calico Enterprise does not support.
+// ProductVersion is the Calico Enterprise release the operator reports in status.
+func (coreControllerExtension) ProductVersion() string {
+	return components.EnterpriseRelease
+}
+
 // DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.
 // Some platforms run a DNS service that isn't named "kube-dns", so dnsTrustedServers
 // needs a provider-specific default for Enterprise DNS logging to work. Returns
@@ -128,7 +148,7 @@ func (coreControllerExtension) DefaultFelixConfiguration(install *operatorv1.Ins
 
 // Watches registers the enterprise resources the installation controller
 // reconciles on.
-func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
+func (e coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 	for _, obj := range []client.Object{
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
@@ -142,6 +162,13 @@ func (coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 			return err
 		}
 	}
+	// The core controller watches the Calico CRDs; these are the ones this variant adds.
+	if e.opts.ManageCRDs {
+		if err := utils.AddCRDWatches(c, enterpriseOnlyCRDs(e.opts.UseV3CRDs)); err != nil {
+			return err
+		}
+	}
+
 	// es-kube-controllers includes the manager internal TLS secret in its bundle.
 	return utils.AddSecretsWatch(c, render.ManagerInternalTLSSecretName, common.OperatorNamespace())
 }
@@ -196,6 +223,14 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 	if err != nil {
 		return ci, nil, fmt.Errorf("error reading ManagementClusterConnection: %w", err)
 	}
+
+	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
+	if err != nil {
+		return ci, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
+	}
+	if managementCluster != nil && managementClusterConnection != nil {
+		return ci, nil, extensions.InvalidConfigf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
+	}
 	waf, wafWebhookTLS, err := buildWAFData(ctx, ci)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
@@ -216,6 +251,8 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		kubeControllerRules:       calicoKubeControllersEnterpriseRules(waf.gatewayAPIPresent, managementClusterConnection != nil, rbacManagementEnabled),
 		kubeControllerControllers: calicoKubeControllersEnterpriseControllers(waf.gatewayAPIPresent, rbacManagementEnabled),
 		rbacManagementEnabled:     rbacManagementEnabled,
+		managedCluster:            managementClusterConnection != nil,
+		managementCluster:         managementCluster != nil,
 		waf:                       waf,
 	}
 
@@ -256,4 +293,21 @@ func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.I
 		managed = append(managed, wafWebhookTLS)
 	}
 	return ci, managed, nil
+}
+
+// enterpriseOnlyCRDs is the Calico Enterprise CRD set minus the Calico set the core
+// controller already watches.
+func enterpriseOnlyCRDs(useV3 bool) []*apiextenv1.CustomResourceDefinition {
+	calico := map[string]bool{}
+	for _, crd := range crds.GetCRDs(operatorv1.Calico, useV3) {
+		calico[crd.Name] = true
+	}
+
+	var out []*apiextenv1.CustomResourceDefinition
+	for _, crd := range crds.GetCRDs(operatorv1.CalicoEnterprise, useV3) {
+		if !calico[crd.Name] {
+			out = append(out, crd)
+		}
+	}
+	return out
 }

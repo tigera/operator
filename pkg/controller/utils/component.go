@@ -1092,6 +1092,16 @@ func setStandardSelectorAndLabels(obj client.Object, customResource metav1.Objec
 			}
 		}
 		podTemplate = &d.Spec.Template
+	case *batchv1.Job:
+		j := obj
+		name = sanitizeLabel(j.Name)
+		// Deliberately no Spec.Selector handling here, unlike Deployment and DaemonSet
+		// above. The job controller owns a Job's selector (it adds controller-uid) and
+		// the field is immutable, so we must leave it alone and label the pod template
+		// only. Existing Jobs are not rewritten: mergeState compares Jobs on container
+		// images and pod-template annotations, not labels, so adding a label here does
+		// not trigger the delete-and-recreate path.
+		podTemplate = &j.Spec.Template
 	case *monitoringv1.Prometheus:
 		d := obj
 		if d.Spec.PodMetadata == nil {

@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -2679,3 +2680,46 @@ func (mc *mockClient) RESTMapper() restMeta.RESTMapper {
 func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 	panic("SubResource not implemented in mockClient")
 }
+
+var _ = Describe("componentHandler modifier application", func() {
+	It("applies registered modifiers to a named component before create", func() {
+		ext := extensions.NewSet()
+		extensions.Modify(ext.Variant(operatorv1.CalicoEnterprise), render.TyphaKey, func(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+			cm := objs[0].(*corev1.ConfigMap)
+			cm.Data = map[string]string{"patched": "yes"}
+			return objs, del
+		})
+
+		s := runtime.NewScheme()
+		Expect(apis.AddToScheme(s, false)).NotTo(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(s)).NotTo(HaveOccurred())
+
+		c := ctrlrfake.DefaultFakeClientBuilder(s).Build()
+		renderInputs := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
+		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderInputs(renderInputs), WithExtensions(ext))
+		comp := &namedFakeComponent{name: render.TyphaKey.String(), obj: &corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},
+		}}
+
+		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
+
+		got := &corev1.ConfigMap{}
+		Expect(c.Get(context.Background(), client.ObjectKey{Name: "cm", Namespace: "default"}, got)).NotTo(HaveOccurred())
+		Expect(got.Data).To(HaveKeyWithValue("patched", "yes"))
+	})
+})
+
+type namedFakeComponent struct {
+	name string
+	obj  client.Object
+}
+
+func (f *namedFakeComponent) ModifierKey() string                      { return f.name }
+func (f *namedFakeComponent) ExtensionInputs() any                     { return render.TyphaExtensionInputs{} }
+func (f *namedFakeComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
+func (f *namedFakeComponent) Objects() ([]client.Object, []client.Object) {
+	return []client.Object{f.obj}, nil
+}
+func (f *namedFakeComponent) Ready() bool                   { return true }
+func (f *namedFakeComponent) SupportedOSType() rmeta.OSType { return rmeta.OSTypeLinux }

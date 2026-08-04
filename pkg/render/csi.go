@@ -163,7 +163,7 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 		VolumeMounts: []corev1.VolumeMount{
 			{
 				Name:      "varrun",
-				MountPath: filepath.Clean("/var/run"),
+				MountPath: filepath.Clean("/var/run/nodeagent"),
 			},
 			{
 				Name:      "socket-dir",
@@ -207,6 +207,8 @@ func (c *csiComponent) csiContainers() []corev1.Container {
 				},
 			},
 		},
+		// Privileged is required here for SELinux compat on OpenShift/RHEL: a non-privileged registrar 
+		// (container_t) cannot connect to the UDS created by the privileged calico-csi container (spc_t).
 		SecurityContext: securitycontext.NewRootContext(true),
 		VolumeMounts: []corev1.VolumeMount{
 			{
@@ -234,7 +236,8 @@ func (c *csiComponent) csiVolumes() []corev1.Volume {
 			Name: "varrun",
 			VolumeSource: corev1.VolumeSource{
 				HostPath: &corev1.HostPathVolumeSource{
-					Path: filepath.Clean("/var/run"),
+					Path: filepath.Clean("/var/run/nodeagent"),
+					Type: &hostPathTypeDirOrCreate,
 				},
 			},
 		},

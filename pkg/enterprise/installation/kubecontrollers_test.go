@@ -67,11 +67,11 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	}
 
 	It("mounts the metrics serving TLS keypair onto the deployment", func() {
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersKey, ri, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -87,11 +87,11 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	})
 
 	It("adds the cert-management init container when certificate management is enabled", func() {
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, certManagementControllerInputs())
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, certManagementControllerInputs())
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, []client.Object{kubeControllersDeployment()}, nil)
+		objs, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersKey, ri, []client.Object{kubeControllersDeployment()}, nil)
 		dp, ok := extensions.FindObject[*appsv1.Deployment](objs, kubecontrollers.KubeController)
 		Expect(ok).To(BeTrue())
 
@@ -149,7 +149,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, create, del)
+		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersKey, ri, create, del)
 		return out
 	}
 
@@ -160,7 +160,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	}
 
 	It("layers the enterprise rules, controllers, and metrics TLS on (WAF off)", func() {
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(newControllerInputs(operatorv1.CalicoEnterprise), ri)
@@ -185,7 +185,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("layers the full WAF surface on when the GatewayAPI extension is enabled", func() {
 		ci := wafControllerInputs()
-		eci, managed, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		eci, managed, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
@@ -224,14 +224,14 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("deletes the WAF webhook surface when the extension is disabled", func() {
 		ci := newControllerInputs(operatorv1.CalicoEnterprise)
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		_, toDelete := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, ri, create, del)
+		_, toDelete := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersKey, ri, create, del)
 
 		_, ok := extensions.FindObject[*corev1.Service](toDelete, applicationlayer.WAFWebhookServiceName)
 		Expect(ok).To(BeTrue(), "the webhook Service should be queued for deletion")
@@ -239,7 +239,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("keeps the WAF controller wired but de-programs when GatewayAPI is present and WAF is disabled", func() {
 		ci := gatewayNoWAFControllerInputs()
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(ci, ri)
@@ -268,13 +268,13 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("adds the WAF webhook ingress rule to the network policy when enabled", func() {
 		ci := wafControllerInputs()
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
 		comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(ci), nil)
 		create, del := comp.Objects()
-		objs, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersPolicyKey, ri, create, del)
+		objs, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersPolicyKey, ri, create, del)
 
 		policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, kubecontrollers.KubeControllerNetworkPolicyName)
 		Expect(ok).To(BeTrue())
@@ -291,12 +291,12 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	DescribeTable("adds the manager egress rule",
 		func(objs []client.Object, expected v3.EntityRule) {
 			ci := newControllerInputs(operatorv1.CalicoEnterprise, objs...)
-			eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+			eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 			Expect(err).NotTo(HaveOccurred())
 
 			comp := kubecontrollers.NewCalicoKubeControllersPolicy(calicoKubeControllersCfg(ci), nil)
 			create, del := comp.Objects()
-			out, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersPolicyKey, eci.RenderInputs, create, del)
+			out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersPolicyKey, eci.RenderInputs, create, del)
 
 			policy, ok := extensions.FindObject[*v3.NetworkPolicy](out, kubecontrollers.KubeControllerNetworkPolicyName)
 			Expect(ok).To(BeTrue())
@@ -316,24 +316,24 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	It("binds kube-controllers to the managed-cluster watch role only on a management cluster", func() {
 		ci := newControllerInputs(operatorv1.CalicoEnterprise,
 			&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}})
-		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
 
 		comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext, render.KubeControllersKey, eci.RenderInputs, create, del)
+		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersKey, eci.RenderInputs, create, del)
 		_, ok := extensions.FindObject[*rbacv1.ClusterRoleBinding](out, kubecontrollers.ManagedClustersWatchRoleBindingName)
 		Expect(ok).To(BeTrue())
 
 		// No ManagementCluster, no binding.
 		plain := newControllerInputs(operatorv1.CalicoEnterprise)
-		eci, _, err = ext.Controller(controller.Installation).ExtendInputs(ctx, plain)
+		eci, _, err = ext.For(controller.Installation).ExtendInputs(ctx, plain)
 		Expect(err).NotTo(HaveOccurred())
 		comp = kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(plain))
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		create, del = comp.Objects()
-		out, _ = extensionstest.ApplyExtensions(ext, render.KubeControllersKey, eci.RenderInputs, create, del)
+		out, _ = extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.KubeControllersKey, eci.RenderInputs, create, del)
 		_, ok = extensions.FindObject[*rbacv1.ClusterRoleBinding](out, kubecontrollers.ManagedClustersWatchRoleBindingName)
 		Expect(ok).To(BeFalse())
 	})

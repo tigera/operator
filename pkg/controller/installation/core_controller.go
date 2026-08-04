@@ -219,7 +219,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
 	}
 
-	if err = opts.Extensions.Watcher(controller.Installation).Watches(c); err != nil {
+	if err = opts.Extensions.For(controller.Installation).Watches(c); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
 	}
 
@@ -285,6 +285,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		migrationWatchReady: &utils.ReadyFlag{},
 		newComponentHandler: utils.NewComponentHandler,
 		opts:                opts,
+		ext:                 opts.Extensions.For(controller.Installation),
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -336,6 +337,7 @@ type ReconcileInstallation struct {
 	tierWatchReady                *utils.ReadyFlag
 	migrationWatchReady           *utils.ReadyFlag
 	opts                          options.ControllerOptions
+	ext                           extensions.Controller
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
@@ -1085,7 +1087,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	calicoVersion := r.opts.Extensions.ProductVersion(controller.Installation).ProductVersion()
+	calicoVersion := r.ext.ProductVersion()
 
 	ci := controller.Inputs{
 		RenderInputs: render.Inputs{
@@ -1097,7 +1099,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ci, extraKeyPairs, err := r.opts.Extensions.Controller(controller.Installation).ExtendInputs(ctx, ci)
+	ci, extraKeyPairs, err := r.ext.ExtendInputs(ctx, ci)
 	if err != nil {
 		if errors.Is(err, extensions.ErrInvalidConfig) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
@@ -1126,7 +1128,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.scheme,
 		instance,
 		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.opts.Extensions.Decorator()),
+		utils.WithDecorator(r.ext.Decorator()),
 	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
@@ -1384,7 +1386,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
 		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
 		V3CRDs:                r.opts.UseV3CRDs,
-		ImageOverrides:        r.opts.Extensions.Images(),
+		ImageOverrides:        r.ext.Images(),
 	}
 
 	if bgpConfiguration.Spec.BindMode != nil {
@@ -1438,7 +1440,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TrustedBundle:          typhaNodeTLS.TrustedBundle,
 		Namespace:              common.CalicoNamespace,
 		BindingNamespaces:      []string{common.CalicoNamespace},
-		ImageOverrides:         r.opts.Extensions.Images(),
+		ImageOverrides:         r.ext.Images(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
@@ -1832,7 +1834,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 	// Variant-specific FelixConfiguration defaults (e.g. the Enterprise
 	// provider-specific dnsTrustedServers) are owned by the variant extension.
-	extUpdated, err := r.opts.Extensions.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(&install.Spec, fc)
+	extUpdated, err := r.ext.DefaultFelixConfiguration(&install.Spec, fc)
 	if err != nil {
 		return updated, err
 	}

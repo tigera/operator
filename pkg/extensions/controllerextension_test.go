@@ -41,7 +41,7 @@ var _ = Describe("controller extension", func() {
 
 	It("returns the base render inputs when no extension is registered", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		eci, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, controller.Inputs{
+		eci, _, err := r.For(controller.Installation).ExtendInputs(ctx, controller.Inputs{
 			RenderInputs: render.Inputs{Installation: install, ClusterDomain: "cluster.local"},
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -52,59 +52,59 @@ var _ = Describe("controller extension", func() {
 
 	It("runs the extension registered for the controller", func() {
 		r.RegisterController(controller.Installation, fakeController{})
-		eci, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
+		eci, _, err := r.For(controller.Installation).ExtendInputs(ctx, inputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eci.RenderInputs.ClusterDomain).To(Equal("from-fake"))
 	})
 
 	It("does not run an extension registered for a different controller", func() {
 		r.RegisterController(controller.Installation, fakeController{})
-		eci, _, err := r.Controller(controller.APIServer).ExtendInputs(ctx, inputs())
+		eci, _, err := r.For(controller.APIServer).ExtendInputs(ctx, inputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eci.RenderInputs.ClusterDomain).To(BeEmpty())
 	})
 
 	It("surfaces the extension error", func() {
 		r.RegisterController(controller.Installation, fakeController{err: errors.New("boom")})
-		_, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
+		_, _, err := r.For(controller.Installation).ExtendInputs(ctx, inputs())
 		Expect(err).To(MatchError("boom"))
 	})
 
 	It("reports unsupported configuration distinctly from any other failure", func() {
 		r.RegisterController(controller.Installation, fakeController{err: extensions.InvalidConfigf("port %d not supported", 0)})
-		_, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
+		_, _, err := r.For(controller.Installation).ExtendInputs(ctx, inputs())
 		Expect(err).To(MatchError(extensions.ErrInvalidConfig))
 		Expect(err.Error()).To(Equal("port 0 not supported"))
 	})
 
 	It("does not report an ordinary failure as unsupported configuration", func() {
 		r.RegisterController(controller.Installation, fakeController{err: errors.New("boom")})
-		_, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
+		_, _, err := r.For(controller.Installation).ExtendInputs(ctx, inputs())
 		Expect(err).NotTo(MatchError(extensions.ErrInvalidConfig))
 	})
 
 	It("runs the watch hook of an extension that implements Watcher", func() {
 		called := false
 		r.RegisterController(controller.Installation, watchingController{called: &called})
-		Expect(r.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
+		Expect(r.For(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
 		Expect(called).To(BeTrue())
 	})
 
 	It("is a no-op watcher when the extension declares no watches", func() {
 		r.RegisterController(controller.Installation, fakeController{})
-		Expect(r.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
+		Expect(r.For(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
 	})
 
 	It("runs the defaulting hook of an extension that implements FelixConfigDefaulter", func() {
 		r.RegisterController(controller.Installation, defaultingController{})
-		updated, err := r.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
+		updated, err := r.For(controller.Installation).DefaultFelixConfiguration(nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeTrue())
 	})
 
 	It("is a no-op defaulter when the extension defaults nothing", func() {
 		r.RegisterController(controller.Installation, fakeController{})
-		updated, err := r.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
+		updated, err := r.For(controller.Installation).DefaultFelixConfiguration(nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeFalse())
 	})
@@ -114,14 +114,14 @@ var _ = Describe("controller extension", func() {
 		ci := inputs()
 		ci.RenderInputs.ClusterDomain = "real"
 
-		eci, managed, err := none.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		eci, managed, err := none.For(controller.Installation).ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eci.RenderInputs.ClusterDomain).To(Equal("real"))
 		Expect(managed).To(BeEmpty())
 
-		Expect(none.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
+		Expect(none.For(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
 
-		updated, err := none.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
+		updated, err := none.For(controller.Installation).DefaultFelixConfiguration(nil, nil)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeFalse())
 		Expect(none.Images()).To(BeNil())

@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
@@ -63,7 +64,7 @@ func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 		extIn, ok = p.ExtensionInputs().(render.GuardianExtensionInputs)
 		ExpectWithOffset(1, ok).To(BeTrue())
 	}
-	out, _ := extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianKey, ri, extIn, objs, nil)
+	out, _ := extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, ri, extIn, objs, nil)
 	return out
 }
 
@@ -127,7 +128,7 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 				extIn, ok = p.ExtensionInputs().(render.GuardianExtensionInputs)
 				Expect(ok).To(BeTrue())
 			}
-			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianKey, ri, extIn, resources, nil)
+			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, ri, extIn, resources, nil)
 		}
 
 		BeforeEach(func() {
@@ -374,7 +375,7 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 				extIn, ok = p.ExtensionInputs().(render.GuardianPolicyExtensionInputs)
 				Expect(ok).To(BeTrue())
 			}
-			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext, render.GuardianPolicyKey, ri, extIn, objs, nil)
+			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianPolicyKey, ri, extIn, objs, nil)
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

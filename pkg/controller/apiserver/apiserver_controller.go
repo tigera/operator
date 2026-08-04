@@ -74,6 +74,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		tierWatchReady:      &utils.ReadyFlag{},
 		migrationWatchReady: &utils.ReadyFlag{},
 		opts:                opts,
+		ext:                 opts.Extensions.For(controller.APIServer),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -107,7 +108,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// The variant extension registers the enterprise watches it needs (the management
 	// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
-	if err = opts.Extensions.Watcher(controller.APIServer).Watches(c); err != nil {
+	if err = opts.Extensions.For(controller.APIServer).Watches(c); err != nil {
 		return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
 	}
 
@@ -196,6 +197,7 @@ type ReconcileAPIServer struct {
 	tierWatchReady      *utils.ReadyFlag
 	migrationWatchReady *utils.ReadyFlag
 	opts                options.ControllerOptions
+	ext                 extensions.Controller
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -319,7 +321,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	ci, extraKeyPairs, err := r.opts.Extensions.Controller(controller.APIServer).ExtendInputs(ctx, ci)
+	ci, extraKeyPairs, err := r.ext.ExtendInputs(ctx, ci)
 	if err != nil {
 		if stderrors.Is(err, extensions.ErrInvalidConfig) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
@@ -379,7 +381,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.scheme,
 		instance,
 		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.opts.Extensions.Decorator()),
+		utils.WithDecorator(r.ext.Decorator()),
 	)
 
 	// Render the desired objects from the CRD and create or update them.

@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -164,6 +165,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -224,6 +226,7 @@ var _ = Describe("apiserver controller tests", func() {
 			})).ToNot(HaveOccurred())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -278,6 +281,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, apiSecret)).ShouldNot(HaveOccurred())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -304,6 +308,7 @@ var _ = Describe("apiserver controller tests", func() {
 			secretName := "calico-apiserver-certs"
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -327,6 +332,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -352,6 +358,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -375,6 +382,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -401,6 +409,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -429,6 +438,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -455,6 +465,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -482,6 +493,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Delete(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -525,6 +537,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -558,6 +571,7 @@ var _ = Describe("apiserver controller tests", func() {
 				Status:     operatorv1.TigeraStatusStatus{},
 			}
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -611,6 +625,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -681,6 +696,7 @@ var _ = Describe("apiserver controller tests", func() {
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -786,6 +802,7 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				r := ReconcileAPIServer{
+					ext:                 testExtensions.For(controller.APIServer),
 					client:              cli,
 					scheme:              scheme,
 					status:              mockStatus,
@@ -816,6 +833,7 @@ var _ = Describe("apiserver controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				r := ReconcileAPIServer{
+					ext:                 testExtensions.For(controller.APIServer),
 					client:              cli,
 					scheme:              scheme,
 					status:              mockStatus,
@@ -847,6 +865,7 @@ var _ = Describe("apiserver controller tests", func() {
 
 			It("Should reconcile multi-cluster setup for a management cluster for a multiple tenant", func() {
 				r := ReconcileAPIServer{
+					ext:                 multiTenantExtensions.For(controller.APIServer),
 					client:              cli,
 					scheme:              scheme,
 					status:              mockStatus,
@@ -899,6 +918,7 @@ var _ = Describe("apiserver controller tests", func() {
 				})).NotTo(HaveOccurred())
 
 				r := ReconcileAPIServer{
+					ext:                 multiTenantExtensions.For(controller.APIServer),
 					client:              cli,
 					scheme:              scheme,
 					status:              mockStatus,
@@ -935,6 +955,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -980,6 +1001,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, ossInstallation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,
@@ -1009,6 +1031,7 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 
 			r := ReconcileAPIServer{
+				ext:                 testExtensions.For(controller.APIServer),
 				client:              cli,
 				scheme:              scheme,
 				status:              mockStatus,

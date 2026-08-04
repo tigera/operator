@@ -28,6 +28,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -74,7 +75,7 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 		})
 
 		renderInputs := render.Inputs{Installation: instance}
-		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderInputs(renderInputs), utils.WithDecorator(enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Decorator()))
+		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderInputs(renderInputs), utils.WithDecorator(enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).For(controller.Installation).Decorator()))
 		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
 
 		role := &rbacv1.ClusterRole{}

@@ -94,7 +94,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	}
 
 	It("appends the node-metrics service", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.WindowsKey, ctxFor(operatorv1.ProviderNone), newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.WindowsKey, ctxFor(operatorv1.ProviderNone), newObjs(), nil)
 		svc, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Namespace).To(Equal(common.CalicoNamespace))
@@ -102,7 +102,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("swaps the cni log mount for the calico log volume and adds enterprise env", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.WindowsKey, ctxFor(operatorv1.ProviderNone), newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.WindowsKey, ctxFor(operatorv1.ProviderNone), newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(HaveField("Name", "var-log-calico")))
@@ -119,7 +119,7 @@ var _ = Describe("windows enterprise modifier", func() {
 	})
 
 	It("sets the trusted DNS server on openshift", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.WindowsKey, ctxFor(operatorv1.ProviderOpenShift), newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.WindowsKey, ctxFor(operatorv1.ProviderOpenShift), newObjs(), nil)
 		Expect(container(ds(out), "node").Env).To(ContainElement(corev1.EnvVar{Name: "FELIX_DNSTRUSTEDSERVERS", Value: "k8s-service:openshift-dns/dns-default"}))
 	})
 
@@ -147,11 +147,11 @@ var _ = Describe("windows enterprise modifier", func() {
 			Client:             cli,
 			CertificateManager: cm,
 		}
-		eci, _, err := ext.Controller(controller.Windows).ExtendInputs(ctx, ci)
+		eci, _, err := ext.For(controller.Windows).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
-		out, _ := extensionstest.ApplyExtensions(ext, render.WindowsKey, ri, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.WindowsKey, ri, newObjs(), nil)
 		d := ds(out)
 
 		Expect(d.Spec.Template.Spec.Volumes).To(ContainElement(tls.Volume()))
@@ -162,7 +162,7 @@ var _ = Describe("windows enterprise modifier", func() {
 
 	It("does nothing when the operator runs as Calico", func() {
 		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
-		out, _ := extensionstest.ApplyExtensions(calicoExt, render.WindowsKey, ctx, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(calicoExt.For(controller.Installation).Decorator(), render.WindowsKey, ctx, newObjs(), nil)
 		_, ok := extensions.FindObject[*corev1.Service](out, render.WindowsNodeMetricsService)
 		Expect(ok).To(BeFalse())
 		Expect(ds(out).Spec.Template.Spec.Volumes).To(BeEmpty())

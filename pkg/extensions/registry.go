@@ -25,8 +25,8 @@ import (
 )
 
 // Registry holds the extensions the operator runs with, for the one variant it
-// resolved at startup. Every lookup returns something safe to call, so a nil
-// Registry (the core operator) needs no guarding at the call site.
+// resolved at startup. A controller resolves its own surface once with For, so
+// nothing downstream carries the whole registry or re-checks the variant.
 type Registry struct {
 	variant     operatorv1.ProductVariant
 	controllers map[controller.Name]ControllerExtension
@@ -54,54 +54,12 @@ func (r *Registry) RegisterImage(component string, image components.Component) {
 	r.images.Register(r.variant, component, image)
 }
 
-func (r *Registry) Controller(name controller.Name) ControllerExtension {
-	if ext := r.controller(name); ext != nil {
-		return ext
-	}
-	return noopExtension{}
-}
-
-func (r *Registry) Watcher(name controller.Name) Watcher {
-	if w, ok := r.controller(name).(Watcher); ok {
-		return w
-	}
-	return noopWatcher{}
-}
-
-func (r *Registry) ProductVersion(name controller.Name) ProductVersion {
-	if v, ok := r.controller(name).(ProductVersion); ok {
-		return v
-	}
-	return noopProductVersion{}
-}
-
-func (r *Registry) FelixConfigDefaulter(name controller.Name) FelixConfigDefaulter {
-	if d, ok := r.controller(name).(FelixConfigDefaulter); ok {
-		return d
-	}
-	return noopFelixConfigDefaulter{}
-}
-
-func (r *Registry) Decorator() Decorator {
-	if r == nil {
-		return Decorator{}
-	}
-	return Decorator{variant: r.variant, modifiers: r.modifiers}
-}
-
 // Images returns the image override table, which render resolves through directly.
 func (r *Registry) Images() *imageoverride.Overrides {
 	if r == nil {
 		return nil
 	}
 	return r.images
-}
-
-func (r *Registry) controller(name controller.Name) ControllerExtension {
-	if r == nil {
-		return nil
-	}
-	return r.controllers[name]
 }
 
 // RegisterModifier registers modify for the component that owns key. Cfg comes from

@@ -178,6 +178,7 @@ func newReconciler(
 		tierWatchReady:        tierWatchReady,
 		clusterInfoWatchReady: clusterInfoWatchReady,
 		opts:                  opts,
+		ext:                   opts.Extensions.For(controller.ClusterConnection),
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -197,6 +198,7 @@ type ReconcileConnection struct {
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
 	opts                       options.ControllerOptions
+	ext                        extensions.Controller
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -286,7 +288,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		Client:             r.cli,
 		CertificateManager: certificateManager,
 	}
-	ci, _, err = r.opts.Extensions.Controller(controller.ClusterConnection).ExtendInputs(ctx, ci)
+	ci, _, err = r.ext.ExtendInputs(ctx, ci)
 	if err != nil {
 		if errors.Is(err, extensions.ErrInvalidConfig) {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
@@ -451,7 +453,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.scheme,
 		managementClusterConnection,
 		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.opts.Extensions.Decorator()),
+		utils.WithDecorator(r.ext.Decorator()),
 	)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,

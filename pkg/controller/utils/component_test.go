@@ -45,6 +45,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/extensions"
@@ -2696,7 +2697,7 @@ var _ = Describe("componentHandler modifier application", func() {
 
 		c := ctrlrfake.DefaultFakeClientBuilder(s).Build()
 		renderInputs := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
-		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderInputs(renderInputs), WithDecorator(ext.Decorator()))
+		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderInputs(renderInputs), WithDecorator(ext.For(controller.Installation).Decorator()))
 		comp := &namedFakeComponent{name: render.TyphaKey.String(), obj: &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},

@@ -42,7 +42,7 @@ var _ = Describe("installation controller extension", func() {
 		ci.RenderInputs.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		_, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
+		_, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
 		Expect(err).To(MatchError(extensions.ErrInvalidConfig))
 	})
 
@@ -50,7 +50,7 @@ var _ = Describe("installation controller extension", func() {
 		func(provider operatorv1.Provider, expected []string) {
 			fc := &v3.FelixConfiguration{}
 			install := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider}
-			updated, err := ext.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(install, fc)
+			updated, err := ext.For(controller.Installation).DefaultFelixConfiguration(install, fc)
 			Expect(err).NotTo(HaveOccurred())
 			if expected == nil {
 				Expect(updated).To(BeFalse())
@@ -67,14 +67,14 @@ var _ = Describe("installation controller extension", func() {
 
 	It("does no felix defaulting when the operator runs as Calico", func() {
 		fc := &v3.FelixConfiguration{}
-		updated, err := calicoExt.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(&operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
+		updated, err := calicoExt.For(controller.Installation).DefaultFelixConfiguration(&operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeFalse())
 		Expect(fc.Spec.DNSTrustedServers).To(BeNil())
 	})
 
 	It("manages the node prometheus and kube-controllers metrics keypairs for the enterprise variant", func() {
-		_, managed, err := ext.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		_, managed, err := ext.For(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
 		for _, kp := range managed {
@@ -84,7 +84,7 @@ var _ = Describe("installation controller extension", func() {
 	})
 
 	It("is a no-op when the operator runs as Calico", func() {
-		_, managed, err := calicoExt.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.Calico))
+		_, managed, err := calicoExt.For(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(managed).To(BeEmpty())
 	})

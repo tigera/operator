@@ -58,6 +58,9 @@ const (
 	APIServerPortName   = "apiserver"
 	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
 
+	// APIServiceName is the aggregated APIService that fronts the projectcalico.org/v3 API group.
+	APIServiceName = "v3.projectcalico.org"
+
 	auditLogsVolumeName   = "calico-audit-logs"
 	auditPolicyVolumeName = "calico-audit-policy"
 )
@@ -166,6 +169,11 @@ type APIServerConfiguration struct {
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool
+
+	// HoldAPIServiceCutover leaves the previous API server in service: the v3.projectcalico.org
+	// APIService keeps pointing at it and none of the resources it needs are removed. Set while the
+	// API server that would take over is not yet ready to serve.
+	HoldAPIServiceCutover bool
 
 	// When certificate management is enabled, we need a separate init container to create a cert, running
 	// with the same permissions as query server.
@@ -277,10 +285,12 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Add in certificates for API server TLS.
-	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
-	} else {
-		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+	if !c.cfg.HoldAPIServiceCutover {
+		if !c.cfg.TLSKeyPair.UseCertificateManagement() {
+			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
+		} else {
+			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		}
 	}
 
 	// Global enterprise-only objects.
@@ -357,7 +367,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 		// Clean up cluster-scoped resources that were created with the 'tigera' prefix.
 		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
-		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
+		if !c.cfg.HoldAPIServiceCutover {
+			objsToDelete = append(objsToDelete, c.deprecatedResources()...)
+		}
 	} else {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
@@ -381,7 +393,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
-	objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
+	if !c.cfg.HoldAPIServiceCutover {
+		objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
+	}
 	objsToCreate := append(globalObjects, namespacedObjects...)
 
 	return objsToCreate, objsToDelete
@@ -425,7 +439,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 	s := &apiregv1.APIService{
 		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "v3.projectcalico.org",
+			Name: APIServiceName,
 		},
 		Spec: apiregv1.APIServiceSpec{
 			Group:                "projectcalico.org",

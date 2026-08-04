@@ -16,6 +16,7 @@ package apiserver_test
 
 import (
 	"context"
+	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -28,6 +29,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -141,7 +143,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	// renderAPIServer builds the base API server objects and applies the enterprise
 	// modifier, the way the component handler does. It returns the create and delete
 	// lists after the modifier ran.
-	renderAPIServer := func(ci controller.Inputs, ri render.Inputs, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
+	renderAPIServerWith := func(s *extensions.Set, ci controller.Inputs, ri render.Inputs, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
@@ -158,7 +160,11 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
 		Expect(ok).To(BeTrue())
-		return extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
+		return extensionstest.ApplyExtensionsWithInputs(s, render.APIServerKey, ri, ec, create, del)
+	}
+
+	renderAPIServer := func(ci controller.Inputs, ri render.Inputs, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
+		return renderAPIServerWith(ext, ci, ri, kp)
 	}
 
 	apiServerDeployment := func(objs []client.Object) *appsv1.Deployment {
@@ -249,6 +255,122 @@ var _ = Describe("API server enterprise modifier", func() {
 		svc, ok := extensions.FindObject[*corev1.Service](objs, render.APIServerServiceName)
 		Expect(ok).To(BeTrue())
 		Expect(svc.Spec.Ports).To(ContainElement(HaveField("Name", render.QueryServerPortName)))
+	})
+
+	Context("Calico Cloud", func() {
+		// cloudExt builds an enterprise Set whose computed options report a Calico Cloud
+		// install, the way main does from the build variant.
+		cloudExt := func() *extensions.Set {
+			cli := k8sfake.NewClientset()
+			cli.Resources = []*metav1.APIResourceList{{
+				GroupVersion: "operator.tigera.io/v1",
+				APIResources: []metav1.APIResource{{Name: "managers", Kind: "Manager", Namespaced: false}},
+			}}
+
+			s := enterprise.New(enterprise.WithCloud(true))
+			Expect(s.ComputeOptions(ctx, cli)).NotTo(HaveOccurred())
+			return s
+		}
+
+		uiSettingsRules := func(role *rbacv1.ClusterRole) []rbacv1.PolicyRule {
+			var rules []rbacv1.PolicyRule
+			for _, r := range role.Rules {
+				if slices.Contains(r.Resources, "uisettingsgroups") || slices.Contains(r.Resources, "uisettingsgroups/data") {
+					rules = append(rules, r)
+				}
+			}
+			return rules
+		}
+
+		lmaResourceNames := func(role *rbacv1.ClusterRole) []string {
+			for _, r := range role.Rules {
+				if slices.Contains(r.APIGroups, "lma.tigera.io") {
+					return r.ResourceNames
+				}
+			}
+			return nil
+		}
+
+		objectsFor := func(s *extensions.Set) ([]client.Object, []client.Object) {
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
+			eci, _, err := s.ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+			return renderAPIServerWith(s, ci, eci.RenderInputs, apiServerKeyPair(ci))
+		}
+
+		It("exposes only the user-settings UISettings group", func() {
+			objs, _ := objectsFor(cloudExt())
+
+			uiUser, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
+			Expect(ok).To(BeTrue())
+			Expect(uiSettingsRules(uiUser)).To(ConsistOf(
+				rbacv1.PolicyRule{
+					APIGroups:     []string{"projectcalico.org"},
+					Resources:     []string{"uisettingsgroups"},
+					Verbs:         []string{"get"},
+					ResourceNames: []string{"user-settings"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups:     []string{"projectcalico.org"},
+					Resources:     []string{"uisettingsgroups/data"},
+					Verbs:         []string{"*"},
+					ResourceNames: []string{"user-settings"},
+				},
+			))
+
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+			Expect(uiSettingsRules(networkAdmin)).To(ConsistOf(
+				rbacv1.PolicyRule{
+					APIGroups:     []string{"projectcalico.org"},
+					Resources:     []string{"uisettingsgroups"},
+					Verbs:         []string{"get"},
+					ResourceNames: []string{"user-settings"},
+				},
+				rbacv1.PolicyRule{
+					APIGroups:     []string{"projectcalico.org"},
+					Resources:     []string{"uisettingsgroups/data"},
+					Verbs:         []string{"*"},
+					ResourceNames: []string{"user-settings"},
+				},
+			))
+		})
+
+		It("grants access to runtime logs", func() {
+			objs, _ := objectsFor(cloudExt())
+
+			uiUser, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
+			Expect(ok).To(BeTrue())
+			Expect(lmaResourceNames(uiUser)).To(ContainElement("runtime"))
+
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+			Expect(lmaResourceNames(networkAdmin)).To(ContainElement("runtime"))
+		})
+
+		It("leaves the cluster-settings group and omits runtime logs off cloud", func() {
+			objs, _ := objectsFor(ext)
+
+			uiUser, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
+			Expect(ok).To(BeTrue())
+			Expect(uiSettingsRules(uiUser)).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"projectcalico.org"},
+				Resources:     []string{"uisettingsgroups"},
+				Verbs:         []string{"get"},
+				ResourceNames: []string{"cluster-settings", "user-settings"},
+			}))
+			Expect(lmaResourceNames(uiUser)).NotTo(ContainElement("runtime"))
+
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+			Expect(uiSettingsRules(networkAdmin)).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"projectcalico.org"},
+				Resources:     []string{"uisettingsgroups"},
+				Verbs:         []string{"get", "patch", "update"},
+				ResourceNames: []string{"cluster-settings", "user-settings"},
+			}))
+			Expect(lmaResourceNames(networkAdmin)).NotTo(ContainElement("runtime"))
+		})
 	})
 
 	It("queues the enterprise RBAC for deletion when not a management cluster", func() {

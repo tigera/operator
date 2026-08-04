@@ -37,9 +37,14 @@ import (
 // After the monorepo split this is what calico-private's main will construct
 // instead. Each per-component subpackage registers its own controller hook and
 // modifiers through its Register func.
-func New() *extensions.Set {
+func New(opts ...Option) *extensions.Set {
+	var b build
+	for _, opt := range opts {
+		opt(&b)
+	}
+
 	s := extensions.NewSet()
-	s.RegisterOptions(computeOptions)
+	s.RegisterOptions(b.computeOptions)
 
 	ent := s.Variant(operatorv1.CalicoEnterprise)
 	typha.Register(ent)
@@ -60,10 +65,14 @@ func New() *extensions.Set {
 // computeOptions discovers the Calico Enterprise controller-phase options at
 // startup. extensions.Set.ComputeOptions runs it from main; the result rides on
 // each Inputs for the enterprise hooks to read.
-func computeOptions(ctx context.Context, cli kubernetes.Interface) (any, error) {
+func (b build) computeOptions(ctx context.Context, cli kubernetes.Interface) (any, error) {
 	multiTenant, err := discovery.MultiTenant(ctx, cli)
 	if err != nil {
 		return nil, err
 	}
-	return eoptions.Options{MultiTenant: multiTenant}, nil
+
+	return eoptions.Options{
+		MultiTenant: multiTenant,
+		Cloud:       b.cloud,
+	}, nil
 }

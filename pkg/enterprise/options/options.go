@@ -23,6 +23,10 @@ import "github.com/tigera/operator/pkg/controller"
 type Options struct {
 	// MultiTenant reports whether the operator runs in multi-tenant mode.
 	MultiTenant bool
+
+	// Cloud reports whether this is a Calico Cloud install. It comes from the build
+	// rather than the cluster, so main supplies it when it builds the Set.
+	Cloud bool
 }
 
 // From returns the enterprise options carried on the controller inputs, or the

@@ -78,6 +78,7 @@ type apiServerRenderData struct {
 	keyValidatorConfig          authentication.KeyValidatorConfig
 	l7EnvoyImage                string
 	dikastesImage               string
+	cloud                       bool
 
 	// bindingNamespaces is the set of tenant namespaces whose calico-apiserver ServiceAccount
 	// should be granted Linseed access. Empty for zero/single-tenant clusters; every tenant
@@ -293,6 +294,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 		l7EnvoyImage:                l7EnvoyImage,
 		dikastesImage:               dikastesImage,
 		bindingNamespaces:           bindingNamespaces,
+		cloud:                       eoptions.From(ci).Cloud,
 	}
 	return ci, nil, nil
 }
@@ -1162,7 +1164,7 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 	//   per-user UISettings)
 	// - read and write UISettings in the user-settings group
 	// Default settings group and settings are created in manager.go.
-	if c.cfg.Cloud {
+	if c.data.cloud {
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				APIGroups:     []string{"projectcalico.org"},
@@ -1244,7 +1246,7 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 		// Access to flow logs, audit logs, and statistics, plus logging into Kibana for oidc users.
 		// Calico Cloud also gets runtime logs.
 		resourceNames := []string{"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login", "recommendations"}
-		if c.cfg.Cloud {
+		if c.data.cloud {
 			resourceNames = append([]string{"runtime"}, resourceNames...)
 		}
 		rules = append(rules, rbacv1.PolicyRule{
@@ -1401,7 +1403,7 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 	//   Cloud, which only exposes per-user UISettings)
 	// - read and write UISettings in the user-settings group, and rename the group
 	// Default settings group and settings are created in manager.go.
-	if c.cfg.Cloud {
+	if c.data.cloud {
 		rules = append(rules,
 			rbacv1.PolicyRule{
 				APIGroups:     []string{"projectcalico.org"},
@@ -1502,7 +1504,7 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 		// Access to flow logs, audit logs, and statistics, plus Elasticsearch superuser access once
 		// logged into Kibana. Calico Cloud also gets runtime logs.
 		resourceNames := []string{"flows", "audit*", "l7", "events", "dns", "waf", "kibana_login", "elasticsearch_superuser", "recommendations"}
-		if c.cfg.Cloud {
+		if c.data.cloud {
 			resourceNames = append([]string{"runtime"}, resourceNames...)
 		}
 		rules = append(rules, rbacv1.PolicyRule{

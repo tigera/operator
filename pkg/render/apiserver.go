@@ -159,12 +159,6 @@ type APIServerConfiguration struct {
 	KubernetesVersion            *common.VersionInfo
 	ClusterDomain                string
 
-	// Cloud indicates the API server is being rendered for a Calico Cloud install. It gates
-	// cloud-specific RBAC in the tigera-ui-user / tigera-network-admin cluster roles (Calico Cloud
-	// exposes only per-user UISettings and grants access to runtime logs). When false the RBAC is
-	// exactly the regular Calico/Calico Enterprise RBAC.
-	Cloud bool
-
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool

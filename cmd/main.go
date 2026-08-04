@@ -571,7 +571,7 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 
 	// Build the variant extensions and let them compute their controller-phase
 	// options (the core operator's Set computes none).
-	extensionSet := enterprise.New()
+	extensionSet := enterprise.New(enterprise.WithCloud(isCloudBuild()))
 	if err := extensionSet.ComputeOptions(ctx, clientset); err != nil {
 		setupLog.Error(err, "Failed to compute extension options")
 		os.Exit(1)

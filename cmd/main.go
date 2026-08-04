@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -610,6 +611,14 @@ admission policy installation; once an Installation exists it is the authority o
 		os.Exit(1)
 	}
 
+	// Build the variant extensions and let them compute their controller-phase
+	// options (the core operator's Set computes none).
+	extensionSet := enterprise.New(enterprise.WithCloud(isCloudBuild()))
+	if err := extensionSet.ComputeOptions(ctx, clientset); err != nil {
+		setupLog.Error(err, "Failed to compute extension options")
+		os.Exit(1)
+	}
+
 	options := options.ControllerOptions{
 		DetectedProvider:  provider,
 		Variant:           variant,
@@ -624,6 +633,7 @@ admission policy installation; once an Installation exists it is the authority o
 		ESMigration:       elasticIsMigrating,
 		UseV3CRDs:         v3CRDs,
 		APIDiscovery:      apiDiscovery,
+		Extensions:        extensionSet,
 	}
 
 	// Before we start any controllers, make sure our options are valid.

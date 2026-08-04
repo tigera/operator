@@ -27,8 +27,7 @@ import (
 
 // holdAPIServiceCutover reports whether the projectcalico.org/v3 APIService is still served from a
 // previous location whose API server has to keep serving, because the one that would replace it is
-// not ready. Repointing early retires a working API server for one that may never come up, and the
-// fix for that then needs the v3 API that was just taken away.
+// not ready. Errors hold too, since failing to read the state is not evidence the cutover is safe.
 func holdAPIServiceCutover(ctx context.Context, reader client.Reader) (bool, error) {
 	apiService := &apiregv1.APIService{}
 	if err := reader.Get(ctx, client.ObjectKey{Name: render.APIServiceName}, apiService); err != nil {
@@ -36,7 +35,7 @@ func holdAPIServiceCutover(ctx context.Context, reader client.Reader) (bool, err
 			// A fresh install. There is no API server in service to protect.
 			return false, nil
 		}
-		return false, err
+		return true, err
 	}
 
 	if apiService.Spec.Service == nil || apiService.Spec.Service.Namespace == render.APIServerNamespace {
@@ -49,7 +48,7 @@ func holdAPIServiceCutover(ctx context.Context, reader client.Reader) (bool, err
 		if errors.IsNotFound(err) {
 			return true, nil
 		}
-		return false, err
+		return true, err
 	}
 
 	// /readyz is deliberately excluded from the API server's always-allow paths, so a passing probe

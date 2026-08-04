@@ -103,6 +103,9 @@ func esKubeControllersEnv(cfg *rkc.KubeControllersConfiguration) []corev1.EnvVar
 
 	if cfg.Tenant != nil {
 		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID})
+	} else if cfg.TenantID != "" {
+		// Calico Cloud reads the tenant from its cloud config rather than a Tenant CR.
+		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: cfg.TenantID})
 	}
 
 	// What started as a workaround is now the default behaviour. This feature uses our backend in order to

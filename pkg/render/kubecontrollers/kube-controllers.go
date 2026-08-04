@@ -85,12 +85,12 @@ type KubeControllersConfiguration struct {
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
-	// Calico Cloud additions. TenantID is only set by the cloud-gated controller path; when empty
-	// (regular Calico/Calico Enterprise) no cloud env is emitted.
+	// TenantID is the Calico Cloud tenant, read from the cloud config by the es-kube-controllers
+	// controller. Only the enterprise assembler consumes it.
 	TenantID string
 
-	// Cloud indicates kube-controllers is being rendered for a Calico Cloud install. When false the
-	// cloud-specific RBAC is not granted and enterprise RBAC is unchanged.
+	// Cloud reports whether this is a Calico Cloud install, which runs kube-controllers from a
+	// different image.
 	Cloud bool
 
 	// Namespace to be installed into.
@@ -473,10 +473,6 @@ func (c *kubeControllersComponent) controllersDeployment() *appsv1.Deployment {
 		{Name: "DATASTORE_TYPE", Value: "kubernetes"},
 		{Name: "ENABLED_CONTROLLERS", Value: strings.Join(c.cfg.EnabledControllers, ",")},
 		{Name: "DISABLE_KUBE_CONTROLLERS_CONFIG_API", Value: strconv.FormatBool(c.cfg.DisableConfigAPI)},
-	}
-
-	if c.cfg.TenantID != "" {
-		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: c.cfg.TenantID})
 	}
 
 	env = append(env, c.cfg.K8sServiceEpPodNetwork.EnvVars()...)

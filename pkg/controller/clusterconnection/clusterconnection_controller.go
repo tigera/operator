@@ -81,7 +81,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	if opts.EnterpriseCRDExists {
+	if opts.Variant.IsEnterprise() {
 		// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
 		go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, nil)
 	}
@@ -132,7 +132,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("clusterconnection-controller failed to watch management-cluster-connection Tigerastatus: %w", err)
 	}
 
-	if opts.EnterpriseCRDExists {
+	if opts.Variant.IsEnterprise() {
 		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
@@ -207,7 +207,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(2).Info("Reconciling the management cluster connection")
 	result := reconcile.Result{}
 
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
 		return result, err
 	}
@@ -299,7 +299,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	includeSystem := false
 	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
-		if variant == operatorv1.Calico {
+		if r.opts.Variant == operatorv1.Calico {
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Guardian CA cannot be public in Calico.", nil, reqLogger)
 			return reconcile.Result{}, nil
 		}
@@ -492,7 +492,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.cli, r.opts.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}

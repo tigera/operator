@@ -147,7 +147,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 	// Watch for changes to IPAMConfiguration.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
-	if ri.opts.EnterpriseCRDExists {
+	if ri.opts.Variant.IsEnterprise() {
 		if err = ri.opts.Extensions.SetupWatches(controller.Windows, c); err != nil {
 			return fmt.Errorf("tigera-windows-controller failed to set up extension watches: %w", err)
 		}

@@ -170,9 +170,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -230,9 +230,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -284,10 +284,10 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-					ClusterDomain:       dns.DefaultClusterDomain,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					ClusterDomain:    dns.DefaultClusterDomain,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -310,9 +310,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -333,9 +333,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -358,9 +358,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -381,9 +381,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      notReady,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -407,9 +407,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -435,9 +435,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -461,9 +461,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      notReady,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -488,9 +488,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: false,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.Calico,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -531,9 +531,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -564,9 +564,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
@@ -617,9 +617,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
@@ -687,9 +687,9 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			installation.Status.Conditions = []metav1.Condition{
@@ -792,9 +792,9 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:          testExtensions,
-						EnterpriseCRDExists: true,
-						DetectedProvider:    operatorv1.ProviderNone,
+						Extensions:       testExtensions,
+						Variant:          operatorv1.CalicoEnterprise,
+						DetectedProvider: operatorv1.ProviderNone,
 					},
 				}
 
@@ -822,9 +822,9 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:          testExtensions,
-						EnterpriseCRDExists: true,
-						DetectedProvider:    operatorv1.ProviderNone,
+						Extensions:       testExtensions,
+						Variant:          operatorv1.CalicoEnterprise,
+						DetectedProvider: operatorv1.ProviderNone,
 					},
 				}
 
@@ -853,10 +853,10 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:          multiTenantExtensions(),
-						EnterpriseCRDExists: true,
-						DetectedProvider:    operatorv1.ProviderNone,
-						MultiTenant:         true,
+						Extensions:       multiTenantExtensions(),
+						Variant:          operatorv1.CalicoEnterprise,
+						DetectedProvider: operatorv1.ProviderNone,
+						MultiTenant:      true,
 					},
 				}
 
@@ -905,10 +905,10 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:          multiTenantExtensions(),
-						EnterpriseCRDExists: true,
-						DetectedProvider:    operatorv1.ProviderNone,
-						MultiTenant:         true,
+						Extensions:       multiTenantExtensions(),
+						Variant:          operatorv1.CalicoEnterprise,
+						DetectedProvider: operatorv1.ProviderNone,
+						MultiTenant:      true,
 					},
 				}
 
@@ -941,11 +941,11 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-					UseV3CRDs:           true,
-					ClusterDomain:       dns.DefaultClusterDomain,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					UseV3CRDs:        true,
+					ClusterDomain:    dns.DefaultClusterDomain,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -986,11 +986,11 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: false,
-					DetectedProvider:    operatorv1.ProviderNone,
-					UseV3CRDs:           true,
-					ClusterDomain:       dns.DefaultClusterDomain,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.Calico,
+					DetectedProvider: operatorv1.ProviderNone,
+					UseV3CRDs:        true,
+					ClusterDomain:    dns.DefaultClusterDomain,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -1015,10 +1015,10 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
-					UseV3CRDs:           false,
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					UseV3CRDs:        false,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})

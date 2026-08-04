@@ -42,6 +42,7 @@ func NewReconcilerWithShims(
 	opts := options.ControllerOptions{
 		ShutdownContext: context.Background(),
 		Extensions:      enterprise.New(),
+		Variant:         operatorv1.CalicoEnterprise,
 	}
 
 	return newReconciler(cli, schema, status, provider, tierWatchReady, clusterInfoWatchReady, opts)

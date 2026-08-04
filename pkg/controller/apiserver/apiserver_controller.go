@@ -103,7 +103,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
-	if opts.EnterpriseCRDExists {
+	if opts.Variant.IsEnterprise() {
 		// The variant extension registers the enterprise watches it needs (the management
 		// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
 		if err = opts.Extensions.SetupWatches(controller.APIServer, c); err != nil {
@@ -272,7 +272,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -334,7 +334,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// The webhooks component (v3-CRD mode) needs the ManagementCluster to register the
 	// managed-cluster webhook. Reading it requires the enterprise CRDs.
 	var managementCluster *operatorv1.ManagementCluster
-	if r.opts.EnterpriseCRDExists {
+	if r.opts.Variant.IsEnterprise() {
 		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)

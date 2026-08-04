@@ -121,9 +121,9 @@ var _ = Describe("windows-controller installation tests", func() {
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileWindows{
 				opts: options.ControllerOptions{
-					Extensions:          testExtensions,
-					DetectedProvider:    operator.ProviderNone,
-					EnterpriseCRDExists: true,
+					Extensions:       testExtensions,
+					DetectedProvider: operator.ProviderNone,
+					Variant:          operator.CalicoEnterprise,
 				},
 				config:               nil, // there is no fake for config
 				client:               c,
@@ -159,7 +159,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					},
 				},
 			}
-			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.opts.DetectedProvider)).NotTo(HaveOccurred())
+			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.opts.DetectedProvider, r.opts.Variant)).NotTo(HaveOccurred())
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
@@ -198,7 +198,7 @@ var _ = Describe("windows-controller installation tests", func() {
 				cr.Status = operator.InstallationStatus{
 					Variant: operator.Calico,
 				}
-				Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.opts.DetectedProvider)).NotTo(HaveOccurred())
+				Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.opts.DetectedProvider, r.opts.Variant)).NotTo(HaveOccurred())
 
 				// Set serviceCIDRs in the installation (required for Calico for Windows)
 				cr.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
@@ -614,9 +614,9 @@ var _ = Describe("windows-controller installation tests", func() {
 					// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 					r = ReconcileWindows{
 						opts: options.ControllerOptions{
-							Extensions:          testExtensions,
-							DetectedProvider:    operator.ProviderNone,
-							EnterpriseCRDExists: true,
+							Extensions:       testExtensions,
+							DetectedProvider: operator.ProviderNone,
+							Variant:          operator.CalicoEnterprise,
 						},
 						config:               nil, // there is no fake for config
 						client:               c,
@@ -670,7 +670,7 @@ var _ = Describe("windows-controller installation tests", func() {
 							},
 						},
 					}
-					Expect(updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider)).NotTo(HaveOccurred())
+					Expect(updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider, r.opts.Variant)).NotTo(HaveOccurred())
 					Expect(c.Create(ctx, instance)).NotTo(HaveOccurred())
 				})
 				AfterEach(func() {

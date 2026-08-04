@@ -53,6 +53,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -379,7 +380,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		rbacManagementEnabled = render.RBACManagementEnabled(gate)
+		rbacManagementEnabled = rbacmanagement.Enabled(gate)
 
 		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
 		if err != nil {

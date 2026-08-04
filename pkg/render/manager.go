@@ -41,6 +41,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -83,10 +84,10 @@ const (
 	// Keep in sync with ui-apis rbacmanagement/idp LDAPConfigSecretName.
 	RBACManagementLDAPConfigSecretName = "tigera-idp-ldap-config"
 
-	// The admin-owned switch for the RBAC management UI, read by the operator, ui-apis
-	// and rbacsync. Keep in sync with ui-apis rbacmanagement/gate.
-	RBACManagementConfigMapName = "rbac-ui-config"
-	RBACManagementConfigMapKey  = "rbac-ui-enabled"
+	// The admin-owned switch for the RBAC management UI. Defined by, and kept in sync
+	// through, pkg/render/common/rbacmanagement.
+	RBACManagementConfigMapName = rbacmanagement.ConfigMapName
+	RBACManagementConfigMapKey  = rbacmanagement.ConfigMapKey
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -1231,16 +1232,6 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
-}
-
-// RBACManagementEnabled reports whether the RBAC management UI is switched on for this
-// cluster. A missing ConfigMap, missing key or unparsable value reads as disabled.
-func RBACManagementEnabled(cm *corev1.ConfigMap) bool {
-	if cm == nil {
-		return false
-	}
-	enabled, err := strconv.ParseBool(cm.Data[RBACManagementConfigMapKey])
-	return err == nil && enabled
 }
 
 // rbacManagementUIActive reports whether this cluster should carry the RBAC management

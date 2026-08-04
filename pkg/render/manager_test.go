@@ -1956,20 +1956,3 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 	resourcesToCreate, resourcesToDelete := component.Objects()
 	return resourcesToCreate, resourcesToDelete
 }
-
-// The gate is hand-edited by an admin, so the parser has to be forgiving about
-// spelling and strict about everything else: anything it cannot read as an explicit
-// true leaves the feature — and all of its access — switched off.
-var _ = DescribeTable("RBACManagementEnabled",
-	func(cm *corev1.ConfigMap, expected bool) {
-		Expect(render.RBACManagementEnabled(cm)).To(Equal(expected))
-	},
-	Entry("nil ConfigMap (never created, or deleted)", nil, false),
-	Entry("missing key", &corev1.ConfigMap{Data: map[string]string{}}, false),
-	Entry("explicitly disabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "false"}}, false),
-	Entry("enabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "true"}}, true),
-	Entry("enabled, capitalised", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "True"}}, true),
-	Entry("enabled as 1", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "1"}}, true),
-	Entry("unparsable value stays off", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "yes please"}}, false),
-	Entry("empty value stays off", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: ""}}, false),
-)

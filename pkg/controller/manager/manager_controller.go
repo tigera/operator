@@ -46,6 +46,7 @@ import (
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -725,7 +726,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Manager:                    instance,
 		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
-		RBACManagementEnabled:      render.RBACManagementEnabled(rbacGate),
+		RBACManagementEnabled:      rbacmanagement.Enabled(rbacGate),
 		CACertCommonName:           certificateManager.CACertCommonName(),
 		Cloud:                      r.opts.Cloud,
 		CloudResources:             mcr,

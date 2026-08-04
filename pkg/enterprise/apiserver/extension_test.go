@@ -254,8 +254,6 @@ var _ = Describe("API server enterprise modifier", func() {
 	})
 
 	Context("Calico Cloud", func() {
-		// cloudExt builds an enterprise Set whose computed options report a Calico Cloud
-		// install, the way main does from the build variant.
 		cloudExt := func() *extensions.Registry {
 			return enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{Cloud: true})
 		}

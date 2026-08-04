@@ -88,19 +88,16 @@ func WithRenderInputs(ri render.Inputs) ComponentHandlerOption {
 	return func(c *componentHandler) { c.renderInputs = ri }
 }
 
-// ComponentDecorator post-processes a component before the handler renders it, so
-// a variant extension can augment the objects the component produces.
+// ComponentDecorator post-processes a component before the handler renders it.
 type ComponentDecorator interface {
 	Decorate(component render.Component, ri render.Inputs) render.Component
 }
 
 // WithDecorator supplies the decorator the handler runs each component through.
-// Omitting it renders components exactly as they were built.
 func WithDecorator(d ComponentDecorator) ComponentHandlerOption {
 	return func(c *componentHandler) { c.decorator = d }
 }
 
-// undecorated is the default: it renders every component unchanged.
 type undecorated struct{}
 
 func (undecorated) Decorate(component render.Component, _ render.Inputs) render.Component {

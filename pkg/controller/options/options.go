@@ -71,8 +71,6 @@ type ControllerOptions struct {
 	APIDiscovery *discovery.APIDiscovery
 
 	// Extensions are the variant extensions the operator runs with, for the Variant
-	// above. The core operator leaves this nil; an extension build (Calico Enterprise)
-	// sets it once at startup and each controller looks up what it needs when it is
-	// constructed.
+	// above. The core operator leaves this nil.
 	Extensions *extensions.Registry
 }

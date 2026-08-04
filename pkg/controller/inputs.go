@@ -25,8 +25,7 @@ import (
 )
 
 // Name identifies the controller a ControllerExtension extends, so a variant can
-// register a different hook per controller. A controller looks its own extension up
-// by name once, when it is constructed.
+// register a different hook per controller.
 type Name string
 
 const (

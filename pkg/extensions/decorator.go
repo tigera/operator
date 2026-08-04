@@ -22,17 +22,14 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// Decorator applies the registered component modifiers on the way to a component
-// handler. Its zero value decorates nothing, which is what the core operator wants.
+// Decorator applies the registered component modifiers. Its zero value decorates
+// nothing.
 type Decorator struct {
 	modifiers map[string]decorator
 }
 
-// Decorate wraps component with the modifier registered for its extension key, so
-// that when the handler renders the component its objects are post-processed. A
-// decorated component is itself a render.Component, so it flows through the handler
-// like any other. Returns component unchanged when it exposes no extension point or
-// nothing is registered for it.
+// Decorate wraps component with the modifier registered for its extension key. The
+// result is itself a render.Component, so it flows through the handler like any other.
 func (d Decorator) Decorate(component render.Component, ri render.Inputs) render.Component {
 	ext, ok := component.(render.Extensible)
 	if !ok {
@@ -46,19 +43,16 @@ func (d Decorator) Decorate(component render.Component, ri render.Inputs) render
 	return build(component, ri)
 }
 
-// decorator wraps a base component, returning one whose Objects() are augmented
-// by a registered modifier.
+// decorator wraps a base component in one whose Objects() a modifier augments.
 type decorator func(base render.Component, ri render.Inputs) render.Component
 
-// newDecorator binds key's typed inputs into modify, so the modifier body needs no
-// type assertion.
+// newDecorator binds key's typed inputs into modify.
 func newDecorator[Cfg any](
 	key render.ModifierKey[Cfg],
 	modify func(ri render.Inputs, cfg Cfg, create, delete []client.Object) ([]client.Object, []client.Object),
 ) decorator {
 	return func(base render.Component, ri render.Inputs) render.Component {
-		// Both of these mean the component and its key disagree, which the component's
-		// own package controls and no caller can recover from.
+		// The component and its key disagree, which no caller can recover from.
 		provider, ok := base.(render.ExtensionInputsProvider)
 		if !ok {
 			panic(fmt.Sprintf("BUG: component %q has a registered modifier but provides no extension inputs", key))
@@ -77,10 +71,8 @@ func newDecorator[Cfg any](
 	}
 }
 
-// decoratedComponent is the render.Component produced by Decorate: it renders its
-// embedded base component and then runs the modifier over the result. It embeds the
-// base render.Component, so ResolveImages, SupportedOSType, and Ready delegate to
-// the base; only Objects is augmented.
+// decoratedComponent renders its embedded base component and then runs the modifier
+// over the result. Everything but Objects delegates to the base.
 type decoratedComponent struct {
 	render.Component
 	ri     render.Inputs

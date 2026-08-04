@@ -25,9 +25,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// The no-ops a Registry lookup returns when nothing is registered. They are what
-// makes an unextended controller and the core operator the same code path.
-
 type noopExtension struct{}
 
 func (noopExtension) Validate(context.Context, controller.Inputs) error {

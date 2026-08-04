@@ -30,14 +30,11 @@ import (
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 )
 
-// testExtensions is the enterprise extension registry the API server controller
-// tests reconcile with, so the componentHandler applies the API server modifier
-// (query server, audit logging, Enterprise RBAC). Reconcilers built in these tests
-// put it on their options, mirroring how main wires it in production.
+// testExtensions is the registry the API server controller tests reconcile with, so
+// the componentHandler applies the API server modifier.
 var testExtensions = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
 
-// multiTenantExtensions is the same registry in multi-tenant mode, for the
-// multi-tenant API server test.
+// multiTenantExtensions is the same registry in multi-tenant mode.
 var multiTenantExtensions = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{MultiTenant: true})
 
 func TestStatus(t *testing.T) {

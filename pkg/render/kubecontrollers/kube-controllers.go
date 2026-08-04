@@ -85,12 +85,10 @@ type KubeControllersConfiguration struct {
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
-	// TenantID is the Calico Cloud tenant, read from the cloud config by the es-kube-controllers
-	// controller. Only the enterprise assembler consumes it.
+	// TenantID is the Calico Cloud tenant. Only the enterprise assembler consumes it.
 	TenantID string
 
-	// Cloud reports whether this is a Calico Cloud install, which runs kube-controllers from a
-	// different image.
+	// Cloud reports whether this is a Calico Cloud install, which runs a different image.
 	Cloud bool
 
 	// Namespace to be installed into.

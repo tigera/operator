@@ -26,8 +26,6 @@ import (
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 )
 
-// ext is the registry under test, shared across the suite. It is immutable once
-// built and the specs only read it, so a single instance is safe.
 var ext = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
 
 // ctx is the reconcile context the specs pass to the extension hooks.

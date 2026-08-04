@@ -26,16 +26,9 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-// New builds the extension registry for the in-repo Calico Enterprise variant:
-// the controller extensions, the component modifiers, and the image overrides.
-// The operator is handed this registry at startup (the core operator is handed
-// none). After the monorepo split this is what calico-private's main will
-// construct instead. Each per-component subpackage registers its own controller
-// hook and modifiers through its Register func.
-//
-// variant is the variant the operator resolved at startup and runs as for its
-// lifetime, so New registers only what that variant extends. o is resolved once by
-// the caller and held by the hooks that need it.
+// New builds the extension registry for the in-repo Calico Enterprise variant,
+// registering only what the variant the operator resolved at startup extends. After
+// the monorepo split this is what calico-private's main will construct instead.
 func New(variant operatorv1.ProductVariant, o eoptions.Options) *extensions.Registry {
 	r := extensions.NewRegistry(variant)
 	switch variant {
@@ -47,8 +40,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) *extensions.Regi
 		apiserver.Register(r, o)
 		clusterconnection.Register(r)
 	case operatorv1.Calico:
-		// The Enterprise operator managing a Calico installation cleans up the
-		// Enterprise objects a prior Enterprise installation left behind.
+		// Clean up what a prior Enterprise installation left behind.
 		apiserver.RegisterCalicoCleanup(r)
 	}
 

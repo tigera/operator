@@ -16,28 +16,19 @@
 // Enterprise) use to layer variant-specific behavior onto the core operator's
 // render output, so core code never branches on variant.
 //
-// A Registry holds the extensions for the one variant the operator resolved at
-// startup, so nothing here re-checks the variant and a lookup that finds nothing
-// hands back a no-op. It stores two kinds of extension:
+// A Registry stores two kinds of extension for the variant the operator runs as.
 //
-// A ControllerExtension is the controller-side hook. It runs once per reconcile
-// in the installation controller, has cluster access (Client,
-// CertificateManager) via controller.Inputs, and does the side-effecting work a
-// pure render hook can't: rejecting unsupported config (Validate) and creating
-// certificates / extending the trusted bundle (ExtendInputs). It returns the
-// render.Inputs passed on to the render phase.
+// A ControllerExtension is the controller-side hook. It has cluster access via
+// controller.Inputs and does the side-effecting work a pure render hook can't:
+// rejecting unsupported config (Validate) and creating certificates / extending the
+// trusted bundle (ExtendInputs).
 //
 // Per-component modifiers are the render phase: pure hooks that run after a
-// component builds its objects. An image override swaps the component's image;
-// a modifier post-processes the rendered objects at the componentHandler.
-// Register one with RegisterModifier, passing the component's key: the key pins the
-// type of the inputs the modifier receives, so one written against a different
-// component won't compile.
+// component builds its objects. An image override swaps the component's image; a
+// modifier post-processes the rendered objects at the componentHandler.
 //
-// controller.Inputs and render.Inputs are a pair: controller.Inputs carries a
-// render.Inputs plus the cluster-access deps, which is why modifiers, given only
-// a render.Inputs, can't do I/O.
+// controller.Inputs carries a render.Inputs plus the cluster-access deps, which is
+// why modifiers, given only a render.Inputs, can't do I/O.
 //
-// A variant wires up its controller extension and modifiers in one place at
-// startup - see pkg/enterprise.
+// A variant wires up its extensions in one place at startup - see pkg/enterprise.
 package extensions

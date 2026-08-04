@@ -14,15 +14,13 @@
 
 package options
 
-// Options is the Calico Enterprise controller-phase options, computed once when the
-// extension build constructs its registry and held by the hooks that need it. It
-// lives in its own leaf package so the hooks and the operator's main can both
+// Options is the Calico Enterprise controller-phase options, held by the hooks that
+// need them. It lives in its own leaf package so the hooks and main can both
 // reference it.
 type Options struct {
 	// MultiTenant reports whether the operator runs in multi-tenant mode.
 	MultiTenant bool
 
-	// Cloud reports whether this is a Calico Cloud install. It comes from the build
-	// rather than the cluster, so main supplies it when it builds the Set.
+	// Cloud reports whether this is a Calico Cloud install.
 	Cloud bool
 }

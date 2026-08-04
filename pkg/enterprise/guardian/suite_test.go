@@ -25,9 +25,7 @@ import (
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 )
 
-// The registries under test, shared across the suite. They are immutable once built
-// and the specs only read them, so a single instance of each is safe. calicoExt is
-// the same Enterprise build running as Calico, which registers only the cleanup.
+// calicoExt is the same Enterprise build running as Calico.
 var (
 	ext       = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
 	calicoExt = enterprise.New(operatorv1.Calico, eoptions.Options{})

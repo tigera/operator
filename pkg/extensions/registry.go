@@ -24,15 +24,9 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// Registry holds the extensions the operator runs with. The process resolves its
-// variant at startup and never changes it, so an extension build (e.g. Calico
-// Enterprise) constructs a Registry for that one variant and hands it in through
-// options.ControllerOptions; the core operator hands in nil.
-//
-// Callers look up what they need once, at construction, and get back something
-// safe to call: a lookup that finds nothing yields a no-op rather than nil, so
-// neither the core operator's nil Registry nor a variant that extends only some
-// controllers needs guarding at the call site.
+// Registry holds the extensions the operator runs with, for the one variant it
+// resolved at startup. Every lookup returns something safe to call, so a nil
+// Registry (the core operator) needs no guarding at the call site.
 type Registry struct {
 	variant     operatorv1.ProductVariant
 	controllers map[controller.Name]ControllerExtension
@@ -50,19 +44,16 @@ func NewRegistry(variant operatorv1.ProductVariant) *Registry {
 	}
 }
 
-// RegisterController registers the controller-side extension for the named
-// controller. A controller has at most one; registering replaces any prior one.
+// RegisterController registers the extension for the named controller, replacing
+// any prior one.
 func (r *Registry) RegisterController(name controller.Name, ext ControllerExtension) {
 	r.controllers[name] = ext
 }
 
-// RegisterImage registers an image override for the named component.
 func (r *Registry) RegisterImage(component string, image components.Component) {
 	r.images.Register(r.variant, component, image)
 }
 
-// Controller returns the extension for the named controller, or a no-op when none
-// is registered.
 func (r *Registry) Controller(name controller.Name) ControllerExtension {
 	if ext := r.controller(name); ext != nil {
 		return ext
@@ -70,8 +61,6 @@ func (r *Registry) Controller(name controller.Name) ControllerExtension {
 	return noopExtension{}
 }
 
-// Watcher returns the named controller's extension as a Watcher, or a no-op when
-// no extension is registered or it declares no watches.
 func (r *Registry) Watcher(name controller.Name) Watcher {
 	if w, ok := r.controller(name).(Watcher); ok {
 		return w
@@ -79,9 +68,6 @@ func (r *Registry) Watcher(name controller.Name) Watcher {
 	return noopWatcher{}
 }
 
-// FelixConfigDefaulter returns the named controller's extension as a
-// FelixConfigDefaulter, or a no-op when no extension is registered or it defaults
-// no FelixConfiguration fields.
 func (r *Registry) FelixConfigDefaulter(name controller.Name) FelixConfigDefaulter {
 	if d, ok := r.controller(name).(FelixConfigDefaulter); ok {
 		return d
@@ -89,8 +75,6 @@ func (r *Registry) FelixConfigDefaulter(name controller.Name) FelixConfigDefault
 	return noopFelixConfigDefaulter{}
 }
 
-// Decorator returns the decorator that applies the registered component
-// modifiers, for handing to a component handler.
 func (r *Registry) Decorator() Decorator {
 	if r == nil {
 		return Decorator{}
@@ -98,8 +82,7 @@ func (r *Registry) Decorator() Decorator {
 	return Decorator{modifiers: r.modifiers}
 }
 
-// Images returns the image override table. The render package resolves a
-// component's image through it directly, so render need not import extensions.
+// Images returns the image override table, which render resolves through directly.
 func (r *Registry) Images() *imageoverride.Overrides {
 	if r == nil {
 		return nil
@@ -107,7 +90,6 @@ func (r *Registry) Images() *imageoverride.Overrides {
 	return r.images
 }
 
-// controller looks up the raw registration, nil when there is none.
 func (r *Registry) controller(name controller.Name) ControllerExtension {
 	if r == nil {
 		return nil
@@ -116,9 +98,8 @@ func (r *Registry) controller(name controller.Name) ControllerExtension {
 }
 
 // RegisterModifier registers modify for the component that owns key. Cfg comes from
-// the key, not from modify, so a modifier written against a different component does
-// not compile. It asserts the component's inputs to Cfg once, here, so the modifier
-// body needs no assertion. Free function because Go has no generic methods.
+// the key, so a modifier written against a different component does not compile.
+// Free function because Go has no generic methods.
 func RegisterModifier[Cfg any](
 	r *Registry,
 	key render.ModifierKey[Cfg],

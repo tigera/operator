@@ -91,13 +91,22 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
 	}
 
-	// The waypoint pull-secrets controller replicates the Installation pull
-	// secret into namespaces that contain istio-waypoint Gateways, so waypoint
-	// pods can pull the Istio proxy image from a private registry (the
-	// imagePullSecrets reference injected via istiod's global config is
-	// namespace-scoped and the secret must exist in the user namespace).
+	// The waypoint controller reconciles the per-Gateway state the Istio
+	// feature needs beyond istiod's own rendering. It creates a
+	// tigera-operator-secrets RoleBinding in namespaces that contain
+	// istio-waypoint Gateways — granting the operator permission to manage
+	// secrets there on clusters where its ClusterRole doesn't allow
+	// cluster-wide secret writes — and replicates the Installation pull
+	// secrets into those namespaces, so waypoint pods can pull the Istio proxy
+	// image from a private registry (the imagePullSecrets reference injected
+	// via istiod's global config is namespace-scoped and the secret must exist
+	// in the user namespace). It also deletes the per-class resource sets that istiod
+	// strands when a Gateway's spec.gatewayClassName changes: istiod only
+	// applies the set for the current class and never deletes the previous
+	// class's set, and owner-reference GC only fires when the Gateway itself
+	// is deleted.
 	if err := waypoint.Add(mgr, opts); err != nil {
-		return fmt.Errorf("failed to add waypoint pull secrets controller: %w", err)
+		return fmt.Errorf("failed to add waypoint controller: %w", err)
 	}
 
 	return nil
@@ -177,7 +186,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Installation, for k8s provider info.
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -185,11 +194,6 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-
-	if variant == "" {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r)
@@ -382,7 +386,7 @@ func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, inst
 		// installationSpec.Variant (i.e. Installation.Spec.Variant), so the
 		// policy-sync field tracks the renderer's decision to ship the L7
 		// waypoint sidecar even before Status.Variant catches up.
-		_, installationSpec, err := utils.GetInstallationSpec(ctx, r.Client)
+		installationSpec, err := utils.GetInstallationSpec(ctx, r.Client)
 		if err != nil && !errors.IsNotFound(err) {
 			return false, err
 		}

@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
@@ -59,13 +60,15 @@ type ESKubeControllersController struct {
 	scheme          *runtime.Scheme
 	status          status.StatusManager
 	clusterDomain   string
+	variant         operatorv1.ProductVariant
 	elasticExternal bool
 	multiTenant     bool
+	cloud           bool
 	tierWatchReady  *utils.ReadyFlag
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
@@ -82,9 +85,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
 		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
 		multiTenant:     opts.MultiTenant,
+		cloud:           opts.Cloud,
 		tierWatchReady:  &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -142,6 +147,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 	if err := utils.AddDeploymentWatch(c, kubecontrollers.EsKubeController, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
+	}
+	if opts.Cloud && opts.ElasticExternal {
+		// This ConfigMap is needed for utils.GetCloudConfig
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
+		}
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -202,7 +213,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Get Installation resource.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -307,7 +318,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		ctx,
 		gwNSHelper,
 		installationSpec,
-		variant,
+		r.variant,
 		pullSecrets,
 		hdler,
 		reqLogger,
@@ -343,10 +354,16 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
 		Tenant:                       nil,
+		Cloud:                        r.cloud,
+	}
+	if r.cloud {
+		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+			return result, err
+		}
 	}
 	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
-	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
+	imageSet, err := imageset.GetImageSet(ctx, r.client, r.variant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

@@ -165,6 +165,7 @@ var _ = Describe("Manager controller tests", func() {
 				opts: options.ControllerOptions{
 					ClusterDomain:    clusterDomain,
 					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 
@@ -444,6 +445,7 @@ var _ = Describe("Manager controller tests", func() {
 				tierWatchReady:  &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 
@@ -691,6 +693,7 @@ var _ = Describe("Manager controller tests", func() {
 						tierWatchReady:  readyFlag,
 						opts: options.ControllerOptions{
 							DetectedProvider: operatorv1.ProviderNone,
+							Variant:          operatorv1.CalicoEnterprise,
 						},
 					}
 				})

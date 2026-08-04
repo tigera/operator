@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/yaml"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
@@ -84,6 +85,16 @@ const (
 	AlertmanagerPort           = 9093
 	MeshAlertmanagerPolicyName = AlertmanagerPolicyName + "-mesh"
 
+	AlertmanagerServiceAccountName = "calico-alertmanager"
+
+	AlertmanagerLinseedTokenSecretName = AlertmanagerServiceAccountName + "-tigera-linseed-token"
+	AlertmanagerLinseedTokenKey        = "token"
+
+	LinseedEventsURL        = "https://tigera-linseed.tigera-elasticsearch.svc/api/v1/events/alertmanager"
+	LinseedEventsURLManaged = "https://tigera-linseed/api/v1/events/alertmanager"
+
+	AlertmanagerLinseedClusterRoleName = "tigera-alertmanager-linseed"
+
 	ElasticsearchMetrics = "elasticsearch-metrics"
 	FluentBitMetrics     = "calico-fluent-bit-metrics"
 
@@ -105,6 +116,11 @@ var alertmanagerSelector = fmt.Sprintf(
 	"(app == 'alertmanager' && alertmanager == '%[1]s') || (app.kubernetes.io/name == 'alertmanager' && alertmanager == '%[1]s')",
 	CalicoNodeAlertmanager,
 )
+
+var AlertmanagerSourceEntityRule = v3.EntityRule{
+	Selector:          alertmanagerSelector,
+	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", common.TigeraPrometheusNamespace),
+}
 
 // Register secret/certs that need Server and Client Key usage
 func init() {
@@ -158,7 +174,7 @@ type Config struct {
 	Monitor                       operatorv1.MonitorSpec
 	Installation                  *operatorv1.InstallationSpec
 	PullSecrets                   []*corev1.Secret
-	AlertmanagerConfigSecret      *corev1.Secret
+	AlertmanagerLinseedTokenData  map[string][]byte
 	KeyValidatorConfig            authentication.KeyValidatorConfig
 	ServerTLSSecret               certificatemanagement.KeyPairInterface
 	ClientTLSSecret               certificatemanagement.KeyPairInterface
@@ -168,6 +184,7 @@ type Config struct {
 	KubeControllerPort            int
 	FelixPrometheusMetricsEnabled bool
 	LicenseExpired                bool
+	ManagedCluster                bool
 
 	// Operator metrics fields.
 	OperatorMetricsEnabled bool
@@ -261,20 +278,43 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 	var toDelete []client.Object
 
 	if mc.alertmanagerReplicas() > 0 {
-		toCreate = append(toCreate, secret.ToRuntimeObjects(secret.CopyToNamespace(common.TigeraPrometheusNamespace, mc.cfg.AlertmanagerConfigSecret)...)...)
 		toCreate = append(toCreate,
+			mc.alertmanagerConfigSecret(),
 			mc.alertmanagerService(),
 			mc.alertmanager(),
+			mc.alertmanagerServiceAccount(),
+			mc.alertmanagerLinseedClusterRole(),
+			mc.alertmanagerLinseedClusterRoleBinding(),
 		)
 	} else {
 		toDelete = append(toDelete,
 			mc.alertmanager(),
 			mc.alertmanagerService(),
-			&corev1.Secret{ObjectMeta: metav1.ObjectMeta{
-				Name:      "alertmanager-" + CalicoNodeAlertmanager,
-				Namespace: common.TigeraPrometheusNamespace,
-			}},
+			mc.alertmanagerServiceAccount(),
+			mc.alertmanagerLinseedClusterRole(),
+			mc.alertmanagerLinseedClusterRoleBinding(),
+			mc.alertmanagerConfigSecret(),
 		)
+	}
+
+	// Provision Alertmanager's Linseed bearer token as a service-account-token Secret (Linseed validates
+	// it via TokenReview) only on non-managed clusters. On a managed cluster the token is instead a
+	// Linseed-issued JWT of the same name, owned by Linseed's token controller; the operator must not
+	// touch it, since the two Secrets have different, immutable types.
+	if !mc.cfg.ManagedCluster {
+		if mc.alertmanagerReplicas() > 0 {
+			toCreate = append(toCreate, mc.alertmanagerLinseedTokenSecret())
+		} else {
+			toDelete = append(toDelete, mc.alertmanagerLinseedTokenSecret())
+		}
+	}
+
+	if mc.cfg.ManagedCluster {
+		toCreate = append(toCreate, mc.externalLinseedRoleBinding())
+		toCreate = append(toCreate, mc.externalLinseedService())
+	} else {
+		toDelete = append(toDelete, mc.externalLinseedRoleBinding())
+		toDelete = append(toDelete, mc.externalLinseedService())
 	}
 
 	serviceMonitors := []client.Object{
@@ -515,6 +555,10 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 		tolerations = append(tolerations, rmeta.TolerateGKEARM64NoSchedule)
 	}
 
+	configHashAnnotations := mc.cfg.TrustedCertBundle.HashAnnotations()
+	configHashAnnotations[mc.cfg.ClientTLSSecret.HashAnnotationKey()] = mc.cfg.ClientTLSSecret.HashAnnotationValue()
+	configHashAnnotations["hash.operator.tigera.io/alertmanager-config"] = rmeta.AnnotationHash(mc.alertmanagerConfigYAML())
+
 	am := &monitoringv1.Alertmanager{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.AlertmanagersKind, APIVersion: MonitoringAPIVersion},
 		ObjectMeta: metav1.ObjectMeta{
@@ -527,13 +571,92 @@ func (mc *monitorComponent) alertmanager() *monitoringv1.Alertmanager {
 			NodeSelector:       mc.cfg.Installation.ControlPlaneNodeSelector,
 			Replicas:           mc.cfg.Monitor.Alertmanager.AlertmanagerSpec.Replicas,
 			SecurityContext:    securitycontext.NewNonRootPodContext(),
-			ServiceAccountName: PrometheusServiceAccountName,
+			ServiceAccountName: AlertmanagerServiceAccountName,
 			Tolerations:        tolerations,
 			Version:            components.ComponentCoreOSAlertmanager.Version,
 			Resources:          resources,
+			PodMetadata: &monitoringv1.EmbeddedObjectMetadata{
+				Labels:      map[string]string{},
+				Annotations: configHashAnnotations,
+			},
+			Secrets:    []string{AlertmanagerLinseedTokenSecretName, PrometheusClientTLSSecretName},
+			ConfigMaps: []string{certificatemanagement.TrustedCertConfigMapName},
 		},
 	}
 	return am
+}
+
+func (mc *monitorComponent) alertmanagerLinseedTokenSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        AlertmanagerLinseedTokenSecretName,
+			Namespace:   common.TigeraPrometheusNamespace,
+			Annotations: map[string]string{corev1.ServiceAccountNameKey: AlertmanagerServiceAccountName},
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+		Data: mc.cfg.AlertmanagerLinseedTokenData,
+	}
+}
+
+func (mc *monitorComponent) alertmanagerConfigSecret() *corev1.Secret {
+	return &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: AlertmanagerConfigSecret, Namespace: common.TigeraPrometheusNamespace},
+		StringData: map[string]string{"alertmanager.yaml": mc.alertmanagerConfigYAML()},
+	}
+}
+
+func (mc *monitorComponent) alertmanagerConfigYAML() string {
+	route := map[string]interface{}{
+		"group_by":        []string{"job"},
+		"group_wait":      "30s",
+		"group_interval":  "1m",
+		"repeat_interval": "5m",
+		"receiver":        "linseed",
+	}
+
+	url, serverName := LinseedEventsURL, "tigera-linseed.tigera-elasticsearch.svc"
+	if mc.cfg.ManagedCluster {
+		url, serverName = LinseedEventsURLManaged, "tigera-linseed"
+	}
+
+	receivers := []map[string]interface{}{{
+		"name": "linseed",
+		"webhook_configs": []map[string]interface{}{{
+			"url":           url,
+			"send_resolved": true,
+			"http_config": map[string]interface{}{
+				"authorization": map[string]interface{}{
+					"type":             "Bearer",
+					"credentials_file": "/etc/alertmanager/secrets/" + AlertmanagerLinseedTokenSecretName + "/" + AlertmanagerLinseedTokenKey,
+				},
+				"tls_config": map[string]interface{}{
+					"ca_file":     "/etc/alertmanager/configmaps/" + certificatemanagement.TrustedCertConfigMapName + "/" + certificatemanagement.TrustedCertConfigMapKeyName,
+					"cert_file":   "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSCertKey,
+					"key_file":    "/etc/alertmanager/secrets/" + PrometheusClientTLSSecretName + "/" + corev1.TLSPrivateKeyKey,
+					"server_name": serverName,
+				},
+			},
+		}},
+	}}
+
+	out, _ := yaml.Marshal(map[string]interface{}{"route": route, "receivers": receivers})
+	return string(out)
+}
+
+func (mc *monitorComponent) externalLinseedService() *corev1.Service {
+	return &corev1.Service{
+		TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:         corev1.ServiceTypeExternalName,
+			ExternalName: fmt.Sprintf("%s.%s.svc.%s", render.GuardianServiceName, render.GuardianNamespace, mc.cfg.ClusterDomain),
+		},
+	}
 }
 
 func (mc *monitorComponent) alertmanagerService() *corev1.Service {
@@ -554,6 +677,39 @@ func (mc *monitorComponent) alertmanagerService() *corev1.Service {
 			},
 			Selector: map[string]string{
 				"alertmanager": CalicoNodeAlertmanager,
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) alertmanagerLinseedClusterRole() *rbacv1.ClusterRole {
+	return &rbacv1.ClusterRole{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: AlertmanagerLinseedClusterRoleName},
+		Rules: []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{"linseed.tigera.io"},
+				Resources: []string{"events"},
+				Verbs:     []string{"create"},
+			},
+		},
+	}
+}
+
+func (mc *monitorComponent) alertmanagerLinseedClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	return &rbacv1.ClusterRoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: AlertmanagerLinseedClusterRoleName},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     AlertmanagerLinseedClusterRoleName,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      AlertmanagerServiceAccountName,
+				Namespace: common.TigeraPrometheusNamespace,
 			},
 		},
 	}
@@ -733,6 +889,38 @@ func (mc *monitorComponent) prometheusServiceAccount() *corev1.ServiceAccount {
 	}
 }
 
+func (mc *monitorComponent) alertmanagerServiceAccount() *corev1.ServiceAccount {
+	return &corev1.ServiceAccount{
+		TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      AlertmanagerServiceAccountName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+	}
+}
+
+func (mc *monitorComponent) externalLinseedRoleBinding() *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "tigera-linseed",
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "ClusterRole",
+			Name:     render.TigeraLinseedSecretsClusterRole,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      render.GuardianServiceAccountName,
+				Namespace: render.GuardianNamespace,
+			},
+		},
+	}
+}
+
 func (mc *monitorComponent) prometheusClusterRole() *rbacv1.ClusterRole {
 	rules := []rbacv1.PolicyRule{
 		{
@@ -888,12 +1076,12 @@ func (mc *monitorComponent) prometheusServiceService() *corev1.Service {
 func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 	rules := []monitoringv1.Rule{
 		{
-			Alert:  "DeniedPacketsRate",
-			Expr:   intstr.FromString("rate(calico_denied_packets[10s]) > 50"),
+			Alert:  "DeniedPackets",
+			Expr:   intstr.FromString("sum by (policy) (rate(calico_denied_packets[10s])) > 0"),
 			Labels: map[string]string{"severity": "info"},
 			Annotations: map[string]string{
-				"summary":     "Instance {{$labels.instance}} - Large rate of packets denied",
-				"description": "{{$labels.instance}} with calico-node pod {{$labels.pod}} has been denying packets at a fast rate {{$labels.sourceIp}} by policy {{$labels.policy}}.",
+				"summary":     "Denied packets",
+				"description": "Policy {{$labels.policy}} is denying packets.",
 			},
 		},
 	}
@@ -981,6 +1169,34 @@ func (mc *monitorComponent) prometheusRule() *monitoringv1.PrometheusRule {
 			},
 		)
 	}
+
+	// IP pool utilisation alerts. ipam_allocations_in_use is reported per node+pool, so sum it per
+	// pool and divide by the pool size; summing both sides on ippool also collapses the scrape labels
+	// so the two metrics match on ippool alone. These rely on kube-controllers IPAM metrics, which are
+	// always exported, so they are not gated on the operator-metrics feature.
+	forDuration5m := monitoringv1.Duration("5m")
+	rules = append(rules,
+		monitoringv1.Rule{
+			Alert:  "IPPoolNearlyExhausted",
+			Expr:   intstr.FromString("100 * sum by (ippool) (ipam_allocations_in_use) / sum by (ippool) (ipam_ippool_size) >= 90 < 100"),
+			For:    &forDuration5m,
+			Labels: map[string]string{"severity": "warning"},
+			Annotations: map[string]string{
+				"summary":     "IP pool {{$labels.ippool}} is nearly full",
+				"description": "IP pool {{$labels.ippool}} is {{ $value | printf \"%.1f\" }}% allocated.",
+			},
+		},
+		monitoringv1.Rule{
+			Alert:  "IPPoolExhausted",
+			Expr:   intstr.FromString("100 * sum by (ippool) (ipam_allocations_in_use) / sum by (ippool) (ipam_ippool_size) >= 100"),
+			For:    &forDuration5m,
+			Labels: map[string]string{"severity": "critical"},
+			Annotations: map[string]string{
+				"summary":     "IP pool {{$labels.ippool}} is exhausted",
+				"description": "IP pool {{$labels.ippool}} has no free addresses ({{ $value | printf \"%.1f\" }}% allocated).",
+			},
+		},
+	)
 
 	return &monitoringv1.PrometheusRule{
 		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.PrometheusRuleKind, APIVersion: MonitoringAPIVersion},

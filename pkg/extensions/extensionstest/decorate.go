@@ -66,15 +66,15 @@ func (s StubComponent) ExtensionInputs() any {
 // extension registered under key, then renders it. The stub hands the modifier the
 // zero value of the key's inputs type; when the modifier reads real inputs, use
 // ApplyExtensionsWithInputs.
-func ApplyExtensions[Cfg any](s *extensions.Set, key render.ModifierKey[Cfg], ri render.Inputs, create, del []client.Object) ([]client.Object, []client.Object) {
+func ApplyExtensions[Cfg any](r *extensions.Registry, key render.ModifierKey[Cfg], ri render.Inputs, create, del []client.Object) ([]client.Object, []client.Object) {
 	var zero Cfg
-	return ApplyExtensionsWithInputs(s, key, ri, zero, create, del)
+	return ApplyExtensionsWithInputs(r, key, ri, zero, create, del)
 }
 
 // ApplyExtensionsWithInputs is ApplyExtensions for a modifier that reads the
 // component's inputs. Their type comes from the key, so a test can't hand a
 // modifier inputs of the wrong shape.
-func ApplyExtensionsWithInputs[Cfg any](s *extensions.Set, key render.ModifierKey[Cfg], ri render.Inputs, extIn Cfg, create, del []client.Object) ([]client.Object, []client.Object) {
+func ApplyExtensionsWithInputs[Cfg any](r *extensions.Registry, key render.ModifierKey[Cfg], ri render.Inputs, extIn Cfg, create, del []client.Object) ([]client.Object, []client.Object) {
 	stub := StubComponent{Key: key.String(), ExtIn: extIn, Create: create, Delete: del}
-	return s.Decorate(stub, ri).Objects()
+	return r.Decorator().Decorate(stub, ri).Objects()
 }

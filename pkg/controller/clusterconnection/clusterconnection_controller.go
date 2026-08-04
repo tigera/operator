@@ -282,15 +282,15 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	// the render inputs carries no extension data, so the OSS defaults apply.
 	ci := controller.Inputs{
 		RenderInputs:       render.Inputs{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
-		Controller:         controller.ClusterConnection,
 		Client:             r.cli,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
+	ext := r.opts.Extensions.Controller(controller.ClusterConnection)
+	if err := ext.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	ci, _, err = r.opts.Extensions.ExtendInputs(ctx, ci)
+	ci, _, err = ext.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -451,7 +451,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.scheme,
 		managementClusterConnection,
 		utils.WithRenderInputs(render.Inputs{Installation: installationSpec}),
-		utils.WithExtensions(r.opts.Extensions),
+		utils.WithDecorator(r.opts.Extensions.Decorator()),
 	)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,

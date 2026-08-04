@@ -25,7 +25,8 @@ import (
 )
 
 // Name identifies the controller a ControllerExtension extends, so a variant can
-// register a different hook per controller.
+// register a different hook per controller. A controller looks its own extension up
+// by name once, when it is constructed.
 type Name string
 
 const (
@@ -41,14 +42,6 @@ const (
 type Inputs struct {
 	RenderInputs render.Inputs
 
-	// Controller identifies the reconciling controller, selecting its hook.
-	Controller Name
-
 	Client             client.Client
 	CertificateManager certificatemanager.CertificateManager
-
-	// Options is the variant's computed controller-phase options, filled in by the
-	// extension Set before it dispatches. Opaque so core never names a variant-only
-	// option; the variant's hooks assert it back out. Nil for the core operator.
-	Options any
 }

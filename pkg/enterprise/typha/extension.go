@@ -26,8 +26,8 @@ import (
 )
 
 // Register wires the typha extension into the variant.
-func Register(v *extensions.Variant) {
-	extensions.Modify(v, render.TyphaKey, modifyTypha)
+func Register(r *extensions.Registry) {
+	extensions.RegisterModifier(r, render.TyphaKey, modifyTypha)
 }
 
 func modifyTypha(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {

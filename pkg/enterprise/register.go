@@ -15,12 +15,7 @@
 package enterprise
 
 import (
-	"context"
-
-	"k8s.io/client-go/kubernetes"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/guardian"
@@ -31,48 +26,31 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-// New builds the extension Set for the in-repo Calico Enterprise variant: the
-// controller extension, every component modifier, and the image overrides. The
-// operator is handed this Set at startup (the core operator is handed none).
-// After the monorepo split this is what calico-private's main will construct
-// instead. Each per-component subpackage registers its own controller hook and
-// modifiers through its Register func.
-func New(opts ...Option) *extensions.Set {
-	var b build
-	for _, opt := range opts {
-		opt(&b)
+// New builds the extension registry for the in-repo Calico Enterprise variant:
+// the controller extensions, the component modifiers, and the image overrides.
+// The operator is handed this registry at startup (the core operator is handed
+// none). After the monorepo split this is what calico-private's main will
+// construct instead. Each per-component subpackage registers its own controller
+// hook and modifiers through its Register func.
+//
+// variant is the variant the operator resolved at startup and runs as for its
+// lifetime, so New registers only what that variant extends. o is resolved once by
+// the caller and held by the hooks that need it.
+func New(variant operatorv1.ProductVariant, o eoptions.Options) *extensions.Registry {
+	r := extensions.NewRegistry(variant)
+	switch variant {
+	case operatorv1.CalicoEnterprise:
+		typha.Register(r)
+		installation.Register(r)
+		windows.Register(r)
+		guardian.Register(r)
+		apiserver.Register(r, o)
+		clusterconnection.Register(r)
+	case operatorv1.Calico:
+		// The Enterprise operator managing a Calico installation cleans up the
+		// Enterprise objects a prior Enterprise installation left behind.
+		apiserver.RegisterCalicoCleanup(r)
 	}
 
-	s := extensions.NewSet()
-	s.RegisterOptions(b.computeOptions)
-
-	ent := s.Variant(operatorv1.CalicoEnterprise)
-	typha.Register(ent)
-	installation.Register(ent)
-	windows.Register(ent)
-	guardian.Register(ent)
-	apiserver.Register(ent)
-	clusterconnection.Register(ent)
-
-	// When the enterprise operator manages a Calico installation, clean up the
-	// Enterprise objects left behind by a prior Enterprise installation.
-	cal := s.Variant(operatorv1.Calico)
-	apiserver.RegisterCalicoCleanup(cal)
-
-	return s
-}
-
-// computeOptions discovers the Calico Enterprise controller-phase options at
-// startup. extensions.Set.ComputeOptions runs it from main; the result rides on
-// each Inputs for the enterprise hooks to read.
-func (b build) computeOptions(ctx context.Context, cli kubernetes.Interface) (any, error) {
-	multiTenant, err := discovery.MultiTenant(ctx, cli)
-	if err != nil {
-		return nil, err
-	}
-
-	return eoptions.Options{
-		MultiTenant: multiTenant,
-		Cloud:       b.cloud,
-	}, nil
+	return r
 }

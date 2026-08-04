@@ -91,9 +91,9 @@ var _ = Describe("guardian enterprise modifier", func() {
 		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: "/ca/bundle"}))
 	})
 
-	It("does nothing for the Calico variant", func() {
+	It("does nothing when the operator runs as Calico", func() {
 		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
-		out, _ := extensionstest.ApplyExtensions(ext, render.GuardianKey, ctx, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(calicoExt, render.GuardianKey, ctx, newObjs(), nil)
 		Expect(out).To(HaveLen(len(newObjs())))
 		role, _ := extensions.FindObject[*rbacv1.ClusterRole](out, render.GuardianClusterRoleName)
 		Expect(role.Rules).To(Equal([]rbacv1.PolicyRule{{Verbs: []string{"get"}}}))

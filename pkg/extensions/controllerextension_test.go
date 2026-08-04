@@ -21,6 +21,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -32,16 +34,15 @@ import (
 var _ = Describe("controller extension", func() {
 	ctx := context.Background()
 
-	var s *extensions.Set
+	var r *extensions.Registry
 	BeforeEach(func() {
-		s = extensions.NewSet()
+		r = extensions.NewRegistry(operatorv1.CalicoEnterprise)
 	})
 
-	It("returns the base render inputs when the variant has no extension", func() {
+	It("returns the base render inputs when no extension is registered", func() {
 		install := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		eci, _, err := s.ExtendInputs(ctx, controller.Inputs{
+		eci, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, controller.Inputs{
 			RenderInputs: render.Inputs{Installation: install, ClusterDomain: "cluster.local"},
-			Controller:   controller.Installation,
 		})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eci.RenderInputs.Installation).To(BeIdenticalTo(install))
@@ -49,56 +50,80 @@ var _ = Describe("controller extension", func() {
 		Expect(eci.RenderInputs.Extension).To(BeNil())
 	})
 
-	It("runs the extension registered for the installation variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, fakeController{})
-		eci, _, err := s.ExtendInputs(ctx, enterpriseInputs())
+	It("runs the extension registered for the controller", func() {
+		r.RegisterController(controller.Installation, fakeController{})
+		eci, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eci.RenderInputs.ClusterDomain).To(Equal("from-fake"))
 	})
 
-	It("ignores an extension registered for a different variant", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, fakeController{})
-		eci, _, err := s.ExtendInputs(ctx, controller.Inputs{
-			RenderInputs: render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}, ClusterDomain: "real"},
-			Controller:   controller.Installation,
-		})
+	It("does not run an extension registered for a different controller", func() {
+		r.RegisterController(controller.Installation, fakeController{})
+		eci, _, err := r.Controller(controller.APIServer).ExtendInputs(ctx, inputs())
 		Expect(err).NotTo(HaveOccurred())
-		Expect(eci.RenderInputs.ClusterDomain).To(Equal("real"))
+		Expect(eci.RenderInputs.ClusterDomain).To(BeEmpty())
 	})
 
 	It("surfaces the extension error", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, fakeController{err: errors.New("boom")})
-		_, _, err := s.ExtendInputs(ctx, enterpriseInputs())
+		r.RegisterController(controller.Installation, fakeController{err: errors.New("boom")})
+		_, _, err := r.Controller(controller.Installation).ExtendInputs(ctx, inputs())
 		Expect(err).To(MatchError("boom"))
 	})
 
 	It("runs the extension's validation", func() {
-		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, fakeController{validateErr: errors.New("invalid")})
-		Expect(s.Validate(ctx, enterpriseInputs())).To(MatchError("invalid"))
+		r.RegisterController(controller.Installation, fakeController{validateErr: errors.New("invalid")})
+		Expect(r.Controller(controller.Installation).Validate(ctx, inputs())).To(MatchError("invalid"))
 	})
 
 	It("runs the watch hook of an extension that implements Watcher", func() {
 		called := false
-		s.Variant(operatorv1.CalicoEnterprise).Controller(controller.Installation, watchingController{called: &called})
-		Expect(s.SetupWatches(controller.Installation, nil)).NotTo(HaveOccurred())
+		r.RegisterController(controller.Installation, watchingController{called: &called})
+		Expect(r.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
 		Expect(called).To(BeTrue())
 	})
 
-	It("returns the base context and no validation error for a nil Set", func() {
-		var nilSet *extensions.Set
-		ci := enterpriseInputs()
+	It("is a no-op watcher when the extension declares no watches", func() {
+		r.RegisterController(controller.Installation, fakeController{})
+		Expect(r.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
+	})
+
+	It("runs the defaulting hook of an extension that implements FelixConfigDefaulter", func() {
+		r.RegisterController(controller.Installation, defaultingController{})
+		updated, err := r.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated).To(BeTrue())
+	})
+
+	It("is a no-op defaulter when the extension defaults nothing", func() {
+		r.RegisterController(controller.Installation, fakeController{})
+		updated, err := r.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated).To(BeFalse())
+	})
+
+	It("hands out no-ops for a nil registry, which is what the core operator runs with", func() {
+		var none *extensions.Registry
+		ci := inputs()
 		ci.RenderInputs.ClusterDomain = "real"
-		eci, _, err := nilSet.ExtendInputs(ctx, ci)
+
+		eci, managed, err := none.Controller(controller.Installation).ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(eci.RenderInputs.ClusterDomain).To(Equal("real"))
-		Expect(nilSet.Validate(ctx, ci)).NotTo(HaveOccurred())
+		Expect(managed).To(BeEmpty())
+
+		Expect(none.Controller(controller.Installation).Validate(ctx, ci)).NotTo(HaveOccurred())
+		Expect(none.Watcher(controller.Installation).Watches(nil)).NotTo(HaveOccurred())
+
+		updated, err := none.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(updated).To(BeFalse())
+		Expect(none.Images()).To(BeNil())
 	})
 })
 
-func enterpriseInputs() controller.Inputs {
+func inputs() controller.Inputs {
 	return controller.Inputs{
 		RenderInputs: render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}},
-		Controller:   controller.Installation,
 	}
 }
 
@@ -131,4 +156,14 @@ type watchingController struct {
 func (w watchingController) Watches(ctrlruntime.Controller) error {
 	*w.called = true
 	return nil
+}
+
+// defaultingController is a fakeController that also implements the
+// FelixConfigDefaulter companion.
+type defaultingController struct {
+	fakeController
+}
+
+func (defaultingController) DefaultFelixConfiguration(*operatorv1.InstallationSpec, *v3.FelixConfiguration) (bool, error) {
+	return true, nil
 }

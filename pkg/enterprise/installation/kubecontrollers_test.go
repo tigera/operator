@@ -66,7 +66,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	}
 
 	It("mounts the metrics serving TLS keypair onto the deployment", func() {
-		eci, _, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -86,7 +86,7 @@ var _ = Describe("kube-controllers enterprise modifier", func() {
 	})
 
 	It("adds the cert-management init container when certificate management is enabled", func() {
-		eci, _, err := ext.ExtendInputs(ctx, certManagementControllerInputs())
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, certManagementControllerInputs())
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -125,7 +125,6 @@ func certManagementControllerInputs() controller.Inputs {
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}
@@ -160,7 +159,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 	}
 
 	It("layers the enterprise rules, controllers, and metrics TLS on (WAF off)", func() {
-		eci, _, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(newControllerInputs(operatorv1.CalicoEnterprise), ri)
@@ -185,7 +184,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("layers the full WAF surface on when the GatewayAPI extension is enabled", func() {
 		ci := wafControllerInputs()
-		eci, managed, err := ext.ExtendInputs(ctx, ci)
+		eci, managed, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
@@ -224,7 +223,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("deletes the WAF webhook surface when the extension is disabled", func() {
 		ci := newControllerInputs(operatorv1.CalicoEnterprise)
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -239,7 +238,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("keeps the WAF controller wired but de-programs when GatewayAPI is present and WAF is disabled", func() {
 		ci := gatewayNoWAFControllerInputs()
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 		objs := renderKubeControllers(ci, ri)
@@ -268,7 +267,7 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 
 	It("adds the WAF webhook ingress rule to the network policy when enabled", func() {
 		ci := wafControllerInputs()
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.Installation).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -323,7 +322,6 @@ func wafControllerInputs() controller.Inputs {
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}
@@ -366,7 +364,6 @@ func gatewayNoWAFControllerInputs() controller.Inputs {
 			TrustedBundle:      certManager.CreateTrustedBundle(),
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}

@@ -48,7 +48,6 @@ import (
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 )
@@ -89,11 +88,23 @@ func WithRenderInputs(ri render.Inputs) ComponentHandlerOption {
 	return func(c *componentHandler) { c.renderInputs = ri }
 }
 
-// WithExtensions supplies the operator's extension Set, whose modifiers the
-// handler applies to extensible components. A handler that renders an
-// extensible component must be given the Set; one that doesn't can omit it.
-func WithExtensions(e *extensions.Set) ComponentHandlerOption {
-	return func(c *componentHandler) { c.extensions = e }
+// ComponentDecorator post-processes a component before the handler renders it, so
+// a variant extension can augment the objects the component produces.
+type ComponentDecorator interface {
+	Decorate(component render.Component, ri render.Inputs) render.Component
+}
+
+// WithDecorator supplies the decorator the handler runs each component through.
+// Omitting it renders components exactly as they were built.
+func WithDecorator(d ComponentDecorator) ComponentHandlerOption {
+	return func(c *componentHandler) { c.decorator = d }
+}
+
+// undecorated is the default: it renders every component unchanged.
+type undecorated struct{}
+
+func (undecorated) Decorate(component render.Component, _ render.Inputs) render.Component {
+	return component
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -105,6 +116,7 @@ func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Sch
 		cr:           cr,
 		log:          log,
 		apiGroupEnvs: apigroup.EnvVars(),
+		decorator:    undecorated{},
 	}
 	for _, o := range opts {
 		o(h)
@@ -120,7 +132,7 @@ type componentHandler struct {
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
 	renderInputs render.Inputs
-	extensions   *extensions.Set
+	decorator    ComponentDecorator
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -463,10 +475,7 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
-	if ext, ok := component.(render.Extensible); ok && ext.ModifierKey() != "" && c.extensions == nil {
-		c.log.Info("BUG: extensible component rendered by a handler with no extension Set; extensions will not be applied", "component", ext.ModifierKey())
-	}
-	component = c.extensions.Decorate(component, c.renderInputs)
+	component = c.decorator.Decorate(component, c.renderInputs)
 
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.

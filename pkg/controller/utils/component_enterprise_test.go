@@ -34,6 +34,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/enterprise"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -73,7 +74,7 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 		})
 
 		renderInputs := render.Inputs{Installation: instance}
-		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderInputs(renderInputs), utils.WithExtensions(enterprise.New()))
+		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderInputs(renderInputs), utils.WithDecorator(enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Decorator()))
 		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
 
 		role := &rbacv1.ClusterRole{}

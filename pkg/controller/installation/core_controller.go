@@ -220,11 +220,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
 	}
 
-	if opts.Variant.IsEnterprise() {
-		if err = opts.Extensions.SetupWatches(controller.Installation, c); err != nil {
-			return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
-		}
+	if err = opts.Extensions.Watcher(controller.Installation).Watches(c); err != nil {
+		return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
+	}
 
+	if opts.Variant.IsEnterprise() {
 		if opts.ManageCRDs {
 			if err = addCRDWatches(c, operatorv1.CalicoEnterprise, opts.UseV3CRDs); err != nil {
 				return fmt.Errorf("tigera-installation-controller failed to watch CRD resource: %v", err)
@@ -1143,15 +1143,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
 		},
-		Controller:         controller.Installation,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
+	ext := r.opts.Extensions.Controller(controller.Installation)
+	if err := ext.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	ci, managedKeyPairs, err := r.opts.Extensions.ExtendInputs(ctx, ci)
+	ci, managedKeyPairs, err := ext.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1176,7 +1176,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.scheme,
 		instance,
 		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithExtensions(r.opts.Extensions),
+		utils.WithDecorator(r.opts.Extensions.Decorator()),
 	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
@@ -1887,7 +1887,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 	// Variant-specific FelixConfiguration defaults (e.g. the Enterprise
 	// provider-specific dnsTrustedServers) are owned by the variant extension.
-	extUpdated, err := r.opts.Extensions.DefaultFelixConfiguration(controller.Installation, &install.Spec, fc)
+	extUpdated, err := r.opts.Extensions.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(&install.Spec, fc)
 	if err != nil {
 		return updated, err
 	}

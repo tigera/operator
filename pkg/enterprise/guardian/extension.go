@@ -38,9 +38,9 @@ import (
 )
 
 // Register wires the guardian extensions into the variant.
-func Register(v *extensions.Variant) {
-	extensions.Modify(v, render.GuardianKey, modifyGuardian)
-	extensions.Modify(v, render.GuardianPolicyKey, modifyGuardianPolicy)
+func Register(r *extensions.Registry) {
+	extensions.RegisterModifier(r, render.GuardianKey, modifyGuardian)
+	extensions.RegisterModifier(r, render.GuardianPolicyKey, modifyGuardianPolicy)
 }
 
 // modifyGuardianPolicy replaces the core OSS guardian network policy with the

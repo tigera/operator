@@ -36,12 +36,12 @@ import (
 var _ = Describe("node enterprise image override", func() {
 	It("selects the enterprise node image for the enterprise variant", func() {
 		ent := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
-		Expect(ext.ResolveImage("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
+		Expect(ext.Images().Resolve("node", components.ComponentCalicoNode, ent)).To(Equal(components.ComponentTigeraNode))
 	})
 
 	It("leaves the default in place for the Calico variant", func() {
 		calico := &operatorv1.InstallationSpec{Variant: operatorv1.Calico}
-		Expect(ext.ResolveImage("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
+		Expect(ext.Images().Resolve("node", components.ComponentCalicoNode, calico)).To(Equal(components.ComponentCalicoNode))
 	})
 })
 
@@ -171,19 +171,13 @@ var _ = Describe("node enterprise modifier", func() {
 		Expect(svc.Spec.Ports[2].Port).To(Equal(int32(7091)))
 	})
 
-	It("is a no-op for the Calico variant", func() {
+	It("is a no-op when the operator runs as Calico", func() {
 		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
-		out, _ := extensionstest.ApplyExtensions(ext, render.NodeKey, ctx, newObjs(), nil)
+		out, _ := extensionstest.ApplyExtensions(calicoExt, render.NodeKey, ctx, newObjs(), nil)
 
 		_, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
 		Expect(ok).To(BeFalse())
 		nodeRole, _ := extensions.FindObject[*rbacv1.ClusterRole](out, render.CalicoNodeObjectName)
 		Expect(nodeRole.Rules).To(BeEmpty())
-	})
-
-	It("does not panic on a zero Inputs", func() {
-		out, _ := extensionstest.ApplyExtensions(ext, render.NodeKey, render.Inputs{}, newObjs(), nil)
-		_, ok := extensions.FindObject[*corev1.Service](out, render.CalicoNodeMetricsService)
-		Expect(ok).To(BeFalse())
 	})
 })

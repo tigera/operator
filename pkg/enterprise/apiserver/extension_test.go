@@ -28,8 +28,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	k8sfake "k8s.io/client-go/kubernetes/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -77,7 +75,6 @@ func apiServerControllerInputs(variant operatorv1.ProductVariant, install *opera
 			ClusterDomain: apiServerClusterDomain,
 			TrustedBundle: certManager.CreateTrustedBundle(),
 		},
-		Controller:         controller.APIServer,
 		Client:             c,
 		CertificateManager: certManager,
 	}
@@ -119,22 +116,22 @@ var _ = Describe("API server enterprise controller extension", func() {
 	Describe("Validate", func() {
 		It("accepts a cluster with neither a ManagementCluster nor a ManagementClusterConnection", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-			Expect(ext.Validate(ctx, ci)).NotTo(HaveOccurred())
+			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).NotTo(HaveOccurred())
 		})
 
 		It("accepts a management cluster", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, managementCluster(), tunnelSecret())
-			Expect(ext.Validate(ctx, ci)).NotTo(HaveOccurred())
+			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).NotTo(HaveOccurred())
 		})
 
 		It("accepts a managed cluster", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, managementClusterConnection())
-			Expect(ext.Validate(ctx, ci)).NotTo(HaveOccurred())
+			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).NotTo(HaveOccurred())
 		})
 
 		It("rejects a cluster that is both a management cluster and a managed cluster", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, managementCluster(), tunnelSecret(), managementClusterConnection())
-			Expect(ext.Validate(ctx, ci)).To(HaveOccurred())
+			Expect(ext.Controller(controller.APIServer).Validate(ctx, ci)).To(HaveOccurred())
 		})
 	})
 })
@@ -143,7 +140,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	// renderAPIServer builds the base API server objects and applies the enterprise
 	// modifier, the way the component handler does. It returns the create and delete
 	// lists after the modifier ran.
-	renderAPIServerWith := func(s *extensions.Set, ci controller.Inputs, ri render.Inputs, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
+	renderAPIServerWith := func(s *extensions.Registry, ci controller.Inputs, ri render.Inputs, kp certificatemanagement.KeyPairInterface) ([]client.Object, []client.Object) {
 		cfg := &render.APIServerConfiguration{
 			RequiresAggregationServer: true,
 			K8SServiceEndpoint:        k8sapi.ServiceEndpoint{},
@@ -182,16 +179,15 @@ var _ = Describe("API server enterprise modifier", func() {
 		return nil
 	}
 
-	It("is a no-op for the Calico variant (no enterprise objects added)", func() {
+	It("adds no enterprise objects when the operator runs as Calico", func() {
 		ci := apiServerControllerInputs(operatorv1.Calico, nil)
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := calicoExt.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
-		objs, _ := renderAPIServer(ci, ri, apiServerKeyPair(ci))
+		objs, _ := renderAPIServerWith(calicoExt, ci, ri, apiServerKeyPair(ci))
 
-		// No enterprise objects. (The Calico variant cleanup is registered on the base
-		// render component, not exercised here.)
+		// Only the cleanup is registered as Calico, and it only queues deletes.
 		_, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-ui-user")
 		Expect(ok).To(BeFalse())
 		dp := apiServerDeployment(objs)
@@ -200,7 +196,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 	It("layers the query server, enterprise RBAC, audit policy, and query server port on", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -260,16 +256,8 @@ var _ = Describe("API server enterprise modifier", func() {
 	Context("Calico Cloud", func() {
 		// cloudExt builds an enterprise Set whose computed options report a Calico Cloud
 		// install, the way main does from the build variant.
-		cloudExt := func() *extensions.Set {
-			cli := k8sfake.NewClientset()
-			cli.Resources = []*metav1.APIResourceList{{
-				GroupVersion: "operator.tigera.io/v1",
-				APIResources: []metav1.APIResource{{Name: "managers", Kind: "Manager", Namespaced: false}},
-			}}
-
-			s := enterprise.New(enterprise.WithCloud(true))
-			Expect(s.ComputeOptions(ctx, cli)).NotTo(HaveOccurred())
-			return s
+		cloudExt := func() *extensions.Registry {
+			return enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{Cloud: true})
 		}
 
 		uiSettingsRules := func(role *rbacv1.ClusterRole) []rbacv1.PolicyRule {
@@ -291,9 +279,9 @@ var _ = Describe("API server enterprise modifier", func() {
 			return nil
 		}
 
-		objectsFor := func(s *extensions.Set) ([]client.Object, []client.Object) {
+		objectsFor := func(s *extensions.Registry) ([]client.Object, []client.Object) {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-			eci, _, err := s.ExtendInputs(ctx, ci)
+			eci, _, err := s.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			Expect(err).NotTo(HaveOccurred())
 			return renderAPIServerWith(s, ci, eci.RenderInputs, apiServerKeyPair(ci))
 		}
@@ -375,7 +363,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 	It("queues the enterprise RBAC for deletion when not a management cluster", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -399,7 +387,7 @@ var _ = Describe("API server enterprise modifier", func() {
 					Data:       map[string][]byte{"cert": []byte("a"), "key": []byte("b")},
 				},
 			)
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -426,7 +414,7 @@ var _ = Describe("API server enterprise modifier", func() {
 					ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 				},
 			)
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -474,21 +462,13 @@ var _ = Describe("API server enterprise modifier", func() {
 			}
 		}
 
-		// multiTenantExt builds an enterprise Set whose computed options report multi-tenant
-		// mode. ExtendInputs reads the mode off the Set's options (not ci.Options, which it
-		// overwrites), so the tenant-namespace lookup only runs when the Set carries it.
-		multiTenantExt := func() *extensions.Set {
-			s := enterprise.New()
-			s.RegisterOptions(func(context.Context, kubernetes.Interface) (any, error) {
-				return eoptions.Options{MultiTenant: true}, nil
-			})
-			Expect(s.ComputeOptions(context.Background(), nil)).NotTo(HaveOccurred())
-			return s
+		multiTenantExt := func() *extensions.Registry {
+			return enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{MultiTenant: true})
 		}
 
 		It("grants each tenant's calico-apiserver service account least-privilege Linseed access", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, tenant("tenant-a"), tenant("tenant-b"))
-			eci, _, err := multiTenantExt().ExtendInputs(ctx, ci)
+			eci, _, err := multiTenantExt().Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -521,7 +501,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		It("queues the Linseed-access RBAC for deletion in zero-tenant mode", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -536,7 +516,7 @@ var _ = Describe("API server enterprise modifier", func() {
 	Context("v3-CRD mode (no aggregation server)", func() {
 		It("renders the deployment skeleton with the query server and pulls it out of the delete list", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -573,7 +553,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		It("registers no APIService", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -613,7 +593,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		It("adds the L7 admission controller container, the sidecar webhook, and the L7 service port", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, applicationLayerSidecar())
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -632,7 +612,7 @@ var _ = Describe("API server enterprise modifier", func() {
 
 		It("pulls the sidecar webhook out of the delete list", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, applicationLayerSidecar())
-			eci, _, err := ext.ExtendInputs(ctx, ci)
+			eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -663,7 +643,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 
 	It("leaves the egress rules as the base when no OIDC key validator is configured", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -680,7 +660,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
 			Spec:       operatorv1.ApplicationLayerSpec{SidecarInjection: &enabled},
 		})
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := ext.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -703,7 +683,7 @@ var _ = Describe("API server enterprise policy modifier", func() {
 var _ = Describe("API server Calico-variant cleanup", func() {
 	It("queues the enterprise RBAC for deletion", func() {
 		ci := apiServerControllerInputs(operatorv1.Calico, nil)
-		eci, _, err := ext.ExtendInputs(ctx, ci)
+		eci, _, err := calicoExt.Controller(controller.APIServer).ExtendInputs(ctx, ci)
 		ri := eci.RenderInputs
 		Expect(err).NotTo(HaveOccurred())
 
@@ -721,7 +701,7 @@ var _ = Describe("API server Calico-variant cleanup", func() {
 		create, del := comp.Objects()
 		ec, ok := comp.(render.ExtensionInputsProvider).ExtensionInputs().(render.APIServerExtensionInputs)
 		Expect(ok).To(BeTrue())
-		_, del = extensionstest.ApplyExtensionsWithInputs(ext, render.APIServerKey, ri, ec, create, del)
+		_, del = extensionstest.ApplyExtensionsWithInputs(calicoExt, render.APIServerKey, ri, ec, create, del)
 
 		_, ok = extensions.FindObject[*rbacv1.ClusterRole](del, "tigera-ui-user")
 		Expect(ok).To(BeTrue())

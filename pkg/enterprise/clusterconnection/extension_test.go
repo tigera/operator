@@ -42,8 +42,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 			RenderInputs: render.Inputs{
 				Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise},
 			},
-			Controller: controller.ClusterConnection,
-			Client:     cli,
+			Client: cli,
 		}
 	}
 
@@ -63,12 +62,12 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	Describe("Validate", func() {
 		It("passes when no ManagementCluster exists", func() {
 			cli = newClient()
-			Expect(ext.Validate(ctx, controllerInputs())).NotTo(HaveOccurred())
+			Expect(ext.Controller(controller.ClusterConnection).Validate(ctx, controllerInputs())).NotTo(HaveOccurred())
 		})
 
 		It("rejects a cluster that is both a management and a managed cluster", func() {
 			cli = newClient(&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
-			err := ext.Validate(ctx, controllerInputs())
+			err := ext.Controller(controller.ClusterConnection).Validate(ctx, controllerInputs())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("not supported"))
 		})
@@ -77,7 +76,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 	Describe("ExtendInputs", func() {
 		It("reports the managed cluster CNX version", func() {
 			cli = newClient(clusterInformation())
-			eci, managed, err := ext.ExtendInputs(ctx, controllerInputs())
+			eci, managed, err := ext.Controller(controller.ClusterConnection).ExtendInputs(ctx, controllerInputs())
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 			Expect(managed).To(BeEmpty())
@@ -94,7 +93,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 				Status:     v3.LicenseKeyStatus{Features: []string{common.EgressAccessControlFeature}},
 			}
 			cli = newClient(clusterInformation(), license)
-			eci, _, err := ext.ExtendInputs(ctx, controllerInputs())
+			eci, _, err := ext.Controller(controller.ClusterConnection).ExtendInputs(ctx, controllerInputs())
 			ri := eci.RenderInputs
 			Expect(err).NotTo(HaveOccurred())
 
@@ -105,7 +104,7 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 
 		It("errors when ClusterInformation is missing", func() {
 			cli = newClient()
-			_, _, err := ext.ExtendInputs(ctx, controllerInputs())
+			_, _, err := ext.Controller(controller.ClusterConnection).ExtendInputs(ctx, controllerInputs())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("ClusterInformation"))
 		})

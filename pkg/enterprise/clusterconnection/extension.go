@@ -29,8 +29,8 @@ import (
 )
 
 // Register wires the clusterconnection controller hook into the variant.
-func Register(v *extensions.Variant) {
-	v.Controller(controller.ClusterConnection, clusterConnectionControllerExtension{})
+func Register(r *extensions.Registry) {
+	r.RegisterController(controller.ClusterConnection, clusterConnectionControllerExtension{})
 }
 
 // clusterConnectionControllerExtension is the Calico Enterprise controller-side hook

@@ -21,13 +21,14 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/enterprise"
-	"github.com/tigera/operator/pkg/extensions"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 )
 
-// ext is the enterprise extension Set under test, shared across the suite. It is
-// immutable once built and the specs only read it, so a single instance is safe.
-var ext *extensions.Set = enterprise.New()
+// ext is the registry under test, shared across the suite. It is immutable once
+// built and the specs only read it, so a single instance is safe.
+var ext = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
 
 // ctx is the reconcile context the specs pass to the extension hooks.
 var ctx = context.Background()

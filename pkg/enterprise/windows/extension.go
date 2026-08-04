@@ -40,11 +40,11 @@ import (
 )
 
 // Register wires the windows controller hook and modifiers into the variant.
-func Register(v *extensions.Variant) {
-	v.Controller(controller.Windows, windowsControllerExtension{})
-	v.Image(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
-	v.Image(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
-	extensions.Modify(v, render.WindowsKey, modifyWindows)
+func Register(r *extensions.Registry) {
+	r.RegisterController(controller.Windows, windowsControllerExtension{})
+	r.RegisterImage(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
+	r.RegisterImage(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
+	extensions.RegisterModifier(r, render.WindowsKey, modifyWindows)
 }
 
 // windowsControllerExtension is the Calico Enterprise controller-side hook for the

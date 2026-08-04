@@ -103,12 +103,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
-	if opts.Variant.IsEnterprise() {
-		// The variant extension registers the enterprise watches it needs (the management
-		// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
-		if err = opts.Extensions.SetupWatches(controller.APIServer, c); err != nil {
-			return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
-		}
+	// The variant extension registers the enterprise watches it needs (the management
+	// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
+	if err = opts.Extensions.Watcher(controller.APIServer).Watches(c); err != nil {
+		return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
 	}
 
 	// Watch for the namespace(s) managed by this controller.
@@ -316,15 +314,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			Installation:  installationSpec,
 			ClusterDomain: r.opts.ClusterDomain,
 		},
-		Controller:         controller.APIServer,
 		Client:             r.client,
 		CertificateManager: certificateManager,
 	}
-	if err := r.opts.Extensions.Validate(ctx, ci); err != nil {
+	ext := r.opts.Extensions.Controller(controller.APIServer)
+	if err := ext.Validate(ctx, ci); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	ci, managedKeyPairs, err := r.opts.Extensions.ExtendInputs(ctx, ci)
+	ci, managedKeyPairs, err := ext.ExtendInputs(ctx, ci)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
 		return reconcile.Result{}, err
@@ -380,7 +378,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.scheme,
 		instance,
 		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithExtensions(r.opts.Extensions),
+		utils.WithDecorator(r.opts.Extensions.Decorator()),
 	)
 
 	// Render the desired objects from the CRD and create or update them.

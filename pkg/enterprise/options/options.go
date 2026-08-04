@@ -14,12 +14,10 @@
 
 package options
 
-import "github.com/tigera/operator/pkg/controller"
-
-// Options is the Calico Enterprise controller-phase options. The extension build
-// computes it once at startup (see extensions.Set.ComputeOptions) and its
-// controller hooks read it back off the Inputs via From. It lives in
-// its own leaf package so the hooks and the operator's main can both reference it.
+// Options is the Calico Enterprise controller-phase options, computed once when the
+// extension build constructs its registry and held by the hooks that need it. It
+// lives in its own leaf package so the hooks and the operator's main can both
+// reference it.
 type Options struct {
 	// MultiTenant reports whether the operator runs in multi-tenant mode.
 	MultiTenant bool
@@ -27,11 +25,4 @@ type Options struct {
 	// Cloud reports whether this is a Calico Cloud install. It comes from the build
 	// rather than the cluster, so main supplies it when it builds the Set.
 	Cloud bool
-}
-
-// From returns the enterprise options carried on the controller inputs, or the
-// zero value when none are set.
-func From(ci controller.Inputs) Options {
-	o, _ := ci.Options.(Options)
-	return o
 }

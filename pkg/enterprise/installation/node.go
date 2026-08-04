@@ -46,13 +46,13 @@ const (
 	defaultFelixMetricsPort = 9091
 )
 
-func registerNode(v *extensions.Variant) {
-	v.Image(render.ComponentNameNode, components.ComponentTigeraNode)
-	extensions.Modify(v, render.NodeKey, modifyNode)
+func registerNode(r *extensions.Registry) {
+	r.RegisterImage(render.ComponentNameNode, components.ComponentTigeraNode)
+	extensions.RegisterModifier(r, render.NodeKey, modifyNode)
 
 	// The node component renders the cni-plugins init container; its image
 	// resolves through its own override key.
-	v.Image(render.ComponentNameCNIPlugins, components.ComponentTigeraCNIPlugins)
+	r.RegisterImage(render.ComponentNameCNIPlugins, components.ComponentTigeraCNIPlugins)
 }
 
 // modifyNode layers Calico Enterprise behavior onto the rendered calico/node

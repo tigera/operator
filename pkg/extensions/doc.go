@@ -16,10 +16,9 @@
 // Enterprise) use to layer variant-specific behavior onto the core operator's
 // render output, so core code never branches on variant.
 //
-// A Set holds the extensions for every variant. Per reconcile the controller
-// selects one Variant from the installation's variant, so a registered hook only
-// ever runs for its own variant and never re-checks it. A Variant bundles two
-// kinds of extension:
+// A Registry holds the extensions for the one variant the operator resolved at
+// startup, so nothing here re-checks the variant and a lookup that finds nothing
+// hands back a no-op. It stores two kinds of extension:
 //
 // A ControllerExtension is the controller-side hook. It runs once per reconcile
 // in the installation controller, has cluster access (Client,
@@ -31,9 +30,9 @@
 // Per-component modifiers are the render phase: pure hooks that run after a
 // component builds its objects. An image override swaps the component's image;
 // a modifier post-processes the rendered objects at the componentHandler.
-// Register one with Modify, passing the component's key: the key pins the type of
-// the inputs the modifier receives, so one written against a different component
-// won't compile.
+// Register one with RegisterModifier, passing the component's key: the key pins the
+// type of the inputs the modifier receives, so one written against a different
+// component won't compile.
 //
 // controller.Inputs and render.Inputs are a pair: controller.Inputs carries a
 // render.Inputs plus the cluster-access deps, which is why modifiers, given only

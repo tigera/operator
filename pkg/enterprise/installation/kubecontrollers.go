@@ -53,9 +53,9 @@ import (
 // registerKubeControllers registers the calico-kube-controllers modifiers. There is
 // no image override: kube-controllers runs from the combined calico image, which
 // resolves by variant in the base render.
-func registerKubeControllers(v *extensions.Variant) {
-	extensions.Modify(v, render.KubeControllersKey, modifyKubeControllers)
-	extensions.Modify(v, render.KubeControllersPolicyKey, modifyKubeControllersPolicy)
+func registerKubeControllers(r *extensions.Registry) {
+	extensions.RegisterModifier(r, render.KubeControllersKey, modifyKubeControllers)
+	extensions.RegisterModifier(r, render.KubeControllersPolicyKey, modifyKubeControllersPolicy)
 }
 
 // modifyKubeControllersPolicy adds the WAF admission webhook ingress rule to the

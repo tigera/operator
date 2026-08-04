@@ -70,9 +70,9 @@ type ControllerOptions struct {
 	// availability without issuing further discovery requests at reconcile time.
 	APIDiscovery *discovery.APIDiscovery
 
-	// Extensions are the variant extensions (modifiers, image overrides, setups)
-	// the operator runs with. The core operator leaves this nil; an extension
-	// build (Calico Enterprise) sets it once at startup and controllers thread it
-	// into their render handlers and component configs.
-	Extensions *extensions.Set
+	// Extensions are the variant extensions the operator runs with, for the Variant
+	// above. The core operator leaves this nil; an extension build (Calico Enterprise)
+	// sets it once at startup and each controller looks up what it needs when it is
+	// constructed.
+	Extensions *extensions.Registry
 }

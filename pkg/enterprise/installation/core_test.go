@@ -38,14 +38,14 @@ var _ = Describe("installation controller extension", func() {
 		ci.RenderInputs.FelixConfiguration = &v3.FelixConfiguration{
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
-		Expect(ext.Validate(ctx, ci)).To(HaveOccurred())
+		Expect(ext.Controller(controller.Installation).Validate(ctx, ci)).To(HaveOccurred())
 	})
 
 	DescribeTable("defaults dnsTrustedServers for providers whose DNS service isn't kube-dns",
 		func(provider operatorv1.Provider, expected []string) {
 			fc := &v3.FelixConfiguration{}
 			install := &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, KubernetesProvider: provider}
-			updated, err := ext.DefaultFelixConfiguration(controller.Installation, install, fc)
+			updated, err := ext.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(install, fc)
 			Expect(err).NotTo(HaveOccurred())
 			if expected == nil {
 				Expect(updated).To(BeFalse())
@@ -60,16 +60,16 @@ var _ = Describe("installation controller extension", func() {
 		Entry("other providers keep the felix default", operatorv1.ProviderNone, nil),
 	)
 
-	It("does no felix defaulting for the Calico variant", func() {
+	It("does no felix defaulting when the operator runs as Calico", func() {
 		fc := &v3.FelixConfiguration{}
-		updated, err := ext.DefaultFelixConfiguration(controller.Installation, &operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
+		updated, err := calicoExt.FelixConfigDefaulter(controller.Installation).DefaultFelixConfiguration(&operatorv1.InstallationSpec{Variant: operatorv1.Calico, KubernetesProvider: operatorv1.ProviderOpenShift}, fc)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(updated).To(BeFalse())
 		Expect(fc.Spec.DNSTrustedServers).To(BeNil())
 	})
 
 	It("manages the node prometheus and kube-controllers metrics keypairs for the enterprise variant", func() {
-		_, managed, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
+		_, managed, err := ext.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.CalicoEnterprise))
 		Expect(err).NotTo(HaveOccurred())
 		names := []string{}
 		for _, kp := range managed {
@@ -78,8 +78,8 @@ var _ = Describe("installation controller extension", func() {
 		Expect(names).To(ConsistOf(render.NodePrometheusTLSServerSecret, kubecontrollers.KubeControllerPrometheusTLSSecret))
 	})
 
-	It("is a no-op for the Calico variant", func() {
-		_, managed, err := ext.ExtendInputs(ctx, newControllerInputs(operatorv1.Calico))
+	It("is a no-op when the operator runs as Calico", func() {
+		_, managed, err := calicoExt.Controller(controller.Installation).ExtendInputs(ctx, newControllerInputs(operatorv1.Calico))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(managed).To(BeEmpty())
 	})
@@ -101,7 +101,6 @@ func newControllerInputs(variant operatorv1.ProductVariant) controller.Inputs {
 			TrustedBundle:      trustedBundle,
 			ClusterDomain:      "cluster.local",
 		},
-		Controller:         controller.Installation,
 		Client:             c,
 		CertificateManager: certManager,
 	}

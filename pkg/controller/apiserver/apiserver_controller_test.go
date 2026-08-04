@@ -853,7 +853,7 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:       multiTenantExtensions(),
+						Extensions:       multiTenantExtensions,
 						Variant:          operatorv1.CalicoEnterprise,
 						DetectedProvider: operatorv1.ProviderNone,
 						MultiTenant:      true,
@@ -905,7 +905,7 @@ var _ = Describe("apiserver controller tests", func() {
 					tierWatchReady:      ready,
 					migrationWatchReady: &utils.ReadyFlag{},
 					opts: options.ControllerOptions{
-						Extensions:       multiTenantExtensions(),
+						Extensions:       multiTenantExtensions,
 						Variant:          operatorv1.CalicoEnterprise,
 						DetectedProvider: operatorv1.ProviderNone,
 						MultiTenant:      true,

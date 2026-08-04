@@ -102,10 +102,10 @@ type apiServer struct {
 }
 
 // Register wires the API server controller hook and modifiers into the variant.
-func Register(v *extensions.Variant) {
-	v.Controller(controller.APIServer, apiServerControllerExtension{})
-	extensions.Modify(v, render.APIServerKey, modifyAPIServer)
-	extensions.Modify(v, render.APIServerPolicyKey, modifyAPIServerPolicy)
+func Register(r *extensions.Registry, opts eoptions.Options) {
+	r.RegisterController(controller.APIServer, apiServerControllerExtension{opts: opts})
+	extensions.RegisterModifier(r, render.APIServerKey, modifyAPIServer)
+	extensions.RegisterModifier(r, render.APIServerPolicyKey, modifyAPIServerPolicy)
 }
 
 func (c *apiServer) isSidecarInjectionEnabled() bool {
@@ -119,7 +119,9 @@ func (c *apiServer) isSidecarInjectionEnabled() bool {
 // server controller. It does the enterprise reconcile work the render phase can't:
 // fetching the enterprise CRs, creating the trusted bundle and the query server cert,
 // and resolving the L7 sidecar images.
-type apiServerControllerExtension struct{}
+type apiServerControllerExtension struct {
+	opts eoptions.Options
+}
 
 // Validate rejects an API server configuration Calico Enterprise does not support: a
 // cluster cannot be both a management cluster and a managed cluster.
@@ -164,7 +166,7 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetches the enterprise CRs, creates the query server certificate, resolves the L7
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
-func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	in := ci.RenderInputs.Installation
 
 	trustedBundle, err := ci.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, ci.Client, common.OperatorNamespace(), false)
@@ -190,7 +192,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
 	// certificates for managed clusters. The manager controller writes it once
 	// ManagementCluster.Spec.TLS is defaulted; degrade until it exists.
-	if managementCluster != nil && managementCluster.Spec.TLS != nil && !eoptions.From(ci).MultiTenant {
+	if managementCluster != nil && managementCluster.Spec.TLS != nil && !e.opts.MultiTenant {
 		if _, err := utils.GetSecret(ctx, ci.Client, managementCluster.Spec.TLS.SecretName, common.OperatorNamespace()); err != nil {
 			return ci, nil, fmt.Errorf("unable to fetch the tunnel secret: %w", err)
 		}
@@ -277,7 +279,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 	// namespace. Zero/single-tenant clusters leave this empty - the calico-system API server
 	// is covered by its own binding.
 	var bindingNamespaces []string
-	if eoptions.From(ci).MultiTenant {
+	if e.opts.MultiTenant {
 		bindingNamespaces, err = utils.TenantNamespaces(ctx, ci.Client, nil)
 		if err != nil {
 			return ci, nil, fmt.Errorf("error reading tenant namespaces: %w", err)
@@ -294,7 +296,7 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 		l7EnvoyImage:                l7EnvoyImage,
 		dikastesImage:               dikastesImage,
 		bindingNamespaces:           bindingNamespaces,
-		cloud:                       eoptions.From(ci).Cloud,
+		cloud:                       e.opts.Cloud,
 	}
 	return ci, nil, nil
 }
@@ -302,8 +304,8 @@ func (apiServerControllerExtension) ExtendInputs(ctx context.Context, ci control
 // RegisterCalicoCleanup registers, for the Calico variant, the cleanup that
 // deletes the Enterprise API server objects left behind by a prior Enterprise
 // installation.
-func RegisterCalicoCleanup(v *extensions.Variant) {
-	extensions.Modify(v, render.APIServerKey, cleanupAPIServer)
+func RegisterCalicoCleanup(r *extensions.Registry) {
+	extensions.RegisterModifier(r, render.APIServerKey, cleanupAPIServer)
 }
 
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:

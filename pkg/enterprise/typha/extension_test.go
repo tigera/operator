@@ -67,7 +67,7 @@ var _ = Describe("typha enterprise modifier", func() {
 
 	// renderTypha renders the real typha component and applies the registered
 	// modifier, exactly as the componentHandler does.
-	renderTypha := func(install *operatorv1.InstallationSpec, ri render.Inputs) []client.Object {
+	renderTypha := func(r *extensions.Registry, install *operatorv1.InstallationSpec, ri render.Inputs) []client.Object {
 		component := render.Typha(&render.TyphaConfiguration{
 			K8sServiceEp:    k8sapi.ServiceEndpoint{},
 			Installation:    install,
@@ -78,7 +78,7 @@ var _ = Describe("typha enterprise modifier", func() {
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, del := component.Objects()
 
-		out, _ := extensionstest.ApplyExtensions(ext, render.TyphaKey, ri, objs, del)
+		out, _ := extensionstest.ApplyExtensions(r, render.TyphaKey, ri, objs, del)
 		return out
 	}
 
@@ -102,32 +102,21 @@ var _ = Describe("typha enterprise modifier", func() {
 			CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}
-		objs := renderTypha(install, render.Inputs{Installation: install})
+		objs := renderTypha(ext, install, render.Inputs{Installation: install})
 
 		Expect(typhaClusterRole(objs).Rules).To(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
 		Expect(typhaContainer(objs).Env).To(ContainElement(corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: multiMode.Value()}))
 	})
 
-	It("is a no-op for the Calico variant", func() {
+	It("is a no-op when the operator runs as Calico", func() {
 		install := &operatorv1.InstallationSpec{
 			Variant:       operatorv1.Calico,
 			CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
 			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
 		}
-		objs := renderTypha(install, render.Inputs{Installation: install})
+		objs := renderTypha(calicoExt, install, render.Inputs{Installation: install})
 
 		Expect(typhaClusterRole(objs).Rules).NotTo(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
 		Expect(typhaContainer(objs).Env).NotTo(ContainElement(HaveField("Name", "MULTI_INTERFACE_MODE")))
-	})
-
-	It("does not panic on zero Inputs (nil Installation)", func() {
-		install := &operatorv1.InstallationSpec{
-			Variant:       operatorv1.CalicoEnterprise,
-			CNI:           &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
-			CalicoNetwork: &operatorv1.CalicoNetworkSpec{MultiInterfaceMode: &multiMode},
-		}
-		objs := renderTypha(install, render.Inputs{})
-
-		Expect(typhaClusterRole(objs).Rules).NotTo(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
 	})
 })

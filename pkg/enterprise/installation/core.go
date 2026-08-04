@@ -40,10 +40,10 @@ import (
 
 // Register wires the installation controller hook and the node and
 // calico-kube-controllers modifiers into the variant.
-func Register(v *extensions.Variant) {
-	v.Controller(controller.Installation, coreControllerExtension{})
-	registerNode(v)
-	registerKubeControllers(v)
+func Register(r *extensions.Registry) {
+	r.RegisterController(controller.Installation, coreControllerExtension{})
+	registerNode(r)
+	registerKubeControllers(r)
 }
 
 // coreControllerExtension is the Calico Enterprise controller-side hook for the

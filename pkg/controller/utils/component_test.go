@@ -2683,8 +2683,8 @@ func (mc *mockClient) SubResource(subResource string) client.SubResourceClient {
 
 var _ = Describe("componentHandler modifier application", func() {
 	It("applies registered modifiers to a named component before create", func() {
-		ext := extensions.NewSet()
-		extensions.Modify(ext.Variant(operatorv1.CalicoEnterprise), render.TyphaKey, func(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+		ext := extensions.NewRegistry(operatorv1.CalicoEnterprise)
+		extensions.RegisterModifier(ext, render.TyphaKey, func(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 			cm := objs[0].(*corev1.ConfigMap)
 			cm.Data = map[string]string{"patched": "yes"}
 			return objs, del
@@ -2696,7 +2696,7 @@ var _ = Describe("componentHandler modifier application", func() {
 
 		c := ctrlrfake.DefaultFakeClientBuilder(s).Build()
 		renderInputs := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
-		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderInputs(renderInputs), WithExtensions(ext))
+		handler := NewComponentHandler(logf.Log, c, s, nil, WithRenderInputs(renderInputs), WithDecorator(ext.Decorator()))
 		comp := &namedFakeComponent{name: render.TyphaKey.String(), obj: &corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "cm", Namespace: "default"},

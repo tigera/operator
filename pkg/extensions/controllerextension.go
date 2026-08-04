@@ -42,21 +42,17 @@ type ControllerExtension interface {
 	ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error)
 }
 
-// Watcher is an optional companion to ControllerExtension. A controller's Add()
-// calls Set.SetupWatches, which invokes Watches on any registered extension that
-// implements this, so the extension registers the watches it needs (its CRs, its
-// secrets) instead of the controller naming them.
+// Watcher is an optional companion a ControllerExtension may implement, so the
+// extension registers the watches it needs (its CRs, its secrets) instead of the
+// controller naming them.
 type Watcher interface {
 	Watches(c ctrlruntime.Controller) error
 }
 
-// FelixConfigDefaulter is an optional companion to ControllerExtension. A
-// controller's FelixConfiguration defaulting calls Set.DefaultFelixConfiguration,
-// which invokes this on a registered extension that implements it, so the variant's
-// FelixConfiguration defaults (e.g. the provider-specific dnsTrustedServers) live in
-// the extension instead of the controller. It returns whether it changed fc. Felix
-// defaulting persists early in reconcile, before ExtendInputs runs, so it can't fold
-// into ExtendInputs.
+// FelixConfigDefaulter is an optional companion a ControllerExtension may implement
+// to default FelixConfiguration fields (e.g. the provider-specific
+// dnsTrustedServers), returning whether it changed fc. It can't fold into
+// ExtendInputs because Felix defaulting persists earlier in the reconcile.
 type FelixConfigDefaulter interface {
 	DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error)
 }

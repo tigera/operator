@@ -220,8 +220,71 @@ var (
 	ElasticsearchUserNameDashboardInstaller = "tigera-ee-dashboards-installer"
 )
 
-func LinseedUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameLinseed, clusterID, tenant)
+// ElasticsearchSecureUserSuffix is appended to the user names provisioned for single-tenant clusters.
+// It maintains the 1:1 mapping between the public user propagated to components and the private user
+// swapped in at ES gateway, which strips this suffix.
+const ElasticsearchSecureUserSuffix = "secure"
+
+// formatNameSingleTenant builds the ES user name for a single-tenant cluster: <name>-<tenantID>-secure.
+// This matches the name previously provisioned by es-kube-controllers, so that existing credentials
+// and role mappings keep resolving once the operator takes over user provisioning.
+func formatNameSingleTenant(name, tenantID string) string {
+	return fmt.Sprintf("%s-%s-%s", name, tenantID, ElasticsearchSecureUserSuffix)
+}
+
+// LinseedUser returns the Linseed user for a multi-tenant cluster. Multi-tenant clusters always store
+// their data in single-index format, so the user is granted access to the indices declared on the Tenant.
+func LinseedUser(clusterID string, tenant *operatorv1.Tenant) *User {
+	return linseedUser(formatName(ElasticsearchUserNameLinseed, clusterID, tenant.Spec.ID), singleIndexNames(tenant))
+}
+
+// LinseedUserSingleTenant returns the Linseed user for a single-tenant cluster. It is named the way
+// es-kube-controllers named it, and needs no cluster ID.
+//
+// A single-tenant cluster only declares indices on its Tenant once it has moved to single-index storage;
+// until then its data lives in the per-cluster multi-index format, and the user is granted access to
+// that instead.
+func LinseedUserSingleTenant(tenant *operatorv1.Tenant, externalElastic bool) *User {
+	names := multiIndexNames(tenant.Spec.ID, externalElastic)
+	if len(tenant.Spec.Indices) > 0 {
+		names = singleIndexNames(tenant)
+	}
+	return linseedUser(formatNameSingleTenant(ElasticsearchUserNameLinseed, tenant.Spec.ID), names)
+}
+
+// singleIndexNames returns the index patterns covering the tenant's single-index storage. Each declared
+// base index name is wildcarded so that the pattern matches the write alias as well as the numbered
+// indices behind it. Indices without a base index name are skipped, so that a misconfigured Tenant
+// cannot widen the pattern to "*" and grant access to every index in Elasticsearch. Tenants that
+// declare no usable indices leave Linseed on its default index names, which are all prefixed with
+// calico_.
+func singleIndexNames(tenant *operatorv1.Tenant) []string {
+	names := make([]string, 0, len(tenant.Spec.Indices))
+	for _, index := range tenant.Spec.Indices {
+		if index.BaseIndexName == "" {
+			continue
+		}
+		names = append(names, fmt.Sprintf("%s*", index.BaseIndexName))
+	}
+
+	if len(names) == 0 {
+		return []string{"calico_*"}
+	}
+	return names
+}
+
+// multiIndexNames returns the index pattern covering multi-index storage, where every cluster writes to
+// its own set of indices. Indices written to an Elasticsearch shared between tenants carry the tenant ID
+// in their name, and the pattern is scoped to it. Indices written to the cluster's own Elasticsearch do
+// not - Linseed has its tenant suffix disabled there - so there is nothing to scope the pattern to.
+func multiIndexNames(tenant string, externalElastic bool) []string {
+	if !externalElastic {
+		tenant = ""
+	}
+	return []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant)}
+}
+
+func linseedUser(username string, indices []string) *User {
 	return &User{
 		Username: username,
 		Roles: []Role{
@@ -231,8 +294,7 @@ func LinseedUser(clusterID, tenant string) *User {
 					Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
 					Indices: []RoleIndex{
 						{
-							// Include both single-index and multi-index name formats.
-							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant), "calico_*"},
+							Names:      indices,
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},
@@ -243,7 +305,16 @@ func LinseedUser(clusterID, tenant string) *User {
 }
 
 func DashboardUser(clusterID, tenant string) *User {
-	username := formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant)
+	return dashboardUser(formatName(ElasticsearchUserNameDashboardInstaller, clusterID, tenant))
+}
+
+// DashboardUserSingleTenant returns the Dashboards installer user for a single-tenant cluster, named
+// the way es-kube-controllers named it. See LinseedUserSingleTenant.
+func DashboardUserSingleTenant(tenant string) *User {
+	return dashboardUser(formatNameSingleTenant(ElasticsearchUserNameDashboardInstaller, tenant))
+}
+
+func dashboardUser(username string) *User {
 	return &User{
 		Username: username,
 		Roles: []Role{

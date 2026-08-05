@@ -26,9 +26,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/whisker"
@@ -36,6 +38,7 @@ import (
 )
 
 var (
+	defaultWhiskerKeyPair    = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: whisker.WhiskerKeyPairSecret}}, nil, "")
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	numExpectedObjects       = 5
@@ -64,6 +67,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.Calico,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerKeyPair:        defaultWhiskerKeyPair,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
@@ -76,6 +80,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.CalicoEnterprise,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerKeyPair:        defaultWhiskerKeyPair,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
@@ -99,6 +104,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.Calico,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerKeyPair:        defaultWhiskerKeyPair,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 				ClusterID:             "test-cluster-id",
@@ -142,6 +148,7 @@ var _ = Describe("ComponentRendering", func() {
 											MountPath: "/etc/nginx/conf.d",
 											ReadOnly:  true,
 										},
+										defaultWhiskerKeyPair.VolumeMount(rmeta.OSTypeLinux),
 									},
 								},
 								{
@@ -154,6 +161,8 @@ var _ = Describe("ComponentRendering", func() {
 										{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.domain:7443"},
 										{Name: "TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
 										{Name: "TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
+										{Name: "SERVER_TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
+										{Name: "SERVER_TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: append(
@@ -163,6 +172,7 @@ var _ = Describe("ComponentRendering", func() {
 							},
 							Volumes: []corev1.Volume{
 								defaultTrustedCertBundle.Volume(),
+								defaultWhiskerKeyPair.Volume(),
 								defaultTLSKeyPair.Volume(),
 								{
 									Name: "nginx-config",
@@ -187,6 +197,7 @@ var _ = Describe("ComponentRendering", func() {
 				Variant:            operatorv1.Calico,
 			},
 			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
 			WhiskerBackendKeyPair: defaultTLSKeyPair,
 			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			ClusterID:             "test-cluster-id",
@@ -217,6 +228,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 			},
 			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
 			WhiskerBackendKeyPair: defaultTLSKeyPair,
 			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			ClusterID:             "test-cluster-id",
@@ -233,6 +245,50 @@ var _ = Describe("ComponentRendering", func() {
 		actual, ok := config.Data["default.conf"]
 		Expect(ok).To(BeTrue(), "expected default.conf to be present in config map")
 		Expect(actual).To(Equal(whisker.NginxConfigDual))
+	})
+
+	It("should render a service with HTTPS port", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		svc, err := rtest.GetResourceOfType[*corev1.Service](objsToCreate, "whisker", whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(svc.Spec.Ports).To(HaveLen(1))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(whisker.WhiskerServicePort)))
+	})
+
+	It("should render a network policy allowing ingress from the whisker gateway proxy only", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, whisker.WhiskerPolicyName, whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+		Expect(np.Spec.Ingress).To(HaveLen(1))
+		Expect(np.Spec.Ingress[0].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[0].Source.Selector).To(Equal("gateway.envoyproxy.io/owning-gateway-name == 'calico-whisker-gateway'"))
+		Expect(np.Spec.Ingress[0].Source.Nets).To(BeEmpty())
+		Expect(np.Spec.Ingress[0].Destination.Ports).To(Equal(networkpolicy.Ports(8443)))
 	})
 
 	It("Should apply overrides", func() {
@@ -348,6 +404,7 @@ func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*a
 			Variant:            operatorv1.Calico,
 		},
 		TrustedCertBundle:     defaultTrustedCertBundle,
+		WhiskerKeyPair:        defaultWhiskerKeyPair,
 		WhiskerBackendKeyPair: defaultTLSKeyPair,
 		Whisker: &operatorv1.Whisker{
 			Spec: operatorv1.WhiskerSpec{

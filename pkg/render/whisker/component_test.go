@@ -26,7 +26,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -125,6 +124,10 @@ var _ = Describe("ComponentRendering", func() {
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: whisker.WhiskerDeploymentName,
+							Annotations: map[string]string{
+								defaultWhiskerKeyPair.HashAnnotationKey(): defaultWhiskerKeyPair.HashAnnotationValue(),
+								defaultTLSKeyPair.HashAnnotationKey():     defaultTLSKeyPair.HashAnnotationValue(),
+							},
 						},
 						Spec: corev1.PodSpec{
 							ServiceAccountName: whisker.WhiskerServiceAccountName,
@@ -266,27 +269,6 @@ var _ = Describe("ComponentRendering", func() {
 		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(whisker.WhiskerServicePort)))
 	})
 
-	It("should render a network policy with ingress rules", func() {
-		cfg := &whisker.Configuration{
-			Installation: &operatorv1.InstallationSpec{
-				KubernetesProvider: operatorv1.ProviderGKE,
-				Variant:            operatorv1.Calico,
-			},
-			TrustedCertBundle:     defaultTrustedCertBundle,
-			WhiskerKeyPair:        defaultWhiskerKeyPair,
-			WhiskerBackendKeyPair: defaultTLSKeyPair,
-			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
-		}
-		component := whisker.Whisker(cfg)
-		objsToCreate, _ := component.Objects()
-
-		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, whisker.WhiskerPolicyName, whisker.WhiskerNamespace)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(np.Spec.Ingress).To(HaveLen(2))
-		Expect(np.Spec.Ingress[0].Source.Nets).To(Equal([]string{"0.0.0.0/0"}))
-		Expect(np.Spec.Ingress[1].Source.Nets).To(Equal([]string{"::/0"}))
-	})
-
 	It("Should apply overrides", func() {
 		affinity := &corev1.Affinity{
 			NodeAffinity: &corev1.NodeAffinity{
@@ -382,7 +364,15 @@ var _ = Describe("ComponentRendering", func() {
 		deployment, err := GetOverriddenWhiskerDeployment(overrides)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(deployment.Spec.Template.ObjectMeta.Labels).To(Equal(podLabels))
-		Expect(deployment.Spec.Template.ObjectMeta.Annotations).To(Equal(podAnnotations))
+		// Override annotations are merged on top of the rendered key pair hash annotations.
+		expectedAnnotations := map[string]string{
+			defaultWhiskerKeyPair.HashAnnotationKey(): defaultWhiskerKeyPair.HashAnnotationValue(),
+			defaultTLSKeyPair.HashAnnotationKey():     defaultTLSKeyPair.HashAnnotationValue(),
+		}
+		for k, v := range podAnnotations {
+			expectedAnnotations[k] = v
+		}
+		Expect(deployment.Spec.Template.ObjectMeta.Annotations).To(Equal(expectedAnnotations))
 		Expect(deployment.Spec.Template.Spec.Affinity).To(Equal(affinity))
 		Expect(deployment.Spec.Template.Spec.TopologySpreadConstraints).To(Equal(topologyConstraints))
 		Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(nodeSelector))

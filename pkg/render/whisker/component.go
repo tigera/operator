@@ -246,6 +246,14 @@ func (c *Component) deployment() *appsv1.Deployment {
 		},
 	}
 
+	// Both key pairs are served at process startup (nginx and the backend), so
+	// rotate the pod when either changes. The trusted bundle is only used by a
+	// client that picks up changes without a restart.
+	annotations := map[string]string{
+		c.cfg.WhiskerKeyPair.HashAnnotationKey():        c.cfg.WhiskerKeyPair.HashAnnotationValue(),
+		c.cfg.WhiskerBackendKeyPair.HashAnnotationKey(): c.cfg.WhiskerBackendKeyPair.HashAnnotationValue(),
+	}
+
 	return &appsv1.Deployment{
 		TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -259,7 +267,8 @@ func (c *Component) deployment() *appsv1.Deployment {
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: WhiskerDeploymentName,
+					Name:        WhiskerDeploymentName,
+					Annotations: annotations,
 				},
 				Spec: corev1.PodSpec{
 					NodeSelector:       c.cfg.Installation.ControlPlaneNodeSelector,
@@ -275,25 +284,6 @@ func (c *Component) deployment() *appsv1.Deployment {
 }
 
 func (c *Component) networkPolicy() *v3.NetworkPolicy {
-	ingressRules := []v3.Rule{
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(WhiskerServicePort),
-			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   v3.EntityRule{Nets: []string{"::/0"}},
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(WhiskerServicePort),
-			},
-		},
-	}
-
 	egressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,
@@ -314,7 +304,6 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			Tier:     networkpolicy.CalicoTierName,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
-			Ingress:  ingressRules,
 			Egress:   egressRules,
 		},
 	}

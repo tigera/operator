@@ -205,7 +205,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	whiskerCertificateNames = append(whiskerCertificateNames, "localhost", "127.0.0.1")
 	whiskerKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerKeyPairSecret, whisker.WhiskerNamespace, whiskerCertificateNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -213,7 +213,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	whiskerBackendCertificateNames = append(whiskerBackendCertificateNames, "localhost", "127.0.0.1")
 	backendKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerBackendKeyPairSecret, whisker.WhiskerNamespace, whiskerBackendCertificateNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

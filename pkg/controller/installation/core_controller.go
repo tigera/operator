@@ -355,6 +355,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		variant:              opts.Variant,
 		clusterDomain:        opts.ClusterDomain,
 		manageCRDs:           opts.ManageCRDs,
+		multiTenant:          opts.MultiTenant,
 		tierWatchReady:       &utils.ReadyFlag{},
 		migrationWatchReady:  &utils.ReadyFlag{},
 		newComponentHandler:  utils.NewComponentHandler,
@@ -416,6 +417,7 @@ type ReconcileInstallation struct {
 	migrationChecked              bool
 	clusterDomain                 string
 	manageCRDs                    bool
+	multiTenant                   bool
 	tierWatchReady                *utils.ReadyFlag
 	migrationWatchReady           *utils.ReadyFlag
 	v3CRDs                        bool
@@ -1325,7 +1327,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, r.client, instance.Spec.Variant, false)
+	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, r.client, instance.Spec.Variant, r.multiTenant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 		return reconcile.Result{}, err

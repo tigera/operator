@@ -2486,6 +2486,17 @@ var _ = Describe("Testing core-controller installation", func() {
 				Expect(enabledControllers()).To(ContainSubstring("rbacsync"))
 			})
 
+			// Multi-tenant force-disables the feature on the ui-apis side.
+			It("withholds rbacsync on a multi-tenant management cluster even with the gate on", func() {
+				r.multiTenant = true
+				writeGate("true")
+
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				Expect(enabledControllers()).NotTo(ContainSubstring("rbacsync"))
+			})
+
 			It("leaves the admin's value untouched across reconciles", func() {
 				writeGate("true")
 

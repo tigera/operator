@@ -350,6 +350,27 @@ var _ = Describe("Utils ElasticSearch test", func() {
 		Expect(linseedUser.Username).To(Equal(expectedName))
 		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
 	})
+
+	It("should never widen the single-index pattern to all indices when a base index name is empty", func() {
+		// An index with no base index name must not be wildcarded into "*", which would grant Linseed
+		// access to every index in Elasticsearch.
+		tenant := &opv1.Tenant{
+			Spec: opv1.TenantSpec{
+				ID: tenantID,
+				Indices: []opv1.Index{
+					{DataType: opv1.DataTypeFlowLogs, BaseIndexName: "calico_flowlogs_standard"},
+					{DataType: opv1.DataTypeDNSLogs},
+				},
+			},
+		}
+		Expect(LinseedUser(clusterID, tenant).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
+		Expect(LinseedUserSingleTenant(tenant, true).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
+
+		// With no usable base index name at all, fall back to Linseed's default index names.
+		tenant.Spec.Indices = []opv1.Index{{DataType: opv1.DataTypeDNSLogs}}
+		Expect(LinseedUser(clusterID, tenant).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_*"}))
+		Expect(LinseedUserSingleTenant(tenant, true).Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_*"}))
+	})
 })
 
 type fakeClient struct {

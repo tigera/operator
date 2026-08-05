@@ -254,16 +254,21 @@ func LinseedUserSingleTenant(tenant *operatorv1.Tenant, externalElastic bool) *U
 
 // singleIndexNames returns the index patterns covering the tenant's single-index storage. Each declared
 // base index name is wildcarded so that the pattern matches the write alias as well as the numbered
-// indices behind it. Tenants that declare no indices leave Linseed on its default index names, which are
-// all prefixed with calico_.
+// indices behind it. Indices without a base index name are skipped, so that a misconfigured Tenant
+// cannot widen the pattern to "*" and grant access to every index in Elasticsearch. Tenants that
+// declare no usable indices leave Linseed on its default index names, which are all prefixed with
+// calico_.
 func singleIndexNames(tenant *operatorv1.Tenant) []string {
-	if len(tenant.Spec.Indices) == 0 {
-		return []string{"calico_*"}
-	}
-
 	names := make([]string, 0, len(tenant.Spec.Indices))
 	for _, index := range tenant.Spec.Indices {
+		if index.BaseIndexName == "" {
+			continue
+		}
 		names = append(names, fmt.Sprintf("%s*", index.BaseIndexName))
+	}
+
+	if len(names) == 0 {
+		return []string{"calico_*"}
 	}
 	return names
 }

@@ -428,7 +428,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 				replicas = l.cfg.Tenant.Spec.ControlPlaneReplicas
 			}
 		} else if l.cfg.UseSingleIndex {
-			// For single-tenant clusters migrating to multi-tenant style indices,
+			// For single-tenant clusters migrating to single-index storage,
 			// use the elastic-single-index backend and configure index base names.
 			envVars = append(envVars, corev1.EnvVar{Name: "BACKEND", Value: "elastic-single-index"})
 			for _, index := range l.cfg.Tenant.Spec.Indices {

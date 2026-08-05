@@ -232,18 +232,54 @@ func formatNameSingleTenant(name, tenantID string) string {
 	return fmt.Sprintf("%s-%s-%s", name, tenantID, ElasticsearchSecureUserSuffix)
 }
 
-func LinseedUser(clusterID, tenant string) *User {
-	return linseedUser(formatName(ElasticsearchUserNameLinseed, clusterID, tenant), tenant)
+// LinseedUser returns the Linseed user for a multi-tenant cluster. Multi-tenant clusters always store
+// their data in single-index format, so the user is granted access to the indices declared on the Tenant.
+func LinseedUser(clusterID string, tenant *operatorv1.Tenant) *User {
+	return linseedUser(formatName(ElasticsearchUserNameLinseed, clusterID, tenant.Spec.ID), singleIndexNames(tenant))
 }
 
-// LinseedUserSingleTenant returns the Linseed user for a single-tenant cluster. It carries the same
-// privileges as the multi-tenant user - including access to the single-index calico_* indices - but is
-// named the way es-kube-controllers named it, and needs no cluster ID.
-func LinseedUserSingleTenant(tenant string) *User {
-	return linseedUser(formatNameSingleTenant(ElasticsearchUserNameLinseed, tenant), tenant)
+// LinseedUserSingleTenant returns the Linseed user for a single-tenant cluster. It is named the way
+// es-kube-controllers named it, and needs no cluster ID.
+//
+// A single-tenant cluster only declares indices on its Tenant once it has moved to single-index storage;
+// until then its data lives in the per-cluster multi-index format, and the user is granted access to
+// that instead.
+func LinseedUserSingleTenant(tenant *operatorv1.Tenant, externalElastic bool) *User {
+	names := multiIndexNames(tenant.Spec.ID, externalElastic)
+	if len(tenant.Spec.Indices) > 0 {
+		names = singleIndexNames(tenant)
+	}
+	return linseedUser(formatNameSingleTenant(ElasticsearchUserNameLinseed, tenant.Spec.ID), names)
 }
 
-func linseedUser(username, tenant string) *User {
+// singleIndexNames returns the index patterns covering the tenant's single-index storage. Each declared
+// base index name is wildcarded so that the pattern matches the write alias as well as the numbered
+// indices behind it. Tenants that declare no indices leave Linseed on its default index names, which are
+// all prefixed with calico_.
+func singleIndexNames(tenant *operatorv1.Tenant) []string {
+	if len(tenant.Spec.Indices) == 0 {
+		return []string{"calico_*"}
+	}
+
+	names := make([]string, 0, len(tenant.Spec.Indices))
+	for _, index := range tenant.Spec.Indices {
+		names = append(names, fmt.Sprintf("%s*", index.BaseIndexName))
+	}
+	return names
+}
+
+// multiIndexNames returns the index pattern covering multi-index storage, where every cluster writes to
+// its own set of indices. Indices written to an Elasticsearch shared between tenants carry the tenant ID
+// in their name, and the pattern is scoped to it. Indices written to the cluster's own Elasticsearch do
+// not - Linseed has its tenant suffix disabled there - so there is nothing to scope the pattern to.
+func multiIndexNames(tenant string, externalElastic bool) []string {
+	if !externalElastic {
+		tenant = ""
+	}
+	return []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant)}
+}
+
+func linseedUser(username string, indices []string) *User {
 	return &User{
 		Username: username,
 		Roles: []Role{
@@ -253,8 +289,7 @@ func linseedUser(username, tenant string) *User {
 					Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
 					Indices: []RoleIndex{
 						{
-							// Include both single-index and multi-index name formats.
-							Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant), "calico_*"},
+							Names:      indices,
 							Privileges: []string{"create_index", "write", "manage", "read"},
 						},
 					},

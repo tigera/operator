@@ -90,7 +90,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		status:          status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
 		cloud:           opts.Cloud,
-		useSingleIndex:  opts.IndexMigration,
+		useSingleIndex:  opts.UseSingleIndex,
 	}
 	r.status.Run(opts.ShutdownContext)
 

@@ -43,10 +43,10 @@ func AddConditionsController(mgr manager.Manager, opts options.ControllerOptions
 
 	// Create the reconciler
 	r := &LogStorageConditions{
-		client:         mgr.GetClient(),
-		scheme:         mgr.GetScheme(),
-		multiTenant:    opts.MultiTenant,
-		indexMigration: opts.IndexMigration,
+		client:      mgr.GetClient(),
+		scheme:      mgr.GetScheme(),
+		multiTenant: opts.MultiTenant,
+		cloud:       opts.Cloud,
 	}
 
 	return ctrl.NewControllerManagedBy(mgr).
@@ -66,9 +66,9 @@ type LogStorageConditions struct {
 	scheme      *runtime.Scheme
 	multiTenant bool
 
-	// indexMigration indicates that this single-tenant cluster is migrating to single-index storage,
-	// in which case the log-storage users controller runs and reports status.
-	indexMigration bool
+	// cloud indicates that this is a Calico Cloud install, in which case the log-storage users
+	// controller runs in single-tenant mode too and reports status.
+	cloud bool
 }
 
 func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -132,8 +132,8 @@ func (r *LogStorageConditions) getDesiredConditions(ctx context.Context) (map[st
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 	} else {
 		expectedInstances = append(expectedInstances, TigeraStatusLogStorageESMetrics, TigeraStatusLogStorageKubeController, TigeraStatusLogStorageDashboards)
-		if r.indexMigration {
-			// While migrating to single-index storage, the users controller runs in single-tenant mode too.
+		if r.cloud {
+			// In Calico Cloud, the users controller runs in single-tenant mode too.
 			expectedInstances = append(expectedInstances, TigeraStatusLogStorageUsers)
 		}
 	}

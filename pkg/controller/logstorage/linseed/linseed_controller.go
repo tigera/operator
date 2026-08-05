@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage"
@@ -63,14 +64,16 @@ type LinseedSubController struct {
 	scheme          *runtime.Scheme
 	status          status.StatusManager
 	clusterDomain   string
+	variant         operatorv1.ProductVariant
 	tierWatchReady  *utils.ReadyFlag
 	dpiAPIReady     *utils.ReadyFlag
 	multiTenant     bool
 	elasticExternal bool
+	cloud           bool
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
@@ -79,11 +82,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
 		tierWatchReady:  &utils.ReadyFlag{},
 		dpiAPIReady:     &utils.ReadyFlag{},
 		multiTenant:     opts.MultiTenant,
 		status:          status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
+		cloud:           opts.Cloud,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -177,6 +182,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	})
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.dpiAPIReady, []client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
+	if opts.Cloud && opts.ElasticExternal {
+		// This ConfigMap is needed for utils.GetCloudConfig
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-linseed-controller failed to watch the ConfigMap resource: %w", err)
+		}
+	}
+
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
 	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
@@ -237,7 +249,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Get Installation resource.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -310,11 +322,21 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	} else {
-		// If we're using an external ES, the Tenant resource must specify the ES endpoint.
-		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
-			reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
-			return reconcile.Result{}, nil
+		if r.multiTenant {
+			// The Tenant resource must specify the ES endpoint.
+			if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
+				reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
+				r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
+				return reconcile.Result{}, nil
+			}
+		} else if r.cloud {
+			// Calico Cloud single-tenant: there is no Tenant CR, so read it from the cloud config map.
+			cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			tenant = cloudConfig.ToTenant()
 		}
 
 		// Determine the host and port from the URL.
@@ -447,10 +469,11 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		ElasticClientSecret:            esClientSecret,
 		ElasticClientCredentialsSecret: &credentials,
 		LogStorage:                     logStorage,
+		Cloud:                          r.cloud,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 
-	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
+	if err := imageset.ApplyImageSet(ctx, r.client, r.variant, linseedComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}

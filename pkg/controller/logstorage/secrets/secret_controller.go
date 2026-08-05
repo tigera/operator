@@ -67,7 +67,7 @@ type SecretSubController struct {
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
@@ -217,7 +217,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// Get Installation resource.
-	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -479,12 +479,6 @@ func (r *SecretSubController) collectUpstreamCerts(log logr.Logger, helper utils
 
 		// Get certificate for DPI, which Linseed needs to trust in a standalone or management cluster.
 		render.DPITLSSecretName: helper.TruthNamespace(),
-
-		// Get compliance certificates, which Linseed needs to trust.
-		render.ComplianceServerCertSecret:  helper.TruthNamespace(),
-		render.ComplianceSnapshotterSecret: helper.TruthNamespace(),
-		render.ComplianceBenchmarkerSecret: helper.TruthNamespace(),
-		render.ComplianceReporterSecret:    helper.TruthNamespace(),
 
 		// Get certificate for policy-recommendation, which Linseed needs to trust.
 		render.PolicyRecommendationTLSSecretName: helper.TruthNamespace(),

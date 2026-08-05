@@ -34,7 +34,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/compliance"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -64,7 +63,7 @@ var log = logf.Log.WithName("controller_manager")
 // Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		// No need to start this controller.
 		return nil
 	}
@@ -134,9 +133,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.APIServer{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = c.WatchObject(&operatorv1.Compliance{}, eventHandler); err != nil {
-		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
-	}
 	if err = c.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
@@ -175,7 +171,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			// client to talk to elastic via es-gateway
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
 			render.VoltronTunnelSecretName, render.VoltronAdditionalTunnelSecretName,
-			render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
+			render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -189,7 +185,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
+		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
@@ -199,6 +195,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.ElasticExternal {
 		if err = utils.AddConfigMapWatch(c, eck.LicenseConfigMapName, eck.OperatorNamespace, eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+		}
+	}
+
+	if opts.Cloud {
+		if err = addCloudWatch(c, eventHandler, opts.ElasticExternal); err != nil {
+			return fmt.Errorf("manager-controller failed to add CC watches: %v", err)
 		}
 	}
 
@@ -317,8 +319,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// TODO: Do we need a license per-tenant in the management cluster?
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
+	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, logc)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -330,7 +331,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -385,14 +386,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Determine if compliance is enabled.
-	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
-	complianceCR, err := compliance.GetCompliance(ctx, r.client, r.opts.MultiTenant, request.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying compliance: ", err, logc)
-		return reconcile.Result{}, err
-	}
-
 	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
 	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
 	// certificates, in case the user has provided their own cert in lieu of the default certificate.
@@ -437,15 +430,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		if monitorCR.Spec.ExternalPrometheus == nil {
 			trustedSecretNames = append(trustedSecretNames, monitor.PrometheusServerTLSSecretName)
 		}
-
-		if complianceLicenseFeatureActive && complianceCR != nil {
-			// Check that compliance is running.
-			if complianceCR.Status.State != operatorv1.TigeraStatusReady {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Compliance is not ready", nil, logc)
-				return reconcile.Result{}, nil
-			}
-			trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
-		}
 	}
 
 	var authenticationCR *operatorv1.Authentication
@@ -467,6 +451,31 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating trusted bundle for manager", err, logc)
 	}
+
+	// Handle all the resources that are specific to Calico Cloud. For non-cloud installs this is
+	// skipped entirely, leaving mcr at its zero value and enterprise behavior unchanged.
+	var mcr render.ManagerCloudResources
+	if r.opts.Cloud {
+		var reconcileResult *reconcile.Result
+		bundleMaker, mcr, tenant, reconcileResult, err = r.handleCloudReconcile(
+			ctx,
+			logc,
+			helper,
+			tenant,
+			authenticationCR,
+			certificateManager,
+			bundleMaker,
+			trustedSecretNames,
+			request.Namespace,
+		)
+		if err != nil {
+			// status degraded should already be set by r.handleCloudReconcile
+			return reconcile.Result{}, err
+		} else if reconcileResult != nil {
+			return *reconcileResult, nil
+		}
+	}
+
 	certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
 	// Check that Prometheus is running
@@ -582,7 +591,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		tunnelSecretPassthrough = render.NewCreationPassthrough(tunnelCASecret)
 	}
 
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
+	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain, r.opts.Cloud && !r.opts.MultiTenant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, logc)
 		return reconcile.Result{}, err
@@ -692,9 +701,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ClusterDomain:              r.opts.ClusterDomain,
 		ESLicenseType:              elasticLicenseType,
 		Replicas:                   replicas,
-		Compliance:                 complianceCR,
-		ComplianceLicenseActive:    complianceLicenseFeatureActive,
-		ComplianceNamespace:        utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
 		Namespace:                  helper.InstallNamespace(),
 		TruthNamespace:             helper.TruthNamespace(),
 		Tenant:                     tenant,
@@ -705,6 +711,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
 		CACertCommonName:           certificateManager.CACertCommonName(),
+		Cloud:                      r.opts.Cloud,
+		CloudResources:             mcr,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -714,7 +722,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
 		return reconcile.Result{}, err
 	}

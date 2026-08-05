@@ -31,10 +31,8 @@ import (
 
 const gkeNodeLabelPrefix = "cloud.google.com/gke-"
 
-// RequiresTigeraSecure determines if the configuration requires we start the tigera secure
-// controllers.
-func RequiresTigeraSecure(clientset *kubernetes.Clientset) (bool, error) {
-	// Use the discovery client to determine if the tigera secure specific APIs exist.
+// EnterpriseAPIsExist reports whether the cluster serves the Calico Enterprise APIs.
+func EnterpriseAPIsExist(clientset *kubernetes.Clientset) (bool, error) {
 	resources, err := clientset.Discovery().ServerResourcesForGroupVersion("operator.tigera.io/v1")
 	if err != nil {
 		return false, err
@@ -288,6 +286,20 @@ func UseExternalElastic(config *corev1.ConfigMap) bool {
 
 	// Load the operator bootstrap configuration from its configmap.
 	if val, ok := config.Data["ELASTIC_EXTERNAL"]; ok && val != "" {
+		if strings.ToLower(val) == "true" {
+			return true
+		}
+	}
+	return false
+}
+
+func ElasticIsMigrating(config *corev1.ConfigMap) bool {
+	if config == nil {
+		return false
+	}
+
+	// Load the operator bootstrap configuration from its configmap.
+	if val, ok := config.Data["ELASTIC_MIGRATION"]; ok && val != "" {
 		if strings.ToLower(val) == "true" {
 			return true
 		}

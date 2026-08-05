@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -58,7 +59,7 @@ var log = logf.Log.WithName("controller_policy_recommendation")
 // Add creates a new PolicyRecommendation Controller and adds it to the Manager. The Manager will
 // set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		// No need to start this controller
 		return nil
 	}
@@ -136,6 +137,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch for changes to TigeraStatus
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch policy-recommendation Tigerastatus: %w", err)
+	}
+
+	if opts.Cloud && opts.ElasticExternal {
+		// This ConfigMap is needed for utils.GetCloudConfig
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("policy-recommendation-controller failed to watch the ConfigMap resource: %w", err)
+		}
 	}
 
 	return nil
@@ -297,7 +305,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Query for the installation object.
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -331,6 +339,17 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, logc)
 		return reconcile.Result{}, err
+	}
+
+	if r.opts.Cloud && r.opts.ElasticExternal && !r.opts.MultiTenant {
+		// For Calico Cloud single-tenant clusters sharing an external ES, extract the tenant
+		// information from the cloud config map.
+		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, logc)
+			return reconcile.Result{}, err
+		}
+		tenant = cloudConfig.ToTenant()
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -460,7 +479,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Render the desired objects from the CRD and create or update them.
 	component := render.PolicyRecommendation(policyRecommendationCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
 		return reconcile.Result{}, err
 	}

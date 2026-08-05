@@ -81,6 +81,11 @@ const (
 	APIServerServiceName         = "calico-api"
 	APIServerServiceAccountName  = "calico-apiserver"
 
+	// The API server this one replaces. It shares the calico-apiserver-access-calico-crds binding,
+	// so while the cutover is held both service accounts must be subjects of it.
+	deprecatedAPIServerServiceAccountName = "tigera-apiserver"
+	deprecatedAPIServerNamespace          = "tigera-system"
+
 	APIServerSecretsRBACName                                      = "calico-extension-apiserver-secrets-access"
 	APIServerLinseedAccessClusterRoleName                         = "calico-apiserver-linseed-access"
 	MultiTenantManagedClustersAccessClusterRoleName               = "calico-managed-cluster-access"
@@ -776,18 +781,25 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 //
 // Both Calico and Calico Enterprise, with the same name.
 func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{
+		{Kind: "ServiceAccount", Name: APIServerServiceAccountName, Namespace: APIServerNamespace},
+	}
+	// The previous API server is still serving while the cutover is held, and it reads its own
+	// storage through this binding, so dropping it here would take the API down.
+	if c.cfg.HoldAPIServiceCutover {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      deprecatedAPIServerServiceAccountName,
+			Namespace: deprecatedAPIServerNamespace,
+		})
+	}
+
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "calico-apiserver-access-calico-crds",
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName,
-				Namespace: APIServerNamespace,
-			},
-		},
+		Subjects: subjects,
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "calico-crds",

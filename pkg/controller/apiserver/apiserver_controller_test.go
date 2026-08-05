@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -505,15 +506,15 @@ var _ = Describe("apiserver controller tests", func() {
 		writeGate := func(value string) {
 			Expect(cli.Create(ctx, &corev1.ConfigMap{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      render.RBACManagementConfigMapName,
+					Name:      rbacmanagement.ConfigMapName,
 					Namespace: common.CalicoNamespace,
 				},
-				Data: map[string]string{render.RBACManagementConfigMapKey: value},
+				Data: map[string]string{rbacmanagement.ConfigMapKey: value},
 			})).NotTo(HaveOccurred())
 		}
 
-		// networkAdminRules reconciles and returns the rendered rules.
-		networkAdminRules := func() []rbacv1.PolicyRule {
+		// reconcileAPIServer reconciles at the given tenancy.
+		reconcileAPIServer := func(multiTenant bool) {
 			r := ReconcileAPIServer{
 				client:              cli,
 				scheme:              scheme,
@@ -521,12 +522,19 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					MultiTenant:      multiTenant,
 				},
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
+		}
+
+		// networkAdminRules reconciles a single-tenant cluster -- the only tenancy that
+		// renders tigera-network-admin -- and returns its rules.
+		networkAdminRules := func() []rbacv1.PolicyRule {
+			reconcileAPIServer(false)
 
 			cr := rbacv1.ClusterRole{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-network-admin"}, &cr)).NotTo(HaveOccurred())
@@ -551,6 +559,16 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(networkAdminRules()).NotTo(ContainElement(gatedRule))
 		})
 
+		// The gated rules ride on tigera-network-admin, which a multi-tenant cluster
+		// never renders -- which is why the gate needs no tenancy term of its own.
+		It("does not render tigera-network-admin at all on a multi-tenant management cluster", func() {
+			writeGate("true")
+			reconcileAPIServer(true)
+
+			err := cli.Get(ctx, client.ObjectKey{Name: "tigera-network-admin"}, &rbacv1.ClusterRole{})
+			Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no tigera-network-admin ClusterRole under multi-tenancy")
+		})
+
 		// A managed cluster carries tigera-network-admin too, so the read must not be
 		// skipped there.
 		It("reads the gate on a managed cluster", func() {
@@ -569,7 +587,7 @@ var _ = Describe("apiserver controller tests", func() {
 			failing := ctrlrfake.DefaultFakeClientBuilder(scheme).
 				WithInterceptorFuncs(interceptor.Funcs{
 					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-						if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == render.RBACManagementConfigMapName {
+						if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
 							return readErr
 						}
 						return c.Get(ctx, key, obj, opts...)
@@ -602,8 +620,8 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					EnterpriseCRDExists: true,
-					DetectedProvider:    operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
 				},
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})

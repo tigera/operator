@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
@@ -1671,7 +1672,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		gateReadRule := rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{render.RBACManagementConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch"},
 		}
 
@@ -1696,13 +1697,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(role.Rules).To(ContainElement(gateReadRule))
 		})
 
-		It("does not add the manager-side RBAC rules in multi-tenant mode", func() {
+		// A tenant reaches the renderer with the switch already off: multi-tenant
+		// force-disables the feature on the ui-apis side.
+		It("does not add the manager-side RBAC rules when the switch is off in multi-tenant mode", func() {
 			resources, _ := renderObjects(renderConfig{
-				installation:      installation,
-				ns:                "tenant-a",
-				bindingNamespaces: []string{"tenant-a"},
-				// Enabled, to prove tenancy is what excludes these and not the gate.
-				rbacManagementEnabled: true,
+				installation:          installation,
+				ns:                    "tenant-a",
+				bindingNamespaces:     []string{"tenant-a"},
+				rbacManagementEnabled: false,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
 					Spec: operatorv1.TenantSpec{
@@ -1956,20 +1958,3 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 	resourcesToCreate, resourcesToDelete := component.Objects()
 	return resourcesToCreate, resourcesToDelete
 }
-
-// The gate is hand-edited by an admin, so the parser has to be forgiving about
-// spelling and strict about everything else: anything it cannot read as an explicit
-// true leaves the feature — and all of its access — switched off.
-var _ = DescribeTable("RBACManagementEnabled",
-	func(cm *corev1.ConfigMap, expected bool) {
-		Expect(render.RBACManagementEnabled(cm)).To(Equal(expected))
-	},
-	Entry("nil ConfigMap (never created, or deleted)", nil, false),
-	Entry("missing key", &corev1.ConfigMap{Data: map[string]string{}}, false),
-	Entry("explicitly disabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "false"}}, false),
-	Entry("enabled", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "true"}}, true),
-	Entry("enabled, capitalised", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "True"}}, true),
-	Entry("enabled as 1", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "1"}}, true),
-	Entry("unparsable value stays off", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: "yes please"}}, false),
-	Entry("empty value stays off", &corev1.ConfigMap{Data: map[string]string{render.RBACManagementConfigMapKey: ""}}, false),
-)

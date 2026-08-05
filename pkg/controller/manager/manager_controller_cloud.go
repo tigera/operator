@@ -79,7 +79,14 @@ func (r *ReconcileManager) handleCloudReconcile(
 
 	if authenticationCR != nil && authenticationCR.Spec.OIDC != nil && authenticationCR.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
 		var err error
-		bundleMaker, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates()
+		// Voltron needs to trust public CAs for the Tigera OIDC type, so the bundle has to include the
+		// system root certificates. It must still be a bundle named for this component: the
+		// default-named tigera-ca-bundle is owned by the core controller, which renders it into the
+		// same namespace with a different set of certificates (the node and typha key pairs, plus the
+		// legacy typha-ca ConfigMap when it is present). Two controllers writing that one ConfigMap
+		// with different contents overwrite each other on every reconcile, which rolls every workload
+		// that mounts or inherits it.
+		bundleMaker, err = certificateManager.CreateNamedTrustedBundleFromSecrets(TrustedBundlePrefix, r.client, helper.TruthNamespace(), true)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "failed to create trusted bundle with system root certs", err, reqLogger)
 			return nil, render.ManagerCloudResources{}, nil, nil, err

@@ -1054,8 +1054,8 @@ var _ = Describe("apiserver controller tests", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
-					Variant:          operatorv1.CalicoEnterprise,
-					DetectedProvider: operatorv1.ProviderNone,
+					EnterpriseCRDExists: true,
+					DetectedProvider:    operatorv1.ProviderNone,
 				},
 			}
 		})

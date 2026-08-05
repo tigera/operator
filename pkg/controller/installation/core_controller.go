@@ -1482,6 +1482,73 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if imageSet == nil {
+		// There is no imageSet for the configured variant, but check to see if there are any
+		// ImageSets with a different variant so we can give the user some kind of indication
+		// to why an existing ImageSet is being ignored.
+		nvis, err := imageset.DoesNonVariantImageSetExist(ctx, r.client, instance.Spec.Variant)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for non-variant ImageSet", err, reqLogger)
+			return reconcile.Result{}, err
+		} else {
+			if nvis {
+				reqLogger.Info("An ImageSet exists for a different variant")
+			}
+		}
+	}
+
+	if err = imageset.ValidateImageSet(imageSet); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Determine whether the Typha Deployment update must be deferred until the
+	// calico-node DaemonSet finishes rolling out. Per the Calico version skew
+	// policy, Felix may be newer than Typha, but not older: updating Typha
+	// while older calico-node pods are still running leaves those pods unable
+	// to sync, marking them NotReady, at which point the DaemonSet controller
+	// no longer honors the configured surge limits and replaces pods
+	// cluster-wide.
+	deferTyphaUpdate := false
+	desiredNodeImage, err := render.NodeImage(&instance.Spec, imageSet)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving calico-node image", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	nodeDS := &appsv1.DaemonSet{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}, nodeDS); err != nil {
+		if !apierrors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read calico-node DaemonSet", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		// DaemonSet doesn't exist (fresh install) - nothing to defer for.
+	} else {
+		deferTyphaUpdate = deferTyphaDeploymentUpdate(nodeDS, desiredNodeImage)
+	}
+	if deferTyphaUpdate {
+		// Only defer when a Typha Deployment already exists; if it is missing
+		// it must be created regardless, since calico-node depends on it.
+		typhaDeployment := &appsv1.Deployment{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: common.TyphaDeploymentName, Namespace: common.CalicoNamespace}, typhaDeployment); err != nil {
+			if !apierrors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to read Typha Deployment", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			deferTyphaUpdate = false
+		}
+	}
+	if deferTyphaUpdate {
+		reqLogger.Info("Deferring Typha Deployment update until the calico-node DaemonSet rollout completes",
+			"updatedNumberScheduled", nodeDS.Status.UpdatedNumberScheduled,
+			"desiredNumberScheduled", nodeDS.Status.DesiredNumberScheduled)
+	}
+
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
 		K8sServiceEp:           k8sapi.Endpoint,
@@ -1492,6 +1559,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		ClusterDomain:          r.clusterDomain,
 		NonClusterHost:         nonclusterhost,
 		FelixHealthPort:        *felixConfiguration.Spec.HealthPort,
+		DeferDeploymentUpdate:  deferTyphaUpdate,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1737,32 +1805,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		)
 	}
 
-	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	if imageSet == nil {
-		// There is no imageSet for the configured variant, but check to see if there are any
-		// ImageSets with a different variant so we can give the user some kind of indication
-		// to why an existing ImageSet is being ignored.
-		nvis, err := imageset.DoesNonVariantImageSetExist(ctx, r.client, instance.Spec.Variant)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for non-variant ImageSet", err, reqLogger)
-			return reconcile.Result{}, err
-		} else {
-			if nvis {
-				reqLogger.Info("An ImageSet exists for a different variant")
-			}
-		}
-	}
-
-	if err = imageset.ValidateImageSet(imageSet); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error validating ImageSet", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	if err = imageset.ResolveImages(imageSet, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Error resolving ImageSet for components", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1893,7 +1935,50 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	reqLogger.V(1).Info("Finished reconciling Installation")
+	if deferTyphaUpdate {
+		// Nothing reliably triggers a reconcile when the calico-node rollout
+		// completes: the DaemonSet watch filters out status-only updates. So
+		// requeue to re-evaluate the deferred Typha Deployment update.
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
 	return reconcile.Result{}, nil
+}
+
+// deferTyphaDeploymentUpdate returns true when the Typha Deployment update
+// must wait for the calico-node DaemonSet. While calico-node is moving to a
+// different image, updating Typha would leave the not-yet-updated Felix
+// instances unable to sync: per the Calico version skew policy, Felix may be
+// newer than Typha, but not older.
+//
+// The DaemonSet is read from the informer cache before any updates are
+// applied this reconcile, so the state here cannot be confused by our own
+// in-flight write. The image comparison covers the reconcile that introduces
+// a new image (the cached status still describes the previous rollout at that
+// point); the status condition covers subsequent reconciles while the rollout
+// progresses.
+func deferTyphaDeploymentUpdate(nodeDS *appsv1.DaemonSet, desiredNodeImage string) bool {
+	var deployedImage string
+	for i := range nodeDS.Spec.Template.Spec.Containers {
+		if nodeDS.Spec.Template.Spec.Containers[i].Name == "calico-node" {
+			deployedImage = nodeDS.Spec.Template.Spec.Containers[i].Image
+			break
+		}
+	}
+	if deployedImage == "" {
+		return false
+	}
+
+	// A calico-node image change is about to be applied this reconcile.
+	if deployedImage != desiredNodeImage {
+		return true
+	}
+
+	// The DaemonSet spec already has the desired image; defer while its
+	// rollout is still in progress so that no older Felix remains when Typha
+	// updates. Pod readiness is deliberately not part of this condition: a
+	// permanently unready node must not block Typha updates indefinitely.
+	return nodeDS.Status.ObservedGeneration < nodeDS.Generation ||
+		nodeDS.Status.UpdatedNumberScheduled != nodeDS.Status.DesiredNumberScheduled
 }
 
 func readMTUFile() (int, error) {

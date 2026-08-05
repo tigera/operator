@@ -172,6 +172,15 @@ type nodeComponent struct {
 	nodeImage       string
 }
 
+// NodeImage returns the image used by the calico-node container for the given
+// installation, resolving through the ImageSet when one is present.
+func NodeImage(installation *operatorv1.InstallationSpec, is *operatorv1.ImageSet) (string, error) {
+	if installation.Variant.IsEnterprise() {
+		return components.GetReference(components.ComponentTigeraNode, installation.Registry, installation.ImagePath, installation.ImagePrefix, is)
+	}
+	return components.GetReference(components.ComponentCalicoNode, installation.Registry, installation.ImagePath, installation.ImagePrefix, is)
+}
+
 func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
@@ -192,12 +201,7 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 			c.cniPluginsImage = appendIfErr(components.GetReference(components.ComponentCalicoCNIPlugins, reg, path, prefix, is))
 		}
 	}
-	switch {
-	case c.cfg.Installation.Variant.IsEnterprise():
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentTigeraNode, reg, path, prefix, is))
-	default:
-		c.nodeImage = appendIfErr(components.GetReference(components.ComponentCalicoNode, reg, path, prefix, is))
-	}
+	c.nodeImage = appendIfErr(NodeImage(c.cfg.Installation, is))
 
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))

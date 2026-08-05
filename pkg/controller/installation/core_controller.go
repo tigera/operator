@@ -25,7 +25,6 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	"github.com/sirupsen/logrus"
@@ -1949,7 +1948,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// Nothing reliably triggers a reconcile when the calico-node rollout
 		// completes: the DaemonSet watch filters out status-only updates. So
 		// requeue to re-evaluate the deferred Typha Deployment update.
-		return reconcile.Result{RequeueAfter: 30 * time.Second}, nil
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	return reconcile.Result{}, nil
 }

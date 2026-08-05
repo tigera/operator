@@ -130,9 +130,11 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 
-	// Rendering the Deployment and the ConfigMap requires a TLS key pair, and no key pair is created
-	// when dex is disabled. Both are only ever deleted on that path, so referring to them by name is
-	// sufficient.
+	// c.deployment() and c.configMap() both dereference c.cfg.TLSKeyPair, so they panic with a nil
+	// pointer dereference when it is nil - and it is nil whenever dex is disabled, because the
+	// authentication controller only creates a key pair when dex is enabled. On that path these two
+	// objects are only ever deleted, and a delete needs nothing beyond name, namespace and kind, so
+	// identify them rather than rendering them.
 	var dexDeployment, dexConfigMap client.Object
 	if c.cfg.DeleteDex {
 		dexDeployment = &appsv1.Deployment{

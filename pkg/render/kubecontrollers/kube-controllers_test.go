@@ -567,12 +567,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			}))
 	})
 
-	It("should not enable the elasticsearchconfiguration controller when migrating to single-index storage", func() {
+	It("should not enable the elasticsearchconfiguration controller in Calico Cloud", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.LogStorageExists = true
 		cfg.KubeControllersGatewaySecret = &testutils.KubeControllersUserSecret
 		cfg.MetricsPort = 9094
-		cfg.IndexMigration = true
+		cfg.Cloud = true
 
 		component := kubecontrollers.NewElasticsearchKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

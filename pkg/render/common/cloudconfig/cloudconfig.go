@@ -31,6 +31,25 @@ const (
 	CloudConfigConfigMapName = "tigera-secure-cloud-config"
 )
 
+// cloudStandardIndices maps each data type to the standard index base name used by clusters that
+// have migrated to single-index storage.
+var cloudStandardIndices = map[v1.DataType]string{
+	v1.DataTypeAlerts:               "calico_alerts_standard",
+	v1.DataTypeAuditLogs:            "calico_auditlogs_standard",
+	v1.DataTypeBGPLogs:              "calico_bgplogs_standard",
+	v1.DataTypeComplianceBenchmarks: "calico_compliance_benchmarks_results_standard",
+	v1.DataTypeComplianceReports:    "calico_compliance_reports_standard",
+	v1.DataTypeComplianceSnapshots:  "calico_compliance_snapshots_standard",
+	v1.DataTypeDNSLogs:              "calico_dnslogs_standard",
+	v1.DataTypeFlowLogs:             "calico_flowlogs_standard",
+	v1.DataTypeL7Logs:               "calico_l7logs_standard",
+	v1.DataTypeRuntimeReports:       "calico_runtime_reports_standard",
+	v1.DataTypeThreatFeedsDomainSet: "calico_threatfeeds_domainnameset_standard",
+	v1.DataTypeThreatFeedsIPSet:     "calico_threatfeeds_ipset_standard",
+	v1.DataTypeWAFLogs:              "calico_waflogs_standard",
+	v1.DataTypePolicyActivity:       "calico_policy_activity_standard",
+}
+
 func NewCloudConfig(tenantId string, tenantName string, externalESDomain string, externalKibanaDomain string, enableMTLS bool) *CloudConfig {
 	return &CloudConfig{
 		tenantId:             tenantId,
@@ -109,7 +128,7 @@ func (c CloudConfig) ToTenant(useSingleIndex bool) *v1.Tenant {
 	}
 
 	for dataType := range v1.DataTypes {
-		tenant.Spec.Indices = append(tenant.Spec.Indices, v1.Index{DataType: dataType, BaseIndexName: v1.CloudStandardIndices[dataType]})
+		tenant.Spec.Indices = append(tenant.Spec.Indices, v1.Index{DataType: dataType, BaseIndexName: cloudStandardIndices[dataType]})
 	}
 
 	// DataTypes is a map, so iteration order is random. Sort by data type to keep the generated

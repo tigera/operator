@@ -70,11 +70,6 @@ func (r *ESKubeControllersController) esGatewayAddCloudModificationsToConfig(c *
 
 // esKubeControllersAddCloudModificationsToConfig modifies the provided *kubecontrollers.KubeControllersConfiguration to include Calico Cloud specific configuration.
 func (r *ESKubeControllersController) esKubeControllersAddCloudModificationsToConfig(c *kubecontrollers.KubeControllersConfiguration, reqLogger logr.Logger, ctx context.Context) (reconcile.Result, bool, error) {
-	// While migrating to single-index storage, es-kube-controllers must not run the elasticsearch
-	// configuration controller. The operator's log-storage users controller provisions the
-	// Elasticsearch users instead, so that Linseed gets the RBAC needed for the new indices.
-	c.IndexMigration = r.indexMigration
-
 	if r.cloud && r.elasticExternal && !r.multiTenant {
 		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
 		if err != nil {

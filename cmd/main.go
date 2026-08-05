@@ -585,12 +585,12 @@ admission policy installation; once an Installation exists it is the authority o
 	}
 
 	elasticIsMigrating := false
-	indexIsMigrating := false
+	useSingleIndex := false
 	useExternalElastic := discovery.UseExternalElastic(bootConfig)
 
 	if isCloudBuild() {
 		elasticIsMigrating = discovery.ElasticIsMigrating(bootConfig)
-		indexIsMigrating = discovery.IndexIsMigrating(bootConfig)
+		useSingleIndex = discovery.UseSingleIndex(bootConfig)
 		if !elasticIsMigrating {
 			if err := verifyElasticSearch(ctx, cs, useExternalElastic); err != nil {
 				setupLog.Error(err, "Elasticsearch configuration verification failed")
@@ -623,7 +623,7 @@ admission policy installation; once an Installation exists it is the authority o
 		ElasticExternal:   useExternalElastic,
 		Cloud:             isCloudBuild(),
 		ESMigration:       elasticIsMigrating,
-		IndexMigration:    indexIsMigrating,
+		UseSingleIndex:    useSingleIndex,
 		UseV3CRDs:         v3CRDs,
 		APIDiscovery:      apiDiscovery,
 	}

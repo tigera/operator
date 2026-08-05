@@ -62,10 +62,10 @@ type UserController struct {
 	multiTenant     bool
 	elasticExternal bool
 
-	// indexMigration indicates that this single-tenant cluster is migrating to single-index storage.
-	// While migrating, this controller provisions the Elasticsearch users instead of es-kube-controllers,
-	// so that Linseed gets the RBAC needed for the new indices.
-	indexMigration bool
+	// useSingleIndex indicates that this single-tenant cluster stores its data in single-index format,
+	// in which case the users provisioned here are granted access to the single-index names rather than
+	// to the per-cluster multi-index ones.
+	useSingleIndex bool
 }
 
 type UsersCleanupController struct {
@@ -79,10 +79,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
-	if !opts.MultiTenant && !opts.IndexMigration {
-		// The operator only creates users in multi-tenant mode, or in single-tenant mode while
-		// migrating to single-index storage. Otherwise, user creation is handled by
-		// es-kube-controllers instead.
+	if !opts.MultiTenant && !opts.Cloud {
+		// The operator creates users for multi-tenant clusters, and for the single-tenant clusters of
+		// Calico Cloud - which build their tenant configuration from the cloud config ConfigMap. Anywhere
+		// else, user creation is handled by es-kube-controllers instead.
 		return nil
 	}
 
@@ -91,7 +91,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		multiTenant:     opts.MultiTenant,
-		indexMigration:  opts.IndexMigration,
+		useSingleIndex:  opts.UseSingleIndex,
 		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageUsers, opts.KubernetesVersion),
 		esClientFn:      utils.NewElasticClient,
 		elasticExternal: opts.ElasticExternal,
@@ -203,11 +203,16 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		// Single-tenant clusters have no Tenant resource. Build the equivalent tenant configuration
 		// from the cloud config, so that we provision the users against the right Elasticsearch.
 		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
-		if err != nil {
+		if errors.IsNotFound(err) {
+			// The cloud config is written out of band, and may not exist yet. Wait for it rather than
+			// retrying with backoff - we watch the ConfigMap, so we reconcile again once it appears.
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for ConfigMap %s to be available", cloudconfig.CloudConfigConfigMapName), nil, reqLogger)
+			return reconcile.Result{}, nil
+		} else if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant(r.indexMigration)
+		tenant = cloudConfig.ToTenant(r.useSingleIndex)
 		tenantID = tenant.Spec.ID
 	}
 
@@ -257,10 +262,10 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		linseedUser = utils.LinseedUser(clusterID, tenantID)
+		linseedUser = utils.LinseedUser(clusterID, tenant)
 		dashboardUser = utils.DashboardUser(clusterID, tenantID)
 	} else {
-		linseedUser = utils.LinseedUserSingleTenant(tenantID)
+		linseedUser = utils.LinseedUserSingleTenant(tenant, r.elasticExternal)
 		dashboardUser = utils.DashboardUserSingleTenant(tenantID)
 	}
 
@@ -282,8 +287,8 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		credentialSecrets = append(credentialSecrets, &linseedUserSecret)
 	} else if string(linseedUserSecret.Data["username"]) != linseedUser.Username {
 		// The credentials exist, but reference a different Elasticsearch user than the one we provision -
-		// e.g. because they were created by es-kube-controllers before this cluster started migrating to
-		// single-index storage. Point them at our user, keeping the existing password.
+		// e.g. because they were created by es-kube-controllers before the operator took over user
+		// provisioning. Point them at our user, keeping the existing password.
 		linseedUserSecret.StringData = map[string]string{"username": linseedUser.Username}
 		credentialSecrets = append(credentialSecrets, &linseedUserSecret)
 	}
@@ -481,7 +486,7 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 			return fmt.Errorf("failed to fetch users from Elasticsearch")
 		}
 
-		lu := utils.LinseedUser(clusterID, t.Spec.ID)
+		lu := utils.LinseedUser(clusterID, &t)
 		dashboardsUser := utils.DashboardUser(clusterID, t.Spec.ID)
 		for _, user := range allESUsers {
 			if user.Username == lu.Username || user.Username == dashboardsUser.Username {

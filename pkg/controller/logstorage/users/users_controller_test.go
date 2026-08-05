@@ -69,17 +69,20 @@ var _ = Describe("LogStorage cleanup controller", func() {
 		tenantID1 := "tenant1"
 		tenantID2 := "tenant2"
 
-		staleLinseedUser := utils.LinseedUser(clusterID1, tenantID1)
+		tenant1 := &operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: tenantID1}}
+		tenant2 := &operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: tenantID2}}
+
+		staleLinseedUser := utils.LinseedUser(clusterID1, tenant1)
 		staleDashboardsUser := utils.DashboardUser(clusterID1, tenantID1)
 
 		esTestUsers := []utils.User{
 			*staleLinseedUser,
 			*staleDashboardsUser,
-			*utils.LinseedUser(clusterID1, tenantID2),
+			*utils.LinseedUser(clusterID1, tenant2),
 			*utils.DashboardUser(clusterID1, tenantID2),
-			*utils.LinseedUser(clusterID2, tenantID1),
+			*utils.LinseedUser(clusterID2, tenant1),
 			*utils.DashboardUser(clusterID2, tenantID1),
-			*utils.LinseedUser(clusterID2, tenantID2),
+			*utils.LinseedUser(clusterID2, tenant2),
 			*utils.DashboardUser(clusterID2, tenantID2),
 		}
 
@@ -183,9 +186,14 @@ var _ = Describe("LogStorage users controller", func() {
 			},
 			multiTenant:     false,
 			elasticExternal: true,
-			indexMigration:  true,
+			useSingleIndex:  true,
 		}
 	})
+
+	// singleTenant builds the Tenant that the controller derives from the cloud config ConfigMap created above.
+	singleTenant := func(useSingleIndex bool) *operatorv1.Tenant {
+		return cloudconfig.NewCloudConfig(tenantID, "tenant-a-name", "es.example.com", "kb.example.com", false).ToTenant(useSingleIndex)
+	}
 
 	// secretValue reads a value from a Secret. The fake client doesn't convert StringData into Data
 	// the way the API server does, so we may find the value in either field.
@@ -198,19 +206,20 @@ var _ = Describe("LogStorage users controller", func() {
 		return string(s.Data[key])
 	}
 
-	It("should provision users for a single-tenant cluster migrating to single-index storage", func() {
+	It("should provision users for a single-tenant cluster using single-index storage", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 
 		// The Linseed user should be created in ES with the name es-kube-controllers used, and with
-		// privileges on the new single-index calico_* indices.
-		expected := utils.LinseedUserSingleTenant(tenantID)
+		// privileges on the single-index calico_* indices.
+		expected := utils.LinseedUserSingleTenant(singleTenant(true), true)
 		Expect(expected.Username).To(Equal("tigera-ee-linseed-tenant-a-secure"))
 		Expect(esClient.created).To(HaveLen(2))
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
 		Expect(esClient.created[0].Roles).To(Equal(expected.Roles))
 		Expect(esClient.created[0].Roles[0].Name).To(Equal(expected.Username))
-		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(ContainElement("calico_*"))
+		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(ContainElement("calico_flowlogs_standard*"))
+		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(HaveLen(len(operatorv1.DataTypes)))
 		Expect(esClient.created[1].Username).To(Equal("tigera-ee-dashboards-installer-tenant-a-secure"))
 
 		// The credentials should be written to the Elasticsearch namespace for Linseed to consume.
@@ -229,7 +238,7 @@ var _ = Describe("LogStorage users controller", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 
-		expected := utils.LinseedUserSingleTenant(tenantID)
+		expected := utils.LinseedUserSingleTenant(singleTenant(true), true)
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, common.OperatorNamespace(), "username")).To(Equal(expected.Username))
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal(expected.Username))
 
@@ -237,5 +246,17 @@ var _ = Describe("LogStorage users controller", func() {
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, common.OperatorNamespace(), "password")).To(Equal("existing-password"))
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
 		Expect(esClient.created[0].Password).To(Equal("existing-password"))
+	})
+
+	It("should grant the Linseed user the multi-index names when not using single-index storage", func() {
+		r.useSingleIndex = false
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+
+		// The user keeps its name, but is only granted access to this tenant's multi-index format indices.
+		expected := utils.LinseedUserSingleTenant(singleTenant(false), true)
+		Expect(esClient.created[0].Username).To(Equal(expected.Username))
+		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.tenant-a.*.*"}))
 	})
 })

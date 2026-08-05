@@ -125,7 +125,7 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 			indices := cloudConfig.ToTenant(true).Spec.Indices
 			Expect(indices).To(HaveLen(len(v1.DataTypes)))
 			for _, index := range indices {
-				Expect(index.BaseIndexName).To(Equal(v1.CloudStandardIndices[index.DataType]))
+				Expect(index.BaseIndexName).To(Equal(cloudStandardIndices[index.DataType]))
 				Expect(index.BaseIndexName).ToNot(BeEmpty())
 			}
 		})

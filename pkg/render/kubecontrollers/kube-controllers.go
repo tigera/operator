@@ -122,13 +122,10 @@ type KubeControllersConfiguration struct {
 	TenantID string
 
 	// Cloud indicates kube-controllers is being rendered for a Calico Cloud install. When false the
-	// cloud-specific RBAC below is not granted and enterprise RBAC is unchanged.
-	Cloud bool
-
-	// IndexMigration indicates that this cluster is migrating to single-index storage. While migrating,
+	// cloud-specific RBAC below is not granted and enterprise RBAC is unchanged. In Calico Cloud,
 	// Elasticsearch configuration - including provisioning of the Linseed user - is handled by the
 	// operator's log-storage users controller rather than by es-kube-controllers.
-	IndexMigration bool
+	Cloud bool
 
 	MetricsServerTLS certificatemanagement.KeyPairInterface
 
@@ -288,9 +285,10 @@ func NewElasticsearchKubeControllers(cfg *KubeControllersConfiguration) *kubeCon
 	if !cfg.Tenant.MultiTenant() {
 		// Zero and single tenant cluster needs elasticsearch configuration
 		enabledControllers = append(enabledControllers, "authorization")
-		if !cfg.IndexMigration {
-			// While migrating to single-index storage, the operator's log-storage users controller
-			// provisions the Elasticsearch users so that they get the RBAC needed for the new indices.
+		if !cfg.Cloud {
+			// In Calico Cloud, the operator's log-storage users controller provisions the Elasticsearch
+			// users itself, so that they get the RBAC for the indices the cluster actually stores its
+			// data in. Running this controller as well would have it overwrite those users.
 			enabledControllers = append(enabledControllers, "elasticsearchconfiguration")
 		}
 		if cfg.ManagementCluster != nil && cfg.Tenant == nil {

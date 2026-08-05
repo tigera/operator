@@ -10,7 +10,8 @@
     "tier": "calico-system",
     "selector": "k8s-app == 'calico-kube-controllers'",
     "types": [
-      "Egress", "Ingress"
+      "Egress",
+      "Ingress"
     ],
     "egress": [
       {
@@ -32,17 +33,6 @@
             443,
             6443,
             12388
-          ]
-        }
-      },
-      {
-        "action": "Allow",
-        "protocol": "TCP",
-        "destination": {
-          "selector": "k8s-app == 'calico-manager'",
-          "namespaceSelector": "projectcalico.org/name == 'calico-system'",
-          "ports": [
-            9443
           ]
         }
       }

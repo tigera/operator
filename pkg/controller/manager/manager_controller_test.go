@@ -637,6 +637,43 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 			})
 
+			It("should use a component-named trusted bundle for the Tigera OIDC type", func() {
+				// The core controller owns the default-named tigera-ca-bundle and renders it into the
+				// same namespace with a different set of certificates (the node and typha key pairs,
+				// plus the legacy typha-ca ConfigMap when present). If the manager writes that same
+				// ConfigMap the two controllers overwrite each other on every reconcile, which rolls
+				// every workload that mounts or inherits the bundle.
+				auth := &operatorv1.Authentication{
+					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+					Spec: operatorv1.AuthenticationSpec{
+						ManagerDomain: "https://localhost:9443",
+						OIDC: &operatorv1.AuthenticationOIDC{
+							IssuerURL: "https://localhost:9443/dex",
+							Type:      operatorv1.OIDCTypeTigera,
+						},
+					},
+				}
+				helper := utils.NewNamespaceHelper(false, render.ManagerNamespace, "")
+
+				// handleCloudReconcile resolves the tenant from this ConfigMap.
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: utils.CloudAuthConfig, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{"tenantID": "Auth0ID"},
+				})).NotTo(HaveOccurred())
+
+				bundle, _, _, res, err := r.handleCloudReconcile(ctx, log, helper, nil, auth, certificateManager, nil, nil, "")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res).To(BeNil())
+
+				// System root certificates are still included, but under a name owned by this component
+				// rather than the shared tigera-ca-bundle.
+				Expect(bundle).NotTo(BeNil())
+				Expect(bundle.ConfigMap(helper.InstallNamespace()).Name).
+					To(Equal(certificatemanagement.TrustedBundleName(render.ManagerName, true)))
+				Expect(bundle.ConfigMap(helper.InstallNamespace()).Name).
+					NotTo(Equal(certificatemanagement.TrustedCertConfigMapName))
+			})
+
 			Context("image reconciliation", func() {
 				It("should use builtin images", func() {
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()

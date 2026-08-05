@@ -290,7 +290,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 				d.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = cloudConfig.ToTenant(false)
 		}
 
 		// Determine the host and port from the URL.
@@ -323,7 +323,8 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// Query the username and password this Dashboards Installer instance should use to authenticate with Elasticsearch.
 	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
+	// For single-tenant systems, these are created by es-kube-controllers, unless the cluster is
+	// migrating to single-index storage - then the users controller creates them as well.
 	key = types.NamespacedName{Name: dashboards.ElasticCredentialsSecret, Namespace: helper.InstallNamespace()}
 	credentials := corev1.Secret{}
 	if err = d.client.Get(ctx, key, &credentials); err != nil && !errors.IsNotFound(err) {

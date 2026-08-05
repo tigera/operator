@@ -53,6 +53,7 @@ const (
 
 	WhiskerKeyPairSecret        = "whisker-key-pair"
 	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
+	WhiskerGatewayName          = "calico-whisker-gateway"
 	WhiskerServicePort          = 8443
 	GoldmaneDeploymentName      = "goldmane"
 	GoldmaneServicePort         = 7443
@@ -275,19 +276,17 @@ func (c *Component) deployment() *appsv1.Deployment {
 }
 
 func (c *Component) networkPolicy() *v3.NetworkPolicy {
+	// Allow ingress only from the Envoy proxy pods that serve the whisker
+	// Gateway. The gateway namespace is user-configurable, so match the
+	// proxy pods by their owning-gateway label across all namespaces.
 	ingressRules := []v3.Rule{
 		{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
-			Source:   v3.EntityRule{Nets: []string{"0.0.0.0/0"}},
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(WhiskerServicePort),
+			Source: v3.EntityRule{
+				NamespaceSelector: "all()",
+				Selector:          fmt.Sprintf("gateway.envoyproxy.io/owning-gateway-name == '%s'", WhiskerGatewayName),
 			},
-		},
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Source:   v3.EntityRule{Nets: []string{"::/0"}},
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(WhiskerServicePort),
 			},

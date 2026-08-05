@@ -30,6 +30,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/whisker"
@@ -266,7 +267,7 @@ var _ = Describe("ComponentRendering", func() {
 		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(whisker.WhiskerServicePort)))
 	})
 
-	It("should render a network policy with ingress rules", func() {
+	It("should render a network policy allowing ingress from the whisker gateway proxy only", func() {
 		cfg := &whisker.Configuration{
 			Installation: &operatorv1.InstallationSpec{
 				KubernetesProvider: operatorv1.ProviderGKE,
@@ -282,9 +283,12 @@ var _ = Describe("ComponentRendering", func() {
 
 		np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, whisker.WhiskerPolicyName, whisker.WhiskerNamespace)
 		Expect(err).ShouldNot(HaveOccurred())
-		Expect(np.Spec.Ingress).To(HaveLen(2))
-		Expect(np.Spec.Ingress[0].Source.Nets).To(Equal([]string{"0.0.0.0/0"}))
-		Expect(np.Spec.Ingress[1].Source.Nets).To(Equal([]string{"::/0"}))
+		Expect(np.Spec.Types).To(ConsistOf(v3.PolicyTypeIngress, v3.PolicyTypeEgress))
+		Expect(np.Spec.Ingress).To(HaveLen(1))
+		Expect(np.Spec.Ingress[0].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[0].Source.Selector).To(Equal("gateway.envoyproxy.io/owning-gateway-name == 'calico-whisker-gateway'"))
+		Expect(np.Spec.Ingress[0].Source.Nets).To(BeEmpty())
+		Expect(np.Spec.Ingress[0].Destination.Ports).To(Equal(networkpolicy.Ports(8443)))
 	})
 
 	It("Should apply overrides", func() {

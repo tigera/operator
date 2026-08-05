@@ -199,7 +199,7 @@ func (c *Component) whiskerService() *corev1.Service {
 func (c *Component) whiskerBackendContainer() corev1.Container {
 	return corev1.Container{
 		Name:    WhiskerBackendContainerName,
-		Image:   "gcr.io/tigera-dev/cnx/tigera/calico:vara-whisker-https",
+		Image:   c.calicoImage,
 		Command: []string{components.CalicoBinaryPath, "component", "whisker-backend"},
 		Env: []corev1.EnvVar{
 			{Name: "LOG_LEVEL", Value: "INFO"},
@@ -207,6 +207,8 @@ func (c *Component) whiskerBackendContainer() corev1.Container {
 			{Name: "GOLDMANE_HOST", Value: fmt.Sprintf("goldmane.%s.svc.%s:7443", GoldmaneNamespace, c.cfg.ClusterDomain)},
 			{Name: "TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
 			{Name: "TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
+			{Name: "SERVER_TLS_CERT_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountCertificateFilePath()},
+			{Name: "SERVER_TLS_KEY_PATH", Value: c.cfg.WhiskerBackendKeyPair.VolumeMountKeyFilePath()},
 		},
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts: append(

@@ -18,10 +18,13 @@ import (
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+
+	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
 
 func mapResourceList() *metav1.APIResourceList {
@@ -36,7 +39,10 @@ func mapResourceList() *metav1.APIResourceList {
 func emptyDynamicClient() *dynamicfake.FakeDynamicClient {
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		runtime.NewScheme(),
-		map[schema.GroupVersionResource]string{datastoreMigrationGVR: "DatastoreMigrationList"},
+		map[schema.GroupVersionResource]string{
+			datastoremigration.GroupVersionV1.WithResource(datastoremigration.Resource):      "DatastoreMigrationList",
+			datastoremigration.GroupVersionV1beta1.WithResource(datastoremigration.Resource): "DatastoreMigrationList",
+		},
 	)
 }
 
@@ -77,6 +83,53 @@ func TestUseV3CRDs(t *testing.T) {
 				t.Errorf("useV3CRDs() = %t, want %t", got, tc.want)
 			}
 		})
+	}
+}
+
+// A cluster that migrated on v3.32 has a Converged v1beta1 CR and no v1 CRD, and still
+// has to be detected as migrated.
+// TODO: remove in v3.34, alongside GroupVersionV1beta1.
+func TestCheckDatastoreMigrationFallsBackToLegacyGVR(t *testing.T) {
+	obj := &unstructured.Unstructured{Object: map[string]interface{}{
+		"apiVersion": datastoremigration.GroupVersionV1beta1.String(),
+		"kind":       datastoremigration.Kind,
+		"metadata":   map[string]interface{}{"name": "v1-to-v3"},
+		"status":     map[string]interface{}{"phase": datastoremigration.PhaseConverged},
+	}}
+
+	dc := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
+		runtime.NewScheme(),
+		map[schema.GroupVersionResource]string{
+			datastoremigration.GroupVersionV1beta1.WithResource(datastoremigration.Resource): "DatastoreMigrationList",
+		},
+		obj,
+	)
+
+	cs := fake.NewClientset()
+	cs.Resources = []*metav1.APIResourceList{{
+		GroupVersion: datastoremigration.GroupVersionV1beta1.String(),
+		APIResources: []metav1.APIResource{{Name: datastoremigration.Resource, Kind: datastoremigration.Kind}},
+	}}
+
+	migrated, err := checkDatastoreMigration(cs.Discovery(), dc)
+	if err != nil {
+		t.Fatalf("checkDatastoreMigration() error = %v", err)
+	}
+	if !migrated {
+		t.Errorf("checkDatastoreMigration() = false, want true (should fall back to the legacy v1beta1 resource)")
+	}
+}
+
+// A cluster with no DatastoreMigration CRD at all must not look migrated.
+func TestCheckDatastoreMigrationWithoutCRD(t *testing.T) {
+	cs := fake.NewClientset()
+
+	migrated, err := checkDatastoreMigration(cs.Discovery(), emptyDynamicClient())
+	if err != nil {
+		t.Fatalf("checkDatastoreMigration() error = %v", err)
+	}
+	if migrated {
+		t.Errorf("checkDatastoreMigration() = true, want false")
 	}
 }
 

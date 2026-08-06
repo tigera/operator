@@ -280,6 +280,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
 	licenseExpired := licenseStatus == utils.LicenseStatusExpired
 
+	// The collector's ServiceMonitor lives here with the others, but its lifecycle
+	// follows LogCollector, so it has to be read to know whether to create it.
+	openTelemetryEnabled := false
+	if logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client); err != nil {
+		reqLogger.V(2).Info("Unable to read LogCollector; assuming OpenTelemetry export is disabled", "error", err)
+	} else if logCollector != nil {
+		openTelemetryEnabled = logCollector.Spec.OpenTelemetry != nil
+	}
+
 	// When in the grace period, schedule a requeue so the controller automatically
 	// transitions to expired state when the grace period elapses.
 	var graceRequeueAfter time.Duration
@@ -450,6 +459,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		LicenseExpired:                licenseExpired,
+		OpenTelemetryEnabled:          openTelemetryEnabled,
 		OperatorMetricsEnabled:        operatorMetricsEnabled,
 		OperatorNamespace:             common.OperatorNamespace(),
 		OperatorName:                  common.OperatorName(),

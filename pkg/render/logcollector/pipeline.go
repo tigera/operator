@@ -235,7 +235,7 @@ func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
 			c.linseedHTTPOutput(tag, c.certPath(), c.keyPath(), linseedStorageLimit(tag)))
 	}
 
-	c.addOTelOutputs(cfg)
+	c.addOpenTelemetryOutputs(cfg)
 
 	// Additional stores are Linux-only, matching the fluentd Windows variant
 	// (Linseed only).
@@ -246,11 +246,11 @@ func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
 	}
 }
 
-func (c *fluentBitComponent) addOTelOutputs(cfg *fluentBitConfig) {
-	if !c.cfg.OTelCollectorEnabled {
+func (c *fluentBitComponent) addOpenTelemetryOutputs(cfg *fluentBitConfig) {
+	if !c.cfg.OpenTelemetryCollectorEnabled {
 		return
 	}
-	for _, t := range c.cfg.OTelLogTypes {
+	for _, t := range c.cfg.OpenTelemetryLogTypes {
 		m, ok := otelLogTypeMatch[t]
 		if !ok {
 			continue
@@ -282,12 +282,12 @@ func (c *fluentBitComponent) addOTelOutputs(cfg *fluentBitConfig) {
 	}
 }
 
-// otelLogTypeMatch maps each OTel log type to {fluent-bit match pattern, service.name}.
+// otelLogTypeMatch maps each OpenTelemetry log type to {fluent-bit match pattern, service.name}.
 // audit.* covers both audit.tsee and audit.kube.
-var otelLogTypeMatch = map[operatorv1.OTelLogType]struct{ match, serviceName string }{
-	operatorv1.OTelFlowLog:  {"flows", "flows"},
-	operatorv1.OTelDNSLog:   {"dns", "dns"},
-	operatorv1.OTelAuditLog: {"audit.*", "audit"},
+var otelLogTypeMatch = map[operatorv1.OpenTelemetryLogType]struct{ match, serviceName string }{
+	operatorv1.OpenTelemetryFlowLog:  {"flows", "flows"},
+	operatorv1.OpenTelemetryDNSLog:   {"dns", "dns"},
+	operatorv1.OpenTelemetryAuditLog: {"audit.*", "audit"},
 }
 
 // linseedTags lists the tags shipped to Linseed: every tailed tag except

@@ -59,6 +59,18 @@ type LogCollectorSpec struct {
 	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
 	// +optional
 	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
+
+	// OpenTelemetry configures OpenTelemetry export of logs and metrics via
+	// OTLP. It is not a passthrough for OpenTelemetry Collector configuration:
+	// the fields here describe what Calico Enterprise exports and where, and
+	// the operator translates that into a Collector deployment.
+	//
+	// Unlike AdditionalStores entries (S3, Syslog, Splunk), which point at
+	// external systems, that Collector is operator-managed infrastructure
+	// (StatefulSet, ConfigMap, RBAC, certs) with its own lifecycle, so this
+	// lives at the top level rather than under AdditionalStores.
+	// +optional
+	OpenTelemetry *OpenTelemetrySpec `json:"openTelemetry,omitempty"`
 }
 
 type CollectProcessPathOption string
@@ -258,6 +270,44 @@ type LogCollectorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []LogCollector `json:"items"`
+}
+
+// OpenTelemetrySpec defines the desired state of the OpenTelemetry Collector.
+type OpenTelemetrySpec struct {
+	// Logs configures which log types are exported via OTLP.
+	// +optional
+	Logs *OpenTelemetryLogs `json:"logs,omitempty"`
+
+	// Metrics configures whether Calico component metrics are exported via OTLP.
+	// +optional
+	Metrics *OpenTelemetryMetrics `json:"metrics,omitempty"`
+
+	// Exporters configures the OTLP export endpoints. At least one is required:
+	// every rendered pipeline exports to all of them, and the collector refuses
+	// to start with an exporter-less pipeline. Names key the exporters in the
+	// generated config, so they are merged and deduplicated by name.
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	Exporters []OpenTelemetryExporter `json:"exporters,omitempty"`
+
+	// OpenTelemetryCollectorStatefulSet configures the OpenTelemetry Collector StatefulSet.
+	// +optional
+	OpenTelemetryCollectorStatefulSet *OpenTelemetryCollectorStatefulSet `json:"openTelemetryCollectorStatefulSet,omitempty"`
+}
+
+func (s *OpenTelemetrySpec) HasLogs() bool {
+	return s != nil && s.Logs != nil && len(s.Logs.Types) > 0
+}
+
+func (s *OpenTelemetrySpec) MetricsEnabled() bool {
+	return s != nil && s.Metrics != nil && s.Metrics.Enabled != nil &&
+		*s.Metrics.Enabled == OpenTelemetryMetricsEnable
+}
+
+func (s *OpenTelemetrySpec) HasDataSources() bool {
+	return s.HasLogs() || s.MetricsEnabled()
 }
 
 func init() {

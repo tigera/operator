@@ -9,6 +9,14 @@ receivers:
           cert_file: {{.ReceiverCertFile}}
           key_file: {{.ReceiverKeyFile}}
           client_ca_file: {{.ReceiverClientCA}}
+          # The operator rotates its CA and our server keypair well before
+          # expiry. Reload both in place so a rotation does not depend on the
+          # pod restarting: client_ca_file_reload watches the CA bundle, and
+          # reload_interval re-reads our own cert/key (never reloaded if unset).
+          # The pod also carries certificate hash annotations, so a restart is
+          # the backstop rather than the mechanism.
+          client_ca_file_reload: true
+          reload_interval: {{.TLSReloadInterval}}
 {{- end}}
 {{- end}}
 {{- if .MetricsEnabled}}
@@ -41,9 +49,23 @@ exporters:
 {{- range .Exporters}}
   {{.Prefix}}/{{.Name}}:
     endpoint: {{.Endpoint}}
-{{- if .TLSInsecure}}
+{{- if .Plaintext}}
+    # http:// endpoint: no transport security. "insecure" here means no TLS at
+    # all, which is what the scheme asks for.
     tls:
       insecure: true
+{{- else}}
+    tls:
+      # Load the system roots alongside any user CA, so publicly-signed and
+      # privately-signed endpoints both verify. Verification is never disabled.
+      include_system_ca_certs_pool: true
+{{- if $.ExporterCAFile}}
+      ca_file: {{$.ExporterCAFile}}
+{{- end}}
+{{- if .MutualTLS}}
+      cert_file: {{$.ExporterClientCertFile}}
+      key_file: {{$.ExporterClientKeyFile}}
+{{- end}}
 {{- end}}
 {{- end}}
 

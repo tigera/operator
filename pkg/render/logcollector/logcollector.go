@@ -177,10 +177,10 @@ type FluentBitConfiguration struct {
 	// LicenseExpired indicates the license has expired and fluent-bit DaemonSet should be removed.
 	LicenseExpired bool
 
-	OTelCollectorEnabled bool
-	// OTelLogTypes selects which log types ship to the OTel collector; one
+	OpenTelemetryCollectorEnabled bool
+	// OpenTelemetryLogTypes selects which log types ship to the OpenTelemetry collector; one
 	// opentelemetry output is rendered per type.
-	OTelLogTypes []operatorv1.OTelLogType
+	OpenTelemetryLogTypes []operatorv1.OpenTelemetryLogType
 }
 
 type fluentBitComponent struct {

@@ -60,14 +60,14 @@ type LogCollectorSpec struct {
 	// +optional
 	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 
-	// OTelCollector configures the OpenTelemetry Collector for exporting logs
+	// OpenTelemetry configures the OpenTelemetry Collector for exporting logs
 	// and metrics via OTLP. Unlike AdditionalStores entries (S3, Syslog,
-	// Splunk), which point at external systems, the OTel Collector is
+	// Splunk), which point at external systems, the OpenTelemetry Collector is
 	// operator-managed infrastructure (StatefulSet, ConfigMap, RBAC, certs)
 	// with its own lifecycle, so it lives at the top level rather than under
 	// AdditionalStores.
 	// +optional
-	OTelCollector *OTelCollectorSpec `json:"otelCollector,omitempty"`
+	OpenTelemetry *OpenTelemetrySpec `json:"openTelemetry,omitempty"`
 }
 
 type CollectProcessPathOption string
@@ -269,35 +269,41 @@ type LogCollectorList struct {
 	Items           []LogCollector `json:"items"`
 }
 
-// OTelCollectorSpec defines the desired state of the OpenTelemetry Collector.
-type OTelCollectorSpec struct {
+// OpenTelemetrySpec defines the desired state of the OpenTelemetry Collector.
+type OpenTelemetrySpec struct {
 	// Logs configures which log types are exported via OTLP.
 	// +optional
-	Logs *OTelLogs `json:"logs,omitempty"`
+	Logs *OpenTelemetryLogs `json:"logs,omitempty"`
 
 	// Metrics configures whether Calico component metrics are exported via OTLP.
 	// +optional
-	Metrics *OTelMetrics `json:"metrics,omitempty"`
+	Metrics *OpenTelemetryMetrics `json:"metrics,omitempty"`
 
-	// Exporters configures the OTLP export endpoints.
+	// Exporters configures the OTLP export endpoints. At least one is required:
+	// every rendered pipeline exports to all of them, and the collector refuses
+	// to start with an exporter-less pipeline. Names key the exporters in the
+	// generated config, so they are merged and deduplicated by name.
 	// +optional
-	Exporters []OTelExporter `json:"exporters,omitempty"`
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	Exporters []OpenTelemetryExporter `json:"exporters,omitempty"`
 
-	// OTelCollectorStatefulSet configures the OTel Collector StatefulSet.
+	// OpenTelemetryCollectorStatefulSet configures the OpenTelemetry Collector StatefulSet.
 	// +optional
-	OTelCollectorStatefulSet *OTelCollectorStatefulSet `json:"openTelemetryCollectorStatefulSet,omitempty"`
+	OpenTelemetryCollectorStatefulSet *OpenTelemetryCollectorStatefulSet `json:"openTelemetryCollectorStatefulSet,omitempty"`
 }
 
-func (s *OTelCollectorSpec) HasLogs() bool {
+func (s *OpenTelemetrySpec) HasLogs() bool {
 	return s != nil && s.Logs != nil && len(s.Logs.Types) > 0
 }
 
-func (s *OTelCollectorSpec) MetricsEnabled() bool {
+func (s *OpenTelemetrySpec) MetricsEnabled() bool {
 	return s != nil && s.Metrics != nil && s.Metrics.Enabled != nil &&
-		*s.Metrics.Enabled == OTelMetricsEnable
+		*s.Metrics.Enabled == OpenTelemetryMetricsEnable
 }
 
-func (s *OTelCollectorSpec) HasDataSources() bool {
+func (s *OpenTelemetrySpec) HasDataSources() bool {
 	return s.HasLogs() || s.MetricsEnabled()
 }
 

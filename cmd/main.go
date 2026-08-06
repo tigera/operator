@@ -100,7 +100,6 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(apiextensions.AddToScheme(scheme))
 	utilruntime.Must(operatortigeraiov1.AddToScheme(scheme))
-	utilruntime.Must(datastoremigration.AddToScheme(scheme))
 }
 
 func printVersion() {
@@ -250,6 +249,11 @@ If a value other than 'all' is specified, the first CRD with a prefix of the spe
 		log.Error(err, "")
 		os.Exit(1)
 	}
+
+	// Calico v3.32 serves DatastoreMigration at v1beta1 and v3.33 at v1, so resolve which
+	// before registering the type.
+	datastoremigration.ResolveServedVersion(cs.Discovery())
+	utilruntime.Must(datastoremigration.AddToScheme(scheme))
 
 	v3CRDs, err := apis.UseV3CRDS(cfg)
 	if err != nil {

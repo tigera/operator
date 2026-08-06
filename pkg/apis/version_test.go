@@ -17,14 +17,12 @@ package apis
 import (
 	"testing"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
-	ktesting "k8s.io/client-go/testing"
 
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
@@ -41,7 +39,10 @@ func mapResourceList() *metav1.APIResourceList {
 func emptyDynamicClient() *dynamicfake.FakeDynamicClient {
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		runtime.NewScheme(),
-		map[schema.GroupVersionResource]string{datastoreMigrationGVR: "DatastoreMigrationList"},
+		map[schema.GroupVersionResource]string{
+			datastoremigration.GroupVersionV1.WithResource(datastoremigration.Resource):      "DatastoreMigrationList",
+			datastoremigration.GroupVersionV1beta1.WithResource(datastoremigration.Resource): "DatastoreMigrationList",
+		},
 	)
 }
 
@@ -87,11 +88,11 @@ func TestUseV3CRDs(t *testing.T) {
 
 // A cluster that migrated on v3.32 has a Converged v1beta1 CR and no v1 CRD, and still
 // has to be detected as migrated.
-// TODO: remove in v3.34, alongside legacyDatastoreMigrationGVR.
+// TODO: remove in v3.34, alongside GroupVersionV1beta1.
 func TestCheckDatastoreMigrationFallsBackToLegacyGVR(t *testing.T) {
 	obj := &unstructured.Unstructured{Object: map[string]interface{}{
-		"apiVersion": datastoremigration.LegacySchemeGroupVersion.String(),
-		"kind":       "DatastoreMigration",
+		"apiVersion": datastoremigration.GroupVersionV1beta1.String(),
+		"kind":       datastoremigration.Kind,
 		"metadata":   map[string]interface{}{"name": "v1-to-v3"},
 		"status":     map[string]interface{}{"phase": datastoremigration.PhaseConverged},
 	}}
@@ -99,26 +100,36 @@ func TestCheckDatastoreMigrationFallsBackToLegacyGVR(t *testing.T) {
 	dc := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(
 		runtime.NewScheme(),
 		map[schema.GroupVersionResource]string{
-			datastoreMigrationGVR:       "DatastoreMigrationList",
-			legacyDatastoreMigrationGVR: "DatastoreMigrationList",
+			datastoremigration.GroupVersionV1beta1.WithResource(datastoremigration.Resource): "DatastoreMigrationList",
 		},
 		obj,
 	)
 
-	// A reactor is the only way to make one GVR 404 on the fake dynamic client.
-	dc.PrependReactor("list", "datastoremigrations", func(action ktesting.Action) (bool, runtime.Object, error) {
-		if action.GetResource() == datastoreMigrationGVR {
-			return true, nil, apierrors.NewGenericServerResponse(404, "get", datastoreMigrationGVR.GroupResource(), "", "404 page not found", 0, true)
-		}
-		return false, nil, nil
-	})
+	cs := fake.NewClientset()
+	cs.Resources = []*metav1.APIResourceList{{
+		GroupVersion: datastoremigration.GroupVersionV1beta1.String(),
+		APIResources: []metav1.APIResource{{Name: datastoremigration.Resource, Kind: datastoremigration.Kind}},
+	}}
 
-	migrated, err := checkDatastoreMigration(dc)
+	migrated, err := checkDatastoreMigration(cs.Discovery(), dc)
 	if err != nil {
 		t.Fatalf("checkDatastoreMigration() error = %v", err)
 	}
 	if !migrated {
 		t.Errorf("checkDatastoreMigration() = false, want true (should fall back to the legacy v1beta1 resource)")
+	}
+}
+
+// A cluster with no DatastoreMigration CRD at all must not look migrated.
+func TestCheckDatastoreMigrationWithoutCRD(t *testing.T) {
+	cs := fake.NewClientset()
+
+	migrated, err := checkDatastoreMigration(cs.Discovery(), emptyDynamicClient())
+	if err != nil {
+		t.Fatalf("checkDatastoreMigration() error = %v", err)
+	}
+	if migrated {
+		t.Errorf("checkDatastoreMigration() = true, want false")
 	}
 }
 

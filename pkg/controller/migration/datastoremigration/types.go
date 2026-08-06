@@ -20,13 +20,23 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-var (
-	// SchemeGroupVersion is the group/version this operator reads DatastoreMigration at.
-	SchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1"}
+const (
+	GroupName = "migration.projectcalico.org"
+	Kind      = "DatastoreMigration"
+	Resource  = "datastoremigrations"
+)
 
-	// LegacySchemeGroupVersion is the pre-GA group/version, served by Calico v3.32.
+var (
+	// GroupVersionV1 is the GA group/version, the storage version from Calico v3.33.
+	GroupVersionV1 = schema.GroupVersion{Group: GroupName, Version: "v1"}
+
+	// GroupVersionV1beta1 is the pre-GA group/version, deprecated but still served in v3.33.
 	// TODO: remove in v3.34.
-	LegacySchemeGroupVersion = schema.GroupVersion{Group: "migration.projectcalico.org", Version: "v1beta1"}
+	GroupVersionV1beta1 = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
+
+	// SchemeGroupVersion is the version the operator reads DatastoreMigration at.
+	// ResolveServedVersion replaces it at startup, before AddToScheme runs.
+	SchemeGroupVersion = GroupVersionV1
 
 	SchemeBuilder = runtime.NewSchemeBuilder(addKnownTypes)
 	AddToScheme   = SchemeBuilder.AddToScheme
@@ -41,9 +51,8 @@ func addKnownTypes(scheme *runtime.Scheme) error {
 	return nil
 }
 
-// DatastoreMigration is a minimal stub for the migration.projectcalico.org/v1
-// DatastoreMigration CR. It contains only the fields the operator needs to read,
-// allowing controller-runtime to cache these objects via a typed watch.
+// DatastoreMigration is a minimal stub of the CR, carrying only the fields the operator
+// reads at either version.
 type DatastoreMigration struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

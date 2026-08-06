@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/uigateway"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -1516,15 +1517,15 @@ var _ = Describe("Manager controller tests", func() {
 		})
 	})
 
-	Context("ensureGatewayNamespace", func() {
-		var r ReconcileManager
+	Context("EnsureNamespace", func() {
+		var r *uigateway.Config
 
 		BeforeEach(func() {
-			r = ReconcileManager{client: c, scheme: scheme}
+			r = &uigateway.Config{Client: c}
 		})
 
 		It("should create the namespace when it does not exist", func() {
-			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
+			Expect(r.EnsureNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
 
 			ns := &corev1.Namespace{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
@@ -1541,7 +1542,7 @@ var _ = Describe("Manager controller tests", func() {
 			}
 			Expect(c.Create(ctx, existing)).NotTo(HaveOccurred())
 
-			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
+			Expect(r.EnsureNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
 
 			ns := &corev1.Namespace{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())

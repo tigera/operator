@@ -60,12 +60,15 @@ type LogCollectorSpec struct {
 	// +optional
 	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
 
-	// OpenTelemetry configures the OpenTelemetry Collector for exporting logs
-	// and metrics via OTLP. Unlike AdditionalStores entries (S3, Syslog,
-	// Splunk), which point at external systems, the OpenTelemetry Collector is
-	// operator-managed infrastructure (StatefulSet, ConfigMap, RBAC, certs)
-	// with its own lifecycle, so it lives at the top level rather than under
-	// AdditionalStores.
+	// OpenTelemetry configures OpenTelemetry export of logs and metrics via
+	// OTLP. It is not a passthrough for OpenTelemetry Collector configuration:
+	// the fields here describe what Calico Enterprise exports and where, and
+	// the operator translates that into a Collector deployment.
+	//
+	// Unlike AdditionalStores entries (S3, Syslog, Splunk), which point at
+	// external systems, that Collector is operator-managed infrastructure
+	// (StatefulSet, ConfigMap, RBAC, certs) with its own lifecycle, so this
+	// lives at the top level rather than under AdditionalStores.
 	// +optional
 	OpenTelemetry *OpenTelemetrySpec `json:"openTelemetry,omitempty"`
 }

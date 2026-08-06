@@ -57,8 +57,9 @@ type Config struct {
 	// BackendNamespace holds the Backend and ReferenceGrant.
 	BackendNamespace string
 
-	// Enterprise controls whether the proxy SA, RoleBinding, and
-	// NetworkPolicy are part of the component's rendered set.
+	// Enterprise controls whether the proxy SA and RoleBinding are part of
+	// the component's rendered set; the proxy NetworkPolicy is rendered on
+	// both variants.
 	Enterprise bool
 }
 

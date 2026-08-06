@@ -228,6 +228,30 @@ var _ = Describe("Gateway component render", func() {
 		})
 	})
 
+	Context("route request timeout", func() {
+		JustBeforeEach(func() {
+			comp := gateway.Component(cfg)
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("omits timeouts by default", func() {
+			route := findObject[*gapi.HTTPRoute](toCreate, prefix+"-route", gwNS)
+			Expect(route.Spec.Rules[0].Timeouts).To(BeNil())
+		})
+
+		Context("when RouteRequestTimeout is set", func() {
+			BeforeEach(func() {
+				cfg.RouteRequestTimeout = ptr.To("0s")
+			})
+
+			It("sets the request timeout on the route", func() {
+				route := findObject[*gapi.HTTPRoute](toCreate, prefix+"-route", gwNS)
+				Expect(route.Spec.Rules[0].Timeouts).NotTo(BeNil())
+				Expect(*route.Spec.Rules[0].Timeouts.Request).To(Equal(gapi.Duration("0s")))
+			})
+		})
+	})
+
 	Context("OpenShift", func() {
 		BeforeEach(func() {
 			cfg.OpenShift = true

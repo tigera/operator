@@ -60,6 +60,12 @@ type Configuration struct {
 	// "calico-manager-gateway", "calico-manager-route", etc.
 	ResourcePrefix string
 
+	// RouteRequestTimeout, when set, becomes the HTTPRoute rule's request
+	// timeout. Whisker sets "0s" to disable Envoy Gateway's 15-second
+	// default — its flow-log stream is server-sent events and must stay
+	// open. Nil keeps the Envoy Gateway default.
+	RouteRequestTimeout *string
+
 	// Enterprise controls whether the proxy SA, RoleBinding, and NetworkPolicy
 	// are rendered. They are only rendered when the Gateway is placed in the
 	// backend (install) namespace: the GatewayAPI controller skips
@@ -182,6 +188,11 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 	backendNS := gapi.Namespace(c.cfg.BackendNamespace)
 	group := gapi.Group(EnvoyGatewayGroup)
 
+	var timeouts *gapi.HTTPRouteTimeouts
+	if c.cfg.RouteRequestTimeout != nil {
+		timeouts = &gapi.HTTPRouteTimeouts{Request: ptr.To(gapi.Duration(*c.cfg.RouteRequestTimeout))}
+	}
+
 	return &gapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -199,6 +210,7 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 			},
 			Rules: []gapi.HTTPRouteRule{
 				{
+					Timeouts: timeouts,
 					BackendRefs: []gapi.HTTPBackendRef{
 						{
 							BackendRef: gapi.BackendRef{

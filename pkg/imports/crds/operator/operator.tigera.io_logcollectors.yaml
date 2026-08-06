@@ -963,21 +963,40 @@ spec:
                     If running as a multi-tenant management cluster, the namespace in which
                     the management cluster's tenant services are running.
                   type: string
-                otelCollector:
-                  description:
-                    OTelCollector configures the OpenTelemetry Collector
-                    for exporting logs and metrics via OTLP.
+                openTelemetry:
+                  description: |-
+                    OpenTelemetry configures the OpenTelemetry Collector for exporting logs
+                    and metrics via OTLP. Unlike AdditionalStores entries (S3, Syslog,
+                    Splunk), which point at external systems, the OpenTelemetry Collector is
+                    operator-managed infrastructure (StatefulSet, ConfigMap, RBAC, certs)
+                    with its own lifecycle, so it lives at the top level rather than under
+                    AdditionalStores.
                   properties:
                     exporters:
-                      description: Exporters configures the OTLP export endpoints.
+                      description: |-
+                        Exporters configures the OTLP export endpoints. At least one is required:
+                        every rendered pipeline exports to all of them, and the collector refuses
+                        to start with an exporter-less pipeline. Names key the exporters in the
+                        generated config, so they are merged and deduplicated by name.
                       items:
-                        description: OTelExporter defines an OTLP export endpoint.
+                        description: OpenTelemetryExporter defines an OTLP export endpoint.
                         properties:
                           endpoint:
                             description: Endpoint is the OTLP endpoint URL.
                             type: string
+                          mutualTLS:
+                            default: false
+                            description: |-
+                              MutualTLS enables client certificate authentication to this exporter's
+                              endpoint. The collector presents the keypair from the
+                              otel-collector-client-certs Secret in the tigera-operator namespace; that
+                              Secret is required when any exporter enables this.
+                              Default: false
+                            type: boolean
                           name:
-                            description: Name is a unique identifier for this exporter.
+                            description: |-
+                              Name is a unique identifier for this exporter. It keys the exporter in the
+                              generated collector config, so it must be unique across the list.
                             type: string
                           protocol:
                             default: grpc
@@ -988,16 +1007,15 @@ spec:
                               - grpc
                               - http
                             type: string
-                          tlsInsecure:
-                            description: |-
-                              TLSInsecure disables TLS verification for this exporter. Only use for trusted in-cluster targets.
-                              Default: false
-                            type: boolean
                         required:
                           - endpoint
                           - name
                         type: object
+                      minItems: 1
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
                     logs:
                       description:
                         Logs configures which log types are exported via
@@ -1009,8 +1027,8 @@ spec:
                             values: Audit, DNS, Flows."
                           items:
                             description:
-                              OTelLogType represents the allowable log types
-                              for OTel export.
+                              OpenTelemetryLogType represents the allowable
+                              log types for OpenTelemetry export.
                             enum:
                               - Audit
                               - DNS
@@ -1024,6 +1042,7 @@ spec:
                         are exported via OTLP.
                       properties:
                         enabled:
+                          default: Disabled
                           description: |-
                             Enabled specifies whether to scrape and export Calico component metrics via OTLP.
                             Default: Disabled
@@ -1034,8 +1053,8 @@ spec:
                       type: object
                     openTelemetryCollectorStatefulSet:
                       description:
-                        OTelCollectorStatefulSet configures the OTel Collector
-                        StatefulSet.
+                        OpenTelemetryCollectorStatefulSet configures the
+                        OpenTelemetry Collector StatefulSet.
                       properties:
                         metadata:
                           description:
@@ -1061,23 +1080,23 @@ spec:
                           type: object
                         spec:
                           description:
-                            Spec is the specification of the OTel Collector
-                            StatefulSet.
+                            Spec is the specification of the OpenTelemetry
+                            Collector StatefulSet.
                           properties:
                             minReadySeconds:
                               description: |-
                                 MinReadySeconds is the minimum number of seconds for which a newly created StatefulSet pod should
                                 be ready without any of its container crashing, for it to be considered available.
-                                If specified, this overrides any minReadySeconds value that may be set on the OTel Collector StatefulSet.
-                                If omitted, the OTel Collector StatefulSet will use its default value for minReadySeconds.
+                                If specified, this overrides any minReadySeconds value that may be set on the OpenTelemetry Collector StatefulSet.
+                                If omitted, the OpenTelemetry Collector StatefulSet will use its default value for minReadySeconds.
                               format: int32
                               maximum: 2147483647
                               minimum: 0
                               type: integer
                             template:
                               description:
-                                Template describes the OTel Collector StatefulSet
-                                pod that will be created.
+                                Template describes the OpenTelemetry Collector
+                                StatefulSet pod that will be created.
                               properties:
                                 metadata:
                                   description:
@@ -1103,13 +1122,13 @@ spec:
                                   type: object
                                 spec:
                                   description:
-                                    Spec is the OTel Collector StatefulSet's
+                                    Spec is the OpenTelemetry Collector StatefulSet's
                                     PodSpec.
                                   properties:
                                     affinity:
                                       description:
                                         Affinity is a group of affinity scheduling
-                                        rules for the OTel Collector pods.
+                                        rules for the OpenTelemetry Collector pods.
                                       properties:
                                         nodeAffinity:
                                           description:
@@ -2105,13 +2124,14 @@ spec:
                                       type: object
                                     containers:
                                       description: |-
-                                        Containers is a list of OTel Collector containers.
-                                        If specified, this overrides the specified OTel Collector StatefulSet containers.
-                                        If omitted, the OTel Collector StatefulSet will use its default values for its containers.
+                                        Containers is a list of OpenTelemetry Collector containers.
+                                        If specified, this overrides the specified OpenTelemetry Collector StatefulSet containers.
+                                        If omitted, the OpenTelemetry Collector StatefulSet will use its default values for its containers.
                                       items:
                                         description:
-                                          OTelCollectorStatefulSetContainer
-                                          is an OTel Collector StatefulSet container.
+                                          OpenTelemetryCollectorStatefulSetContainer
+                                          is an OpenTelemetry Collector StatefulSet
+                                          container.
                                         properties:
                                           livenessProbe:
                                             description: |-
@@ -2146,7 +2166,7 @@ spec:
                                             type: object
                                           name:
                                             description: |-
-                                              Name is an enum which identifies the OTel Collector StatefulSet container by name.
+                                              Name is an enum which identifies the OpenTelemetry Collector StatefulSet container by name.
                                               Supported values are: otel-collector
                                             enum:
                                               - otel-collector
@@ -2185,8 +2205,8 @@ spec:
                                           resources:
                                             description: |-
                                               Resources allows customization of limits and requests for compute resources such as cpu and memory.
-                                              If specified, this overrides the named OTel Collector StatefulSet container's resources.
-                                              If omitted, the OTel Collector StatefulSet will use its default value for this container's resources.
+                                              If specified, this overrides the named OpenTelemetry Collector StatefulSet container's resources.
+                                              If omitted, the OpenTelemetry Collector StatefulSet will use its default value for this container's resources.
                                             properties:
                                               claims:
                                                 description: |-
@@ -2253,8 +2273,8 @@ spec:
                                         type: string
                                       description:
                                         NodeSelector gives more control over
-                                        the nodes where the OTel Collector pods will
-                                        run on.
+                                        the nodes where the OpenTelemetry Collector
+                                        pods will run on.
                                       type: object
                                     priorityClassName:
                                       description:
@@ -2263,9 +2283,9 @@ spec:
                                       type: string
                                     tolerations:
                                       description: |-
-                                        Tolerations is the OTel Collector pod's tolerations.
-                                        If specified, this overrides any tolerations that may be set on the OTel Collector StatefulSet.
-                                        If omitted, the OTel Collector StatefulSet will use its default value for tolerations.
+                                        Tolerations is the OpenTelemetry Collector pod's tolerations.
+                                        If specified, this overrides any tolerations that may be set on the OpenTelemetry Collector StatefulSet.
+                                        If omitted, the OpenTelemetry Collector StatefulSet will use its default value for tolerations.
                                       items:
                                         description: |-
                                           The pod this Toleration is attached to tolerates any taint that matches

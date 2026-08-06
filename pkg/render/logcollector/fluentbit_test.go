@@ -275,9 +275,9 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
-	It("should render one opentelemetry output per selected OTel log type", func() {
-		cfg.OTelCollectorEnabled = true
-		cfg.OTelLogTypes = []operatorv1.OTelLogType{operatorv1.OTelFlowLog, operatorv1.OTelAuditLog}
+	It("should render one opentelemetry output per selected OpenTelemetry log type", func() {
+		cfg.OpenTelemetryCollectorEnabled = true
+		cfg.OpenTelemetryLogTypes = []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog, operatorv1.OpenTelemetryAuditLog}
 		component := logcollector.FluentBitOSSpecific(cfg, rmeta.OSTypeLinux)
 		resources, _ := component.Objects()
 

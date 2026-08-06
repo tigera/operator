@@ -650,26 +650,26 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentBitCfg := &rlogcollector.FluentBitConfiguration{
-		LogCollector:           instance,
-		S3Credential:           s3Credential,
-		SplkCredential:         splunkCredential,
-		Filters:                filters,
-		EKSConfig:              eksConfig,
-		PullSecrets:            pullSecrets,
-		Installation:           installationSpec,
-		ClusterDomain:          r.opts.ClusterDomain,
-		FluentBitKeyPair:       fluentBitKeyPair,
-		TrustedBundle:          trustedBundle,
-		ManagedCluster:         managedCluster,
-		UseSyslogCertificate:   useSyslogCertificate,
-		Tenant:                 tenant,
-		ExternalElastic:        r.opts.ElasticExternal,
-		Cloud:                  r.opts.Cloud,
-		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
-		NonClusterHost:         nonclusterhost,
-		LicenseExpired:         licenseExpired,
-		OTelCollectorEnabled:   instance.Spec.OTelCollector != nil,
-		OTelLogTypes:           otelLogTypes(instance),
+		LogCollector:                  instance,
+		S3Credential:                  s3Credential,
+		SplkCredential:                splunkCredential,
+		Filters:                       filters,
+		EKSConfig:                     eksConfig,
+		PullSecrets:                   pullSecrets,
+		Installation:                  installationSpec,
+		ClusterDomain:                 r.opts.ClusterDomain,
+		FluentBitKeyPair:              fluentBitKeyPair,
+		TrustedBundle:                 trustedBundle,
+		ManagedCluster:                managedCluster,
+		UseSyslogCertificate:          useSyslogCertificate,
+		Tenant:                        tenant,
+		ExternalElastic:               r.opts.ElasticExternal,
+		Cloud:                         r.opts.Cloud,
+		EKSLogForwarderKeyPair:        eksLogForwarderKeyPair,
+		NonClusterHost:                nonclusterhost,
+		LicenseExpired:                licenseExpired,
+		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry != nil,
+		OpenTelemetryLogTypes:         otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific
@@ -924,11 +924,11 @@ func getUserCACertificate(client client.Client, name string) (certificatemanagem
 	return certificatemanagement.NewCertificate(name, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil), nil
 }
 
-// otelLogTypes returns the log types selected for OTel export, empty when the
+// otelLogTypes returns the log types selected for OpenTelemetry export, empty when the
 // otelCollector section or its logs selection is absent.
-func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OTelLogType {
-	if lc.Spec.OTelCollector == nil || lc.Spec.OTelCollector.Logs == nil {
+func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OpenTelemetryLogType {
+	if lc.Spec.OpenTelemetry == nil || lc.Spec.OpenTelemetry.Logs == nil {
 		return nil
 	}
-	return lc.Spec.OTelCollector.Logs.Types
+	return lc.Spec.OpenTelemetry.Logs.Types
 }

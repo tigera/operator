@@ -12,16 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package otelcollector
+package render
 
-import (
-	corev1 "k8s.io/api/core/v1"
-
-	"github.com/tigera/operator/pkg/common/k8svalidation"
-	"k8s.io/apimachinery/pkg/util/validation/field"
+// Identity of the OpenTelemetry Collector workload. These live here rather than
+// in pkg/render/otelcollector because that package imports pkg/render/monitor
+// (for the Prometheus federation target), so the monitor render cannot import it
+// back to build the collector's ServiceMonitor. Same arrangement as the
+// fluent-bit constants in logcollector.go.
+const (
+	OpenTelemetryCollectorName        = "otel-collector"
+	OpenTelemetryCollectorNamespace   = "calico-system"
+	OpenTelemetryCollectorMetricsPort = "metrics"
 )
-
-func ValidateOpenTelemetryCollectorStatefulSetContainer(container corev1.Container) error {
-	errs := k8svalidation.ValidateResourceRequirements(&container.Resources, field.NewPath("spec", "template", "spec", "containers"))
-	return errs.ToAggregate()
-}

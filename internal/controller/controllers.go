@@ -199,7 +199,7 @@ func AddToManager(mgr ctrl.Manager, options options.ControllerOptions) error {
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
 	}).SetupWithManager(mgr, options); err != nil {
-		return fmt.Errorf("failed to create controller %s: %v", "OpenTelemetryCollector", err)
+		return fmt.Errorf("failed to create controller %s: %v", "OpenTelemetry", err)
 	}
 	// +kubebuilder:scaffold:builder
 	return nil

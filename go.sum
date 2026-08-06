@@ -592,8 +592,8 @@ k8s.io/apimachinery v0.37.0-beta.0 h1:AgONL5RlVP+UzEzmDx1R2RHd/lp6YJ2QS9AHD92dTF
 k8s.io/apimachinery v0.37.0-beta.0/go.mod h1:RLRmd2kYSdlBaTwCmVbVETZqxaNoqGWOF0S0SG/gThg=
 k8s.io/apiserver v0.37.0-beta.0 h1:GZI0O9+kJ8rfKo/W5Ug6IUU79xB6XUb8BwC1DuZIs4o=
 k8s.io/apiserver v0.37.0-beta.0/go.mod h1:a+2CICxJD6uJAmiAfOxzIEL0p4HLnfDlsuwmHJs6s+U=
-k8s.io/cli-runtime v0.36.2 h1:CconTvEeV4DJs4ZX3HQKCFbFRGsm6OtuBM9yjmMP2VM=
-k8s.io/cli-runtime v0.36.2/go.mod h1:LddcjiMf4YlnHO7c1Y7rEtDqL84FyiYVLco7V679GUU=
+k8s.io/cli-runtime v0.36.3 h1:g+eJ+M1sYpnNYp/q5fzaw2KejIL0Q7DH+xFl6YVoL4U=
+k8s.io/cli-runtime v0.36.3/go.mod h1:hZpAqK8nSFXvvLaVCbzUPVp8e9TRLSTCfpNzMt7s3tE=
 k8s.io/client-go v0.37.0-beta.0 h1:WfKGOp3Ai9fCvZlS4HaBxgpyPMMKaX6fKya2WM3xmq8=
 k8s.io/client-go v0.37.0-beta.0/go.mod h1:4ftZEJQaLYQOzc78hg8y7IzGyivzZ2ICL3qOZ7rDxzg=
 k8s.io/component-base v0.37.0-beta.0 h1:oFDAstSbhOPQkhbDVyyb9OyFmHakAwXuUem/nLLiwmI=
@@ -604,8 +604,8 @@ k8s.io/kube-aggregator v0.37.0-beta.0 h1:siaTDLzoPhC8uAIWKQvR0/9e99yULdNUei5WE41
 k8s.io/kube-aggregator v0.37.0-beta.0/go.mod h1:936LICakWn2gN2QTonvcffq4XB6FpjxLqa7wdbTRYjw=
 k8s.io/kube-openapi v0.0.0-20260618221249-bc653b64f974 h1:JVogoTvOj6gutlx8bUwGh0e8o8L4X8nDbTLyONmoVvk=
 k8s.io/kube-openapi v0.0.0-20260618221249-bc653b64f974/go.mod h1:V/QaCUYDa+0QpcHhVVc5l99Uz56wEMEXBSj9oCDkNDY=
-k8s.io/kubectl v0.36.2 h1:rpUGGpeL09XVOLep2yle5jrtk//JA1L6ZHfkQQtVEwk=
-k8s.io/kubectl v0.36.2/go.mod h1:gVbQ3B/yb4bSR2ggQ7rd0W6icUSWs7sduH4e16Vii+0=
+k8s.io/kubectl v0.36.3 h1:TesKp+XYQEjPYoFvuobcVnuvira2+/xAVlq//+kksaI=
+k8s.io/kubectl v0.36.3/go.mod h1:W+NEb1CzBGmoaI1Nrpn2ETo9omNBl0AsyxnnMT40N6E=
 k8s.io/utils v0.0.0-20260626114624-be93311217bd h1:Ea7fgQ5we8Y9T0OX5o0dAHzQOBRI07D/dEYRaB9ZZEs=
 k8s.io/utils v0.0.0-20260626114624-be93311217bd/go.mod h1:xDxuJ0whA3d0I4mf/C4ppKHxXynQ+fxnkmQH0vTHnuk=
 oras.land/oras-go/v2 v2.6.2 h1:N04RXngAp1LJKTG6ifz3xHPipasEkWr+hFmInja5YKo=

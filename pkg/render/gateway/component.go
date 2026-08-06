@@ -60,13 +60,19 @@ type Configuration struct {
 	// "calico-manager-gateway", "calico-manager-route", etc.
 	ResourcePrefix string
 
-	// Enterprise controls whether the proxy SA, RoleBinding, and NetworkPolicy
-	// are rendered. They are only rendered when the Gateway is placed in the
-	// backend (install) namespace: the GatewayAPI controller skips
-	// calico-system (lifecycle guard), so this component fills that gap. For
-	// custom gateway namespaces the GatewayAPI controller creates the
-	// SA/RoleBinding itself and no NetworkPolicy is rendered, matching
-	// user-brought Gateways.
+	// RouteRequestTimeout, when set, becomes the HTTPRoute rule's request
+	// timeout. Whisker sets "0s" to disable Envoy Gateway's 15-second
+	// default — its flow-log stream is server-sent events and must stay
+	// open. Nil keeps the Envoy Gateway default.
+	RouteRequestTimeout *string
+
+	// Enterprise controls whether the proxy SA and RoleBinding are rendered.
+	// The proxy NetworkPolicy is rendered on both variants. All three are only
+	// rendered when the Gateway is placed in the backend (install) namespace:
+	// the GatewayAPI controller skips calico-system (lifecycle guard), so this
+	// component fills that gap. For custom gateway namespaces the GatewayAPI
+	// controller creates the SA/RoleBinding itself and no NetworkPolicy is
+	// rendered, matching user-brought Gateways.
 	Enterprise bool
 
 	OpenShift bool
@@ -111,18 +117,21 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 		c.tlsSecret(),
 	)
 
-	if c.cfg.Enterprise && c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
-		// calico-system has an operator-managed default-deny, and the
-		// GatewayAPI controller skips it (lifecycle guard), so the proxy SA,
-		// RoleBinding, and NetworkPolicy are rendered here. In a custom
-		// namespace the GatewayAPI controller creates the SA and RoleBinding,
-		// and no NetworkPolicy is rendered — the same treatment user-brought
-		// Gateways get.
-		objs = append(objs,
-			rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
-			rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
-			c.proxyNetworkPolicy(),
-		)
+	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
+		// calico-system has an operator-managed default-deny on both variants,
+		// and the GatewayAPI controller skips it (lifecycle guard), so the
+		// proxy NetworkPolicy is rendered here. In a custom namespace no
+		// NetworkPolicy is rendered — the same treatment user-brought Gateways
+		// get.
+		objs = append(objs, c.proxyNetworkPolicy())
+		if c.cfg.Enterprise {
+			// The proxy SA and RoleBinding (pull secrets) are Enterprise-only;
+			// in a custom namespace the GatewayAPI controller creates them.
+			objs = append(objs,
+				rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
+				rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
+			)
+		}
 	}
 
 	return objs, nil
@@ -182,6 +191,11 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 	backendNS := gapi.Namespace(c.cfg.BackendNamespace)
 	group := gapi.Group(EnvoyGatewayGroup)
 
+	var timeouts *gapi.HTTPRouteTimeouts
+	if c.cfg.RouteRequestTimeout != nil {
+		timeouts = &gapi.HTTPRouteTimeouts{Request: ptr.To(gapi.Duration(*c.cfg.RouteRequestTimeout))}
+	}
+
 	return &gapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -199,6 +213,7 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 			},
 			Rules: []gapi.HTTPRouteRule{
 				{
+					Timeouts: timeouts,
 					BackendRefs: []gapi.HTTPBackendRef{
 						{
 							BackendRef: gapi.BackendRef{
@@ -413,15 +428,13 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 		)
 	}
 
-	if c.cfg.Enterprise && gwNS == bkNS {
+	if gwNS == bkNS {
 		// Mirrors the main path: these are only rendered when the Gateway is
 		// in the backend namespace. In a custom namespace the SA and
 		// RoleBinding belong to the GatewayAPI controller's per-namespace
 		// lifecycle — deleting them here could break other Gateways in that
 		// namespace.
 		objs = append(objs,
-			rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
-			rgatewayapi.GatewayNamespaceRoleBinding(gwNS),
 			&v3.NetworkPolicy{
 				TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -430,6 +443,12 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 				},
 			},
 		)
+		if c.cfg.Enterprise {
+			objs = append(objs,
+				rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
+				rgatewayapi.GatewayNamespaceRoleBinding(gwNS),
+			)
+		}
 	}
 
 	return nil, objs

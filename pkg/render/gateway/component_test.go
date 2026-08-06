@@ -161,15 +161,17 @@ var _ = Describe("Gateway component render", func() {
 				cfg.Enterprise = false
 			})
 
-			It("skips SA and NetworkPolicy", func() {
+			It("skips SA and RoleBinding but keeps the proxy NetworkPolicy", func() {
 				for _, obj := range toCreate {
 					if _, ok := obj.(*corev1.ServiceAccount); ok {
 						Fail("ServiceAccount should not be rendered when Enterprise is false")
 					}
-					if _, ok := obj.(*v3.NetworkPolicy); ok {
-						Fail("NetworkPolicy should not be rendered when Enterprise is false")
+					if _, ok := obj.(*rbacv1.RoleBinding); ok {
+						Fail("RoleBinding should not be rendered when Enterprise is false")
 					}
 				}
+				np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
+				Expect(np).NotTo(BeNil())
 			})
 		})
 	})
@@ -367,15 +369,17 @@ var _ = Describe("Gateway deletion component", func() {
 			delCfg.Enterprise = false
 		})
 
-		It("skips Enterprise resources", func() {
+		It("skips SA and RoleBinding but keeps the proxy NetworkPolicy", func() {
 			for _, obj := range toDelete {
 				if _, ok := obj.(*corev1.ServiceAccount); ok {
 					Fail("ServiceAccount should not appear when Enterprise is false")
 				}
-				if _, ok := obj.(*v3.NetworkPolicy); ok {
-					Fail("NetworkPolicy should not appear when Enterprise is false")
+				if _, ok := obj.(*rbacv1.RoleBinding); ok {
+					Fail("RoleBinding should not appear when Enterprise is false")
 				}
 			}
+			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
+			Expect(np).NotTo(BeNil())
 		})
 	})
 

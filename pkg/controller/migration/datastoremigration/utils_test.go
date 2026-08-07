@@ -41,7 +41,7 @@ func migrationCR(name, phase string) *DatastoreMigration {
 	obj := &DatastoreMigration{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "DatastoreMigration",
-			APIVersion: "migration.projectcalico.org/v1beta1",
+			APIVersion: SchemeGroupVersion.String(),
 		},
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 	}

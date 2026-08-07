@@ -53,6 +53,7 @@ import (
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -104,6 +105,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if opts.Variant.IsEnterprise() {
+		// Watched so a toggle re-renders the rules gated on it.
+		if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", rbacmanagement.ConfigMapName, err)
+		}
+
 		// Watch for changes to ApplicationLayer
 		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
 		if err != nil {
@@ -120,13 +126,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
 		if err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch the Manager CR so toggling spec.rbac re-runs the apiserver
-		// reconcile (the tigera-network-admin RBAC is gated on it).
-		err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch Manager: %v", err)
 		}
 
 		for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
@@ -170,6 +169,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
 	}
 	if err = utils.AddDeploymentWatch(c, "calico-apiserver", "calico-apiserver"); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+
+	// The cutover is gated on this Deployment's readiness, so react to it rather than waiting for the
+	// next periodic reconcile.
+	if err = utils.AddDeploymentWatch(c, render.APIServerName, render.APIServerNamespace); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
 	}
 
@@ -361,7 +366,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var managementCluster *operatorv1.ManagementCluster
 	var managementClusterConnection *operatorv1.ManagementClusterConnection
 	var keyValidatorConfig authentication.KeyValidatorConfig
-	var managerCR *operatorv1.Manager
+	var rbacManagementEnabled bool
 	includeV3NetworkPolicy := false
 
 	if installationSpec.Variant.IsEnterprise() {
@@ -369,6 +374,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 			common.OperatorNamespace(), false)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		rbacManagementEnabled, err = utils.RBACManagementEnabled(ctx, r.client, installationSpec.Variant, r.opts.MultiTenant)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -387,12 +398,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		managerCR, err = utils.GetManager(ctx, r.client, false, "")
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading Manager", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 
@@ -515,6 +520,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 	}
 
+	var holdCutover bool
+	if !r.opts.UseV3CRDs {
+		holdCutover, err = holdAPIServiceCutover(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying the projectcalico.org/v3 APIService", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
@@ -538,7 +552,8 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		ClusterDomain:                r.opts.ClusterDomain,
 		Cloud:                        r.opts.Cloud,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
-		RBACManagementEnabled:        managerCR.RBACManagementEnabled(),
+		HoldAPIServiceCutover:        holdCutover,
+		RBACManagementEnabled:        rbacManagementEnabled,
 		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
 	}
 
@@ -610,8 +625,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// dependency on the API server deployment.
 	//
 	// We do this last to avoid transient errors with policy preventing progression of the controller.
+	//
+	// While the cutover is held the previous API server is still serving, so the policy can go first
+	// instead, closing the window in which the new workload runs with no policy of its own.
 	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
+		policy := render.APIServerPolicy(&apiServerCfg)
+		if holdCutover {
+			components = append([]render.Component{policy}, components...)
+		} else {
+			components = append(components, policy)
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
@@ -631,6 +654,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		render.CalicoAPIServerTLSSecretName: tlsSecret,
 		webhooks.WebhooksTLSSecretName:      webhooksTLS,
 	}, r.status)
+
+	if holdCutover {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the Calico API server to become ready before repointing the projectcalico.org/v3 APIService", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

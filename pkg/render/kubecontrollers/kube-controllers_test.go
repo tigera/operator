@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -326,7 +327,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(len(dp.Spec.Template.Spec.Volumes)).To(Equal(1))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.KubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(38), "cluster role should have 38 rules")
+		Expect(clusterRole.Rules).To(HaveLen(39), "cluster role should have 39 rules")
 
 		// Application-layer reconciler RBAC: WAF CRDs (resources, /status, /finalizers).
 		Expect(clusterRole.Rules).To(ContainElement(rbacv1.PolicyRule{
@@ -448,12 +449,12 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}
 	})
 
-	Context("RBAC management UI gate", func() {
+	Context("RBAC management UI", func() {
 		BeforeEach(func() {
 			instance.Variant = operatorv1.CalicoEnterprise
 		})
 
-		It("does not enable rbacsync when RBACManagementEnabled is false", func() {
+		It("does not enable rbacsync or grant its RBAC while the feature gate is off", func() {
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
 			resources, _ := component.Objects()
@@ -467,7 +468,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(rtest.GetResource(resources, "calico-kube-controllers-rbac-sync", common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role")).To(BeNil())
 		})
 
-		It("enables rbacsync and adds the controller's RBAC when RBACManagementEnabled is true", func() {
+		It("enables rbacsync and grants it read access to both ConfigMaps it depends on", func() {
 			cfg.RBACManagementEnabled = true
 			component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 			Expect(component.ResolveImages(nil)).To(BeNil())
@@ -483,9 +484,15 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				ResourceNames: []string{"tigera-idp-groups"},
+				ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
 				Verbs:         []string{"get", "list", "watch"},
 			}), "expected read-only access to tigera-idp-groups in calico-system")
+			Expect(nsRole.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{rbacmanagement.ConfigMapName},
+				Verbs:         []string{"get", "list", "watch"},
+			}), "expected read-only access to the feature gate in calico-system")
 		})
 	})
 
@@ -545,7 +552,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Volumes[0].ConfigMap.Name).To(Equal("tigera-ca-bundle"))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(36), "cluster role should have 36 rules")
+		Expect(clusterRole.Rules).To(HaveLen(37), "cluster role should have 37 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},
@@ -844,7 +851,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		Expect(dp.Spec.Template.Spec.Containers[0].Image).To(Equal("test-reg/tigera/calico:" + components.ComponentTigeraCalico.Version))
 
 		clusterRole := rtest.GetResource(resources, kubecontrollers.EsKubeControllerRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(clusterRole.Rules).To(HaveLen(36), "cluster role should have 36 rules")
+		Expect(clusterRole.Rules).To(HaveLen(37), "cluster role should have 37 rules")
 		Expect(clusterRole.Rules).To(ContainElement(
 			rbacv1.PolicyRule{
 				APIGroups: []string{""},

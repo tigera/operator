@@ -44,6 +44,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -56,6 +57,9 @@ const (
 	APIServerPort       = 5443
 	APIServerPortName   = "apiserver"
 	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
+
+	// APIServiceName is the aggregated APIService that fronts the projectcalico.org/v3 API group.
+	APIServiceName = "v3.projectcalico.org"
 
 	auditLogsVolumeName   = "calico-audit-logs"
 	auditPolicyVolumeName = "calico-audit-policy"
@@ -77,6 +81,11 @@ const (
 	CalicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	APIServerServiceName         = "calico-api"
 	APIServerServiceAccountName  = "calico-apiserver"
+
+	// The API server this one replaces. It shares the calico-apiserver-access-calico-crds binding,
+	// so while the cutover is held both service accounts must be subjects of it.
+	deprecatedAPIServerServiceAccountName = "tigera-apiserver"
+	deprecatedAPIServerNamespace          = "tigera-system"
 
 	APIServerSecretsRBACName                                      = "calico-extension-apiserver-secrets-access"
 	APIServerLinseedAccessClusterRoleName                         = "calico-apiserver-linseed-access"
@@ -152,19 +161,24 @@ type APIServerConfiguration struct {
 	KubernetesVersion  *common.VersionInfo
 	ClusterDomain      string
 
-	// RBACManagementEnabled gates the RBAC management UI permissions on
-	// tigera-network-admin.
-	RBACManagementEnabled bool
-
 	// Cloud indicates the API server is being rendered for a Calico Cloud install. It gates
 	// cloud-specific RBAC in the tigera-ui-user / tigera-network-admin cluster roles (Calico Cloud
 	// exposes only per-user UISettings and grants access to runtime logs). When false the RBAC is
 	// exactly the regular Calico/Calico Enterprise RBAC.
 	Cloud bool
 
+	// RBACManagementEnabled reports whether to render the RBAC management UI access.
+	// The controller has already applied the variant, the admin's gate and tenancy.
+	RBACManagementEnabled bool
+
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool
+
+	// HoldAPIServiceCutover leaves the previous API server in service: the v3.projectcalico.org
+	// APIService keeps pointing at it and none of the resources it needs are removed. Set while the
+	// API server that would take over is not yet ready to serve.
+	HoldAPIServiceCutover bool
 
 	// When certificate management is enabled, we need a separate init container to create a cert, running
 	// with the same permissions as query server.
@@ -276,10 +290,15 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Add in certificates for API server TLS.
-	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
-	} else {
-		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+	//
+	// Leaving the APIService unrendered is what holds the cutover, since the component handler only
+	// writes what it is given and so leaves the one pointing at the previous API server alone.
+	if !c.cfg.HoldAPIServiceCutover {
+		if !c.cfg.TLSKeyPair.UseCertificateManagement() {
+			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
+		} else {
+			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		}
 	}
 
 	// Global enterprise-only objects.
@@ -356,7 +375,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 
 		// Clean up cluster-scoped resources that were created with the 'tigera' prefix.
 		// The apiserver now uses consistent resource names with 'calico' prefix across both EE and OSS variants.
-		objsToDelete = append(objsToDelete, c.deprecatedResources()...)
+		if !c.cfg.HoldAPIServiceCutover {
+			objsToDelete = append(objsToDelete, c.deprecatedResources()...)
+		}
 	} else {
 		// Explicitly delete any global enterprise objects.
 		// Namespaced objects will be handled by namespace deletion.
@@ -380,7 +401,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
-	objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
+	if !c.cfg.HoldAPIServiceCutover {
+		objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
+	}
 	objsToCreate := append(globalObjects, namespacedObjects...)
 
 	return objsToCreate, objsToDelete
@@ -424,7 +447,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 	s := &apiregv1.APIService{
 		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "v3.projectcalico.org",
+			Name: APIServiceName,
 		},
 		Spec: apiregv1.APIServiceSpec{
 			Group:                "projectcalico.org",
@@ -749,18 +772,25 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 //
 // Both Calico and Calico Enterprise, with the same name.
 func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{
+		{Kind: "ServiceAccount", Name: APIServerServiceAccountName, Namespace: APIServerNamespace},
+	}
+	// The previous API server is still serving while the cutover is held, and it reads its own
+	// storage through this binding, so dropping it here would take the API down.
+	if c.cfg.HoldAPIServiceCutover {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      deprecatedAPIServerServiceAccountName,
+			Namespace: deprecatedAPIServerNamespace,
+		})
+	}
+
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "calico-apiserver-access-calico-crds",
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName,
-				Namespace: APIServerNamespace,
-			},
-		},
+		Subjects: subjects,
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "calico-crds",
@@ -2192,10 +2222,26 @@ func (c *apiServerComponent) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole
 		},
 	}...)
 
-	// Role/binding access for the RBAC management UI. ui-apis writes these
-	// impersonating the caller, so the apiserver enforces escalation against the
-	// user's own permissions. The UI reads the role catalogue and manages group
-	// membership through both cluster- and namespace-scoped bindings.
+	// Write access to the switch, so a network admin can enable the feature without
+	// cluster-admin. Not gated: a rule rendered only while the feature is on could never
+	// be used to turn it on. create cannot be restricted by resource name, so it admits
+	// creating any ConfigMap in the namespace.
+	rules = append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+		},
+	)
+
+	// Role/binding access for the RBAC management UI. ui-apis writes these impersonating
+	// the caller, so the apiserver enforces escalation against the user's own permissions.
 	if c.cfg.RBACManagementEnabled {
 		rules = append(rules,
 			rbacv1.PolicyRule{

@@ -42,6 +42,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -384,9 +385,9 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		Entry("custom cluster domain", "custom-domain.internal"),
 	)
 
-	It("should gate the RBAC management UI rule on RBACManagementEnabled", func() {
-		// Disabled (default): tigera-network-admin must not carry the
-		// escalation-capable RBAC management rule.
+	// The escalation-capable rolebinding rules are the reason this is gated.
+	It("should gate the RBAC management UI rules on tigera-network-admin", func() {
+		By("omitting them while the feature gate is off")
 		component, err := render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		resources, _ := component.Objects()
@@ -394,17 +395,44 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 		for _, rule := range rbacManagementNetworkAdminRules {
 			Expect(clusterRole.Rules).NotTo(ContainElement(rule))
 		}
+		Expect(clusterRole.Rules).To(ConsistOf(networkAdminPolicyRules))
 
-		// Enabled: the rules are appended.
+		By("adding them once the admin switches the feature on")
 		cfg.RBACManagementEnabled = true
 		component, err = render.APIServer(cfg)
 		Expect(err).NotTo(HaveOccurred())
 		resources, _ = component.Objects()
 		clusterRole = rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		for _, rule := range rbacManagementNetworkAdminRules {
-			Expect(clusterRole.Rules).To(ContainElement(rule))
-		}
 		Expect(clusterRole.Rules).To(ConsistOf(append(networkAdminPolicyRules, rbacManagementNetworkAdminRules...)))
+	})
+
+	// Not gated: a rule rendered only while the feature is on could never turn it on.
+	It("should grant tigera-network-admin write access to the switch regardless of the gate", func() {
+		gateWriteRules := []rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{rbacmanagement.ConfigMapName},
+				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+			},
+		}
+
+		for _, enabled := range []bool{false, true} {
+			cfg.RBACManagementEnabled = enabled
+			component, err := render.APIServer(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			resources, _ := component.Objects()
+			clusterRole := rtest.GetResource(resources, "tigera-network-admin", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			for _, rule := range gateWriteRules {
+				Expect(clusterRole.Rules).To(ContainElement(rule),
+					"expected the switch write rules with RBACManagementEnabled=%v", enabled)
+			}
+		}
 	})
 
 	It("should render resources without an aggregation server", func() {
@@ -463,6 +491,28 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			Expect(r.GetObjectKind().GroupVersionKind().Kind).NotTo(Equal("APIService"),
 				"unexpected APIService registered in v3 CRD mode: %s", r.GetName())
 		}
+	})
+
+	It("binds the previous API server to the CRD role while the cutover is held", func() {
+		// v1.38 created calico-apiserver-access-calico-crds with the previous service account, so
+		// narrowing it to one subject mid-migration stops the API server that is still serving.
+		subjectsFor := func(hold bool) []rbacv1.Subject {
+			cfg.HoldAPIServiceCutover = hold
+			component, err := render.APIServer(cfg)
+			Expect(err).To(BeNil())
+			resources, _ := component.Objects()
+			crb := rtest.GetResource(resources, "calico-apiserver-access-calico-crds", "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")
+			Expect(crb).NotTo(BeNil())
+			return crb.(*rbacv1.ClusterRoleBinding).Subjects
+		}
+
+		held := subjectsFor(true)
+		Expect(held).To(ContainElement(rbacv1.Subject{Kind: "ServiceAccount", Name: "calico-apiserver", Namespace: "calico-system"}))
+		Expect(held).To(ContainElement(rbacv1.Subject{Kind: "ServiceAccount", Name: "tigera-apiserver", Namespace: "tigera-system"}))
+
+		done := subjectsFor(false)
+		Expect(done).To(HaveLen(1))
+		Expect(done).To(ContainElement(rbacv1.Subject{Kind: "ServiceAccount", Name: "calico-apiserver", Namespace: "calico-system"}))
 	})
 
 	It("should grant the calico-apiserver SA write access to globalreports/status", func() {
@@ -1976,11 +2026,22 @@ var (
 			ResourceNames: []string{"webhooks-secret"},
 			Verbs:         []string{"patch"},
 		},
+		// Write access to the switch, ungated so it can be used to turn the feature on.
+		{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+		},
 	}
 
-	// rbacManagementNetworkAdminRules are the extra tigera-network-admin rules
-	// added when rbac.ui is Enabled. See tigeraNetworkAdminClusterRole for the
-	// rationale behind the verb set.
+	// rbacManagementNetworkAdminRules are the extra tigera-network-admin rules added
+	// while the feature is enabled.
 	rbacManagementNetworkAdminRules = []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{"rbac.authorization.k8s.io"},

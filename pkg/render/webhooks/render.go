@@ -240,6 +240,12 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	containerPort := dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort
 	dep.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port = intstr.FromInt32(containerPort)
 
+	// The binary picks its own listen port, so pass the final value rather than let it default.
+	dep.Spec.Template.Spec.Containers[0].Args = append(
+		dep.Spec.Template.Spec.Containers[0].Args,
+		fmt.Sprintf("--port=%d", containerPort),
+	)
+
 	// Network policy to allow traffic to/from the webhook pod. Skip if host networking is
 	// enabled, since network policy is ineffective for host-networked pods.
 	var np *v3.NetworkPolicy

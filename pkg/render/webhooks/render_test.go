@@ -487,6 +487,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(customPort))
 		Expect(dep.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port.IntValue()).To(Equal(int(customPort)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Args).To(ContainElement(fmt.Sprintf("--port=%d", customPort)))
 
 		// Verify the service target port uses the custom value.
 		svc, err := rtest.GetResourceOfType[*corev1.Service](resources, webhooks.WebhooksName, common.CalicoNamespace)

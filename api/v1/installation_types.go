@@ -253,6 +253,26 @@ type InstallationSpec struct {
 	// it installs to protect the Calico components it manages.
 	// +optional
 	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
+
+	// NetworkReadyTaint, when Enabled, taints new nodes with node.projectcalico.org/network-not-ready:NoSchedule
+	// until Calico networking is ready on the node, so that workloads don't schedule onto a node before Calico
+	// can service them. Calico removes the taint once networking is ready. Defaults to Disabled.
+	// +kubebuilder:validation:Enum=Enabled;Disabled
+	// +optional
+	NetworkReadyTaint *NetworkReadyTaintType `json:"networkReadyTaint,omitempty"`
+}
+
+// NetworkReadyTaintType specifies whether Calico taints nodes until networking is ready.
+type NetworkReadyTaintType string
+
+const (
+	NetworkReadyTaintEnabled  NetworkReadyTaintType = "Enabled"
+	NetworkReadyTaintDisabled NetworkReadyTaintType = "Disabled"
+)
+
+// NetworkReadyTaintIsEnabled reports whether the network-ready taint feature is enabled.
+func (s InstallationSpec) NetworkReadyTaintIsEnabled() bool {
+	return s.NetworkReadyTaint != nil && *s.NetworkReadyTaint == NetworkReadyTaintEnabled
 }
 
 // BPFNetworkBootstrapType defines how the initial networking configuration is executed.

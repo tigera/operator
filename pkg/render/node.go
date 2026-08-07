@@ -1573,6 +1573,10 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_MANAGE_CNI", Value: "false"})
 	}
 
+	if c.cfg.Installation.NetworkReadyTaintIsEnabled() {
+		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "CALICO_MANAGE_NETWORK_READY_TAINT", Value: "true"})
+	}
+
 	if c.cfg.Installation.CNI != nil && c.cfg.Installation.CNI.Type == operatorv1.PluginAmazonVPC {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
 	}

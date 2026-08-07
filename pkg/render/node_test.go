@@ -373,6 +373,35 @@ var _ = Describe("Node rendering tests", func() {
 				verifyProbesAndLifecycle(ds, false, false)
 			})
 
+			It("should render a metrics service with only Felix's port when Felix metrics are enabled", func() {
+				cfg.FelixPrometheusMetricsEnabled = true
+				cfg.FelixPrometheusMetricsPort = 9091
+
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				ms := rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service").(*corev1.Service)
+				Expect(ms.Spec.Ports).To(Equal([]corev1.ServicePort{
+					{
+						Name:       "felix-metrics-port",
+						Port:       9091,
+						TargetPort: intstr.FromInt(9091),
+						Protocol:   corev1.ProtocolTCP,
+					},
+				}))
+				Expect(ms.Spec.ClusterIP).To(Equal("None"))
+			})
+
+			It("should delete the metrics service when Felix metrics are disabled", func() {
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, objsToDelete := component.Objects()
+
+				Expect(rtest.GetResource(resources, "calico-node-metrics", "calico-system", "", "v1", "Service")).To(BeNil())
+				Expect(rtest.GetResource(objsToDelete, "calico-node-metrics", "calico-system", "", "v1", "Service")).ToNot(BeNil())
+			})
+
 			It("should render node correctly for BPF dataplane", func() {
 				expectedResources := []struct {
 					name    string

@@ -186,6 +186,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
 	return nil
 }
 
@@ -648,24 +649,26 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentBitCfg := &rlogcollector.FluentBitConfiguration{
-		LogCollector:           instance,
-		S3Credential:           s3Credential,
-		SplkCredential:         splunkCredential,
-		Filters:                filters,
-		EKSConfig:              eksConfig,
-		PullSecrets:            pullSecrets,
-		Installation:           installationSpec,
-		ClusterDomain:          r.opts.ClusterDomain,
-		FluentBitKeyPair:       fluentBitKeyPair,
-		TrustedBundle:          trustedBundle,
-		ManagedCluster:         managedCluster,
-		UseSyslogCertificate:   useSyslogCertificate,
-		Tenant:                 tenant,
-		ExternalElastic:        r.opts.ElasticExternal,
-		Cloud:                  r.opts.Cloud,
-		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
-		NonClusterHost:         nonclusterhost,
-		LicenseExpired:         licenseExpired,
+		LogCollector:                  instance,
+		S3Credential:                  s3Credential,
+		SplkCredential:                splunkCredential,
+		Filters:                       filters,
+		EKSConfig:                     eksConfig,
+		PullSecrets:                   pullSecrets,
+		Installation:                  installationSpec,
+		ClusterDomain:                 r.opts.ClusterDomain,
+		FluentBitKeyPair:              fluentBitKeyPair,
+		TrustedBundle:                 trustedBundle,
+		ManagedCluster:                managedCluster,
+		UseSyslogCertificate:          useSyslogCertificate,
+		Tenant:                        tenant,
+		ExternalElastic:               r.opts.ElasticExternal,
+		Cloud:                         r.opts.Cloud,
+		EKSLogForwarderKeyPair:        eksLogForwarderKeyPair,
+		NonClusterHost:                nonclusterhost,
+		LicenseExpired:                licenseExpired,
+		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry != nil,
+		OpenTelemetryLogTypes:         otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific
@@ -918,4 +921,13 @@ func getUserCACertificate(client client.Client, name string) (certificatemanagem
 		return nil, nil
 	}
 	return certificatemanagement.NewCertificate(name, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil), nil
+}
+
+// otelLogTypes returns the log types selected for OpenTelemetry export, empty when the
+// otelCollector section or its logs selection is absent.
+func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OpenTelemetryLogType {
+	if lc.Spec.OpenTelemetry == nil || lc.Spec.OpenTelemetry.Logs == nil {
+		return nil
+	}
+	return lc.Spec.OpenTelemetry.Logs.Types
 }

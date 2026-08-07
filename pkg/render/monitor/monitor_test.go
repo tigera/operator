@@ -111,6 +111,25 @@ var _ = Describe("monitor rendering tests", func() {
 		}
 	})
 
+	It("Should create the OpenTelemetry collector ServiceMonitor only while OTel is enabled", func() {
+		// The ServiceMonitor selects a Service that only exists while the collector
+		// does, so it has to track the collector rather than being rendered
+		// unconditionally — otherwise disabling OTel leaves it behind.
+		cfg.OpenTelemetryEnabled = false
+		toCreate, toDelete := monitor.Monitor(cfg).Objects()
+		Expect(rtest.GetResource(toCreate, render.OpenTelemetryCollectorName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)).To(BeNil())
+		Expect(rtest.GetResource(toDelete, render.OpenTelemetryCollectorName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)).NotTo(BeNil())
+
+		cfg.OpenTelemetryEnabled = true
+		toCreate, toDelete = monitor.Monitor(cfg).Objects()
+		sm, ok := rtest.GetResource(toCreate, render.OpenTelemetryCollectorName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind).(*monitoringv1.ServiceMonitor)
+		Expect(ok).To(BeTrue())
+		Expect(sm.Spec.NamespaceSelector.MatchNames).To(ConsistOf(render.OpenTelemetryCollectorNamespace))
+		Expect(sm.Spec.Endpoints).To(HaveLen(1))
+		Expect(sm.Spec.Endpoints[0].Port).To(Equal(render.OpenTelemetryCollectorMetricsPort))
+		Expect(rtest.GetResource(toDelete, render.OpenTelemetryCollectorName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)).To(BeNil())
+	})
+
 	It("Should render Prometheus resources", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -120,7 +139,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Check the namespace.
 		namespace := rtest.GetResource(toCreate, "tigera-prometheus", "", "", "v1", "Namespace").(*corev1.Namespace)
@@ -177,7 +196,7 @@ var _ = Describe("monitor rendering tests", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		toCreate, toDelete := component.Objects()
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -682,7 +701,7 @@ var _ = Describe("monitor rendering tests", func() {
 		expectedResources := expectedBaseResources()
 		rtest.ExpectResources(toCreate, expectedResources)
 
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 
 		// Prometheus
 		prometheusObj, ok := rtest.GetResource(toCreate, monitor.CalicoNodePrometheus, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.PrometheusesKind).(*monitoringv1.Prometheus)
@@ -872,7 +891,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render external prometheus resources with service monitor and custom token", func() {
@@ -898,7 +917,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render external prometheus resources without service monitor", func() {
@@ -914,7 +933,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(6))
+		Expect(toDelete).To(HaveLen(7))
 	})
 
 	It("Should render typha service monitor if typha metrics are enabled", func() {
@@ -928,7 +947,7 @@ var _ = Describe("monitor rendering tests", func() {
 		)
 
 		rtest.ExpectResources(toCreate, expectedResources)
-		Expect(toDelete).To(HaveLen(5))
+		Expect(toDelete).To(HaveLen(6))
 		sm := rtest.GetResource(toCreate, "calico-typha-metrics", "tigera-prometheus", "monitoring.coreos.com", "v1", "ServiceMonitor").(*monitoringv1.ServiceMonitor)
 		Expect(sm).To(Equal(&monitoringv1.ServiceMonitor{
 			TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: "monitoring.coreos.com/v1"},
@@ -1068,7 +1087,7 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(serviceMonitor.Spec.Endpoints[0].Port).To(Equal(monitor.OperatorMetricsPortName))
 
 		// Neither should be in toDelete (only the legacy monitors, Deployment, typhaServiceMonitor).
-		Expect(toDelete).To(HaveLen(4))
+		Expect(toDelete).To(HaveLen(5))
 	})
 
 	It("Should include operator alert rules in PrometheusRule when OperatorMetricsEnabled is true", func() {

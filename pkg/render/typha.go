@@ -85,6 +85,15 @@ type TyphaConfiguration struct {
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
 	FelixHealthPort int
+
+	// DeferDeploymentUpdate indicates that the Typha Deployment should be left
+	// as-is for now: the calico-node DaemonSet is rolling out a newer version,
+	// and Typha must not be updated until no older Felix remains. Per the
+	// Calico version skew policy, Felix may be newer than Typha, but not
+	// older. Only the Deployment is deferred; all other Typha objects are
+	// still reconciled. The controller only sets this when a Typha Deployment
+	// already exists.
+	DeferDeploymentUpdate bool
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
@@ -127,7 +136,11 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, c.typhaServices()...)
 
 	// Add deployment last, as it may depend on the creation of previous objects in the list.
-	objs = append(objs, c.typhaDeployment()...)
+	// When the update is deferred, omit the Deployment so the existing one is
+	// left untouched; omitted objects are not deleted by the handler.
+	if !c.cfg.DeferDeploymentUpdate {
+		objs = append(objs, c.typhaDeployment()...)
+	}
 	if c.cfg.Installation.TyphaMetricsPort != nil {
 		objs = append(objs, c.typhaPrometheusService())
 	}

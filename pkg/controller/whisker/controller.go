@@ -116,7 +116,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if err = uigateway.AddWatches(c, opts.K8sClientset, log, whisker.GatewayResourcePrefix, whisker.GatewayTLSSecretName); err != nil {
-		return fmt.Errorf("%s %w", controllerName, err)
+		return fmt.Errorf("%s failed to add gateway watches: %w", controllerName, err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,

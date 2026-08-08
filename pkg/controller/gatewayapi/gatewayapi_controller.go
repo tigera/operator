@@ -663,8 +663,8 @@ func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI 
 
 // reconcileGatewayNamespaceResources writes the per-namespace resources owned by the namespace's
 // Gateways, so the GC removes them once the last Gateway is gone (and the GatewayAPI CR's deletion
-// doesn't strand them). Reserved namespaces are skipped; trust bundle on both variants, the rest on
-// Enterprise.
+// doesn't strand them). Reserved namespaces are skipped; trust bundle and operator-secrets
+// RoleBinding on both variants, the rest on Enterprise.
 // Each object is written once per owning Gateway, because the component handler takes a single
 // owner. MultipleOwnersLabel makes it merge that owner reference into the references already on the
 // object instead of replacing them, which is what keeps the namespace's other Gateways — and any

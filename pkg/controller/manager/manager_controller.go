@@ -191,7 +191,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if err = uigateway.AddWatches(c, opts.K8sClientset, log, ManagerGatewayResourcePrefix, ManagerGatewayTLSSecretName); err != nil {
-		return fmt.Errorf("manager-controller %w", err)
+		return fmt.Errorf("manager-controller failed to add gateway watches: %w", err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {

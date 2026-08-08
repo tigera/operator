@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strings"
 )
 
 // ParseEndpoint parses an endpoint of the form scheme://host:port and returns the components.
@@ -27,11 +26,11 @@ func ParseEndpoint(endpoint string) (string, string, string, error) {
 	if err != nil {
 		return "", "", "", err
 	}
-	splits := strings.Split(url.Host, ":")
-	if len(splits) != 2 {
+	host, port, err := net.SplitHostPort(url.Host)
+	if err != nil {
 		return "", "", "", fmt.Errorf("invalid host: %s", url.Host)
 	}
-	return url.Scheme, splits[0], splits[1], nil
+	return url.Scheme, host, port, nil
 }
 
 func ParseHostPortFromHTTPProxyString(proxyURL string) (string, error) {

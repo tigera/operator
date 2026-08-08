@@ -311,7 +311,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		gwNS := gw.NamespaceOrDefault()
 		if gwNS != whisker.WhiskerNamespace {
-			if err := gwHelper.EnsureNamespace(ctx, gwNS); err != nil {
+			if err := uigateway.EnsureNamespace(ctx, r.cli, gwNS); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, reqLogger)
 				return reconcile.Result{}, err
 			}

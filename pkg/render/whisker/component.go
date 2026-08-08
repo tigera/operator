@@ -51,16 +51,16 @@ const (
 	WhiskerContainerName        = "whisker"
 	WhiskerBackendContainerName = "whisker-backend"
 
-	WhiskerKeyPairSecret = "whisker-key-pair"
-
-	// GatewayResourcePrefix names the CIG resources exposing Whisker.
-	GatewayResourcePrefix       = "calico-whisker"
-	GatewayTLSSecretName        = "calico-whisker-gateway-tls"
+	WhiskerKeyPairSecret        = "whisker-key-pair"
 	WhiskerBackendKeyPairSecret = "whisker-backend-key-pair"
 	WhiskerServicePort          = 8443
 	GoldmaneDeploymentName      = "goldmane"
 	GoldmaneServicePort         = 7443
 	GoldmaneNamespace           = common.CalicoNamespace
+
+	// GatewayResourcePrefix names the CIG resources exposing Whisker.
+	GatewayResourcePrefix = "calico-whisker"
+	GatewayTLSSecretName  = "calico-whisker-gateway-tls"
 
 	configMapName    = "whisker-nginx-config"
 	configVolumeName = "nginx-config"

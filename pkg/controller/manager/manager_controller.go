@@ -1005,8 +1005,7 @@ func (r *ReconcileManager) resolveGateway(
 	// Create the gateway namespace if it does not exist. calico-system is
 	// skipped: the Installation controller owns it.
 	if gwNS := gw.NamespaceOrDefault(); gwNS != common.CalicoNamespace {
-		gwEnsurer := &uigateway.Config{Client: r.client}
-		if err := gwEnsurer.EnsureNamespace(ctx, gwNS); err != nil {
+		if err := uigateway.EnsureNamespace(ctx, r.client, gwNS); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, logc)
 			return nil, nil, reconcile.Result{}, err
 		}

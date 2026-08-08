@@ -197,8 +197,8 @@ func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix strin
 // EnsureNamespace creates the gateway namespace if it does not exist.
 // The namespace is created without an owner reference and is never deleted by
 // the operator: a user-provided namespace may hold other workloads.
-func (c *Config) EnsureNamespace(ctx context.Context, name string) error {
-	err := c.Client.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
+func EnsureNamespace(ctx context.Context, c client.Client, name string) error {
+	err := c.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
 	if err == nil || !errors.IsNotFound(err) {
 		return err
 	}
@@ -209,7 +209,7 @@ func (c *Config) EnsureNamespace(ctx context.Context, name string) error {
 			Labels: map[string]string{"name": name},
 		},
 	}
-	if err := c.Client.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+	if err := c.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 	return nil

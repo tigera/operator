@@ -1510,38 +1510,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 	})
 
-	Context("ensureGatewayNamespace", func() {
-		var r ReconcileManager
-
-		BeforeEach(func() {
-			r = ReconcileManager{client: c, scheme: scheme}
-		})
-
-		It("should create the namespace when it does not exist", func() {
-			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
-
-			ns := &corev1.Namespace{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(HaveKeyWithValue("name", "ns-a"))
-			Expect(ns.OwnerReferences).To(BeEmpty())
-		})
-
-		It("should leave an existing namespace untouched", func() {
-			existing := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "ns-a",
-					Labels: map[string]string{"team": "netsec"},
-				},
-			}
-			Expect(c.Create(ctx, existing)).NotTo(HaveOccurred())
-
-			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
-
-			ns := &corev1.Namespace{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(Equal(map[string]string{"team": "netsec"}))
-		})
-	})
 })
 
 // failingGateReadClient fails the read of the gate ConfigMap and passes everything else

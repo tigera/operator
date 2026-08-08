@@ -699,11 +699,15 @@ func gatewayNamespaceObjects(namespace string, bundle certificatemanagement.Trus
 	if bundle != nil {
 		objs = append(objs, bundle.ConfigMap(namespace))
 	}
+	// The operator needs secret CRUD in every gateway namespace on both
+	// variants: it places the UI gateway TLS secret there when
+	// spec.ingressGateway names a custom namespace (Manager on Enterprise,
+	// Whisker on Calico).
+	objs = append(objs, render.CreateOperatorSecretsRoleBinding(namespace))
 	if enterprise {
 		objs = append(objs,
 			gatewayapi.GatewayNamespaceServiceAccount(namespace),
 			gatewayapi.GatewayNamespaceRoleBinding(namespace),
-			render.CreateOperatorSecretsRoleBinding(namespace),
 		)
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(namespace, pullSecrets...)...)...)
 	}

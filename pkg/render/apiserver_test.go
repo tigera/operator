@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
@@ -417,7 +418,7 @@ var _ = Describe("API server rendering tests (Calico Enterprise)", func() {
 			{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				ResourceNames: []string{rbacmanagement.ConfigMapName},
+				ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
 				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 			},
 		}
@@ -2026,7 +2027,7 @@ var (
 			ResourceNames: []string{"webhooks-secret"},
 			Verbs:         []string{"patch"},
 		},
-		// Write access to the switch, ungated so it can be used to turn the feature on.
+		// Write access to the switches, ungated so they can be used to turn the features on.
 		{
 			APIGroups: []string{""},
 			Resources: []string{"configmaps"},
@@ -2035,7 +2036,7 @@ var (
 		{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 		},
 	}

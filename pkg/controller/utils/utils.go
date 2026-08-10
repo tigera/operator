@@ -60,6 +60,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
 
@@ -575,6 +576,23 @@ func RBACManagementEnabled(ctx context.Context, c client.Client, variant operato
 		return false, err
 	}
 	return rbacmanagement.Enabled(gate), nil
+}
+
+// WAFManagementEnabled reports whether the WAF management UI should be rendered.
+// The feature is Enterprise-only and is not offered on multi-tenant management
+// clusters. Otherwise the admin's switch decides; an absent ConfigMap reads as
+// disabled.
+func WAFManagementEnabled(ctx context.Context, c client.Client, variant operatorv1.ProductVariant, multiTenant bool) (bool, error) {
+	if !variant.IsEnterprise() || multiTenant {
+		return false, nil
+	}
+	gate, err := GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+		Name: wafmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
+	}, c)
+	if err != nil {
+		return false, err
+	}
+	return wafmanagement.Enabled(gate), nil
 }
 
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.

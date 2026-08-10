@@ -279,6 +279,22 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
 	licenseExpired := licenseStatus == utils.LicenseStatusExpired
 
+	// The collector's ServiceMonitor and the Prometheus egress rule that reaches it
+	// live here, but follow LogCollector. Gate them on the same conditions the otel
+	// controller deploys on, so the two cannot disagree.
+	openTelemetryEnabled := false
+	logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client)
+	if err != nil {
+		// Requeue instead of assuming "disabled", which would flap both resources
+		// on an apiserver blip.
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading LogCollector", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	if logCollector != nil {
+		openTelemetryEnabled = logCollector.Spec.OpenTelemetry != nil &&
+			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)
+	}
+
 	// When in the grace period, schedule a requeue so the controller automatically
 	// transitions to expired state when the grace period elapses.
 	var graceRequeueAfter time.Duration
@@ -449,6 +465,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		LicenseExpired:                licenseExpired,
+		OpenTelemetryEnabled:          openTelemetryEnabled,
 		OperatorMetricsEnabled:        operatorMetricsEnabled,
 		OperatorNamespace:             common.OperatorNamespace(),
 		OperatorName:                  common.OperatorName(),

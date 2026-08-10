@@ -15,7 +15,11 @@
 package datastoremigration
 
 import (
+	"context"
+	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -35,6 +39,22 @@ func discoveryServing(versions ...schema.GroupVersion) discovery.DiscoveryInterf
 	return c.Discovery()
 }
 
+// failingDiscovery fails the first failures lookups, then behaves like the wrapped client.
+type failingDiscovery struct {
+	discovery.DiscoveryInterface
+
+	remaining atomic.Int32
+	attempts  atomic.Int32
+}
+
+func (d *failingDiscovery) ServerResourcesForGroupVersion(gv string) (*metav1.APIResourceList, error) {
+	d.attempts.Add(1)
+	if d.remaining.Add(-1) >= 0 {
+		return nil, errors.New("connection refused")
+	}
+	return d.DiscoveryInterface.ServerResourcesForGroupVersion(gv)
+}
+
 func TestServedGroupVersion(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -49,7 +69,10 @@ func TestServedGroupVersion(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, ok := ServedGroupVersion(tc.disco)
+			got, ok, err := ServedGroupVersion(tc.disco)
+			if err != nil {
+				t.Fatalf("ServedGroupVersion() error = %v, want nil", err)
+			}
 			if ok != tc.wantOK {
 				t.Fatalf("ServedGroupVersion() ok = %t, want %t", ok, tc.wantOK)
 			}
@@ -64,32 +87,93 @@ func TestServedGroupVersionIgnoresGroupWithoutResource(t *testing.T) {
 	c := fake.NewClientset()
 	c.Resources = []*metav1.APIResourceList{{GroupVersion: GroupVersionV1.String()}}
 
-	if _, ok := ServedGroupVersion(c.Discovery()); ok {
+	_, ok, err := ServedGroupVersion(c.Discovery())
+	if err != nil {
+		t.Fatalf("ServedGroupVersion() error = %v, want nil", err)
+	}
+	if ok {
 		t.Error("ServedGroupVersion() = true, want false when the group serves no datastoremigrations")
 	}
 }
 
-func TestResolveServedVersion(t *testing.T) {
+// A lookup failure must not read as an absent CRD, or we'd pin the wrong version.
+func TestServedGroupVersionReportsLookupFailure(t *testing.T) {
+	disco := &failingDiscovery{DiscoveryInterface: discoveryServing(GroupVersionV1beta1)}
+	disco.remaining.Store(1)
+
+	if _, ok, err := ServedGroupVersion(disco); err == nil {
+		t.Errorf("ServedGroupVersion() ok = %t, err = nil, want an error", ok)
+	}
+}
+
+func TestWaitForServedVersion(t *testing.T) {
 	cases := []struct {
 		name  string
 		disco discovery.DiscoveryInterface
 		want  schema.GroupVersion
 	}{
-		{"switches to the legacy version", discoveryServing(GroupVersionV1beta1), GroupVersionV1beta1},
-		{"stays on v1 when nothing is served", discoveryServing(), GroupVersionV1},
+		{"picks up the legacy version", discoveryServing(GroupVersionV1beta1), GroupVersionV1beta1},
+		{"picks up v1", discoveryServing(GroupVersionV1), GroupVersionV1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			original := SchemeGroupVersion
-			t.Cleanup(func() { SchemeGroupVersion = original })
+			defer restoreServedVersion(t)()
 
-			ResolveServedVersion(tc.disco)
-			if SchemeGroupVersion != tc.want {
-				t.Fatalf("SchemeGroupVersion = %v, want %v", SchemeGroupVersion, tc.want)
+			WaitForServedVersion(context.Background(), tc.disco)
+			if got := ServedVersion(); got != tc.want {
+				t.Fatalf("ServedVersion() = %v, want %v", got, tc.want)
 			}
-			if got := WatchObject().APIVersion; got != tc.want.String() {
-				t.Errorf("WatchObject() APIVersion = %q, want %q", got, tc.want.String())
+			if got := WatchObject().GetObjectKind().GroupVersionKind().GroupVersion(); got != tc.want {
+				t.Errorf("WatchObject() group version = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// The CRD is normally installed long after startup, so a missing one can't resolve to v1.
+func TestWaitForServedVersionWaitsForTheCRD(t *testing.T) {
+	defer restoreServedVersion(t)()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		WaitForServedVersion(ctx, discoveryServing())
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("WaitForServedVersion() did not return when the context was cancelled")
+	}
+	if got := ServedVersion(); got != GroupVersionV1 {
+		t.Errorf("ServedVersion() = %v, want the %v default", got, GroupVersionV1)
+	}
+}
+
+func TestWaitForServedVersionRetriesLookupFailures(t *testing.T) {
+	defer restoreServedVersion(t)()
+
+	disco := &failingDiscovery{DiscoveryInterface: discoveryServing(GroupVersionV1beta1)}
+	disco.remaining.Store(2)
+
+	WaitForServedVersion(context.Background(), disco)
+	if got := ServedVersion(); got != GroupVersionV1beta1 {
+		t.Fatalf("ServedVersion() = %v, want %v", got, GroupVersionV1beta1)
+	}
+	if got := disco.attempts.Load(); got < 3 {
+		t.Errorf("discovery attempts = %d, want at least 3", got)
+	}
+}
+
+func restoreServedVersion(t *testing.T) func() {
+	t.Helper()
+	original := ServedVersion()
+	return func() {
+		servedMutex.Lock()
+		defer servedMutex.Unlock()
+		servedVersion = original
 	}
 }

@@ -15,52 +15,89 @@
 package datastoremigration
 
 import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	initialRetry = 1 * time.Second
+	maxRetry     = 30 * time.Second
 )
 
 var log = ctrl.Log.WithName("datastoremigration")
 
-// ResolveServedVersion points the package at the version the cluster serves. Call it before
-// AddToScheme: scheme, cache and watches must agree.
-func ResolveServedVersion(disco discovery.DiscoveryInterface) {
-	gv, ok := ServedGroupVersion(disco)
-	if !ok {
-		// The CRD is installed by the user when they migrate, so it's usually absent at startup.
-		log.V(1).Info("No DatastoreMigration CRD served, defaulting", "groupVersion", SchemeGroupVersion)
-		return
-	}
-	log.Info("Resolved served DatastoreMigration version", "groupVersion", gv)
-	SchemeGroupVersion = gv
+var (
+	servedMutex   sync.RWMutex
+	servedVersion = GroupVersionV1
+)
+
+// ServedVersion returns the group/version the operator reads DatastoreMigration at. It is v1
+// until WaitForServedVersion finds out what the cluster serves.
+func ServedVersion() schema.GroupVersion {
+	servedMutex.RLock()
+	defer servedMutex.RUnlock()
+	return servedVersion
 }
 
-// ServedGroupVersion returns the DatastoreMigration group/version the cluster serves, preferring v1.
-// The second return is false when the CRD isn't installed.
-func ServedGroupVersion(disco discovery.DiscoveryInterface) (schema.GroupVersion, bool) {
+// WaitForServedVersion records the served version once the CRD appears. The user installs it
+// at migration time, so expect a wait.
+func WaitForServedVersion(ctx context.Context, disco discovery.DiscoveryInterface) {
+	delay := initialRetry
+	for {
+		gv, ok, err := ServedGroupVersion(disco)
+		switch {
+		case err != nil:
+			log.Error(err, "Failed to look up served DatastoreMigration versions - will retry")
+		case ok:
+			servedMutex.Lock()
+			servedVersion = gv
+			servedMutex.Unlock()
+			log.Info("Resolved served DatastoreMigration version", "groupVersion", gv)
+			return
+		}
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(delay):
+		}
+		delay = min(delay*2, maxRetry)
+	}
+}
+
+// ServedGroupVersion returns the served group/version, preferring v1. The bool is false when
+// the CRD isn't installed; a failed lookup errors.
+func ServedGroupVersion(disco discovery.DiscoveryInterface) (schema.GroupVersion, bool, error) {
 	for _, gv := range []schema.GroupVersion{GroupVersionV1, GroupVersionV1beta1} {
 		resources, err := disco.ServerResourcesForGroupVersion(gv.String())
 		if err != nil {
-			if !apierrors.IsNotFound(err) {
-				log.Error(err, "Failed to look up served DatastoreMigration versions", "groupVersion", gv)
+			if apierrors.IsNotFound(err) {
+				continue
 			}
-			continue
+			return schema.GroupVersion{}, false, fmt.Errorf("look up %s: %w", gv, err)
 		}
 		for _, r := range resources.APIResources {
 			if r.Name == Resource {
-				return gv, true
+				return gv, true, nil
 			}
 		}
 	}
-	return schema.GroupVersion{}, false
+	return schema.GroupVersion{}, false, nil
 }
 
-// WatchObject returns an empty DatastoreMigration stamped with the resolved group/version, for
-// controllers registering a watch.
-func WatchObject() *DatastoreMigration {
-	return &DatastoreMigration{
-		TypeMeta: metav1.TypeMeta{Kind: Kind, APIVersion: SchemeGroupVersion.String()},
-	}
+// WatchObject returns an empty DatastoreMigration at the served version, for controllers
+// registering a watch.
+func WatchObject() client.Object {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(ServedVersion().WithKind(Kind))
+	return u
 }

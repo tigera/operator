@@ -133,7 +133,10 @@ func requireMAPForV3(useV3 bool, disco discovery.DiscoveryInterface) (bool, erro
 // checkDatastoreMigration reports whether a DatastoreMigration CR exists in a phase that
 // means v3 CRDs. Runs before the manager cache exists.
 func checkDatastoreMigration(disco discovery.DiscoveryInterface, dyn dynamic.Interface) (bool, error) {
-	gv, ok := datastoremigration.ServedGroupVersion(disco)
+	gv, ok, err := datastoremigration.ServedGroupVersion(disco)
+	if err != nil {
+		return false, err
+	}
 	if !ok {
 		return false, nil
 	}

@@ -15,14 +15,17 @@
 package apis
 
 import (
+	"errors"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	discoveryfake "k8s.io/client-go/discovery/fake"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
 )
@@ -130,6 +133,22 @@ func TestCheckDatastoreMigrationWithoutCRD(t *testing.T) {
 	}
 	if migrated {
 		t.Errorf("checkDatastoreMigration() = true, want false")
+	}
+}
+
+// A discovery failure must error rather than read as "no migration".
+func TestCheckDatastoreMigrationReportsDiscoveryFailure(t *testing.T) {
+	cs := fake.NewClientset()
+	disco, ok := cs.Discovery().(*discoveryfake.FakeDiscovery)
+	if !ok {
+		t.Fatalf("discovery client is %T, want *discoveryfake.FakeDiscovery", cs.Discovery())
+	}
+	disco.PrependReactor("get", "resource", func(clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, errors.New("connection refused")
+	})
+
+	if _, err := checkDatastoreMigration(disco, emptyDynamicClient()); err == nil {
+		t.Error("checkDatastoreMigration() error = nil, want an error")
 	}
 }
 

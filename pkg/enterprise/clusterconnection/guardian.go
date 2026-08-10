@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package guardian
+package clusterconnection
 
 import (
 	"net"
@@ -29,6 +29,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
@@ -37,17 +38,11 @@ import (
 	operatorurl "github.com/tigera/operator/pkg/url"
 )
 
-// Register wires the guardian extensions into the variant.
-func Register(r *extensions.Registry) {
-	extensions.RegisterModifier(r, render.GuardianKey, modifyGuardian)
-	extensions.RegisterModifier(r, render.GuardianPolicyKey, modifyGuardianPolicy)
-}
-
 // modifyGuardianPolicy replaces the core OSS guardian network policy with the
 // enterprise management-cluster policy. Building the enterprise egress rules can
 // fail (proxy URL parsing); on failure we drop the policy entirely, matching the
 // core behavior of omitting it rather than installing a partial policy.
-func modifyGuardianPolicy(ri render.Inputs, gpc render.GuardianPolicyExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyGuardianPolicy(ri render.Inputs, gpc *render.GuardianConfiguration, objs, del []client.Object) ([]client.Object, []client.Object) {
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](objs, render.GuardianPolicyName)
 	if !ok {
 		return objs, del
@@ -76,7 +71,7 @@ func removeObject(objs []client.Object, drop client.Object) []client.Object {
 // managed cluster: egress to the management cluster components and the tunnel
 // destination(s), and ingress from the management-cluster components that reach
 // back over the tunnel.
-func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionInputs) (v3.NetworkPolicySpec, error) {
+func enterpriseGuardianPolicySpec(gpc *render.GuardianConfiguration) (v3.NetworkPolicySpec, error) {
 	egressRules := []v3.Rule{
 		{
 			Action:      v3.Allow,
@@ -200,7 +195,9 @@ func enterpriseGuardianPolicySpec(gpc render.GuardianPolicyExtensionInputs) (v3.
 // objects: the secrets Role/RoleBinding and default UI settings, the
 // elasticsearch/kibana service ports, the management-cluster-request cluster
 // role rules (which replace the OSS rules), and the CA bundle env vars.
-func modifyGuardian(ri render.Inputs, gc render.GuardianExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyGuardian(ri render.Inputs, cfg *render.GuardianConfiguration, objs, del []client.Object) ([]client.Object, []client.Object) {
+	gc := guardianInputsFrom(cfg)
+
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
 		role.Rules = guardianEnterpriseRules(gc)
 	}
@@ -224,11 +221,33 @@ func modifyGuardian(ri render.Inputs, gc render.GuardianExtensionInputs, objs, d
 	), del
 }
 
+// guardianInputs is what the guardian modifier needs beyond the installation: the
+// impersonation config, the platform, and the CA bundle path the env vars reference.
+type guardianInputs struct {
+	OpenShift              bool
+	Impersonation          *operatorv1.Impersonation
+	TrustedBundleMountPath string
+}
+
+func guardianInputsFrom(cfg *render.GuardianConfiguration) guardianInputs {
+	var impersonation *operatorv1.Impersonation
+	if cfg.ManagementClusterConnection != nil {
+		impersonation = cfg.ManagementClusterConnection.Spec.Impersonation
+	}
+
+	in := guardianInputs{OpenShift: cfg.OpenShift, Impersonation: impersonation}
+	if cfg.TrustedCertBundle != nil {
+		in.TrustedBundleMountPath = cfg.TrustedCertBundle.MountPath()
+	}
+
+	return in
+}
+
 // guardianEnterpriseRules are the cluster role rules guardian needs in Calico
 // Enterprise. They wholly replace the OSS rules: the management cluster drives
 // guardian over the tunnel, so it needs the union of the rules its components
 // require, plus any configured impersonation and the OpenShift SCC.
-func guardianEnterpriseRules(gc render.GuardianExtensionInputs) []rbacv1.PolicyRule {
+func guardianEnterpriseRules(gc guardianInputs) []rbacv1.PolicyRule {
 	var rules []rbacv1.PolicyRule
 
 	if imp := gc.Impersonation; imp != nil {
@@ -289,7 +308,7 @@ func guardianEnterpriseServicePorts() []corev1.ServicePort {
 	}
 }
 
-func addGuardianEnterpriseEnv(gc render.GuardianExtensionInputs, dep *appsv1.Deployment) {
+func addGuardianEnterpriseEnv(gc guardianInputs, dep *appsv1.Deployment) {
 	c := render.MustContainer(&dep.Spec.Template.Spec, render.GuardianContainerName)
 	c.Env = append(c.Env,
 		corev1.EnvVar{Name: "GUARDIAN_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: gc.TrustedBundleMountPath},

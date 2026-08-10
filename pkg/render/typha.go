@@ -111,13 +111,13 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return err
 }
 
+func (c *typhaComponent) TyphaConfig() *TyphaConfiguration {
+	return c.cfg
+}
+
 func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
-
-func (c *typhaComponent) ModifierKey() string { return TyphaKey.String() }
-
-func (c *typhaComponent) ExtensionInputs() any { return TyphaExtensionInputs{} }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	pdb := c.typhaPodDisruptionBudget()

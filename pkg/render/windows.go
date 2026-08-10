@@ -102,13 +102,13 @@ func (c *windowsComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
+func (c *windowsComponent) WindowsConfig() *WindowsConfiguration {
+	return c.cfg
+}
+
 func (c *windowsComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeWindows
 }
-
-func (c *windowsComponent) ModifierKey() string { return WindowsKey.String() }
-
-func (c *windowsComponent) ExtensionInputs() any { return WindowsExtensionInputs{} }
 
 func (c *windowsComponent) Objects() ([]client.Object, []client.Object) {
 	// Clean up old windows upgrader daemonset if present

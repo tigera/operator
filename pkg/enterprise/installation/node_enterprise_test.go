@@ -131,7 +131,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Client:             cli,
 			CertificateManager: certManager,
 		}
-		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, ci)
+		eci, _, err := ext.Installation().ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
 		renderInputs = eci.RenderInputs
 	})
@@ -150,7 +150,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		comp := render.Node(cfg)
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.NodeKey, ri, objs, nil)
+		out, _ := ext.Installation().Modify(extensionstest.NodeStub{StubComponent: extensionstest.StubComponent{Create: objs, Delete: nil}, Cfg: nil}, ri).Objects()
 		return out
 	}
 
@@ -220,7 +220,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 			Spec:       operatorv1.LogCollectorSpec{CollectProcessPath: &enable},
 		})).NotTo(HaveOccurred())
 
-		eci, _, err := ext.For(controller.Installation).ExtendInputs(ctx, controller.Inputs{
+		eci, _, err := ext.Installation().ExtendInputs(ctx, controller.Inputs{
 			RenderInputs: render.Inputs{
 				Installation:  instance,
 				TrustedBundle: typhaNodeTLS.TrustedBundle,
@@ -248,7 +248,7 @@ var _ = Describe("node enterprise modifier integration", func() {
 		})
 		Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, _ := comp.Objects()
-		objs, _ = extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.TyphaKey, renderInputs, objs, nil)
+		objs, _ = ext.Installation().Modify(extensionstest.TyphaStub{StubComponent: extensionstest.StubComponent{Create: objs, Delete: nil}, Cfg: nil}, renderInputs).Objects()
 
 		role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "calico-typha")
 		Expect(ok).To(BeTrue())

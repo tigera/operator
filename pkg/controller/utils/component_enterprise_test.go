@@ -28,7 +28,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -39,11 +38,9 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// This exercises the full path comment-by-comment: a real render component goes
-// through CreateOrUpdateOrDelete with an enterprise Inputs, and the
-// registered modifier must match the real render output by name. If render ever
-// renames the typha ClusterRole, the modifier silently no-ops and this fails.
-var _ = Describe("componentHandler enterprise modifier integration", func() {
+// A real typha component goes through the handler with the enterprise modifier
+// attached, so this fails if dispatch or the modifier stops matching render.
+var _ = Describe("enterprise typha modifier integration", func() {
 	It("applies the enterprise typha modifier to real render output", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
@@ -60,7 +57,7 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 			Variant: operatorv1.CalicoEnterprise,
 			CNI:     &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
 		}
-		comp := render.Typha(&render.TyphaConfiguration{
+		typhaCfg := &render.TyphaConfiguration{
 			K8sServiceEp:    k8sapi.ServiceEndpoint{},
 			Installation:    instance,
 			ClusterDomain:   dns.DefaultClusterDomain,
@@ -72,11 +69,14 @@ var _ = Describe("componentHandler enterprise modifier integration", func() {
 				NodeSecret:      nodeKeyPair,
 				NodeCommonName:  render.FelixCommonName,
 			},
-		})
+		}
 
+		ext := enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Installation()
 		renderInputs := render.Inputs{Installation: instance}
-		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithRenderInputs(renderInputs), utils.WithDecorator(enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).For(controller.Installation).Decorator()))
-		Expect(handler.CreateOrUpdateOrDelete(context.Background(), comp, nil)).NotTo(HaveOccurred())
+		handler := utils.NewComponentHandler(logf.Log, cli, scheme, nil, utils.WithModifier(func(c render.Component) render.Component {
+			return ext.Modify(c, renderInputs)
+		}))
+		Expect(handler.CreateOrUpdateOrDelete(context.Background(), render.Typha(typhaCfg), nil)).NotTo(HaveOccurred())
 
 		role := &rbacv1.ClusterRole{}
 		Expect(cli.Get(context.Background(), client.ObjectKey{Name: "calico-typha"}, role)).NotTo(HaveOccurred())

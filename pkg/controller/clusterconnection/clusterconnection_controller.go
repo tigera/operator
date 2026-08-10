@@ -178,7 +178,7 @@ func newReconciler(
 		tierWatchReady:        tierWatchReady,
 		clusterInfoWatchReady: clusterInfoWatchReady,
 		opts:                  opts,
-		ext:                   opts.Extensions.For(controller.ClusterConnection),
+		ext:                   opts.Extensions.ClusterConnection(),
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -198,7 +198,7 @@ type ReconcileConnection struct {
 	resolvedPodProxies         []*httpproxy.Config
 	lastAvailabilityTransition metav1.Time
 	opts                       options.ControllerOptions
-	ext                        extensions.Controller
+	ext                        extensions.ClusterConnectionExtension
 }
 
 // Reconcile reads that state of the cluster for a ManagementClusterConnection object and makes changes based on the
@@ -452,8 +452,9 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.cli,
 		r.scheme,
 		managementClusterConnection,
-		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.ext.Decorator()),
+		utils.WithModifier(func(c render.Component) render.Component {
+			return r.ext.Modify(c, ci.RenderInputs)
+		}),
 	)
 	guardianCfg := &render.GuardianConfiguration{
 		URL:                         managementClusterConnection.Spec.ManagementClusterAddr,

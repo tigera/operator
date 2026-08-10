@@ -198,16 +198,12 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return nil
 }
 
+func (c *nodeComponent) NodeConfig() *NodeConfiguration {
+	return c.cfg
+}
+
 func (c *nodeComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
-}
-
-func (c *nodeComponent) ModifierKey() string {
-	return NodeKey.String()
-}
-
-func (c *nodeComponent) ExtensionInputs() any {
-	return NodeExtensionInputs{}
 }
 
 func (c *nodeComponent) Objects() ([]client.Object, []client.Object) {

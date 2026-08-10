@@ -71,6 +71,6 @@ type ControllerOptions struct {
 	APIDiscovery *discovery.APIDiscovery
 
 	// Extensions are the variant extensions the operator runs with, for the Variant
-	// above. The core operator leaves this nil.
-	Extensions *extensions.Registry
+	// above. The core operator leaves them unset and runs the base behavior.
+	Extensions extensions.Extensions
 }

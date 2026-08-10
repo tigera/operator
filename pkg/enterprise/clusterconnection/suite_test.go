@@ -26,7 +26,10 @@ import (
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 )
 
-var ext = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
+var (
+	ext       = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
+	calicoExt = enterprise.New(operatorv1.Calico, eoptions.Options{})
+)
 
 // ctx is the reconcile context the specs pass to the extension hooks.
 var ctx = context.Background()

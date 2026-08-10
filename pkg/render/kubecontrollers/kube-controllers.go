@@ -142,27 +142,44 @@ type KubeControllersConfiguration struct {
 	ExtraEnv []corev1.EnvVar
 	// DisableConfigAPI sets DISABLE_KUBE_CONTROLLERS_CONFIG_API.
 	DisableConfigAPI bool
-
-	// ModifierKey is the extension modifier key the component reports through
-	// render.Extensible. calico-kube-controllers sets it so the enterprise modifier
-	// can layer on the enterprise surface; es-calico-kube-controllers leaves it empty
-	// so it is never decorated.
-	ModifierKey string
 }
 
-// calicoKubeControllersPolicyComponent wraps the calico-kube-controllers network
-// policy passthrough so it is render.Extensible: the enterprise modifier adds the WAF
-// admission webhook ingress rule. The base policy carries no WAF.
-type calicoKubeControllersPolicyComponent struct {
+// The calico-kube-controllers components expose an extension point. The
+// es-calico-kube-controllers deployment shares the underlying type but not these
+// wrappers, so a variant never sees it.
+type (
+	CalicoComponent interface {
+		render.Component
+		KubeControllersConfig() *KubeControllersConfiguration
+	}
+
+	CalicoPolicyComponent interface {
+		render.Component
+		KubeControllersPolicyConfig() *KubeControllersConfiguration
+	}
+)
+
+// calicoKubeControllers marks the calico-kube-controllers deployment as extendable.
+type calicoKubeControllers struct {
 	render.Component
+
+	cfg *KubeControllersConfiguration
 }
 
-func (calicoKubeControllersPolicyComponent) ModifierKey() string {
-	return render.KubeControllersPolicyKey.String()
+func (c calicoKubeControllers) KubeControllersConfig() *KubeControllersConfiguration {
+	return c.cfg
 }
 
-func (calicoKubeControllersPolicyComponent) ExtensionInputs() any {
-	return render.KubeControllersPolicyExtensionInputs{}
+// calicoKubeControllersPolicy marks the calico-kube-controllers network policy as
+// extendable.
+type calicoKubeControllersPolicy struct {
+	render.Component
+
+	cfg *KubeControllersConfiguration
+}
+
+func (c calicoKubeControllersPolicy) KubeControllersPolicyConfig() *KubeControllersConfiguration {
+	return c.cfg
 }
 
 func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDeny *v3.NetworkPolicy) render.Component {
@@ -172,14 +189,17 @@ func NewCalicoKubeControllersPolicy(cfg *KubeControllersConfiguration, defaultDe
 		toCreate = append(toCreate, defaultDeny)
 	}
 
-	return calicoKubeControllersPolicyComponent{render.NewPassthrough(
-		toCreate,
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", cfg.Namespace),
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
-		},
-	)}
+	return calicoKubeControllersPolicy{
+		Component: render.NewPassthrough(
+			toCreate,
+			[]client.Object{
+				// allow-tigera Tier was renamed to calico-system
+				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("kube-controller-access", cfg.Namespace),
+				networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", common.CalicoNamespace),
+			},
+		),
+		cfg: cfg,
+	}
 }
 
 // NewKubeControllers builds a kube-controllers component from a fully-populated
@@ -191,21 +211,18 @@ func NewKubeControllers(cfg *KubeControllersConfiguration) render.Component {
 }
 
 // NewCalicoKubeControllers builds the calico-kube-controllers component. The base is
-// pure OSS (the common rules plus the node and loadbalancer controllers); the Calico
-// Enterprise additions (extra RBAC, enterprise controllers, metrics TLS, the WAF v3
-// surface) are layered on by the enterprise modifier keyed by ModifierKey.
+// pure OSS; a variant layers its additions on through the installation extension.
 func NewCalicoKubeControllers(cfg *KubeControllersConfiguration) render.Component {
 	cfg.Name = KubeController
 	cfg.ConfigName = "default"
 	cfg.RoleName = KubeControllerRole
 	cfg.RoleBindingName = KubeControllerRoleBinding
 	cfg.MetricsName = KubeControllerMetrics
-	cfg.ModifierKey = render.KubeControllersKey.String()
 
 	cfg.Rules = KubeControllersRoleCommonRules(cfg)
 	cfg.EnabledControllers = []string{"node", "loadbalancer"}
 
-	return NewKubeControllers(cfg)
+	return calicoKubeControllers{Component: NewKubeControllers(cfg), cfg: cfg}
 }
 
 type kubeControllersComponent struct {
@@ -286,16 +303,6 @@ func (c *kubeControllersComponent) Objects() ([]client.Object, []client.Object) 
 
 func (c *kubeControllersComponent) Ready() bool {
 	return true
-}
-
-// ModifierKey implements render.Extensible. It is empty for es-calico-kube-controllers
-// (never decorated) and set for calico-kube-controllers.
-func (c *kubeControllersComponent) ModifierKey() string {
-	return c.cfg.ModifierKey
-}
-
-func (c *kubeControllersComponent) ExtensionInputs() any {
-	return render.KubeControllersExtensionInputs{}
 }
 
 func KubeControllersRoleCommonRules(cfg *KubeControllersConfiguration) []rbacv1.PolicyRule {

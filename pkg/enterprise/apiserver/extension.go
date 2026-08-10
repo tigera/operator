@@ -81,6 +81,10 @@ type apiServerRenderData struct {
 	dikastesImage               string
 	cloud                       bool
 
+	// calicoImage is the image the query server and L7 admission controller containers
+	// run. The base render resolves it too, but a modifier runs with no ImageSet.
+	calicoImage string
+
 	// rbacManagementEnabled mirrors Manager.spec.rbacUI. ui-apis writes role bindings
 	// impersonating the caller, so tigera-network-admin needs the verbs itself.
 	rbacManagementEnabled bool
@@ -106,11 +110,33 @@ type apiServer struct {
 	data        apiServerRenderData
 }
 
-// Register wires the API server controller hook and modifiers into the variant.
-func Register(r *extensions.Registry, opts eoptions.Options) {
-	r.RegisterController(controller.APIServer, apiServerControllerExtension{opts: opts})
-	extensions.RegisterModifier(r, render.APIServerKey, modifyAPIServer)
-	extensions.RegisterModifier(r, render.APIServerPolicyKey, modifyAPIServerPolicy)
+// Extension is the Calico Enterprise behavior for the API server controller.
+type Extension struct {
+	variant operatorv1.ProductVariant
+	opts    eoptions.Options
+}
+
+var _ extensions.APIServerExtension = &Extension{}
+
+// New returns the API server extension for the variant the operator resolved.
+func New(variant operatorv1.ProductVariant, opts eoptions.Options) *Extension {
+	return &Extension{variant: variant, opts: opts}
+}
+
+// Modify dispatches over the components the API server controller renders.
+func (e *Extension) Modify(c render.Component, ri render.Inputs) render.Component {
+	switch t := c.(type) {
+	case render.APIServerComponent:
+		return extensions.Decorate(c, ri, e.variant, func(create, del []client.Object) ([]client.Object, []client.Object) {
+			return modifyAPIServer(ri, t.APIServerConfig(), create, del)
+		})
+	case render.APIServerPolicyComponent:
+		return extensions.Decorate(c, ri, e.variant, func(create, del []client.Object) ([]client.Object, []client.Object) {
+			return modifyAPIServerPolicy(ri, t.APIServerPolicyConfig(), create, del)
+		})
+	default:
+		return c
+	}
 }
 
 func (c *apiServer) isSidecarInjectionEnabled() bool {
@@ -120,16 +146,8 @@ func (c *apiServer) isSidecarInjectionEnabled() bool {
 		*al.Spec.SidecarInjection == operatorv1.SidecarEnabled
 }
 
-// apiServerControllerExtension is the Calico Enterprise controller-side hook for the API
-// server controller. It does the enterprise reconcile work the render phase can't:
-// fetching the enterprise CRs, creating the trusted bundle and the query server cert,
-// and resolving the L7 sidecar images.
-type apiServerControllerExtension struct {
-	opts eoptions.Options
-}
-
 // Watches registers the enterprise resources the API server controller reconciles on.
-func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
+func (e *Extension) Watches(c ctrlruntime.Controller) error {
 	for _, obj := range []client.Object{
 		&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}},
 		&operatorv1.ManagementCluster{},
@@ -155,7 +173,7 @@ func (apiServerControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetches the enterprise CRs, creates the query server certificate, resolves the L7
 // sidecar images, and stashes them for the modifiers. The base API server render carries
 // none of this.
-func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	in := ci.RenderInputs.Installation
 
 	trustedBundle, err := ci.CertificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, ci.Client, common.OperatorNamespace(), false)
@@ -252,16 +270,22 @@ func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci contr
 		}
 	}
 
-	// Resolve the L7 sidecar images when sidecar injection is enabled. The modifier runs
-	// after image resolution, so the hook resolves them here.
+	// Modifiers run with no ImageSet, so resolve the images they need here. The query
+	// server and L7 admission controller containers run the combined calico image; the
+	// sidecar images are only needed when sidecar injection is enabled.
+	imageSet, err := imageset.GetImageSet(ctx, ci.Client, in.Variant)
+	if err != nil {
+		return ci, nil, err
+	}
+	calicoImage, err := components.GetReference(components.CombinedCalicoImage(in), in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
+	if err != nil {
+		return ci, nil, err
+	}
+
 	var l7EnvoyImage, dikastesImage string
 	if applicationLayer != nil &&
 		applicationLayer.Spec.SidecarInjection != nil &&
 		*applicationLayer.Spec.SidecarInjection == operatorv1.SidecarEnabled {
-		imageSet, err := imageset.GetImageSet(ctx, ci.Client, in.Variant)
-		if err != nil {
-			return ci, nil, err
-		}
 		l7EnvoyImage, err = components.GetReference(components.ComponentEnvoyProxy, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 		if err != nil {
 			return ci, nil, err
@@ -293,6 +317,7 @@ func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci contr
 		keyValidatorConfig:          keyValidatorConfig,
 		l7EnvoyImage:                l7EnvoyImage,
 		dikastesImage:               dikastesImage,
+		calicoImage:                 calicoImage,
 		bindingNamespaces:           bindingNamespaces,
 		cloud:                       e.opts.Cloud,
 		rbacManagementEnabled:       managerCR.RBACManagementEnabled(),
@@ -300,18 +325,37 @@ func (e apiServerControllerExtension) ExtendInputs(ctx context.Context, ci contr
 	return ci, nil, nil
 }
 
-// RegisterCalicoCleanup registers, for the Calico variant, the cleanup that
-// deletes the Enterprise API server objects left behind by a prior Enterprise
-// installation.
-func RegisterCalicoCleanup(r *extensions.Registry) {
-	extensions.RegisterModifier(r, render.APIServerKey, cleanupAPIServer)
+// CalicoCleanup deletes the Enterprise API server objects a prior Enterprise
+// installation left behind.
+type CalicoCleanup struct{}
+
+var _ extensions.APIServerExtension = CalicoCleanup{}
+
+func (CalicoCleanup) ExtendInputs(_ context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	return ci, nil, nil
+}
+
+func (CalicoCleanup) Watches(ctrlruntime.Controller) error {
+	return nil
+}
+
+func (CalicoCleanup) Modify(c render.Component, ri render.Inputs) render.Component {
+	t, ok := c.(render.APIServerComponent)
+	if !ok {
+		return c
+	}
+
+	return extensions.Decorate(c, ri, operatorv1.Calico, func(create, del []client.Object) ([]client.Object, []client.Object) {
+		return cleanupAPIServer(ri, t.APIServerConfig(), create, del)
+	})
 }
 
 // modifyAPIServer layers Calico Enterprise behavior onto the rendered API server objects:
 // the query server container and its volumes, audit logging on the aggregation API server
 // container, the Enterprise RBAC objects, and the query server port on the Service.
-func modifyAPIServer(ri render.Inputs, ec render.APIServerExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
-	c := &apiServer{cfg: ec.Config, calicoImage: ec.CalicoImage, data: apiServerData(ri)}
+func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, create, del []client.Object) ([]client.Object, []client.Object) {
+	data := apiServerData(ri)
+	c := &apiServer{cfg: cfg, calicoImage: data.calicoImage, data: data}
 
 	// Ensure the deployment and its supporting objects exist. The base renders them when
 	// running an aggregation API server; in v3-CRD mode it queues them for deletion, but
@@ -408,8 +452,8 @@ func modifyAPIServer(ri render.Inputs, ec render.APIServerExtensionInputs, creat
 
 // cleanupAPIServer deletes the Enterprise API server objects when running Calico, so a
 // cluster switched from Enterprise to Calico does not leave them behind.
-func cleanupAPIServer(ri render.Inputs, ec render.APIServerExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
-	c := &apiServer{cfg: ec.Config}
+func cleanupAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, create, del []client.Object) ([]client.Object, []client.Object) {
+	c := &apiServer{cfg: cfg}
 
 	del = append(del, c.tigeraAPIServerClusterRole(), c.tigeraAPIServerClusterRoleBinding())
 	del = append(del, c.linseedAccessClusterRoleBinding(), c.linseedAccessClusterRole())
@@ -667,8 +711,8 @@ func (c *apiServer) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConf
 // the OIDC egress rule (when an OIDC key validator is configured) and the L7 admission
 // controller ingress port (when sidecar injection is enabled). The base policy carries
 // neither.
-func modifyAPIServerPolicy(ri render.Inputs, ec render.APIServerPolicyExtensionInputs, create, del []client.Object) ([]client.Object, []client.Object) {
-	c := &apiServer{cfg: ec.Config, data: apiServerData(ri)}
+func modifyAPIServerPolicy(ri render.Inputs, cfg *render.APIServerConfiguration, create, del []client.Object) ([]client.Object, []client.Object) {
+	c := &apiServer{cfg: cfg, data: apiServerData(ri)}
 
 	policy, ok := extensions.FindObject[*v3.NetworkPolicy](create, render.APIServerPolicyName)
 	if !ok {

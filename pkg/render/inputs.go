@@ -16,16 +16,16 @@ package render
 
 import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // Inputs is the raw cluster state a controller gathered, carried into render
-// modifiers. Only registered modifiers read it; core operator code never does.
+// modifiers. Only modifiers read it; core operator code never does.
 //
-// Per-component config a modifier can't derive from these fields is not carried
-// here. It reaches the modifier as a typed argument pinned by the component's
-// ModifierKey.
+// Per-component config is not carried here. A modifier is handed the same typed
+// config the core operator rendered the component from.
 type Inputs struct {
 	Installation       *operatorv1.InstallationSpec
 	FelixConfiguration *v3.FelixConfiguration

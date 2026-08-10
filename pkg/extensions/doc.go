@@ -16,19 +16,16 @@
 // Enterprise) use to layer variant-specific behavior onto the core operator's
 // render output, so core code never branches on variant.
 //
-// A Registry stores two kinds of extension for the variant the operator runs as.
+// Extensions holds one extension per controller a variant extends. Each is an
+// interface the variant implements, covering two phases.
 //
-// A ControllerExtension is the controller-side hook. It has cluster access via
-// controller.Inputs and does the side-effecting work a pure render hook can't:
-// rejecting unsupported config (Validate) and creating certificates / extending the
-// trusted bundle (ExtendInputs).
+// ExtendInputs is the controller phase. It has cluster access via controller.Inputs
+// and does the side-effecting work a render hook can't: rejecting unsupported
+// config, creating certificates, extending the trusted bundle.
 //
-// Per-component modifiers are the render phase: pure hooks that run after a
-// component builds its objects. An image override swaps the component's image; a
-// modifier post-processes the rendered objects at the componentHandler.
+// The Modify methods are the render phase: pure hooks handed the component and the
+// same typed config the core operator rendered it from, returning a component whose
+// objects the variant has adjusted. Decorate does the wrapping.
 //
-// controller.Inputs carries a render.Inputs plus the cluster-access deps, which is
-// why modifiers, given only a render.Inputs, can't do I/O.
-//
-// A variant wires up its extensions in one place at startup - see pkg/enterprise.
+// A variant builds the whole set in one place at startup - see pkg/enterprise.
 package extensions

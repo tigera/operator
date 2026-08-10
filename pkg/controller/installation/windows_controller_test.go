@@ -24,11 +24,11 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -121,7 +121,7 @@ var _ = Describe("windows-controller installation tests", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileWindows{
-				ext: testExtensions.For(controller.Windows),
+				ext: testExtensions.Windows(),
 				opts: options.ControllerOptions{
 					Extensions:       testExtensions,
 					DetectedProvider: operator.ProviderNone,
@@ -615,7 +615,7 @@ var _ = Describe("windows-controller installation tests", func() {
 
 					// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 					r = ReconcileWindows{
-						ext: testExtensions.For(controller.Windows),
+						ext: testExtensions.Windows(),
 						opts: options.ControllerOptions{
 							Extensions:       testExtensions,
 							DetectedProvider: operator.ProviderNone,

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package guardian_test
+package clusterconnection_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
@@ -52,19 +51,14 @@ const (
 	guardianPolicyOCPJSON = "../../render/testutils/expected_policies/guardian_ocp.json"
 )
 
-// guardianObjects renders the guardian component and applies the registered
-// enterprise modifier the way the componentHandler does.
+// guardianObjects renders the guardian component and runs the enterprise extension
+// over it, the way the clusterconnection controller does.
 func guardianObjects(cfg *render.GuardianConfiguration) []client.Object {
 	g := render.Guardian(cfg)
 	ExpectWithOffset(1, g.ResolveImages(nil)).To(BeNil())
 	objs, _ := g.Objects()
 	ri := render.Inputs{Installation: cfg.Installation}
-	var extIn render.GuardianExtensionInputs
-	if p, ok := g.(render.ExtensionInputsProvider); ok {
-		extIn, ok = p.ExtensionInputs().(render.GuardianExtensionInputs)
-		ExpectWithOffset(1, ok).To(BeTrue())
-	}
-	out, _ := extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, ri, extIn, objs, nil)
+	out, _ := ext.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: objs, Delete: nil}, Cfg: cfg}, ri).Objects()
 	return out
 }
 
@@ -120,15 +114,10 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 			g = render.Guardian(cfg)
 			Expect(g.ResolveImages(nil)).To(BeNil())
 			resources, deleteResources = g.Objects()
-			// Apply the registered enterprise modifier the way the componentHandler
-			// does, so these enterprise tests exercise the integrated output.
+			// Run the extension the way the clusterconnection controller does, so these
+			// tests exercise the integrated output.
 			ri := render.Inputs{Installation: cfg.Installation}
-			var extIn render.GuardianExtensionInputs
-			if p, ok := g.(render.ExtensionInputsProvider); ok {
-				extIn, ok = p.ExtensionInputs().(render.GuardianExtensionInputs)
-				Expect(ok).To(BeTrue())
-			}
-			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, ri, extIn, resources, nil)
+			resources, _ = ext.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: resources, Delete: nil}, Cfg: cfg}, ri).Objects()
 		}
 
 		BeforeEach(func() {
@@ -367,15 +356,10 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 			g, err := render.GuardianPolicy(cfg)
 			Expect(err).NotTo(HaveOccurred())
 			objs, _ := g.Objects()
-			// Apply the registered enterprise modifier the way the componentHandler
-			// does, so the enterprise policy is exercised.
+			// Run the extension the way the clusterconnection controller does, so the
+			// enterprise policy is exercised.
 			ri := render.Inputs{Installation: cfg.Installation}
-			var extIn render.GuardianPolicyExtensionInputs
-			if p, ok := g.(render.ExtensionInputsProvider); ok {
-				extIn, ok = p.ExtensionInputs().(render.GuardianPolicyExtensionInputs)
-				Expect(ok).To(BeTrue())
-			}
-			resources, _ = extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianPolicyKey, ri, extIn, objs, nil)
+			resources, _ = ext.ClusterConnection().Modify(extensionstest.GuardianPolicyStub{StubComponent: extensionstest.StubComponent{Create: objs, Delete: nil}, Cfg: cfg}, ri).Objects()
 		}
 
 		Context("policy rendering based on variant and IncludeEgressNetworkPolicy", func() {

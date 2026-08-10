@@ -33,7 +33,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
-	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -42,20 +41,6 @@ import (
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
-
-// Register wires the installation controller hook and the node and
-// calico-kube-controllers modifiers into the variant.
-func Register(r *extensions.Registry, opts eoptions.Options) {
-	r.RegisterController(controller.Installation, coreControllerExtension{opts: opts})
-	registerNode(r)
-	registerKubeControllers(r, opts)
-}
-
-// coreControllerExtension is the Calico Enterprise controller-side hook for the
-// installation controller.
-type coreControllerExtension struct {
-	opts eoptions.Options
-}
 
 // installationRenderData is the controller-produced data the installation
 // extension hands to its modifiers through Inputs.Extension. The node
@@ -106,7 +91,7 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 
 // Validate rejects installation config Calico Enterprise does not support.
 // ProductVersion is the Calico Enterprise release the operator reports in status.
-func (coreControllerExtension) ProductVersion() string {
+func (e *Extension) ProductVersion() string {
 	return components.EnterpriseRelease
 }
 
@@ -114,7 +99,7 @@ func (coreControllerExtension) ProductVersion() string {
 // Some platforms run a DNS service that isn't named "kube-dns", so dnsTrustedServers
 // needs a provider-specific default for Enterprise DNS logging to work. Returns
 // whether it changed fc.
-func (coreControllerExtension) DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
+func (e *Extension) DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
 	dnsService := ""
 	switch install.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:
@@ -148,7 +133,7 @@ func (coreControllerExtension) DefaultFelixConfiguration(install *operatorv1.Ins
 
 // Watches registers the enterprise resources the installation controller
 // reconciles on.
-func (e coreControllerExtension) Watches(c ctrlruntime.Controller) error {
+func (e *Extension) Watches(c ctrlruntime.Controller) error {
 	for _, obj := range []client.Object{
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
@@ -177,7 +162,7 @@ func (e coreControllerExtension) Watches(c ctrlruntime.Controller) error {
 // fetching the certificates that feed the trusted bundle. It returns the render
 // inputs carrying the produced node prometheus keypair, and that keypair as one
 // the controller should manage.
-func (coreControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	if err := ValidateReporterPort(ci.RenderInputs.FelixConfiguration); err != nil {
 		return ci, nil, err
 	}

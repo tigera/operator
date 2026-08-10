@@ -32,7 +32,6 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -61,7 +60,7 @@ func renderWindows(cfg *render.WindowsConfiguration) []client.Object {
 	ExpectWithOffset(1, comp.ResolveImages(nil)).To(BeNil())
 	objs, _ := comp.Objects()
 	ri := render.Inputs{Installation: cfg.Installation}
-	out, _ := extensionstest.ApplyExtensions(ext.For(controller.Installation).Decorator(), render.WindowsKey, ri, objs, nil)
+	out, _ := ext.Windows().Modify(extensionstest.WindowsStub{StubComponent: extensionstest.StubComponent{Create: objs, Delete: nil}, Cfg: nil}, ri).Objects()
 	return out
 }
 
@@ -195,7 +194,7 @@ var _ = Describe("Windows enterprise rendering tests", func() {
 			ClusterDomain:  defaultClusterDomain,
 			TLS:            typhaNodeTLS,
 			VXLANVNI:       4096,
-			ImageOverrides: ext.Images(),
+			ImageOverrides: ext.Windows().Images(),
 		}
 	})
 

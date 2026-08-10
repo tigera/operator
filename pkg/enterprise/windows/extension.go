@@ -33,23 +33,45 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/enterprise/installation"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// Register wires the windows controller hook and modifiers into the variant.
-func Register(r *extensions.Registry) {
-	r.RegisterController(controller.Windows, windowsControllerExtension{})
-	r.RegisterImage(render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
-	r.RegisterImage(render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
-	extensions.RegisterModifier(r, render.WindowsKey, modifyWindows)
+// Extension is the Calico Enterprise behavior for the windows controller.
+type Extension struct {
+	variant operatorv1.ProductVariant
+	images  *imageoverride.Overrides
 }
 
-// windowsControllerExtension is the Calico Enterprise controller-side hook for the
-// windows controller.
-type windowsControllerExtension struct{}
+var _ extensions.WindowsExtension = &Extension{}
+
+// New returns the windows extension for the variant the operator resolved.
+func New(variant operatorv1.ProductVariant) *Extension {
+	images := imageoverride.New()
+	images.Register(variant, render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
+	images.Register(variant, render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
+
+	return &Extension{variant: variant, images: images}
+}
+
+func (e *Extension) Images() *imageoverride.Overrides {
+	return e.images
+}
+
+// Modify dispatches over the components the windows controller renders.
+func (e *Extension) Modify(c render.Component, ri render.Inputs) render.Component {
+	switch c.(type) {
+	case render.WindowsComponent:
+		return extensions.Decorate(c, ri, e.variant, func(objs, del []client.Object) ([]client.Object, []client.Object) {
+			return modifyWindows(ri, objs, del)
+		})
+	default:
+		return c
+	}
+}
 
 // windowsRenderData is the controller-produced data the windows extension hands to
 // its modifier through Inputs.Extension.
@@ -65,7 +87,7 @@ func windowsData(ri render.Inputs) windowsRenderData {
 
 // Validate rejects windows installation config Calico Enterprise does not support.
 // Watches registers the enterprise secrets the windows controller reconciles on.
-func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
+func (e *Extension) Watches(c ctrlruntime.Controller) error {
 	for _, ns := range []string{common.CalicoNamespace, common.OperatorNamespace()} {
 		if err := utils.AddSecretsWatch(c, render.NodePrometheusTLSServerSecret, ns); err != nil {
 			return err
@@ -79,7 +101,7 @@ func (windowsControllerExtension) Watches(c ctrlruntime.Controller) error {
 
 // ExtendInputs fetches the node prometheus keypair the installation controller
 // created and stashes it in the render inputs for the windows modifier.
-func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	if err := installation.ValidateReporterPort(ci.RenderInputs.FelixConfiguration); err != nil {
 		return ci, nil, err
 	}
@@ -101,7 +123,7 @@ func (windowsControllerExtension) ExtendInputs(ctx context.Context, ci controlle
 // calico-node-windows objects: the node-metrics Service and the Enterprise
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
-func modifyWindows(ri render.Inputs, _ render.WindowsExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyWindows(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
 		modifyWindowsDaemonSet(ri, ds)
 	}

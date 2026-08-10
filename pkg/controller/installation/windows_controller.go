@@ -149,7 +149,7 @@ func AddWindowsController(mgr manager.Manager, opts options.ControllerOptions) e
 	// Watch for changes to IPAMConfiguration.
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, logw, ri.ipamConfigWatchReady, []client.Object{&v3.IPAMConfiguration{TypeMeta: metav1.TypeMeta{Kind: v3.KindIPAMConfiguration}}})
 
-	if err = opts.Extensions.For(controller.Windows).Watches(c); err != nil {
+	if err = opts.Extensions.Windows().Watches(c); err != nil {
 		return fmt.Errorf("tigera-windows-controller failed to set up extension watches: %w", err)
 	}
 
@@ -171,7 +171,7 @@ type ReconcileWindows struct {
 	status               status.StatusManager
 	ipamConfigWatchReady *utils.ReadyFlag
 	opts                 options.ControllerOptions
-	ext                  extensions.Controller
+	ext                  extensions.WindowsExtension
 }
 
 // newWindowsReconciler returns a new reconcile.Reconciler
@@ -186,7 +186,7 @@ func newWindowsReconciler(mgr manager.Manager, opts options.ControllerOptions) (
 		status:               statusManager,
 		ipamConfigWatchReady: &utils.ReadyFlag{},
 		opts:                 opts,
-		ext:                  opts.Extensions.For(controller.Windows),
+		ext:                  opts.Extensions.Windows(),
 	}
 	r.status.Run(opts.ShutdownContext)
 	return r, nil
@@ -395,8 +395,9 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.ext.Decorator()),
+		utils.WithModifier(func(c render.Component) render.Component {
+			return r.ext.Modify(c, ci.RenderInputs)
+		}),
 	)
 	if err := handler.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)

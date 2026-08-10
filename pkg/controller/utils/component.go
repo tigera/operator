@@ -48,6 +48,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apigroup"
 	"github.com/tigera/operator/pkg/common"
@@ -87,26 +88,13 @@ type ComponentHandler interface {
 // ComponentHandlerOption configures a componentHandler.
 type ComponentHandlerOption func(*componentHandler)
 
-// WithRenderInputs supplies the render.Inputs passed to registered
-// render modifiers.
-func WithRenderInputs(ri render.Inputs) ComponentHandlerOption {
-	return func(c *componentHandler) { c.renderInputs = ri }
-}
+// ComponentModifier post-processes a component before the handler renders it. The
+// handler applies it to every component, and never learns what it does.
+type ComponentModifier func(render.Component) render.Component
 
-// ComponentDecorator post-processes a component before the handler renders it.
-type ComponentDecorator interface {
-	Decorate(component render.Component, ri render.Inputs) render.Component
-}
-
-// WithDecorator supplies the decorator the handler runs each component through.
-func WithDecorator(d ComponentDecorator) ComponentHandlerOption {
-	return func(c *componentHandler) { c.decorator = d }
-}
-
-type undecorated struct{}
-
-func (undecorated) Decorate(component render.Component, _ render.Inputs) render.Component {
-	return component
+// WithModifier supplies the modifier the handler runs each component through.
+func WithModifier(m ComponentModifier) ComponentHandlerOption {
+	return func(c *componentHandler) { c.modify = m }
 }
 
 // cr is allowed to be nil in the case we don't want to put ownership on a resource,
@@ -118,7 +106,6 @@ func NewComponentHandler(log logr.Logger, cli client.Client, scheme *runtime.Sch
 		cr:           cr,
 		log:          log,
 		apiGroupEnvs: apigroup.EnvVars(),
-		decorator:    undecorated{},
 	}
 	for _, o := range opts {
 		o(h)
@@ -133,8 +120,7 @@ type componentHandler struct {
 	log          logr.Logger
 	createOnly   bool
 	apiGroupEnvs []v1.EnvVar
-	renderInputs render.Inputs
-	decorator    ComponentDecorator
+	modify       ComponentModifier
 }
 
 func (c *componentHandler) SetCreateOnly() {
@@ -477,7 +463,9 @@ func resetMetadataForCreate(obj client.Object) {
 }
 
 func (c *componentHandler) CreateOrUpdateOrDelete(ctx context.Context, component render.Component, status status.StatusManager) error {
-	component = c.decorator.Decorate(component, c.renderInputs)
+	if c.modify != nil {
+		component = c.modify(component)
+	}
 
 	// Before creating the component, make sure that it is ready. This provides a hook to do
 	// dependency checking for the component.

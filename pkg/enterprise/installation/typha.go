@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package typha
+package installation
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
@@ -25,12 +25,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 )
 
-// Register wires the typha extension into the variant.
-func Register(r *extensions.Registry) {
-	extensions.RegisterModifier(r, render.TyphaKey, modifyTypha)
-}
-
-func modifyTypha(ri render.Inputs, _ render.TyphaExtensionInputs, objs, del []client.Object) ([]client.Object, []client.Object) {
+func modifyTypha(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.TyphaClusterRoleName); ok {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},

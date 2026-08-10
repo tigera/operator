@@ -50,15 +50,6 @@ const (
 	APIServerPortName   = "apiserver"
 	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
 
-	// ComponentNameAPIServer is the extension key under which a variant registers
-	// its API server modifier and image override.
-	ComponentNameAPIServer = "apiserver"
-
-	// ComponentNameAPIServerPolicy keys the API server network policy modifier (the
-	// OIDC egress rule and the L7 admission controller ingress port). The base policy
-	// carries neither.
-	ComponentNameAPIServerPolicy = "apiserver-policy"
-
 	TieredPolicyPassthruClusterRoleName = "calico-tiered-policy-passthrough"
 )
 
@@ -115,20 +106,16 @@ func APIServer(cfg *APIServerConfiguration) (Component, error) {
 	}, nil
 }
 
-// apiServerPolicyComponent wraps the API server network policy passthrough so it is
-// render.Extensible: the variant modifier adds the OIDC egress rule and the L7
-// admission controller ingress port. The base policy carries neither.
+// apiServerPolicyComponent carries the config a variant needs to layer its own rules
+// onto the base policy.
 type apiServerPolicyComponent struct {
 	Component
+
 	cfg *APIServerConfiguration
 }
 
-func (apiServerPolicyComponent) ModifierKey() string { return APIServerPolicyKey.String() }
-
-// ExtensionInputs hands the policy modifier the config it needs to look up container
-// ports.
-func (c apiServerPolicyComponent) ExtensionInputs() any {
-	return APIServerPolicyExtensionInputs{Config: c.cfg}
+func (c apiServerPolicyComponent) APIServerPolicyConfig() *APIServerConfiguration {
+	return c.cfg
 }
 
 func APIServerPolicy(cfg *APIServerConfiguration) Component {
@@ -169,35 +156,8 @@ type apiServerComponent struct {
 	calicoImage string
 }
 
-// APIServerExtensionInputs carries the API server's render configuration and resolved
-// image to a variant modifier. The modifier uses these to build variant-specific objects
-// and to layer additional containers, volumes, and configuration onto the rendered
-// deployment.
-type APIServerExtensionInputs struct {
-	Config      *APIServerConfiguration
-	CalicoImage string
-}
-
-// APIServerPolicyExtensionInputs carries the API server's render configuration to the
-// network policy modifier. It is a separate type from APIServerExtensionInputs, despite
-// overlapping, so that a modifier can't be registered against the wrong key.
-type APIServerPolicyExtensionInputs struct {
-	Config *APIServerConfiguration
-}
-
-var (
-	APIServerKey       = ModifierKey[APIServerExtensionInputs]{ComponentNameAPIServer}
-	APIServerPolicyKey = ModifierKey[APIServerPolicyExtensionInputs]{ComponentNameAPIServerPolicy}
-)
-
-// ModifierKey implements render.Extensible: the API server's variant-specific objects are
-// applied by the modifier registered under this key.
-func (c *apiServerComponent) ModifierKey() string { return APIServerKey.String() }
-
-// ExtensionInputs implements render.ExtensionInputsProvider, handing the modifier the
-// config and resolved image it needs.
-func (c *apiServerComponent) ExtensionInputs() any {
-	return APIServerExtensionInputs{Config: c.cfg, CalicoImage: c.calicoImage}
+func (c *apiServerComponent) APIServerConfig() *APIServerConfiguration {
+	return c.cfg
 }
 
 func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {

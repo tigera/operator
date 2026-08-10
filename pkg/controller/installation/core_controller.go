@@ -56,6 +56,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
@@ -219,7 +220,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("tigera-installation-controller failed to watch BGPConfiguration resource: %w", err)
 	}
 
-	if err = opts.Extensions.For(controller.Installation).Watches(c); err != nil {
+	if err = opts.Extensions.Installation().Watches(c); err != nil {
 		return fmt.Errorf("tigera-installation-controller failed to set up extension watches: %w", err)
 	}
 
@@ -285,7 +286,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		migrationWatchReady: &utils.ReadyFlag{},
 		newComponentHandler: utils.NewComponentHandler,
 		opts:                opts,
-		ext:                 opts.Extensions.For(controller.Installation),
+		ext:                 opts.Extensions.Installation(),
 	}
 	r.status.Run(opts.ShutdownContext)
 	r.typhaAutoscaler.start(opts.ShutdownContext)
@@ -337,7 +338,7 @@ type ReconcileInstallation struct {
 	tierWatchReady                *utils.ReadyFlag
 	migrationWatchReady           *utils.ReadyFlag
 	opts                          options.ControllerOptions
-	ext                           extensions.Controller
+	ext                           extensions.InstallationExtension
 
 	// newComponentHandler returns a new component handler. Useful stub for unit testing.
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
@@ -1127,8 +1128,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.ext.Decorator()),
+		utils.WithModifier(func(c render.Component) render.Component {
+			return r.ext.Modify(c, ci.RenderInputs)
+		}),
 	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.

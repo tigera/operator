@@ -17,14 +17,33 @@ package extensions
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 )
 
-// modifier post-processes the objects a render component produced, with the
-// component's typed inputs already bound in by Modify. It may mutate matched
-// objects and append to either list (deletes clean up what a prior variant left
-// behind). It runs only for the variant it is registered under.
-type modifier func(ri render.Inputs, create, delete []client.Object) (newCreate, newDelete []client.Object)
+// Modifier post-processes the objects a render component produced. Appending to
+// delete cleans up what a prior variant left behind.
+type Modifier func(create, delete []client.Object) (newCreate, newDelete []client.Object)
+
+// Decorate wraps base so modify runs over its rendered objects. An Installation
+// asking for a different variant gets base untouched.
+func Decorate(base render.Component, ri render.Inputs, variant operatorv1.ProductVariant, modify Modifier) render.Component {
+	if ri.Installation == nil || ri.Installation.Variant != variant {
+		return base
+	}
+	return &decoratedComponent{Component: base, modify: modify}
+}
+
+// decoratedComponent renders its base component and runs the modifier over the result.
+type decoratedComponent struct {
+	render.Component
+
+	modify Modifier
+}
+
+func (d *decoratedComponent) Objects() ([]client.Object, []client.Object) {
+	return d.modify(d.Component.Objects())
+}
 
 // FindObject returns the first object of type T with the given name.
 func FindObject[T client.Object](objs []client.Object, name string) (T, bool) {

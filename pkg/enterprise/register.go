@@ -18,31 +18,27 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
-	"github.com/tigera/operator/pkg/enterprise/guardian"
 	"github.com/tigera/operator/pkg/enterprise/installation"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
-	"github.com/tigera/operator/pkg/enterprise/typha"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
-// New builds the extension registry for the in-repo Calico Enterprise variant,
-// registering only what the variant the operator resolved at startup extends. After
-// the monorepo split this is what calico-private's main will construct instead.
-func New(variant operatorv1.ProductVariant, o eoptions.Options) *extensions.Registry {
-	r := extensions.NewRegistry(variant)
+// New builds the Calico Enterprise extensions. After the monorepo split this is what
+// calico-private's main constructs instead.
+func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Extensions {
 	switch variant {
 	case operatorv1.CalicoEnterprise:
-		typha.Register(r)
-		installation.Register(r, o)
-		windows.Register(r)
-		guardian.Register(r)
-		apiserver.Register(r, o)
-		clusterconnection.Register(r)
+		return extensions.New(extensions.Set{
+			Installation:      installation.New(variant, o),
+			Windows:           windows.New(variant),
+			APIServer:         apiserver.New(variant, o),
+			ClusterConnection: clusterconnection.New(variant),
+		})
 	case operatorv1.Calico:
 		// Clean up what a prior Enterprise installation left behind.
-		apiserver.RegisterCalicoCleanup(r)
+		return extensions.New(extensions.Set{APIServer: apiserver.CalicoCleanup{}})
 	}
 
-	return r
+	return extensions.Extensions{}
 }

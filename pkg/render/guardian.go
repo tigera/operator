@@ -73,21 +73,16 @@ var (
 )
 
 func Guardian(cfg *GuardianConfiguration) Component {
-	return &GuardianComponent{
+	return &guardianComponent{
 		cfg: cfg,
 	}
 }
 
-// GuardianPolicy renders the guardian network policy. The core operator renders
-// the OSS policy; the enterprise modifier (keyed ComponentNameGuardianPolicy)
-// replaces it with the management-cluster policy. The error return is retained
-// for callers but is always nil now that the fallible enterprise computation
-// lives in the modifier.
+// GuardianPolicy renders the OSS guardian network policy. A variant may replace it
+// with its own. The error return is always nil, and is kept for callers.
 func GuardianPolicy(cfg *GuardianConfiguration) (Component, error) {
 	return &guardianPolicyComponent{cfg: cfg}, nil
 }
-
-const ComponentNameGuardianPolicy = "guardian-policy"
 
 type guardianPolicyComponent struct {
 	cfg *GuardianConfiguration
@@ -96,27 +91,8 @@ type guardianPolicyComponent struct {
 func (c *guardianPolicyComponent) ResolveImages(*operatorv1.ImageSet) error { return nil }
 func (c *guardianPolicyComponent) SupportedOSType() rmeta.OSType            { return rmeta.OSTypeAny }
 func (c *guardianPolicyComponent) Ready() bool                              { return true }
-func (c *guardianPolicyComponent) ModifierKey() string                      { return GuardianPolicyKey.String() }
-
-// GuardianPolicyExtensionInputs is the per-component context the guardian
-// policy modifier reads (via Inputs.Component). The enterprise guardian
-// network policy is built entirely from these inputs.
-type GuardianPolicyExtensionInputs struct {
-	URL                        string
-	PodProxies                 []*httpproxy.Config
-	OpenShift                  bool
-	IncludeEgressNetworkPolicy bool
-}
-
-var GuardianPolicyKey = ModifierKey[GuardianPolicyExtensionInputs]{ComponentNameGuardianPolicy}
-
-func (c *guardianPolicyComponent) ExtensionInputs() any {
-	return GuardianPolicyExtensionInputs{
-		URL:                        c.cfg.URL,
-		PodProxies:                 c.cfg.PodProxies,
-		OpenShift:                  c.cfg.OpenShift,
-		IncludeEgressNetworkPolicy: c.cfg.IncludeEgressNetworkPolicy,
-	}
+func (c *guardianPolicyComponent) GuardianPolicyConfig() *GuardianConfiguration {
+	return c.cfg
 }
 
 func (c *guardianPolicyComponent) Objects() ([]client.Object, []client.Object) {
@@ -176,12 +152,12 @@ func GuardianRenderDataFromInputs(ri Inputs) (GuardianRenderData, bool) {
 	return data, ok
 }
 
-type GuardianComponent struct {
+type guardianComponent struct {
 	cfg         *GuardianConfiguration
 	calicoImage string
 }
 
-func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
+func (c *guardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := c.cfg.Installation.Registry
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
@@ -190,38 +166,15 @@ func (c *GuardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	return err
 }
 
-func (c *GuardianComponent) SupportedOSType() rmeta.OSType {
+func (c *guardianComponent) GuardianConfig() *GuardianConfiguration {
+	return c.cfg
+}
+
+func (c *guardianComponent) SupportedOSType() rmeta.OSType {
 	return rmeta.OSTypeLinux
 }
 
-func (c *GuardianComponent) ModifierKey() string { return GuardianKey.String() }
-
-// GuardianExtensionInputs is the per-component context the guardian modifier
-// reads (via Inputs.Component). It carries the inputs the enterprise
-// guardian behavior needs that a modifier can't derive from the installation:
-// the management cluster's impersonation config, whether we're on OpenShift,
-// and the trusted bundle mount path the CA env vars reference.
-type GuardianExtensionInputs struct {
-	OpenShift              bool
-	Impersonation          *operatorv1.Impersonation
-	TrustedBundleMountPath string
-}
-
-var GuardianKey = ModifierKey[GuardianExtensionInputs]{GuardianName}
-
-func (c *GuardianComponent) ExtensionInputs() any {
-	var impersonation *operatorv1.Impersonation
-	if c.cfg.ManagementClusterConnection != nil {
-		impersonation = c.cfg.ManagementClusterConnection.Spec.Impersonation
-	}
-	return GuardianExtensionInputs{
-		OpenShift:              c.cfg.OpenShift,
-		Impersonation:          impersonation,
-		TrustedBundleMountPath: c.cfg.TrustedCertBundle.MountPath(),
-	}
-}
-
-func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
+func (c *guardianComponent) Objects() ([]client.Object, []client.Object) {
 	objs := []client.Object{
 		c.serviceAccount(),
 		c.clusterRole(),
@@ -234,11 +187,11 @@ func (c *GuardianComponent) Objects() ([]client.Object, []client.Object) {
 	return objs, deprecatedObjects()
 }
 
-func (c *GuardianComponent) Ready() bool {
+func (c *guardianComponent) Ready() bool {
 	return true
 }
 
-func (c *GuardianComponent) service() *corev1.Service {
+func (c *guardianComponent) service() *corev1.Service {
 	ports := []corev1.ServicePort{
 		{
 			Name: "https",
@@ -265,14 +218,14 @@ func (c *GuardianComponent) service() *corev1.Service {
 	}
 }
 
-func (c *GuardianComponent) serviceAccount() *corev1.ServiceAccount {
+func (c *guardianComponent) serviceAccount() *corev1.ServiceAccount {
 	return &corev1.ServiceAccount{
 		TypeMeta:   metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: GuardianServiceAccountName, Namespace: GuardianNamespace},
 	}
 }
 
-func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
+func (c *guardianComponent) clusterRole() *rbacv1.ClusterRole {
 	policyRules := []rbacv1.PolicyRule{
 		{
 			APIGroups: []string{""},
@@ -320,7 +273,7 @@ func (c *GuardianComponent) clusterRole() *rbacv1.ClusterRole {
 	}
 }
 
-func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
+func (c *guardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -341,7 +294,7 @@ func (c *GuardianComponent) clusterRoleBinding() *rbacv1.ClusterRoleBinding {
 	}
 }
 
-func (c *GuardianComponent) deployment() *appsv1.Deployment {
+func (c *guardianComponent) deployment() *appsv1.Deployment {
 	var replicas int32 = 1
 
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateCriticalAddonsAndControlPlane...)
@@ -386,7 +339,7 @@ func (c *GuardianComponent) deployment() *appsv1.Deployment {
 	return d
 }
 
-func (c *GuardianComponent) volumes() []corev1.Volume {
+func (c *guardianComponent) volumes() []corev1.Volume {
 	volumes := []corev1.Volume{
 		c.cfg.TrustedCertBundle.Volume(),
 		{
@@ -404,7 +357,7 @@ func (c *GuardianComponent) volumes() []corev1.Volume {
 	return volumes
 }
 
-func (c *GuardianComponent) container() []corev1.Container {
+func (c *guardianComponent) container() []corev1.Container {
 	envVars := []corev1.EnvVar{
 		{Name: "GUARDIAN_PORT", Value: "9443"},
 		{Name: "GUARDIAN_LOGLEVEL", Value: "INFO"},
@@ -461,7 +414,7 @@ func (c *GuardianComponent) container() []corev1.Container {
 	}
 }
 
-func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
+func (c *guardianComponent) volumeMounts() []corev1.VolumeMount {
 	volumeMounts := append(
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 		corev1.VolumeMount{Name: GuardianVolumeName, MountPath: "/certs/", ReadOnly: true},
@@ -472,7 +425,7 @@ func (c *GuardianComponent) volumeMounts() []corev1.VolumeMount {
 	return volumeMounts
 }
 
-func (c *GuardianComponent) annotations() map[string]string {
+func (c *guardianComponent) annotations() map[string]string {
 	annotations := c.cfg.TrustedCertBundle.HashAnnotations()
 	annotations["hash.operator.tigera.io/tigera-managed-cluster-connection"] = rmeta.AnnotationHash(c.cfg.TunnelSecret.Data)
 

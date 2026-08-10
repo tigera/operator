@@ -74,7 +74,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		tierWatchReady:      &utils.ReadyFlag{},
 		migrationWatchReady: &utils.ReadyFlag{},
 		opts:                opts,
-		ext:                 opts.Extensions.For(controller.APIServer),
+		ext:                 opts.Extensions.APIServer(),
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -108,7 +108,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// The variant extension registers the enterprise watches it needs (the management
 	// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
-	if err = opts.Extensions.For(controller.APIServer).Watches(c); err != nil {
+	if err = opts.Extensions.APIServer().Watches(c); err != nil {
 		return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
 	}
 
@@ -197,7 +197,7 @@ type ReconcileAPIServer struct {
 	tierWatchReady      *utils.ReadyFlag
 	migrationWatchReady *utils.ReadyFlag
 	opts                options.ControllerOptions
-	ext                 extensions.Controller
+	ext                 extensions.APIServerExtension
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -380,8 +380,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithRenderInputs(ci.RenderInputs),
-		utils.WithDecorator(r.ext.Decorator()),
+		utils.WithModifier(func(c render.Component) render.Component {
+			return r.ext.Modify(c, ci.RenderInputs)
+		}),
 	)
 
 	// Render the desired objects from the CRD and create or update them.

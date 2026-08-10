@@ -19,7 +19,9 @@ import (
 	"fmt"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -28,18 +30,36 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-// Register wires the clusterconnection controller hook into the variant.
-func Register(r *extensions.Registry) {
-	r.RegisterController(controller.ClusterConnection, clusterConnectionControllerExtension{})
+// Extension is the Calico Enterprise behavior for the clusterconnection controller
+// and the guardian components it renders.
+type Extension struct {
+	variant operatorv1.ProductVariant
 }
 
-// clusterConnectionControllerExtension is the Calico Enterprise controller-side hook
-// for the clusterconnection (ManagementClusterConnection) controller.
-type clusterConnectionControllerExtension struct{}
+var _ extensions.ClusterConnectionExtension = &Extension{}
 
-// Validate rejects clusterconnection configuration Calico Enterprise does not
-// support: a cluster cannot be both a management cluster and a managed cluster.
-func (clusterConnectionControllerExtension) validate(ctx context.Context, ci controller.Inputs) error {
+// New returns the clusterconnection extension for the variant the operator resolved.
+func New(variant operatorv1.ProductVariant) *Extension {
+	return &Extension{variant: variant}
+}
+
+// Modify dispatches over the components the clusterconnection controller renders.
+func (e *Extension) Modify(c render.Component, ri render.Inputs) render.Component {
+	switch t := c.(type) {
+	case render.GuardianComponent:
+		return extensions.Decorate(c, ri, e.variant, func(objs, del []client.Object) ([]client.Object, []client.Object) {
+			return modifyGuardian(ri, t.GuardianConfig(), objs, del)
+		})
+	case render.GuardianPolicyComponent:
+		return extensions.Decorate(c, ri, e.variant, func(objs, del []client.Object) ([]client.Object, []client.Object) {
+			return modifyGuardianPolicy(ri, t.GuardianPolicyConfig(), objs, del)
+		})
+	default:
+		return c
+	}
+}
+
+func (e *Extension) validate(ctx context.Context, ci controller.Inputs) error {
 	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
@@ -55,7 +75,7 @@ func (clusterConnectionControllerExtension) validate(ctx context.Context, ci con
 // permits the domain-based egress network policy. It creates no certificates, so it
 // returns no managed keypairs. The OSS controller path supplies its own defaults
 // when this hook is absent.
-func (e clusterConnectionControllerExtension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	if err := e.validate(ctx, ci); err != nil {
 		return ci, nil, err
 	}

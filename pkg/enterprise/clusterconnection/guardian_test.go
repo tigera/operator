@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package guardian_test
+package clusterconnection_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -25,11 +25,12 @@ import (
 	client "sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("guardian enterprise modifier", func() {
@@ -52,8 +53,12 @@ var _ = Describe("guardian enterprise modifier", func() {
 
 	entIn := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}}
 
+	guardianCfg := func() *render.GuardianConfiguration {
+		return &render.GuardianConfiguration{Installation: entIn.Installation}
+	}
+
 	It("appends the secrets RBAC and UI settings", func() {
-		out, _ := extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, entIn, render.GuardianExtensionInputs{}, newObjs(), nil)
+		out, _ := ext.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: newObjs(), Delete: nil}, Cfg: guardianCfg()}, entIn).Objects()
 		_, ok := extensions.FindObject[*rbacv1.Role](out, render.GuardianSecretsRole)
 		Expect(ok).To(BeTrue())
 		_, ok = extensions.FindObject[*rbacv1.RoleBinding](out, render.GuardianSecretsRoleBindingName)
@@ -63,7 +68,7 @@ var _ = Describe("guardian enterprise modifier", func() {
 	})
 
 	It("adds the elasticsearch and kibana service ports", func() {
-		out, _ := extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, entIn, render.GuardianExtensionInputs{}, newObjs(), nil)
+		out, _ := ext.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: newObjs(), Delete: nil}, Cfg: guardianCfg()}, entIn).Objects()
 		svc, _ := extensions.FindObject[*corev1.Service](out, render.GuardianServiceName)
 		names := []string{}
 		for _, p := range svc.Spec.Ports {
@@ -73,10 +78,13 @@ var _ = Describe("guardian enterprise modifier", func() {
 	})
 
 	It("replaces the cluster role rules and adds impersonation", func() {
-		gc := render.GuardianExtensionInputs{
-			Impersonation: &operatorv1.Impersonation{Users: []string{"foo"}, Groups: []string{"bar"}},
+		gc := guardianCfg()
+		gc.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{
+			Spec: operatorv1.ManagementClusterConnectionSpec{
+				Impersonation: &operatorv1.Impersonation{Users: []string{"foo"}, Groups: []string{"bar"}},
+			},
 		}
-		out, _ := extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, entIn, gc, newObjs(), nil)
+		out, _ := ext.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: newObjs(), Delete: nil}, Cfg: gc}, entIn).Objects()
 		role, _ := extensions.FindObject[*rbacv1.ClusterRole](out, render.GuardianClusterRoleName)
 
 		// The single OSS placeholder rule is gone, replaced by the enterprise set.
@@ -86,15 +94,19 @@ var _ = Describe("guardian enterprise modifier", func() {
 	})
 
 	It("adds the CA bundle env to the guardian container", func() {
-		gc := render.GuardianExtensionInputs{TrustedBundleMountPath: "/ca/bundle"}
-		out, _ := extensionstest.ApplyExtensionsWithInputs(ext.For(controller.Installation).Decorator(), render.GuardianKey, entIn, gc, newObjs(), nil)
+		gc := guardianCfg()
+		gc.TrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
+		out, _ := ext.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: newObjs(), Delete: nil}, Cfg: gc}, entIn).Objects()
 		dep, _ := extensions.FindObject[*appsv1.Deployment](out, render.GuardianDeploymentName)
-		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH", Value: "/ca/bundle"}))
+		Expect(dep.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+			Name:  "GUARDIAN_PROMETHEUS_CA_BUNDLE_PATH",
+			Value: gc.TrustedCertBundle.MountPath(),
+		}))
 	})
 
 	It("does nothing when the operator runs as Calico", func() {
 		ctx := render.Inputs{Installation: &operatorv1.InstallationSpec{Variant: operatorv1.Calico}}
-		out, _ := extensionstest.ApplyExtensions(calicoExt.For(controller.Installation).Decorator(), render.GuardianKey, ctx, newObjs(), nil)
+		out, _ := calicoExt.ClusterConnection().Modify(extensionstest.GuardianStub{StubComponent: extensionstest.StubComponent{Create: newObjs(), Delete: nil}, Cfg: nil}, ctx).Objects()
 		Expect(out).To(HaveLen(len(newObjs())))
 		role, _ := extensions.FindObject[*rbacv1.ClusterRole](out, render.GuardianClusterRoleName)
 		Expect(role.Rules).To(Equal([]rbacv1.PolicyRule{{Verbs: []string{"get"}}}))

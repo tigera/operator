@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package typha_test
+package installation_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
@@ -26,7 +26,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -66,9 +65,9 @@ var _ = Describe("typha enterprise modifier", func() {
 		}
 	})
 
-	// renderTypha renders the real typha component and applies the registered
-	// modifier, exactly as the componentHandler does.
-	renderTypha := func(r *extensions.Registry, install *operatorv1.InstallationSpec, ri render.Inputs) []client.Object {
+	// renderTypha renders the real typha component and runs the extension over it,
+	// exactly as the installation controller does.
+	renderTypha := func(r extensions.Extensions, install *operatorv1.InstallationSpec, ri render.Inputs) []client.Object {
 		component := render.Typha(&render.TyphaConfiguration{
 			K8sServiceEp:    k8sapi.ServiceEndpoint{},
 			Installation:    install,
@@ -79,7 +78,7 @@ var _ = Describe("typha enterprise modifier", func() {
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		objs, del := component.Objects()
 
-		out, _ := extensionstest.ApplyExtensions(r.For(controller.Installation).Decorator(), render.TyphaKey, ri, objs, del)
+		out, _ := r.Installation().Modify(extensionstest.TyphaStub{StubComponent: extensionstest.StubComponent{Create: objs, Delete: del}, Cfg: nil}, ri).Objects()
 		return out
 	}
 

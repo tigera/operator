@@ -168,6 +168,11 @@ type Config struct {
 	KubeControllerPort            int
 	FelixPrometheusMetricsEnabled bool
 	LicenseExpired                bool
+	// OpenTelemetryEnabled reports whether the OTel Collector is configured. Its
+	// ServiceMonitor is created and removed with the collector; without this the
+	// monitor render cannot tell, and would leave one behind selecting a Service
+	// that no longer exists.
+	OpenTelemetryEnabled bool
 
 	// Operator metrics fields.
 	OperatorMetricsEnabled bool
@@ -288,6 +293,13 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		toDelete = append(toDelete, serviceMonitors...)
 	} else {
 		toCreate = append(toCreate, serviceMonitors...)
+	}
+
+	// Tracks the collector's own lifecycle rather than the license's.
+	if mc.cfg.OpenTelemetryEnabled && !mc.cfg.LicenseExpired {
+		toCreate = append(toCreate, mc.serviceMonitorOpenTelemetryCollector())
+	} else {
+		toDelete = append(toDelete, mc.serviceMonitorOpenTelemetryCollector())
 	}
 
 	if mc.cfg.KeyValidatorConfig != nil {
@@ -1154,6 +1166,35 @@ func (mc *monitorComponent) serviceMonitorFluentBit() *monitoringv1.ServiceMonit
 					Path:          "/api/v2/metrics/prometheus",
 					ScrapeTimeout: "5s",
 					// No TLS config: plain HTTP, see the function comment.
+				},
+			},
+		},
+	}
+}
+
+// serviceMonitorOpenTelemetryCollector scrapes the collector's own telemetry
+// (queue depth, export failures, dropped records) so a silently failing export
+// pipeline is visible. Plain HTTP, like fluent-bit's: the port serves the
+// collector's internal metrics only and is restricted to Prometheus by the
+// component's NetworkPolicy.
+func (mc *monitorComponent) serviceMonitorOpenTelemetryCollector() *monitoringv1.ServiceMonitor {
+	return &monitoringv1.ServiceMonitor{
+		TypeMeta: metav1.TypeMeta{Kind: monitoringv1.ServiceMonitorsKind, APIVersion: MonitoringAPIVersion},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      render.OpenTelemetryCollectorName,
+			Namespace: common.TigeraPrometheusNamespace,
+		},
+		Spec: monitoringv1.ServiceMonitorSpec{
+			Selector: metav1.LabelSelector{
+				MatchLabels: map[string]string{"k8s-app": render.OpenTelemetryCollectorName},
+			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{MatchNames: []string{render.OpenTelemetryCollectorNamespace}},
+			Endpoints: []monitoringv1.Endpoint{
+				{
+					HonorLabels:   true,
+					Interval:      "5s",
+					Port:          render.OpenTelemetryCollectorMetricsPort,
+					ScrapeTimeout: "5s",
 				},
 			},
 		},

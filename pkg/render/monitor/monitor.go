@@ -1506,6 +1506,16 @@ func calicoSystemPrometheusPolicy(cfg *Config) *v3.NetworkPolicy {
 		})
 	}
 
+	if cfg.OpenTelemetryEnabled {
+		// Pairs with serviceMonitorOpenTelemetryCollector; without it the scrape
+		// is blocked by the namespace default-deny and just reports up=0.
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateServiceSelectorEntityRule(render.OpenTelemetryCollectorNamespace, render.OpenTelemetryCollectorName),
+		})
+	}
+
 	typhaMetricsPort := cfg.Installation.TyphaMetricsPort
 	if typhaMetricsPort != nil {
 		egressRules = append(egressRules, v3.Rule{

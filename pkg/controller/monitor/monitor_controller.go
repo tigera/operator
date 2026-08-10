@@ -280,12 +280,18 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
 	licenseExpired := licenseStatus == utils.LicenseStatusExpired
 
-	// The collector's ServiceMonitor lives here with the others, but its lifecycle
-	// follows LogCollector, so it has to be read to know whether to create it.
+	// The collector's ServiceMonitor and the Prometheus egress rule that reaches it
+	// live here, but follow LogCollector. Gate them on the same conditions the otel
+	// controller deploys on, so the two cannot disagree.
 	openTelemetryEnabled := false
-	if logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client); err != nil {
-		reqLogger.V(2).Info("Unable to read LogCollector; assuming OpenTelemetry export is disabled", "error", err)
-	} else if logCollector != nil {
+	logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client)
+	if err != nil {
+		// Requeue instead of assuming "disabled", which would flap both resources
+		// on an apiserver blip.
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading LogCollector", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	if logCollector != nil {
 		openTelemetryEnabled = logCollector.Spec.OpenTelemetry != nil &&
 			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)
 	}

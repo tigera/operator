@@ -54,6 +54,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
 	tigeratls "github.com/tigera/operator/pkg/tls"
@@ -610,7 +611,7 @@ var _ = Describe("Manager controller tests", func() {
 				// rather than rendering as disabled.
 				It("degrades and requeues when the ConfigMap cannot be read", func() {
 					readErr := fmt.Errorf("the API server is having a bad day")
-					r.client = failingGateReadClient{Client: c, err: readErr}
+					r.client = failingGateReadClient{Client: c, name: rbacmanagement.ConfigMapName, err: readErr}
 					// The shared mockStatus expects a full reconcile, which this returns
 					// early from, so assert the one call.
 					mockStatus.On("SetDegraded", operatorv1.ResourceReadError,
@@ -620,6 +621,73 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(err).To(MatchError(readErr))
 					mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceReadError,
 						"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything)
+				})
+			})
+
+			// ui-apis reads WAF_UI_ENABLED at startup, so the controller's half is
+			// getting the admin's value onto the container.
+			Context("WAF management UI feature gate", func() {
+				writeGate := func(value string) {
+					Expect(c.Create(ctx, &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      wafmanagement.ConfigMapName,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string]string{wafmanagement.ConfigMapKey: value},
+					})).NotTo(HaveOccurred())
+				}
+
+				// wafUIEnv reconciles and reports the value handed to ui-apis.
+				wafUIEnv := func() string {
+					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).NotTo(HaveOccurred())
+
+					d := appsv1.Deployment{
+						TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "v1"},
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      render.ManagerName,
+							Namespace: render.ManagerNamespace,
+						},
+					}
+					Expect(test.GetResource(c, &d)).To(BeNil())
+					uiAPIs := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
+					Expect(uiAPIs).NotTo(BeNil())
+					for _, e := range uiAPIs.Env {
+						if e.Name == "WAF_UI_ENABLED" {
+							return e.Value
+						}
+					}
+					Fail("WAF_UI_ENABLED is not set on the ui-apis container")
+					return ""
+				}
+
+				It("leaves the UI off when the admin has not created the ConfigMap", func() {
+					Expect(wafUIEnv()).To(Equal("false"))
+				})
+
+				It("turns the UI on once the admin enables the feature", func() {
+					writeGate("true")
+					Expect(wafUIEnv()).To(Equal("true"))
+				})
+
+				It("leaves the UI off when the admin sets the value to false", func() {
+					writeGate("false")
+					Expect(wafUIEnv()).To(Equal("false"))
+				})
+
+				// An unreadable ConfigMap is unknown state, not absent, so it degrades
+				// rather than rendering as disabled.
+				It("degrades and requeues when the ConfigMap cannot be read", func() {
+					readErr := fmt.Errorf("the API server is having a bad day")
+					r.client = failingGateReadClient{Client: c, name: wafmanagement.ConfigMapName, err: readErr}
+					mockStatus.On("SetDegraded", operatorv1.ResourceReadError,
+						"Error reading the WAF management UI ConfigMap", readErr.Error(), mock.Anything).Return().Once()
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).To(MatchError(readErr))
+					mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceReadError,
+						"Error reading the WAF management UI ConfigMap", readErr.Error(), mock.Anything)
 				})
 			})
 
@@ -1544,15 +1612,16 @@ var _ = Describe("Manager controller tests", func() {
 	})
 })
 
-// failingGateReadClient fails the read of the gate ConfigMap and passes everything else
-// through, to distinguish an unreadable ConfigMap from an absent one.
+// failingGateReadClient fails the read of the named gate ConfigMap and passes everything
+// else through, to distinguish an unreadable ConfigMap from an absent one.
 type failingGateReadClient struct {
 	client.Client
-	err error
+	name string
+	err  error
 }
 
 func (f failingGateReadClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
+	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == f.name {
 		return f.err
 	}
 	return f.Client.Get(ctx, key, obj, opts...)

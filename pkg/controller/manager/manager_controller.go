@@ -57,6 +57,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
@@ -230,6 +231,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watched so that toggling the RBAC management UI re-renders the access gated on it.
 	if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", rbacmanagement.ConfigMapName, err)
+	}
+
+	// Watched so that toggling the WAF management UI rolls ui-apis with the new WAF_UI_ENABLED.
+	if err = utils.AddConfigMapWatch(c, wafmanagement.ConfigMapName, common.CalicoNamespace, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", wafmanagement.ConfigMapName, err)
 	}
 
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
@@ -738,6 +744,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	wafManagementEnabled, err := utils.WAFManagementEnabled(ctx, r.client, installationSpec.Variant, tenant.MultiTenant())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the WAF management UI ConfigMap", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:         routeConfig,
 		KeyValidatorConfig:         keyValidatorConfig,
@@ -765,6 +777,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
 		RBACManagementEnabled:      rbacManagementEnabled,
+		WAFManagementEnabled:       wafManagementEnabled,
 		CACertCommonName:           certificateManager.CACertCommonName(),
 		Cloud:                      r.opts.Cloud,
 		CloudResources:             mcr,

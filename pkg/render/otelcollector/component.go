@@ -101,7 +101,9 @@ const (
 	livenessInitialDelaySeconds  = 90
 	readinessInitialDelaySeconds = 10
 
-	configHashAnnotation = "hash.operator.tigera.io/otel-collector-config"
+	configHashAnnotation            = "hash.operator.tigera.io/otel-collector-config"
+	exporterCAHashAnnotation        = "hash.operator.tigera.io/otel-exporter-ca"
+	exporterClientTLSHashAnnotation = "hash.operator.tigera.io/otel-exporter-client-tls"
 
 	// DefaultTLSReloadInterval is a poll, not a watch, so keep it cheap. Certs
 	// rotate roughly every two years and the operator starts rotating a month
@@ -586,6 +588,12 @@ func (c *component) podAnnotations() map[string]string {
 	}
 	if c.cfg.ReceiverTLSSecret != nil {
 		annotations[c.cfg.ReceiverTLSSecret.HashAnnotationKey()] = c.cfg.ReceiverTLSSecret.HashAnnotationValue()
+	}
+	if c.cfg.ExporterCA != nil {
+		annotations[exporterCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.ExporterCA.Data)
+	}
+	if c.cfg.ExporterClientTLS != nil {
+		annotations[exporterClientTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ExporterClientTLS.Data)
 	}
 	return annotations
 }

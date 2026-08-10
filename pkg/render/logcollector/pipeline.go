@@ -235,7 +235,9 @@ func (c *fluentBitComponent) addOutputs(cfg *fluentBitConfig) {
 			c.linseedHTTPOutput(tag, c.certPath(), c.keyPath(), linseedStorageLimit(tag)))
 	}
 
-	c.addOpenTelemetryOutputs(cfg)
+	if c.osType == rmeta.OSTypeLinux {
+		c.addOpenTelemetryOutputs(cfg)
+	}
 
 	// Additional stores are Linux-only, matching the fluentd Windows variant
 	// (Linseed only).

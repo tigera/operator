@@ -610,6 +610,9 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
 				Name: "exporter-ca", MountPath: "/certs/exporter-ca", ReadOnly: true,
 			}))
+
+			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/otel-exporter-ca"),
+				"CA rotation must trigger a pod roll via the hash annotation")
 		})
 
 		It("should present the client keypair only to exporters that enable mutual TLS", func() {
@@ -652,6 +655,9 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
 				Name: "exporter-client-tls", MountPath: "/certs/exporter-client", ReadOnly: true,
 			}))
+
+			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/otel-exporter-client-tls"),
+				"client cert rotation must trigger a pod roll via the hash annotation")
 		})
 
 		It("should list multiple exporters in pipelines", func() {

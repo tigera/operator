@@ -130,6 +130,30 @@ var _ = Describe("monitor rendering tests", func() {
 		Expect(rtest.GetResource(toDelete, render.OpenTelemetryCollectorName, common.TigeraPrometheusNamespace, "monitoring.coreos.com", "v1", monitoringv1.ServiceMonitorsKind)).To(BeNil())
 	})
 
+	It("Should let Prometheus reach the collector whenever it renders the ServiceMonitor", func() {
+		// Both must appear together, or the scrape is blocked and reports up=0.
+		otelEgress := func() []v3.Rule {
+			toCreate, _ := monitor.MonitorPolicy(cfg).Objects()
+			policy := rtest.GetResource(toCreate, monitor.PrometheusPolicyName, common.TigeraPrometheusNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+			matched := []v3.Rule{}
+			for _, r := range policy.Spec.Egress {
+				if svc := r.Destination.Services; svc != nil && svc.Name == render.OpenTelemetryCollectorName {
+					matched = append(matched, r)
+				}
+			}
+			return matched
+		}
+
+		cfg.OpenTelemetryEnabled = false
+		Expect(otelEgress()).To(BeEmpty())
+
+		cfg.OpenTelemetryEnabled = true
+		rules := otelEgress()
+		Expect(rules).To(HaveLen(1))
+		Expect(rules[0].Action).To(Equal(v3.Allow))
+		Expect(rules[0].Destination.Services.Namespace).To(Equal(render.OpenTelemetryCollectorNamespace))
+	})
+
 	It("Should render Prometheus resources", func() {
 		component := monitor.Monitor(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())

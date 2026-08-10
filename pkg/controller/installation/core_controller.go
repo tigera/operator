@@ -1228,6 +1228,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	calicoVersion := components.CalicoRelease
 
 	felixPrometheusMetricsPort := defaultFelixMetricsDefaultPort
+	if felixConfiguration.Spec.PrometheusMetricsPort != nil {
+		felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
+	}
 
 	if instance.Spec.Variant.IsEnterprise() {
 
@@ -1239,10 +1242,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			err := errors.New("felixConfiguration prometheusReporterPort=0 not supported")
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "invalid metrics port", err, reqLogger)
 			return reconcile.Result{}, err
-		}
-
-		if felixConfiguration.Spec.PrometheusMetricsPort != nil {
-			felixPrometheusMetricsPort = *felixConfiguration.Spec.PrometheusMetricsPort
 		}
 
 		nodePrometheusTLS, err = certificateManager.GetOrCreateKeyPair(r.client, render.NodePrometheusTLSServerSecret, common.OperatorNamespace(), dns.GetServiceDNSNames(render.CalicoNodeMetricsService, common.CalicoNamespace, r.clusterDomain))

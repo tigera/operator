@@ -286,7 +286,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	if logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client); err != nil {
 		reqLogger.V(2).Info("Unable to read LogCollector; assuming OpenTelemetry export is disabled", "error", err)
 	} else if logCollector != nil {
-		openTelemetryEnabled = logCollector.Spec.OpenTelemetry != nil
+		openTelemetryEnabled = logCollector.Spec.OpenTelemetry != nil &&
+			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)
 	}
 
 	// When in the grace period, schedule a requeue so the controller automatically

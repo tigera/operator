@@ -281,6 +281,12 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					{Name: "backend", Endpoint: "other.example.com:4317"},
 				},
 			}),
+			Entry("mutualTLS on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
+				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+				Exporters: []operatorv1.OpenTelemetryExporter{
+					{Name: "backend", Endpoint: "http://otlp.example.com:4318", MutualTLS: ptr.To(true)},
+				},
+			}),
 		)
 	})
 

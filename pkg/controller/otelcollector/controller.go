@@ -17,6 +17,7 @@ package otelcollector
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -496,6 +497,9 @@ func validateOpenTelemetrySpec(spec *operatorv1.OpenTelemetrySpec) error {
 			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
 		}
 		seen[exp.Name] = struct{}{}
+		if exp.MutualTLS != nil && *exp.MutualTLS && strings.HasPrefix(exp.Endpoint, "http://") {
+			return fmt.Errorf("exporter %q sets mutualTLS on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
+		}
 	}
 	return nil
 }

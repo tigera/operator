@@ -944,6 +944,35 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Ports: networkpolicy.Ports(4317),
 			})))
 		})
+
+		DescribeTable("should always emit a rule for an endpoint carrying no port",
+			func(protocol operatorv1.OpenTelemetryExporterProtocol, wantPort uint16) {
+				// The OTLP exporters accept a bare host and default the port
+				// themselves. Skipping the rule left the default-deny silently
+				// dropping every export while the operator still reported Available.
+				cfg := &otelcollector.Configuration{
+					Installation:        defaultInstallation,
+					DomainEgressAllowed: true,
+					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+						Exporters: []operatorv1.OpenTelemetryExporter{
+							{Name: "noport", Endpoint: "otlp.example.com", Protocol: protocol},
+						},
+					},
+				}
+				comp, err := otelcollector.OpenTelemetryCollector(cfg)
+				Expect(err).NotTo(HaveOccurred())
+				objs, _ := comp.Objects()
+
+				np, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objs, otelcollector.OpenTelemetryCollectorPolicyName, otelcollector.OpenTelemetryCollectorNamespace)
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(np.Spec.Egress).To(ContainElement(HaveField("Destination", v3.EntityRule{
+					Ports:   networkpolicy.Ports(wantPort),
+					Domains: []string{"otlp.example.com"},
+				})))
+			},
+			Entry("gRPC defaults to 4317", operatorv1.OpenTelemetryProtocolGRPC, uint16(4317)),
+			Entry("HTTP defaults to 4318", operatorv1.OpenTelemetryProtocolHTTP, uint16(4318)),
+		)
 	})
 
 	Context("StatefulSet overrides", func() {

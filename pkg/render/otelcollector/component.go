@@ -680,6 +680,27 @@ func (c *component) statefulSet() *appsv1.StatefulSet {
 	}
 }
 
+// exporterDestination resolves the egress destination for an exporter. The OTLP
+// exporters accept a bare host and supply the port themselves, which
+// ParseExternalDestination cannot infer, so fall back to the protocol's default
+// port instead of returning nothing — an exporter with no rule is silently
+// dropped by the default-deny, with the operator still reporting Available.
+func exporterDestination(exp operatorv1.OpenTelemetryExporter) networkpolicy.ExternalDestination {
+	if dest, ok := networkpolicy.ParseExternalDestination(exp.Endpoint); ok {
+		return dest
+	}
+	port := uint16(OTLPGRPCPort)
+	if exp.Protocol == operatorv1.OpenTelemetryProtocolHTTP {
+		port = OTLPHTTPPort
+	}
+	// A bare host carries no scheme or path, so it is safe to name directly.
+	// Anything more exotic falls through to a port-only rule.
+	if !strings.ContainsAny(exp.Endpoint, "/:") {
+		return networkpolicy.ExternalDestination{Host: exp.Endpoint, Port: port}
+	}
+	return networkpolicy.ExternalDestination{Port: port}
+}
+
 func (c *component) networkPolicy() *v3.NetworkPolicy {
 	egressRules := []v3.Rule{}
 
@@ -688,14 +709,10 @@ func (c *component) networkPolicy() *v3.NetworkPolicy {
 	// ports: the exporters below are the only egress destinations we need, and a
 	// catch-all would let the collector reach any host on 4317/4318.
 	for _, exp := range c.cfg.OpenTelemetry.Exporters {
-		dest, ok := networkpolicy.ParseExternalDestination(exp.Endpoint)
-		if !ok {
-			continue
-		}
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.ExternalDestinationEntityRule(dest, c.cfg.DomainEgressAllowed),
+			Destination: networkpolicy.ExternalDestinationEntityRule(exporterDestination(exp), c.cfg.DomainEgressAllowed),
 		})
 	}
 

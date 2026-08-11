@@ -59,6 +59,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
 
@@ -98,9 +99,7 @@ var (
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	return log.WithValues("name", name, "namespace", namespace, "kind", gvk.Kind)
+	return log.WithValues("name", obj.GetName(), "namespace", obj.GetNamespace(), "kind", gvk.Kind)
 }
 
 // IgnoreObject returns true if the object has been marked as ignored by the user,
@@ -558,6 +557,22 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	}
 
 	return obj, nil
+}
+
+// RBACManagementEnabled reports whether the RBAC management UI should be rendered.
+// The feature is Enterprise-only, and multi-tenant force-disables it on the ui-apis
+// side. Otherwise the admin's switch decides; an absent ConfigMap reads as disabled.
+func RBACManagementEnabled(ctx context.Context, c client.Client, variant operatorv1.ProductVariant, multiTenant bool) (bool, error) {
+	if !variant.IsEnterprise() || multiTenant {
+		return false, nil
+	}
+	gate, err := GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+		Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
+	}, c)
+	if err != nil {
+		return false, err
+	}
+	return rbacmanagement.Enabled(gate), nil
 }
 
 // GetNonClusterHost finds the NonClusterHost CR in your cluster.

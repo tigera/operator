@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"
@@ -91,6 +92,19 @@ var _ = Describe("kube-controllers rendering tests", func() {
 			Namespace:         common.CalicoNamespace,
 			BindingNamespaces: []string{common.CalicoNamespace},
 		}
+	})
+
+	It("should let the IPAM syncer watch IPReservations", func() {
+		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
+		Expect(component.ResolveImages(nil)).To(BeNil())
+		resources, _ := component.Objects()
+
+		role := rtest.GetResource(resources, "calico-kube-controllers", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+		Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			Resources: []string{"ipreservations"},
+			Verbs:     []string{"list", "watch"},
+		}))
 	})
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {

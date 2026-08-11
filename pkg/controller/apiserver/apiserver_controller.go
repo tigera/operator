@@ -55,6 +55,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -136,6 +137,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
 	}
 
+	// The cutover is gated on this Deployment's readiness, so react to it rather than waiting for the
+	// next periodic reconcile.
+	if err = utils.AddDeploymentWatch(c, render.APIServerName, render.APIServerNamespace); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+
 	if err = utils.AddDeploymentWatch(c, webhooks.WebhooksName, common.CalicoNamespace); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch webhooks Deployment: %w", err)
 	}
@@ -174,11 +181,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// to migration phase changes (e.g., goes hands-off during Migrating).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
 	// are status-only updates that don't bump generation.
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
-		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-		},
-	}, predicate.ResourceVersionChangedPredicate{})
+	go func() {
+		// Calico v3.32 serves DatastoreMigration at v1beta1 and v3.33 at v1, so wait for the
+		// CRD before picking a version.
+		datastoremigration.WaitForServedVersion(opts.ShutdownContext, opts.K8sClientset.Discovery())
+		utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
+			datastoremigration.WatchObject(),
+		}, predicate.ResourceVersionChangedPredicate{})
+	}()
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
@@ -385,6 +395,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}),
 	)
 
+	var holdCutover bool
+	if !r.opts.UseV3CRDs {
+		holdCutover, err = holdAPIServiceCutover(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying the projectcalico.org/v3 APIService", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
 
@@ -402,6 +421,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		KubernetesVersion:            r.opts.KubernetesVersion,
 		ClusterDomain:                r.opts.ClusterDomain,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
+		HoldAPIServiceCutover:        holdCutover,
 	}
 
 	var components []render.Component
@@ -475,8 +495,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	// dependency on the API server deployment.
 	//
 	// We do this last to avoid transient errors with policy preventing progression of the controller.
+	//
+	// While the cutover is held the previous API server is still serving, so the policy can go first
+	// instead, closing the window in which the new workload runs with no policy of its own.
 	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
+		policy := render.APIServerPolicy(&apiServerCfg)
+		if holdCutover {
+			components = append([]render.Component{policy}, components...)
+		} else {
+			components = append(components, policy)
+		}
 	}
 
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
@@ -500,6 +528,11 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		keyPairWarnings[kp.GetName()] = kp
 	}
 	certificatemanagement.CheckKeyPairWarnings(keyPairWarnings, r.status)
+
+	if holdCutover {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the Calico API server to become ready before repointing the projectcalico.org/v3 APIService", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

@@ -12,24 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package datastoremigration
+package rbacmanagement_test
 
 import (
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"testing"
+
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
-const (
-	GroupName = "migration.projectcalico.org"
-	Kind      = "DatastoreMigration"
-	ListKind  = "DatastoreMigrationList"
-	Resource  = "datastoremigrations"
-)
-
-var (
-	// GroupVersionV1 is the GA group/version, the storage version from Calico v3.33.
-	GroupVersionV1 = schema.GroupVersion{Group: GroupName, Version: "v1"}
-
-	// GroupVersionV1beta1 is the pre-GA group/version, deprecated but still served in v3.33.
-	// TODO: remove in v3.34.
-	GroupVersionV1beta1 = schema.GroupVersion{Group: GroupName, Version: "v1beta1"}
-)
+func TestRBACManagement(t *testing.T) {
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
+	reporterConfig.JUnitReport = "../../../../report/ut/rbacmanagement_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/render/common/rbacmanagement Suite", suiteConfig, reporterConfig)
+}

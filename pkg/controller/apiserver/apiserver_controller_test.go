@@ -32,7 +32,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	apiregv1 "k8s.io/kube-aggregator/pkg/apis/apiregistration/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -49,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
@@ -510,6 +513,143 @@ var _ = Describe("apiserver controller tests", func() {
 
 			certSecret := corev1.Secret{}
 			Expect(cli.Get(ctx, client.ObjectKey{Name: "calico-apiserver-certs", Namespace: "calico-system"}, &certSecret)).ToNot(HaveOccurred())
+		})
+	})
+
+	// These cover the controller's half: reading the ConfigMap and handing the value to
+	// the renderer.
+	Context("RBAC management UI feature gate", func() {
+		// gatedRule is where the gate's value is observable in the rendered output.
+		gatedRule := rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+		}
+
+		writeGate := func(value string) {
+			Expect(cli.Create(ctx, &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      rbacmanagement.ConfigMapName,
+					Namespace: common.CalicoNamespace,
+				},
+				Data: map[string]string{rbacmanagement.ConfigMapKey: value},
+			})).NotTo(HaveOccurred())
+		}
+
+		// reconcileAPIServer reconciles at the given tenancy.
+		reconcileAPIServer := func(multiTenant bool) {
+			r := ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+				migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+					MultiTenant:      multiTenant,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+
+		// networkAdminRules reconciles a single-tenant cluster -- the only tenancy that
+		// renders tigera-network-admin -- and returns its rules.
+		networkAdminRules := func() []rbacv1.PolicyRule {
+			reconcileAPIServer(false)
+
+			cr := rbacv1.ClusterRole{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-network-admin"}, &cr)).NotTo(HaveOccurred())
+			return cr.Rules
+		}
+
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
+		})
+
+		It("withholds the rules when the admin has not created the ConfigMap", func() {
+			Expect(networkAdminRules()).NotTo(ContainElement(gatedRule))
+		})
+
+		It("adds the rules once the admin enables the feature", func() {
+			writeGate("true")
+			Expect(networkAdminRules()).To(ContainElement(gatedRule))
+		})
+
+		It("withholds the rules when the admin sets the value to false", func() {
+			writeGate("false")
+			Expect(networkAdminRules()).NotTo(ContainElement(gatedRule))
+		})
+
+		// The gated rules ride on tigera-network-admin, which a multi-tenant cluster
+		// never renders -- which is why the gate needs no tenancy term of its own.
+		It("does not render tigera-network-admin at all on a multi-tenant management cluster", func() {
+			writeGate("true")
+			reconcileAPIServer(true)
+
+			err := cli.Get(ctx, client.ObjectKey{Name: "tigera-network-admin"}, &rbacv1.ClusterRole{})
+			Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no tigera-network-admin ClusterRole under multi-tenancy")
+		})
+
+		// A managed cluster carries tigera-network-admin too, so the read must not be
+		// skipped there.
+		It("reads the gate on a managed cluster", func() {
+			Expect(cli.Create(ctx, &operatorv1.ManagementClusterConnection{
+				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
+			})).NotTo(HaveOccurred())
+			writeGate("true")
+
+			Expect(networkAdminRules()).To(ContainElement(gatedRule))
+		})
+
+		// An unreadable ConfigMap is unknown state, not absent, so it degrades rather
+		// than rendering as disabled.
+		It("degrades and requeues when the ConfigMap cannot be read", func() {
+			readErr := fmt.Errorf("the API server is having a bad day")
+			failing := ctrlrfake.DefaultFakeClientBuilder(scheme).
+				WithInterceptorFuncs(interceptor.Funcs{
+					Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+						if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
+							return readErr
+						}
+						return c.Get(ctx, key, obj, opts...)
+					},
+				}).Build()
+
+			// Re-plant what the reconcile needs on the new client.
+			certificateManager, err := certificatemanager.Create(failing, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(failing.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+			Expect(failing.Create(ctx, &operatorv1.APIServer{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+			Expect(failing.Create(ctx, &v3.Tier{ObjectMeta: metav1.ObjectMeta{Name: "calico-system"}})).NotTo(HaveOccurred())
+			// The shared installation carries a resourceVersion that Create would reject.
+			freshInstallation := installation.DeepCopy()
+			freshInstallation.ResourceVersion = ""
+			Expect(failing.Create(ctx, freshInstallation)).NotTo(HaveOccurred())
+
+			degraded := &status.MockStatus{}
+			degraded.On("OnCRFound").Return()
+			degraded.On("SetMetaData", mock.Anything).Return()
+			degraded.On("AddCertificateSigningRequests", mock.Anything).Return().Maybe()
+			degraded.On("RemoveCertificateSigningRequests", mock.Anything).Return().Maybe()
+			degraded.On("SetDegraded", operatorv1.ResourceReadError,
+				"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything).Return().Once()
+
+			r := ReconcileAPIServer{
+				client:              failing,
+				scheme:              scheme,
+				status:              degraded,
+				tierWatchReady:      ready,
+				migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+				},
+			}
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(MatchError(readErr))
+			degraded.AssertExpectations(GinkgoT())
 		})
 	})
 
@@ -1072,4 +1212,111 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(err.Error()).To(ContainSubstring("CalicoWebhooksDeployment"))
 		})
 	})
+
+	Context("API server cutover", func() {
+		var r ReconcileAPIServer
+
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "tigera-system"}})).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &apiregv1.APIService{
+				ObjectMeta: metav1.ObjectMeta{Name: render.APIServiceName},
+				Spec: apiregv1.APIServiceSpec{
+					Group:   "projectcalico.org",
+					Version: "v3",
+					Service: &apiregv1.ServiceReference{Name: "tigera-api", Namespace: "tigera-system"},
+				},
+			})).NotTo(HaveOccurred())
+
+			r = ReconcileAPIServer{
+				client:              cli,
+				scheme:              scheme,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+				migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+				},
+			}
+		})
+
+		apiService := func() *apiregv1.APIService {
+			s := &apiregv1.APIService{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: render.APIServiceName}, s)).NotTo(HaveOccurred())
+			return s
+		}
+
+		It("leaves the previous API server in service while the new one is not ready", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(apiService().Spec.Service.Namespace).To(Equal("tigera-system"))
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "tigera-system"}, &corev1.Namespace{})).NotTo(HaveOccurred())
+
+			// The workload it will hand over to is still created, so it has a chance to become ready.
+			d := &appsv1.Deployment{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: render.APIServerName, Namespace: render.APIServerNamespace}, d)).NotTo(HaveOccurred())
+		})
+
+		It("repoints the APIService once the new API server is ready", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			d := &appsv1.Deployment{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: render.APIServerName, Namespace: render.APIServerNamespace}, d)).NotTo(HaveOccurred())
+			d.Status.ReadyReplicas = 2
+			Expect(cli.Status().Update(ctx, d)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(apiService().Spec.Service.Namespace).To(Equal(render.APIServerNamespace))
+			err = cli.Get(ctx, types.NamespacedName{Name: "tigera-system"}, &corev1.Namespace{})
+			Expect(kerror.IsNotFound(err)).To(BeTrue())
+		})
+
+		It("writes the API server's own policy before the workload while holding", func() {
+			r.client = &orderRecordingClient{Client: cli}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			recorder, ok := r.client.(*orderRecordingClient)
+			Expect(ok).To(BeTrue())
+			Expect(recorder.created).To(ContainElement(render.APIServerPolicyName))
+			Expect(recorder.created).To(ContainElement(render.APIServerName))
+			Expect(indexOf(recorder.created, render.APIServerPolicyName)).To(BeNumerically("<", indexOf(recorder.created, render.APIServerName)))
+		})
+
+		It("does not hold on a cluster that has already migrated", func() {
+			s := apiService()
+			s.Spec.Service.Namespace = render.APIServerNamespace
+			Expect(cli.Update(ctx, s)).NotTo(HaveOccurred())
+
+			hold, err := holdAPIServiceCutover(ctx, cli)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(hold).To(BeFalse())
+		})
+	})
 })
+
+// orderRecordingClient records the names of objects created through it, in order.
+type orderRecordingClient struct {
+	client.Client
+
+	created []string
+}
+
+func (c *orderRecordingClient) Create(ctx context.Context, obj client.Object, opts ...client.CreateOption) error {
+	c.created = append(c.created, obj.GetName())
+	return c.Client.Create(ctx, obj, opts...)
+}
+
+func indexOf(names []string, name string) int {
+	for i, n := range names {
+		if n == name {
+			return i
+		}
+	}
+	return -1
+}

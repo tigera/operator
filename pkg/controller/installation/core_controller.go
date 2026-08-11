@@ -78,6 +78,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -247,11 +248,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// migration state changes (e.g., Converged → triggers env var injection on components).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
 	// are status-only updates that don't bump generation.
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
-		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-		},
-	}, predicate.ResourceVersionChangedPredicate{})
+	go func() {
+		// Calico v3.32 serves DatastoreMigration at v1beta1 and v3.33 at v1, so wait for the
+		// CRD before picking a version.
+		datastoremigration.WaitForServedVersion(opts.ShutdownContext, opts.K8sClientset.Discovery())
+		utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, ri.migrationWatchReady, []client.Object{
+			datastoremigration.WatchObject(),
+		}, predicate.ResourceVersionChangedPredicate{})
+	}()
 
 	return nil
 }
@@ -1140,6 +1144,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, r.client, instance.Spec.Variant, r.multiTenant)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

@@ -39,6 +39,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -51,6 +52,9 @@ const (
 	APIServerPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "apiserver-access"
 
 	TieredPolicyPassthruClusterRoleName = "calico-tiered-policy-passthrough"
+
+	// APIServiceName is the aggregated APIService that fronts the projectcalico.org/v3 API group.
+	APIServiceName = "v3.projectcalico.org"
 )
 
 const (
@@ -69,6 +73,11 @@ const (
 	CalicoAPIServerTLSSecretName = "calico-apiserver-certs"
 	APIServerServiceName         = "calico-api"
 	APIServerServiceAccountName  = "calico-apiserver"
+
+	// The API server this one replaces. Both service accounts share the
+	// calico-apiserver-access-calico-crds binding while the cutover is held.
+	deprecatedAPIServerServiceAccountName = "tigera-apiserver"
+	deprecatedAPIServerNamespace          = "tigera-system"
 
 	APIServerSecretsRBACName                        = "calico-extension-apiserver-secrets-access"
 	MultiTenantManagedClustersAccessClusterRoleName = "calico-managed-cluster-access"
@@ -146,9 +155,17 @@ type APIServerConfiguration struct {
 	KubernetesVersion            *common.VersionInfo
 	ClusterDomain                string
 
+	// RBACManagementEnabled reports whether to render the RBAC management UI access.
+	// The controller has already applied the variant, the admin's gate and tenancy.
+	RBACManagementEnabled bool
+
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
 	RequiresAggregationServer bool
+
+	// HoldAPIServiceCutover leaves the previous API server in service, so its
+	// APIService and the resources it needs are left alone.
+	HoldAPIServiceCutover bool
 }
 
 type apiServerComponent struct {
@@ -221,10 +238,15 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Add in certificates for API server TLS.
-	if !c.cfg.TLSKeyPair.UseCertificateManagement() {
-		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
-	} else {
-		aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+	//
+	// Leaving the APIService unrendered is what holds the cutover, since the component handler only
+	// writes what it is given and so leaves the one pointing at the previous API server alone.
+	if !c.cfg.HoldAPIServiceCutover {
+		if !c.cfg.TLSKeyPair.UseCertificateManagement() {
+			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.TLSKeyPair.GetCertificatePEM()))
+		} else {
+			aggregationAPIServerObjects = append(aggregationAPIServerObjects, c.apiServiceRegistration(c.cfg.Installation.CertificateManagement.CACert))
+		}
 	}
 
 	// The L7 sidecar mutating webhook is an enterprise (ApplicationLayer) concern added
@@ -250,7 +272,9 @@ func (c *apiServerComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	// Explicitly delete any renamed/deprecated objects.
-	objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
+	if !c.cfg.HoldAPIServiceCutover {
+		objsToDelete = append(objsToDelete, c.getDeprecatedResources()...)
+	}
 	objsToCreate := append(globalObjects, namespacedObjects...)
 
 	return objsToCreate, objsToDelete
@@ -328,7 +352,7 @@ func (c *apiServerComponent) apiServiceRegistration(cert []byte) *apiregv1.APISe
 	s := &apiregv1.APIService{
 		TypeMeta: metav1.TypeMeta{Kind: "APIService", APIVersion: "apiregistration.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "v3.projectcalico.org",
+			Name: APIServiceName,
 		},
 		Spec: apiregv1.APIServiceSpec{
 			Group:                "projectcalico.org",
@@ -611,18 +635,25 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRole() *rbacv1.ClusterR
 //
 // Both Calico and Calico Enterprise, with the same name.
 func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.ClusterRoleBinding {
+	subjects := []rbacv1.Subject{
+		{Kind: "ServiceAccount", Name: APIServerServiceAccountName, Namespace: APIServerNamespace},
+	}
+	// The previous API server is still serving while the cutover is held, and it reads its own
+	// storage through this binding, so dropping it here would take the API down.
+	if c.cfg.HoldAPIServiceCutover {
+		subjects = append(subjects, rbacv1.Subject{
+			Kind:      "ServiceAccount",
+			Name:      deprecatedAPIServerServiceAccountName,
+			Namespace: deprecatedAPIServerNamespace,
+		})
+	}
+
 	return &rbacv1.ClusterRoleBinding{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "calico-apiserver-access-calico-crds",
 		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      APIServerServiceAccountName,
-				Namespace: APIServerNamespace,
-			},
-		},
+		Subjects: subjects,
 		RoleRef: rbacv1.RoleRef{
 			Kind:     "ClusterRole",
 			Name:     "calico-crds",

@@ -89,3 +89,38 @@ var _ = Describe("the zero value Extensions", func() {
 		Expect(create).To(HaveLen(1))
 	})
 })
+
+var _ = Describe("the base ManagementClusterConnection validation", func() {
+	var e extensions.Extensions
+
+	It("accepts a connection that uses none of the Enterprise fields", func() {
+		cr := &operatorv1.ManagementClusterConnection{}
+		Expect(e.ClusterConnection().ValidateAndDefault(cr)).NotTo(HaveOccurred())
+		Expect(cr.Spec.Impersonation).To(BeNil())
+	})
+
+	It("rejects impersonation, which only Enterprise Voltron honors", func() {
+		cr := &operatorv1.ManagementClusterConnection{
+			Spec: operatorv1.ManagementClusterConnectionSpec{Impersonation: &operatorv1.Impersonation{}},
+		}
+		Expect(e.ClusterConnection().ValidateAndDefault(cr)).To(MatchError(ContainSubstring("Impersonation must be unset")))
+	})
+
+	It("rejects a public CA, since only Enterprise guardian trusts the system bundle", func() {
+		cr := &operatorv1.ManagementClusterConnection{
+			Spec: operatorv1.ManagementClusterConnectionSpec{
+				TLS: &operatorv1.ManagementClusterTLS{CA: operatorv1.CATypePublic},
+			},
+		}
+		Expect(e.ClusterConnection().ValidateAndDefault(cr)).To(MatchError(ContainSubstring("cannot be public")))
+	})
+
+	It("accepts the Tigera CA", func() {
+		cr := &operatorv1.ManagementClusterConnection{
+			Spec: operatorv1.ManagementClusterConnectionSpec{
+				TLS: &operatorv1.ManagementClusterTLS{CA: operatorv1.CATypeTigera},
+			},
+		}
+		Expect(e.ClusterConnection().ValidateAndDefault(cr)).NotTo(HaveOccurred())
+	})
+})

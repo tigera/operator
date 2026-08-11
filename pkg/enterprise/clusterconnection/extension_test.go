@@ -67,6 +67,35 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 			Expect(err).To(MatchError(extensions.ErrInvalidConfig))
 			Expect(err.Error()).To(ContainSubstring("not supported"))
 		})
+
+		It("accepts impersonation and defaults it to empty lists", func() {
+			cr := &operatorv1.ManagementClusterConnection{}
+			Expect(ext.ClusterConnection().ValidateAndDefault(cr)).NotTo(HaveOccurred())
+			Expect(cr.Spec.Impersonation).To(Equal(&operatorv1.Impersonation{
+				Users:           []string{},
+				Groups:          []string{},
+				ServiceAccounts: []string{},
+			}))
+		})
+
+		It("leaves impersonation the user set alone", func() {
+			cr := &operatorv1.ManagementClusterConnection{
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					Impersonation: &operatorv1.Impersonation{Users: []string{"jane"}},
+				},
+			}
+			Expect(ext.ClusterConnection().ValidateAndDefault(cr)).NotTo(HaveOccurred())
+			Expect(cr.Spec.Impersonation.Users).To(Equal([]string{"jane"}))
+		})
+
+		It("accepts a public CA, which enterprise guardian can trust", func() {
+			cr := &operatorv1.ManagementClusterConnection{
+				Spec: operatorv1.ManagementClusterConnectionSpec{
+					TLS: &operatorv1.ManagementClusterTLS{CA: operatorv1.CATypePublic},
+				},
+			}
+			Expect(ext.ClusterConnection().ValidateAndDefault(cr)).NotTo(HaveOccurred())
+		})
 	})
 
 	Describe("ExtendInputs", func() {

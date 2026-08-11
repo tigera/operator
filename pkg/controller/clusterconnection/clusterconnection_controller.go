@@ -82,10 +82,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("failed to create %s: %w", controllerName, err)
 	}
 
-	if opts.Variant.IsEnterprise() {
-		// Watch for changes to License and Tier, as their status is used as input to determine whether network policy should be reconciled by this controller.
-		go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, nil)
+	if err = opts.Extensions.ClusterConnection().Watches(c, opts.K8sClientset); err != nil {
+		return fmt.Errorf("%s failed to add variant watches: %w", controllerName, err)
 	}
+
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
 
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
@@ -131,30 +131,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch for changes to TigeraStatus.
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("clusterconnection-controller failed to watch management-cluster-connection Tigerastatus: %w", err)
-	}
-
-	if opts.Variant.IsEnterprise() {
-		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("%s failed to watch primary resource: %w", controllerName, err)
-		}
-
-		// Watch for changes to the secrets associated with the PacketCapture APIs.
-		if err = utils.AddSecretsWatch(c, render.PacketCaptureServerCert, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, render.PacketCaptureServerCert, err)
-		}
-		// Watch for changes to the secrets associated with Prometheus.
-		if err = utils.AddSecretsWatch(c, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, monitor.PrometheusServerTLSSecretName, err)
-		}
-
-		if err = utils.AddSecretsWatch(c, certificatemanagement.CASecretName, common.OperatorNamespace()); err != nil {
-			return fmt.Errorf("%s failed to watch Secret resource %s: %w", controllerName, certificatemanagement.CASecretName, err)
-		}
-
-		if err = imageset.AddImageSetWatch(c); err != nil {
-			return fmt.Errorf("%s failed to watch ImageSet: %w", controllerName, err)
-		}
 	}
 
 	return nil
@@ -254,13 +230,12 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	if err = validate(managementClusterConnection, installationSpec.Variant); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico", err, reqLogger)
+	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
+	if err = r.ext.ValidateAndDefault(managementClusterConnection); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-
-	preDefaultPatchFrom := client.MergeFrom(managementClusterConnection.DeepCopy())
-	fillDefaults(managementClusterConnection, installationSpec.Variant)
+	fillDefaults(managementClusterConnection)
 	if err = r.cli.Patch(ctx, managementClusterConnection, preDefaultPatchFrom); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, err.Error(), err, reqLogger)
 	}
@@ -299,14 +274,7 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 	guardianData, haveGuardianData := render.GuardianRenderDataFromInputs(ci.RenderInputs)
 
-	includeSystem := false
-	if managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic {
-		if r.opts.Variant == operatorv1.Calico {
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Guardian CA cannot be public in Calico.", nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
-		includeSystem = true
-	}
+	includeSystem := managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic
 
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
 		common.OperatorNamespace(), includeSystem,
@@ -520,25 +488,11 @@ func (r *ReconcileConnection) maintainFinalizer(ctx context.Context, managementC
 	return utils.MaintainInstallationFinalizer(ctx, r.cli, managementClusterConnection, render.GuardianFinalizer, &guardianDeployment)
 }
 
-func validate(cr *operatorv1.ManagementClusterConnection, variant operatorv1.ProductVariant) error {
-	if variant == operatorv1.Calico && cr.Spec.Impersonation != nil {
-		return errors.New("ManagementClusterConnection.Spec.Impersonation must be unset when Installation.Spec.Variant = Calico")
-	}
-	return nil
-}
-
-func fillDefaults(cr *operatorv1.ManagementClusterConnection, variant operatorv1.ProductVariant) {
+func fillDefaults(cr *operatorv1.ManagementClusterConnection) {
 	if cr.Spec.TLS == nil {
 		cr.Spec.TLS = &operatorv1.ManagementClusterTLS{}
 	}
 	if cr.Spec.TLS.CA == "" {
 		cr.Spec.TLS.CA = operatorv1.CATypeTigera
-	}
-	if variant.IsEnterprise() && cr.Spec.Impersonation == nil {
-		cr.Spec.Impersonation = &operatorv1.Impersonation{
-			Users:           []string{},
-			Groups:          []string{},
-			ServiceAccounts: []string{},
-		}
 	}
 }

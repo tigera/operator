@@ -19,16 +19,24 @@ import (
 	"fmt"
 
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/controller/utils/imageset"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
+
+var log = logf.Log.WithName("clusterconnection-controller")
 
 // Extension is the Calico Enterprise behavior for the clusterconnection controller
 // and the guardian components it renders.
@@ -57,6 +65,39 @@ func (e *Extension) Modify(c render.Component, ri render.Inputs) render.Componen
 	default:
 		return c
 	}
+}
+
+// Watches registers the resources only Enterprise guardian renders from.
+func (e *Extension) Watches(c ctrlruntime.Controller, cs kubernetes.Interface) error {
+	// The license gates whether this controller reconciles network policy.
+	go utils.WaitToAddLicenseKeyWatch(c, cs, log, nil)
+
+	if err := c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return err
+	}
+	for _, secretName := range []string{
+		render.PacketCaptureServerCert,
+		monitor.PrometheusServerTLSSecretName,
+		certificatemanagement.CASecretName,
+	} {
+		if err := utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
+			return err
+		}
+	}
+	return imageset.AddImageSetWatch(c)
+}
+
+// ValidateAndDefault accepts the Enterprise-only fields and defaults impersonation
+// to empty lists so Guardian renders a stable config.
+func (e *Extension) ValidateAndDefault(cr *operatorv1.ManagementClusterConnection) error {
+	if cr.Spec.Impersonation == nil {
+		cr.Spec.Impersonation = &operatorv1.Impersonation{
+			Users:           []string{},
+			Groups:          []string{},
+			ServiceAccounts: []string{},
+		}
+	}
+	return nil
 }
 
 func (e *Extension) validate(ctx context.Context, ci controller.Inputs) error {

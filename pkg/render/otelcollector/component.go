@@ -28,7 +28,6 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
-	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -59,21 +58,18 @@ const (
 	OpenTelemetryCollectorClusterRoleName     = OpenTelemetryCollectorName
 	OpenTelemetryCollectorServerTLSSecretName = "otel-collector-tls"
 
-	// OpenTelemetryCollectorCAConfigMapName is an optional user-supplied ConfigMap
-	// holding the CA that signed the exporters' endpoints. It is loaded in addition
-	// to the system root pool, so it is only needed for endpoints fronted by a
-	// private CA. Mirrors the syslog-ca / splunk-ca convention.
-	OpenTelemetryCollectorCAConfigMapName = "otel-collector-ca"
-	// OpenTelemetryCollectorClientTLSSecretName is the user-supplied client keypair
-	// presented to exporters that enable mutual TLS. Required when any exporter sets
-	// mutualTLS. Mirrors the external Elasticsearch mTLS convention.
-	OpenTelemetryCollectorClientTLSSecretName = "otel-collector-client-certs"
+	// Operator-managed aggregates of the user's per-exporter TLS and auth material,
+	// keyed by exporter. Fixed names so the teardown can name them without the
+	// spec, which is gone by the time it runs.
+	OpenTelemetryCollectorExporterCAsName   = "otel-collector-exporter-cas"
+	OpenTelemetryCollectorExporterCertsName = "otel-collector-exporter-certs"
+	OpenTelemetryCollectorExporterAuthName  = "otel-collector-exporter-auth"
 
 	// Mount outside /etc/otel: the config ConfigMap already owns that path.
-	caVolumeName        = "exporter-ca"
-	caMountPath         = "/certs/exporter-ca"
-	clientTLSVolumeName = "exporter-client-tls"
-	clientTLSMountPath  = "/certs/exporter-client"
+	exporterCAsVolumeName   = "exporter-cas"
+	exporterCAsMountPath    = "/certs/exporter-cas"
+	exporterCertsVolumeName = "exporter-certs"
+	exporterCertsMountPath  = "/certs/exporter-certs"
 
 	OTLPGRPCPort        = 4317
 	OTLPHTTPPort        = 4318
@@ -104,6 +100,7 @@ const (
 	configHashAnnotation            = "hash.operator.tigera.io/otel-collector-config"
 	exporterCAHashAnnotation        = "hash.operator.tigera.io/otel-exporter-ca"
 	exporterClientTLSHashAnnotation = "hash.operator.tigera.io/otel-exporter-client-tls"
+	exporterAuthHashAnnotation      = "hash.operator.tigera.io/otel-exporter-auth"
 
 	// DefaultTLSReloadInterval is a poll, not a watch, so keep it cheap. Certs
 	// rotate roughly every two years and the operator starts rotating a month
@@ -119,13 +116,18 @@ type Configuration struct {
 	// ReceiverTLSSecret is the server keypair for the OTLP receiver (mTLS termination).
 	ReceiverTLSSecret certificatemanagement.KeyPairInterface
 	TrustedCertBundle certificatemanagement.TrustedBundleRO
-	// ExporterCA is the optional user-supplied CA ConfigMap for exporter endpoints
-	// fronted by a private CA. Nil means endpoints are verified against the system
-	// root pool alone.
-	ExporterCA *corev1.ConfigMap
-	// ExporterClientTLS is the user-supplied client keypair presented to exporters
-	// that enable mutual TLS. Non-nil whenever any exporter sets mutualTLS.
-	ExporterClientTLS *corev1.Secret
+	// ExporterCAs holds the user-supplied CA ConfigMap for each exporter that names
+	// one, keyed by exporter name. An exporter absent from the map is verified
+	// against the system root pool alone.
+	ExporterCAs map[string]*corev1.ConfigMap
+	// ExporterClientCerts holds the client keypair Secret for each exporter that
+	// enables mutual TLS, keyed by exporter name. Per exporter rather than shared:
+	// different backends generally expect different client identities.
+	ExporterClientCerts map[string]*corev1.Secret
+	// ExporterAuthSecrets holds every Secret referenced by an exporter's auth
+	// headers, keyed by Secret name. Values reach the collector as environment
+	// variables so credentials never land in the rendered ConfigMap.
+	ExporterAuthSecrets map[string]*corev1.Secret
 	// DomainEgressAllowed reports whether the license carries the
 	// egress-access-control feature, without which NetworkPolicy cannot name a
 	// destination by domain and egress rules fall back to port-only.
@@ -198,16 +200,81 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(OpenTelemetryCollectorNamespace, c.cfg.PullSecrets...)...)...)
 
-	// The user creates these in the operator namespace; the collector runs in
-	// calico-system, so they have to be copied across to be mountable.
-	if c.cfg.ExporterCA != nil {
-		objs = append(objs, configmap.ToRuntimeObjects(configmap.CopyToNamespace(OpenTelemetryCollectorNamespace, c.cfg.ExporterCA)...)...)
+	// The user creates these in the operator namespace under names of their
+	// choosing; the collector runs in calico-system. Rather than copying each
+	// across under its original name, gather them into one object per kind keyed
+	// by exporter. That keeps the names the teardown has to know fixed, which it
+	// cannot derive from the spec once the feature is switched off.
+	if cm := c.exporterCAsConfigMap(); cm != nil {
+		objs = append(objs, cm)
 	}
-	if c.cfg.ExporterClientTLS != nil {
-		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(OpenTelemetryCollectorNamespace, c.cfg.ExporterClientTLS)...)...)
+	if s := c.exporterCertsSecret(); s != nil {
+		objs = append(objs, s)
+	}
+	if s := c.exporterAuthSecret(); s != nil {
+		objs = append(objs, s)
 	}
 
 	return objs, nil
+}
+
+// exporterCAsConfigMap gathers every user-supplied exporter CA under one
+// ConfigMap, keyed <exporter>.crt.
+func (c *component) exporterCAsConfigMap() client.Object {
+	if len(c.cfg.ExporterCAs) == 0 {
+		return nil
+	}
+	data := map[string]string{}
+	for name, cm := range c.cfg.ExporterCAs {
+		data[exporterCAKey(name)] = cm.Data[corev1.TLSCertKey]
+	}
+	return &corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterCAsName, Namespace: OpenTelemetryCollectorNamespace},
+		Data:       data,
+	}
+}
+
+// exporterCertsSecret gathers every exporter client keypair under one Secret,
+// keyed <exporter>.crt / <exporter>.key.
+func (c *component) exporterCertsSecret() client.Object {
+	if len(c.cfg.ExporterClientCerts) == 0 {
+		return nil
+	}
+	data := map[string][]byte{}
+	for name, s := range c.cfg.ExporterClientCerts {
+		data[exporterCertKey(name)] = s.Data[corev1.TLSCertKey]
+		data[exporterKeyKey(name)] = s.Data[corev1.TLSPrivateKeyKey]
+	}
+	return &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterCertsName, Namespace: OpenTelemetryCollectorNamespace},
+		Data:       data,
+	}
+}
+
+// exporterAuthSecret gathers every header credential under one Secret. The
+// collector reads them as environment variables, so they never appear in the
+// rendered config ConfigMap.
+func (c *component) exporterAuthSecret() client.Object {
+	data := map[string][]byte{}
+	for _, exp := range c.cfg.OpenTelemetry.Exporters {
+		for _, h := range exp.AuthHeaders() {
+			src := c.cfg.ExporterAuthSecrets[h.ValueFrom.SecretKeyRef.Name]
+			if src == nil {
+				continue
+			}
+			data[headerEnvName(exp.Name, h.Name)] = src.Data[h.ValueFrom.SecretKeyRef.Key]
+		}
+	}
+	if len(data) == 0 {
+		return nil
+	}
+	return &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterAuthName, Namespace: OpenTelemetryCollectorNamespace},
+		Data:       data,
+	}
 }
 
 // ownedObjects lists every resource this component manages. Deletion reuses it so
@@ -221,19 +288,49 @@ func (c *component) ownedObjects() []client.Object {
 		c.clusterRoleBinding(),
 		c.clusterRole(),
 		c.serviceAccount(),
-		// Copies of the user-supplied exporter TLS material. Named
+		// The aggregates of the user's exporter TLS and auth material. Named
 		// deterministically, so they can be cleaned up without knowing whether the
 		// user ever created the originals — otherwise they linger in
 		// calico-system after the feature is switched off.
 		&corev1.ConfigMap{
 			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorCAConfigMapName, Namespace: OpenTelemetryCollectorNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterCAsName, Namespace: OpenTelemetryCollectorNamespace},
 		},
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorClientTLSSecretName, Namespace: OpenTelemetryCollectorNamespace},
+			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterCertsName, Namespace: OpenTelemetryCollectorNamespace},
+		},
+		&corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterAuthName, Namespace: OpenTelemetryCollectorNamespace},
 		},
 	}
+}
+
+// Keys inside the aggregated objects, and the environment-variable name a header
+// credential is exposed under. All derived from the exporter name, which the API
+// keys the exporter list by, so they are unique by construction.
+func exporterCAKey(exporter string) string   { return exporter + ".crt" }
+func exporterCertKey(exporter string) string { return exporter + ".crt" }
+func exporterKeyKey(exporter string) string  { return exporter + ".key" }
+
+// headerEnvName builds the env var a header value is read from. Exporter and
+// header names allow characters that are not legal in an env var, so anything
+// outside [A-Za-z0-9_] becomes an underscore.
+func headerEnvName(exporter, header string) string {
+	return "OTEL_EXPORTER_" + envSafe(exporter) + "_" + envSafe(header)
+}
+
+func envSafe(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(s) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }
 
 func (c *component) Ready() bool {
@@ -332,30 +429,35 @@ type configTemplateData struct {
 	PrometheusFederateTarget string
 	Exporters                []exporterEntry
 	ExporterNames            string
-	// ExporterCAFile is the user-supplied CA for exporter endpoints. Empty means
-	// the system root pool alone verifies them.
-	ExporterCAFile string
-	// ExporterClientCertFile / ExporterClientKeyFile are the client keypair
-	// presented to exporters that enable mutual TLS.
-	ExporterClientCertFile string
-	ExporterClientKeyFile  string
-	HealthCheckPort        int
-	InternalMetricsPort    int
-	MemoryLimitMiB         int
-	MemorySpikeLimitMiB    int
-	BatchMaxSize           int
+	HealthCheckPort          int
+	InternalMetricsPort      int
+	MemoryLimitMiB           int
+	MemorySpikeLimitMiB      int
+	BatchMaxSize             int
 }
 
 type exporterEntry struct {
-	Prefix    string
-	Name      string
-	Endpoint  string
-	MutualTLS bool
+	Prefix   string
+	Name     string
+	Endpoint string
+	// CAFile, CertFile and KeyFile are this exporter's own TLS material. Empty
+	// means it is not configured for this exporter; each backend is independent.
+	CAFile   string
+	CertFile string
+	KeyFile  string
+	// Headers maps a header name to the environment variable holding its value.
+	// The value itself never reaches the rendered config.
+	Headers []exporterHeader
 	// Plaintext is set for http:// endpoints. OTLP backends are commonly exposed
 	// without TLS in-cluster, and the scheme is how the user asks for that —
 	// mirroring the Splunk output, where a plain-http endpoint does no TLS. There
 	// is deliberately no field for "TLS on, verification off".
 	Plaintext bool
+}
+
+type exporterHeader struct {
+	Name    string
+	EnvName string
 }
 
 //go:embed collector-config.yaml.template
@@ -373,13 +475,29 @@ func (c *component) collectorConfig() (string, error) {
 		} else {
 			prefix = exporterPrefixGRPC
 		}
-		exporters = append(exporters, exporterEntry{
+		entry := exporterEntry{
 			Prefix:    prefix,
 			Name:      exp.Name,
 			Endpoint:  exp.Endpoint,
-			MutualTLS: exp.MutualTLS != nil && *exp.MutualTLS,
 			Plaintext: strings.HasPrefix(exp.Endpoint, "http://"),
-		})
+		}
+		// Each exporter points at its own CA and client keypair inside the
+		// aggregated mounts, so backends needing different trust or a different
+		// client identity do not have to share one.
+		if _, ok := c.cfg.ExporterCAs[exp.Name]; ok {
+			entry.CAFile = fmt.Sprintf("%s/%s", exporterCAsMountPath, exporterCAKey(exp.Name))
+		}
+		if _, ok := c.cfg.ExporterClientCerts[exp.Name]; ok {
+			entry.CertFile = fmt.Sprintf("%s/%s", exporterCertsMountPath, exporterCertKey(exp.Name))
+			entry.KeyFile = fmt.Sprintf("%s/%s", exporterCertsMountPath, exporterKeyKey(exp.Name))
+		}
+		for _, h := range exp.AuthHeaders() {
+			entry.Headers = append(entry.Headers, exporterHeader{
+				Name:    h.Name,
+				EnvName: headerEnvName(exp.Name, h.Name),
+			})
+		}
+		exporters = append(exporters, entry)
 		exporterNames = append(exporterNames, fmt.Sprintf("%s/%s", prefix, exp.Name))
 	}
 
@@ -402,18 +520,6 @@ func (c *component) collectorConfig() (string, error) {
 		data.ReceiverKeyFile = c.cfg.ReceiverTLSSecret.VolumeMountKeyFilePath()
 		data.ReceiverClientCA = c.cfg.TrustedCertBundle.MountPath()
 		data.TLSReloadInterval = DefaultTLSReloadInterval
-	}
-
-	// Exporter trust is deliberately kept off the operator's trusted bundle: that
-	// bundle backs the receiver's client_ca_file, so folding public roots or a
-	// user CA into it would make those CAs valid signers for inbound client certs.
-	// include_system_ca_certs_pool lets each exporter add the system pool locally.
-	if c.cfg.ExporterCA != nil {
-		data.ExporterCAFile = fmt.Sprintf("%s/%s", caMountPath, corev1.TLSCertKey)
-	}
-	if c.cfg.ExporterClientTLS != nil {
-		data.ExporterClientCertFile = fmt.Sprintf("%s/%s", clientTLSMountPath, corev1.TLSCertKey)
-		data.ExporterClientKeyFile = fmt.Sprintf("%s/%s", clientTLSMountPath, corev1.TLSPrivateKeyKey)
 	}
 
 	if c.metricsTLSReady() {
@@ -486,18 +592,18 @@ func (c *component) container() corev1.Container {
 		)
 	}
 
-	if c.cfg.ExporterCA != nil {
+	if len(c.cfg.ExporterCAs) > 0 {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      caVolumeName,
-			MountPath: caMountPath,
+			Name:      exporterCAsVolumeName,
+			MountPath: exporterCAsMountPath,
 			ReadOnly:  true,
 		})
 	}
 
-	if c.cfg.ExporterClientTLS != nil {
+	if len(c.cfg.ExporterClientCerts) > 0 {
 		volumeMounts = append(volumeMounts, corev1.VolumeMount{
-			Name:      clientTLSVolumeName,
-			MountPath: clientTLSMountPath,
+			Name:      exporterCertsVolumeName,
+			MountPath: exporterCertsMountPath,
 			ReadOnly:  true,
 		})
 	}
@@ -506,6 +612,7 @@ func (c *component) container() corev1.Container {
 		Name:    OpenTelemetryCollectorContainerName,
 		Image:   c.image,
 		Command: []string{"/usr/bin/otelcol", "--config=/etc/otel/config.yaml"},
+		Env:     c.exporterAuthEnv(),
 		Ports: []corev1.ContainerPort{
 			// No otlp-grpc port: the receiver is HTTP-only (fluent-bit's
 			// opentelemetry output has no gRPC mode). 4317 appears only in
@@ -589,13 +696,41 @@ func (c *component) podAnnotations() map[string]string {
 	if c.cfg.ReceiverTLSSecret != nil {
 		annotations[c.cfg.ReceiverTLSSecret.HashAnnotationKey()] = c.cfg.ReceiverTLSSecret.HashAnnotationValue()
 	}
-	if c.cfg.ExporterCA != nil {
-		annotations[exporterCAHashAnnotation] = rmeta.AnnotationHash(c.cfg.ExporterCA.Data)
+	// Hash the aggregates, not the originals: rotating any exporter's CA, client
+	// keypair or header credential has to roll the pod, since the collector reads
+	// files and environment only at startup.
+	if cm, ok := c.exporterCAsConfigMap().(*corev1.ConfigMap); ok && cm != nil {
+		annotations[exporterCAHashAnnotation] = rmeta.AnnotationHash(cm.Data)
 	}
-	if c.cfg.ExporterClientTLS != nil {
-		annotations[exporterClientTLSHashAnnotation] = rmeta.AnnotationHash(c.cfg.ExporterClientTLS.Data)
+	if s, ok := c.exporterCertsSecret().(*corev1.Secret); ok && s != nil {
+		annotations[exporterClientTLSHashAnnotation] = rmeta.AnnotationHash(s.Data)
+	}
+	if s, ok := c.exporterAuthSecret().(*corev1.Secret); ok && s != nil {
+		annotations[exporterAuthHashAnnotation] = rmeta.AnnotationHash(s.Data)
 	}
 	return annotations
+}
+
+// exporterAuthEnv exposes each header credential as an environment variable the
+// rendered config refers to with ${env:...}. Keeping the values out of the
+// ConfigMap means credentials are never readable from the rendered config.
+func (c *component) exporterAuthEnv() []corev1.EnvVar {
+	var env []corev1.EnvVar
+	for _, exp := range c.cfg.OpenTelemetry.Exporters {
+		for _, h := range exp.AuthHeaders() {
+			name := headerEnvName(exp.Name, h.Name)
+			env = append(env, corev1.EnvVar{
+				Name: name,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: OpenTelemetryCollectorExporterAuthName},
+						Key:                  name,
+					},
+				},
+			})
+		}
+	}
+	return env
 }
 
 func (c *component) statefulSet() *appsv1.StatefulSet {
@@ -623,23 +758,23 @@ func (c *component) statefulSet() *appsv1.StatefulSet {
 		volumes = append(volumes, c.cfg.ReceiverTLSSecret.Volume())
 	}
 
-	if c.cfg.ExporterCA != nil {
+	if len(c.cfg.ExporterCAs) > 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: caVolumeName,
+			Name: exporterCAsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				ConfigMap: &corev1.ConfigMapVolumeSource{
-					LocalObjectReference: corev1.LocalObjectReference{Name: OpenTelemetryCollectorCAConfigMapName},
+					LocalObjectReference: corev1.LocalObjectReference{Name: OpenTelemetryCollectorExporterCAsName},
 				},
 			},
 		})
 	}
 
-	if c.cfg.ExporterClientTLS != nil {
+	if len(c.cfg.ExporterClientCerts) > 0 {
 		volumes = append(volumes, corev1.Volume{
-			Name: clientTLSVolumeName,
+			Name: exporterCertsVolumeName,
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
-					SecretName: OpenTelemetryCollectorClientTLSSecretName,
+					SecretName: OpenTelemetryCollectorExporterCertsName,
 				},
 			},
 		})

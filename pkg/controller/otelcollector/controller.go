@@ -132,13 +132,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("%s failed to watch the Secret resource(%s): %w", controllerName, certificatemanagement.CASecretName, err)
 	}
 
-	// User-supplied exporter TLS material: pick up creation, rotation and deletion.
-	if err = utils.AddConfigMapWatch(c, otelcollector.OpenTelemetryCollectorCAConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("%s failed to watch the ConfigMap resource(%s): %w", controllerName, otelcollector.OpenTelemetryCollectorCAConfigMapName, err)
+	// Exporter TLS and auth material is named by the user per exporter, so there is
+	// no fixed name to watch. Watch the namespace instead and let the reconcile
+	// decide, which also covers a Secret being renamed in the spec.
+	if err = utils.AddConfigMapWatch(c, "", common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("%s failed to watch ConfigMaps in %s: %w", controllerName, common.OperatorNamespace(), err)
 	}
 
-	if err = utils.AddSecretsWatch(c, otelcollector.OpenTelemetryCollectorClientTLSSecretName, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("%s failed to watch the Secret resource(%s): %w", controllerName, otelcollector.OpenTelemetryCollectorClientTLSSecretName, err)
+	if err = utils.AddSecretsWatch(c, "", common.OperatorNamespace()); err != nil {
+		return fmt.Errorf("%s failed to watch Secrets in %s: %w", controllerName, common.OperatorNamespace(), err)
 	}
 
 	return nil
@@ -341,61 +343,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		certMgr.AddToStatusManager(r.status, otelcollector.OpenTelemetryCollectorNamespace)
 	}
 
-	// Optional user-supplied CA for exporter endpoints behind a private CA. It is
-	// deliberately kept out of the trusted bundle: that bundle backs the receiver's
-	// client_ca_file, so adding this CA there would make it a valid signer for
-	// inbound client certificates. Absent means system roots alone, matching the
-	// syslog-ca / splunk-ca convention.
-	exporterCA := &corev1.ConfigMap{}
-	if err := r.cli.Get(ctx, client.ObjectKey{
-		Name:      otelcollector.OpenTelemetryCollectorCAConfigMapName,
-		Namespace: common.OperatorNamespace(),
-	}, exporterCA); err != nil {
-		if !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error reading ConfigMap %s", otelcollector.OpenTelemetryCollectorCAConfigMapName), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		exporterCA = nil
-	}
-	// Its existence is the opt-in, so an empty one is a mistake rather than a
-	// default. Catch it here: we would otherwise point ca_file at a path the
-	// mount never materialises and the collector would fail to start.
-	if exporterCA != nil && len(exporterCA.Data[corev1.TLSCertKey]) == 0 {
-		r.status.SetDegraded(operatorv1.ResourceValidationError,
-			fmt.Sprintf("ConfigMap %s must contain a %q key holding the exporter CA", otelcollector.OpenTelemetryCollectorCAConfigMapName, corev1.TLSCertKey), nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
-	// The client keypair is required whenever an exporter opts into mutual TLS —
-	// unlike the CA there is no sensible fallback, so a missing Secret degrades.
-	var exporterClientTLS *corev1.Secret
-	if exportersUseMutualTLS(logCollector.Spec.OpenTelemetry) {
-		exporterClientTLS = &corev1.Secret{}
-		if err := r.cli.Get(ctx, client.ObjectKey{
-			Name:      otelcollector.OpenTelemetryCollectorClientTLSSecretName,
-			Namespace: common.OperatorNamespace(),
-		}, exporterClientTLS); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError,
-				fmt.Sprintf("Waiting for Secret %s, required by exporters with mutualTLS enabled", otelcollector.OpenTelemetryCollectorClientTLSSecretName), err, reqLogger)
-			return reconcile.Result{}, err
-		}
-		// Both halves must be present, for the same reason as the CA above.
-		if len(exporterClientTLS.Data[corev1.TLSCertKey]) == 0 || len(exporterClientTLS.Data[corev1.TLSPrivateKeyKey]) == 0 {
-			r.status.SetDegraded(operatorv1.ResourceValidationError,
-				fmt.Sprintf("Secret %s must contain both %q and %q", otelcollector.OpenTelemetryCollectorClientTLSSecretName, corev1.TLSCertKey, corev1.TLSPrivateKeyKey), nil, reqLogger)
-			return reconcile.Result{}, nil
-		}
+	// Per-exporter TLS and auth material. Each is named by the exporter that uses
+	// it, so backends can be given different trust anchors and different client
+	// identities. Exporter CAs are deliberately kept out of the trusted bundle:
+	// that bundle backs the receiver's client_ca_file, so adding one there would
+	// make it a valid signer for inbound client certificates.
+	exporterCAs, exporterClientCerts, exporterAuthSecrets, degraded, err := r.fetchExporterMaterial(ctx, logCollector.Spec.OpenTelemetry, reqLogger)
+	if degraded {
+		return reconcile.Result{}, err
 	}
 
 	cfg := &otelcollector.Configuration{
-		PullSecrets:       pullSecrets,
-		OpenShift:         r.opts.DetectedProvider.IsOpenShift(),
-		Installation:      installationSpec,
-		OpenTelemetry:     logCollector.Spec.OpenTelemetry,
-		ReceiverTLSSecret: receiverTLSSecret,
-		TrustedCertBundle: trustedBundle,
-		ExporterCA:        exporterCA,
-		ExporterClientTLS: exporterClientTLS,
+		PullSecrets:         pullSecrets,
+		OpenShift:           r.opts.DetectedProvider.IsOpenShift(),
+		Installation:        installationSpec,
+		OpenTelemetry:       logCollector.Spec.OpenTelemetry,
+		ReceiverTLSSecret:   receiverTLSSecret,
+		TrustedCertBundle:   trustedBundle,
+		ExporterCAs:         exporterCAs,
+		ExporterClientCerts: exporterClientCerts,
+		ExporterAuthSecrets: exporterAuthSecrets,
 		// Naming an egress destination by domain requires this feature; without it
 		// the exporter rules can only constrain the port.
 		DomainEgressAllowed: utils.IsFeatureActive(license, common.EgressAccessControlFeature),
@@ -522,13 +489,71 @@ func (r *Reconciler) removeCollector(ctx context.Context, logCollector *operator
 	return nil
 }
 
-// exportersUseMutualTLS reports whether any exporter opts into presenting a
-// client certificate, which makes the client keypair Secret mandatory.
-func exportersUseMutualTLS(spec *operatorv1.OpenTelemetrySpec) bool {
+// fetchExporterMaterial reads the CA, client keypair and header credentials each
+// exporter names, keyed for the render. The second return reports that the
+// reconcile has already been degraded and should stop; a missing or malformed
+// object is a user error we surface rather than rendering a path or environment
+// variable the collector cannot resolve.
+func (r *Reconciler) fetchExporterMaterial(
+	ctx context.Context, spec *operatorv1.OpenTelemetrySpec, reqLogger logr.Logger,
+) (map[string]*corev1.ConfigMap, map[string]*corev1.Secret, map[string]*corev1.Secret, bool, error) {
+	cas := map[string]*corev1.ConfigMap{}
+	certs := map[string]*corev1.Secret{}
+	auth := map[string]*corev1.Secret{}
+	ns := common.OperatorNamespace()
+
 	for _, exp := range spec.Exporters {
-		if exp.MutualTLS != nil && *exp.MutualTLS {
-			return true
+		if name := exp.CAConfigMap(); name != "" {
+			cm := &corev1.ConfigMap{}
+			if err := r.cli.Get(ctx, client.ObjectKey{Name: name, Namespace: ns}, cm); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					fmt.Sprintf("Waiting for ConfigMap %s, named by exporter %q tls.caConfigMapName", name, exp.Name), err, reqLogger)
+				return nil, nil, nil, true, err
+			}
+			// The reference is the opt-in, so an empty one is a mistake rather than a
+			// default: we would otherwise point ca_file at a path the mount never
+			// materialises and the collector would fail to start.
+			if len(cm.Data[corev1.TLSCertKey]) == 0 {
+				r.status.SetDegraded(operatorv1.ResourceValidationError,
+					fmt.Sprintf("ConfigMap %s must contain a %q key holding the CA for exporter %q", name, corev1.TLSCertKey, exp.Name), nil, reqLogger)
+				return nil, nil, nil, true, nil
+			}
+			cas[exp.Name] = cm
+		}
+
+		if name := exp.ClientCertSecret(); name != "" {
+			s := &corev1.Secret{}
+			if err := r.cli.Get(ctx, client.ObjectKey{Name: name, Namespace: ns}, s); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					fmt.Sprintf("Waiting for Secret %s, named by exporter %q tls.clientCertSecretName", name, exp.Name), err, reqLogger)
+				return nil, nil, nil, true, err
+			}
+			if len(s.Data[corev1.TLSCertKey]) == 0 || len(s.Data[corev1.TLSPrivateKeyKey]) == 0 {
+				r.status.SetDegraded(operatorv1.ResourceValidationError,
+					fmt.Sprintf("Secret %s must contain both %q and %q for exporter %q", name, corev1.TLSCertKey, corev1.TLSPrivateKeyKey, exp.Name), nil, reqLogger)
+				return nil, nil, nil, true, nil
+			}
+			certs[exp.Name] = s
+		}
+
+		for _, h := range exp.AuthHeaders() {
+			ref := h.ValueFrom.SecretKeyRef
+			if _, done := auth[ref.Name]; done {
+				continue
+			}
+			s := &corev1.Secret{}
+			if err := r.cli.Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: ns}, s); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError,
+					fmt.Sprintf("Waiting for Secret %s, named by exporter %q header %q", ref.Name, exp.Name, h.Name), err, reqLogger)
+				return nil, nil, nil, true, err
+			}
+			if len(s.Data[ref.Key]) == 0 {
+				r.status.SetDegraded(operatorv1.ResourceValidationError,
+					fmt.Sprintf("Secret %s must contain key %q, named by exporter %q header %q", ref.Name, ref.Key, exp.Name, h.Name), nil, reqLogger)
+				return nil, nil, nil, true, nil
+			}
+			auth[ref.Name] = s
 		}
 	}
-	return false
+	return cas, certs, auth, false, nil
 }

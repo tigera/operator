@@ -49,6 +49,14 @@ exporters:
 {{- range .Exporters}}
   {{.Prefix}}/{{.Name}}:
     endpoint: {{.Endpoint}}
+{{- if .Headers}}
+    # Values come from the environment, so credentials never appear in this
+    # ConfigMap. Each is projected from a Secret key by the StatefulSet.
+    headers:
+{{- range .Headers}}
+      {{.Name}}: ${env:{{.EnvName}}}
+{{- end}}
+{{- end}}
 {{- if .Plaintext}}
     # http:// endpoint: no transport security. "insecure" here means no TLS at
     # all, which is what the scheme asks for.
@@ -56,15 +64,15 @@ exporters:
       insecure: true
 {{- else}}
     tls:
-      # Load the system roots alongside any user CA, so publicly-signed and
-      # privately-signed endpoints both verify. Verification is never disabled.
+      # Load the system roots alongside any per-exporter CA, so publicly-signed
+      # and privately-signed endpoints both verify. Verification is never disabled.
       include_system_ca_certs_pool: true
-{{- if $.ExporterCAFile}}
-      ca_file: {{$.ExporterCAFile}}
+{{- if .CAFile}}
+      ca_file: {{.CAFile}}
 {{- end}}
-{{- if .MutualTLS}}
-      cert_file: {{$.ExporterClientCertFile}}
-      key_file: {{$.ExporterClientKeyFile}}
+{{- if .CertFile}}
+      cert_file: {{.CertFile}}
+      key_file: {{.KeyFile}}
 {{- end}}
 {{- end}}
 {{- end}}

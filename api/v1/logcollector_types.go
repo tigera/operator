@@ -305,8 +305,8 @@ func (s *OpenTelemetrySpec) HasLogs() bool {
 }
 
 func (s *OpenTelemetrySpec) MetricsEnabled() bool {
-	return s != nil && s.Metrics != nil && s.Metrics.Enabled != nil &&
-		*s.Metrics.Enabled == OpenTelemetryMetricsEnable
+	return s != nil && s.Metrics != nil && s.Metrics.State != nil &&
+		*s.Metrics.State == OpenTelemetryMetricsEnabled
 }
 
 func (s *OpenTelemetrySpec) HasDataSources() bool {
@@ -326,7 +326,7 @@ func (s *OpenTelemetrySpec) Validate() error {
 	}
 	// No log types and no metrics means no pipelines at all.
 	if !s.HasDataSources() {
-		return fmt.Errorf("at least one data source must be enabled: set spec.openTelemetry.logs.types or spec.openTelemetry.metrics.enabled")
+		return fmt.Errorf("at least one data source must be enabled: set spec.openTelemetry.logs.types or spec.openTelemetry.metrics.state")
 	}
 	// Names key the exporters in the rendered config, so duplicates would emit the
 	// same mapping key twice. +listMapKey=name normally stops this at the API
@@ -337,8 +337,20 @@ func (s *OpenTelemetrySpec) Validate() error {
 			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
 		}
 		seen[exp.Name] = struct{}{}
-		if exp.MutualTLS != nil && *exp.MutualTLS && strings.HasPrefix(exp.Endpoint, "http://") {
-			return fmt.Errorf("exporter %q sets mutualTLS on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
+		// TLS material on a plaintext endpoint is silently ignored by the collector,
+		// so reject it rather than letting the user believe it took effect.
+		if plaintext := strings.HasPrefix(exp.Endpoint, "http://"); plaintext && exp.TLS != nil {
+			if exp.TLS.ClientCertSecretName != "" {
+				return fmt.Errorf("exporter %q sets tls.clientCertSecretName on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
+			}
+			if exp.TLS.CAConfigMapName != "" {
+				return fmt.Errorf("exporter %q sets tls.caConfigMapName on an http:// endpoint; there is no server certificate to verify", exp.Name)
+			}
+		}
+		for _, h := range exp.AuthHeaders() {
+			if h.ValueFrom.SecretKeyRef == nil || h.ValueFrom.SecretKeyRef.Name == "" || h.ValueFrom.SecretKeyRef.Key == "" {
+				return fmt.Errorf("exporter %q header %q must set valueFrom.secretKeyRef.name and .key", exp.Name, h.Name)
+			}
 		}
 	}
 	return nil

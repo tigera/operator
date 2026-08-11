@@ -69,7 +69,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: &operatorv1.InstallationSpec{KubernetesProvider: operatorv1.ProviderGKE},
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			},
@@ -89,7 +89,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			&otelcollector.Configuration{
 				Installation: &operatorv1.InstallationSpec{KubernetesProvider: operatorv1.ProviderGKE},
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			},
@@ -218,7 +218,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 				TrustedCertBundle: trustedBundle,
@@ -315,7 +315,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 				TrustedCertBundle: trustedBundle,
@@ -574,19 +574,22 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(config).NotTo(ContainSubstring("/certs/exporter-client"))
 		})
 
-		It("should add the user-supplied CA to exporters and copy it to the collector namespace", func() {
+		It("should give each exporter its own CA rather than one shared trust anchor", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:443", Protocol: operatorv1.OpenTelemetryProtocolHTTP}},
-				},
-				ExporterCA: &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      otelcollector.OpenTelemetryCollectorCAConfigMapName,
-						Namespace: common.OperatorNamespace(),
+					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+					Exporters: []operatorv1.OpenTelemetryExporter{
+						{Name: "corp", Endpoint: "https://otlp.corp.example:443", Protocol: operatorv1.OpenTelemetryProtocolHTTP,
+							TLS: &operatorv1.OpenTelemetryExporterTLS{CAConfigMapName: "corp-ca"}},
+						{Name: "public", Endpoint: "https://otlp.public.example:443", Protocol: operatorv1.OpenTelemetryProtocolHTTP},
 					},
-					Data: map[string]string{corev1.TLSCertKey: "-----BEGIN CERTIFICATE-----"},
+				},
+				ExporterCAs: map[string]*corev1.ConfigMap{
+					"corp": {
+						ObjectMeta: metav1.ObjectMeta{Name: "corp-ca", Namespace: common.OperatorNamespace()},
+						Data:       map[string]string{corev1.TLSCertKey: "-----BEGIN CERTIFICATE-----"},
+					},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -599,36 +602,44 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			config := cm.Data["config.yaml"]
 			// Loaded in addition to the system pool, so public endpoints keep working.
 			Expect(config).To(ContainSubstring("include_system_ca_certs_pool: true"))
-			Expect(config).To(ContainSubstring("ca_file: /certs/exporter-ca/tls.crt"))
+			// Only the exporter that named a CA gets one.
+			Expect(config).To(ContainSubstring("ca_file: /certs/exporter-cas/corp.crt"))
+			Expect(strings.Count(config, "ca_file: /certs/exporter-cas/")).To(Equal(1))
 
-			// The CA must be copied into the collector's namespace to be mountable.
-			_, err = rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OpenTelemetryCollectorCAConfigMapName, otelcollector.OpenTelemetryCollectorNamespace)
+			// Gathered into one operator-managed ConfigMap keyed by exporter.
+			agg, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OpenTelemetryCollectorExporterCAsName, otelcollector.OpenTelemetryCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
+			Expect(agg.Data).To(HaveKey("corp.crt"))
+			Expect(agg.Data).ToNot(HaveKey("public.crt"))
 
 			statefulSet, err := rtest.GetResourceOfType[*appsv1.StatefulSet](objs, otelcollector.OpenTelemetryCollectorStatefulSetName, otelcollector.OpenTelemetryCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
-				Name: "exporter-ca", MountPath: "/certs/exporter-ca", ReadOnly: true,
+				Name: "exporter-cas", MountPath: "/certs/exporter-cas", ReadOnly: true,
 			}))
 
 			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/otel-exporter-ca"),
 				"CA rotation must trigger a pod roll via the hash annotation")
 		})
 
-		It("should present the client keypair only to exporters that enable mutual TLS", func() {
+		It("should give each exporter its own client identity for mutual TLS", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Exporters: []operatorv1.OpenTelemetryExporter{
-						{Name: "mtlsbackend", Endpoint: "otlp.example.com:4317", MutualTLS: ptr.To(true)},
+						{Name: "mtlsbackend", Endpoint: "otlp.example.com:4317",
+							TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "backend-mtls"}},
 						{Name: "plainbackend", Endpoint: "other.example.com:4317"},
 					},
 				},
-				ExporterClientTLS: &corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      otelcollector.OpenTelemetryCollectorClientTLSSecretName,
-						Namespace: common.OperatorNamespace(),
+				ExporterClientCerts: map[string]*corev1.Secret{
+					"mtlsbackend": {
+						ObjectMeta: metav1.ObjectMeta{Name: "backend-mtls", Namespace: common.OperatorNamespace()},
+						Data: map[string][]byte{
+							corev1.TLSCertKey:       []byte("cert"),
+							corev1.TLSPrivateKeyKey: []byte("key"),
+						},
 					},
 				},
 			}
@@ -641,23 +652,80 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			config := cm.Data["config.yaml"]
 
-			// Only the opted-in exporter gets the keypair.
-			Expect(config).To(ContainSubstring("cert_file: /certs/exporter-client/tls.crt"))
-			Expect(config).To(ContainSubstring("key_file: /certs/exporter-client/tls.key"))
-			Expect(strings.Count(config, "/certs/exporter-client/tls.crt")).To(Equal(1))
-			Expect(strings.Count(config, "/certs/exporter-client/tls.key")).To(Equal(1))
+			// Only the exporter that named a keypair presents one.
+			Expect(config).To(ContainSubstring("cert_file: /certs/exporter-certs/mtlsbackend.crt"))
+			Expect(config).To(ContainSubstring("key_file: /certs/exporter-certs/mtlsbackend.key"))
+			Expect(strings.Count(config, "cert_file: /certs/exporter-certs/")).To(Equal(1))
 
-			_, err = rtest.GetResourceOfType[*corev1.Secret](objs, otelcollector.OpenTelemetryCollectorClientTLSSecretName, otelcollector.OpenTelemetryCollectorNamespace)
+			agg, err := rtest.GetResourceOfType[*corev1.Secret](objs, otelcollector.OpenTelemetryCollectorExporterCertsName, otelcollector.OpenTelemetryCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
+			Expect(agg.Data).To(HaveKey("mtlsbackend.crt"))
+			Expect(agg.Data).To(HaveKey("mtlsbackend.key"))
 
 			statefulSet, err := rtest.GetResourceOfType[*appsv1.StatefulSet](objs, otelcollector.OpenTelemetryCollectorStatefulSetName, otelcollector.OpenTelemetryCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(statefulSet.Spec.Template.Spec.Containers[0].VolumeMounts).To(ContainElement(corev1.VolumeMount{
-				Name: "exporter-client-tls", MountPath: "/certs/exporter-client", ReadOnly: true,
+				Name: "exporter-certs", MountPath: "/certs/exporter-certs", ReadOnly: true,
 			}))
 
 			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/otel-exporter-client-tls"),
 				"client cert rotation must trigger a pod roll via the hash annotation")
+		})
+
+		It("should pass auth headers through the environment, never the rendered config", func() {
+			cfg := &otelcollector.Configuration{
+				Installation: defaultInstallation,
+				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{
+						Name: "datadog", Endpoint: "https://otlp.datadoghq.com:4318", Protocol: operatorv1.OpenTelemetryProtocolHTTP,
+						Auth: &operatorv1.OpenTelemetryExporterAuth{
+							Headers: []operatorv1.OpenTelemetryExporterHeader{{
+								Name: "DD-API-KEY",
+								ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "otlp-datadog-auth"},
+										Key:                  "api-key",
+									},
+								},
+							}},
+						},
+					}},
+				},
+				ExporterAuthSecrets: map[string]*corev1.Secret{
+					"otlp-datadog-auth": {
+						ObjectMeta: metav1.ObjectMeta{Name: "otlp-datadog-auth", Namespace: common.OperatorNamespace()},
+						Data:       map[string][]byte{"api-key": []byte("super-secret")},
+					},
+				},
+			}
+			comp, err := otelcollector.OpenTelemetryCollector(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
+			objs, _ := comp.Objects()
+
+			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OpenTelemetryCollectorConfigMapName, otelcollector.OpenTelemetryCollectorNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			config := cm.Data["config.yaml"]
+
+			envName := "OTEL_EXPORTER_DATADOG_DD_API_KEY"
+			Expect(config).To(ContainSubstring("DD-API-KEY: ${env:" + envName + "}"))
+			// The credential itself must never be readable from the config.
+			Expect(config).ToNot(ContainSubstring("super-secret"))
+
+			statefulSet, err := rtest.GetResourceOfType[*appsv1.StatefulSet](objs, otelcollector.OpenTelemetryCollectorStatefulSetName, otelcollector.OpenTelemetryCollectorNamespace)
+			Expect(err).ShouldNot(HaveOccurred())
+			Expect(statefulSet.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{
+				Name: envName,
+				ValueFrom: &corev1.EnvVarSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: otelcollector.OpenTelemetryCollectorExporterAuthName},
+						Key:                  envName,
+					},
+				},
+			}))
+			Expect(statefulSet.Spec.Template.Annotations).To(HaveKey("hash.operator.tigera.io/otel-exporter-auth"),
+				"credential rotation must trigger a pod roll")
 		})
 
 		It("should list multiple exporters in pipelines", func() {
@@ -851,7 +919,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			}
@@ -869,7 +937,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			}

@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/otelcollector"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/test"
 )
 
@@ -200,7 +201,11 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 			shared := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "calico-system"}}
 			Expect(test.GetResource(cli, &shared)).ToNot(BeNil(), "must not render the Installation controller's bundle")
 
-			own := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector", Namespace: "calico-system"}}
+			// Named after the collector: TrustedBundleName appends -ca-bundle, so
+			// this is otel-collector-ca-bundle, not the collector's config ConfigMap.
+			bundleName := certificatemanagement.TrustedBundleName(otelcollector.OpenTelemetryCollectorName, false)
+			Expect(bundleName).ToNot(Equal(otelcollector.OpenTelemetryCollectorConfigMapName))
+			own := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: bundleName, Namespace: "calico-system"}}
 			Expect(test.GetResource(cli, &own)).To(BeNil())
 		})
 	})
@@ -213,7 +218,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-						Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+						Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
 						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 					},
 				},
@@ -350,10 +355,30 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					{Name: "backend", Endpoint: "other.example.com:4317"},
 				},
 			}),
-			Entry("mutualTLS on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
+			Entry("a client certificate on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
 				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 				Exporters: []operatorv1.OpenTelemetryExporter{
-					{Name: "backend", Endpoint: "http://otlp.example.com:4318", MutualTLS: ptr.To(true)},
+					{Name: "backend", Endpoint: "http://otlp.example.com:4318",
+						TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "certs"}},
+				},
+			}),
+			Entry("a CA on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
+				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+				Exporters: []operatorv1.OpenTelemetryExporter{
+					{Name: "backend", Endpoint: "http://otlp.example.com:4318",
+						TLS: &operatorv1.OpenTelemetryExporterTLS{CAConfigMapName: "ca"}},
+				},
+			}),
+			Entry("a header with no secret key", &operatorv1.OpenTelemetrySpec{
+				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+				Exporters: []operatorv1.OpenTelemetryExporter{
+					{Name: "backend", Endpoint: "https://otlp.example.com:4318",
+						Auth: &operatorv1.OpenTelemetryExporterAuth{
+							Headers: []operatorv1.OpenTelemetryExporterHeader{{
+								Name:      "Authorization",
+								ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{},
+							}},
+						}},
 				},
 			}),
 		)
@@ -364,17 +389,17 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 		// to load it at startup, which is an opaque crash-loop.
 		It("should degrade when the exporter CA ConfigMap has no certificate", func() {
 			Expect(cli.Create(ctx, &corev1.ConfigMap{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      otelcollector.OpenTelemetryCollectorCAConfigMapName,
-					Namespace: common.OperatorNamespace(),
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "corp-ca", Namespace: common.OperatorNamespace()},
 			})).ToNot(HaveOccurred())
 			Expect(cli.Create(ctx, &operatorv1.LogCollector{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+						Exporters: []operatorv1.OpenTelemetryExporter{
+							{Name: "backend", Endpoint: "https://otlp.example.com:443",
+								TLS: &operatorv1.OpenTelemetryExporterTLS{CAConfigMapName: "corp-ca"}},
+						},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -386,11 +411,8 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 
 		It("should degrade when the client keypair Secret is missing its key", func() {
 			Expect(cli.Create(ctx, &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      otelcollector.OpenTelemetryCollectorClientTLSSecretName,
-					Namespace: common.OperatorNamespace(),
-				},
-				Data: map[string][]byte{corev1.TLSCertKey: []byte("cert")},
+				ObjectMeta: metav1.ObjectMeta{Name: "backend-mtls", Namespace: common.OperatorNamespace()},
+				Data:       map[string][]byte{corev1.TLSCertKey: []byte("cert")},
 			})).ToNot(HaveOccurred())
 			Expect(cli.Create(ctx, &operatorv1.LogCollector{
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -398,8 +420,42 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 						Exporters: []operatorv1.OpenTelemetryExporter{
-							{Name: "backend", Endpoint: "otlp.example.com:4317", MutualTLS: ptr.To(true)},
+							{Name: "backend", Endpoint: "otlp.example.com:4317",
+								TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "backend-mtls"}},
 						},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, mock.AnythingOfType("string"), mock.Anything, mock.Anything)
+		})
+
+		It("should degrade when a header names a Secret key that does not exist", func() {
+			Expect(cli.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "otlp-auth", Namespace: common.OperatorNamespace()},
+				Data:       map[string][]byte{"wrong-key": []byte("v")},
+			})).ToNot(HaveOccurred())
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.LogCollectorSpec{
+					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{
+							Name: "backend", Endpoint: "https://otlp.example.com:4318",
+							Auth: &operatorv1.OpenTelemetryExporterAuth{
+								Headers: []operatorv1.OpenTelemetryExporterHeader{{
+									Name: "DD-API-KEY",
+									ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{
+										SecretKeyRef: &corev1.SecretKeySelector{
+											LocalObjectReference: corev1.LocalObjectReference{Name: "otlp-auth"},
+											Key:                  "api-key",
+										},
+									},
+								}},
+							},
+						}},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -418,7 +474,8 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 						Exporters: []operatorv1.OpenTelemetryExporter{
-							{Name: "backend", Endpoint: "otlp.example.com:4317", MutualTLS: ptr.To(true)},
+							{Name: "backend", Endpoint: "otlp.example.com:4317",
+								TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "missing-secret"}},
 						},
 					},
 				},

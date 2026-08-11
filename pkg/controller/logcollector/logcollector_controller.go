@@ -186,6 +186,7 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("logcollector-controller failed to watch resource: %w", err)
 	}
+
 	return nil
 }
 
@@ -666,6 +667,12 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
 		NonClusterHost:         nonclusterhost,
 		LicenseExpired:         licenseExpired,
+		// Same predicate the otel controller deploys on. Pointing fluent-bit at a
+		// collector that is never rendered — unlicensed, or an invalid spec — just
+		// fails every chunk and fills the storage buffer.
+		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry.Deployable(
+			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)),
+		OpenTelemetryLogTypes: otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific
@@ -918,4 +925,13 @@ func getUserCACertificate(client client.Client, name string) (certificatemanagem
 		return nil, nil
 	}
 	return certificatemanagement.NewCertificate(name, common.OperatorNamespace(), []byte(cm.Data[corev1.TLSCertKey]), nil), nil
+}
+
+// otelLogTypes returns the log types selected for OpenTelemetry export, empty when the
+// otelCollector section or its logs selection is absent.
+func otelLogTypes(lc *operatorv1.LogCollector) []operatorv1.OpenTelemetryLogType {
+	if lc.Spec.OpenTelemetry == nil || lc.Spec.OpenTelemetry.Logs == nil {
+		return nil
+	}
+	return lc.Spec.OpenTelemetry.Logs.Types
 }

@@ -17,6 +17,9 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -59,6 +62,18 @@ type LogCollectorSpec struct {
 	// EKSLogForwarderDeployment configures the EKSLogForwarderDeployment Deployment.
 	// +optional
 	EKSLogForwarderDeployment *EKSLogForwarderDeployment `json:"eksLogForwarderDeployment,omitempty"`
+
+	// OpenTelemetry configures OpenTelemetry export of logs and metrics via
+	// OTLP. It is not a passthrough for OpenTelemetry Collector configuration:
+	// the fields here describe what Calico Enterprise exports and where, and
+	// the operator translates that into a Collector deployment.
+	//
+	// Unlike AdditionalStores entries (S3, Syslog, Splunk), which point at
+	// external systems, that Collector is operator-managed infrastructure
+	// (StatefulSet, ConfigMap, RBAC, certs) with its own lifecycle, so this
+	// lives at the top level rather than under AdditionalStores.
+	// +optional
+	OpenTelemetry *OpenTelemetrySpec `json:"openTelemetry,omitempty"`
 }
 
 type CollectProcessPathOption string
@@ -258,6 +273,83 @@ type LogCollectorList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []LogCollector `json:"items"`
+}
+
+// OpenTelemetrySpec defines the desired state of the OpenTelemetry Collector.
+type OpenTelemetrySpec struct {
+	// Logs configures which log types are exported via OTLP.
+	// +optional
+	Logs *OpenTelemetryLogs `json:"logs,omitempty"`
+
+	// Metrics configures whether Calico component metrics are exported via OTLP.
+	// +optional
+	Metrics *OpenTelemetryMetrics `json:"metrics,omitempty"`
+
+	// Exporters configures the OTLP export endpoints. At least one is required:
+	// every rendered pipeline exports to all of them, and the collector refuses
+	// to start with an exporter-less pipeline. Names key the exporters in the
+	// generated config, so they are merged and deduplicated by name.
+	// +optional
+	// +kubebuilder:validation:MinItems=1
+	// +listType=map
+	// +listMapKey=name
+	Exporters []OpenTelemetryExporter `json:"exporters,omitempty"`
+
+	// OpenTelemetryCollectorStatefulSet configures the OpenTelemetry Collector StatefulSet.
+	// +optional
+	OpenTelemetryCollectorStatefulSet *OpenTelemetryCollectorStatefulSet `json:"openTelemetryCollectorStatefulSet,omitempty"`
+}
+
+func (s *OpenTelemetrySpec) HasLogs() bool {
+	return s != nil && s.Logs != nil && len(s.Logs.Types) > 0
+}
+
+func (s *OpenTelemetrySpec) MetricsEnabled() bool {
+	return s != nil && s.Metrics != nil && s.Metrics.Enabled != nil &&
+		*s.Metrics.Enabled == OpenTelemetryMetricsEnable
+}
+
+func (s *OpenTelemetrySpec) HasDataSources() bool {
+	return s.HasLogs() || s.MetricsEnabled()
+}
+
+// Validate rejects the specs that render a config the collector refuses to start
+// from. otelcol validates most of these itself, but only at boot, by which point
+// the failure is an opaque crash-loop. It lives here rather than in the otel
+// controller so every controller that has to decide whether the collector is
+// deployable answers the question the same way.
+func (s *OpenTelemetrySpec) Validate() error {
+	// Every pipeline we render fans out to all exporters, so with none configured
+	// each pipeline would be exporter-less.
+	if len(s.Exporters) == 0 {
+		return fmt.Errorf("at least one exporter must be configured in spec.openTelemetry.exporters")
+	}
+	// No log types and no metrics means no pipelines at all.
+	if !s.HasDataSources() {
+		return fmt.Errorf("at least one data source must be enabled: set spec.openTelemetry.logs.types or spec.openTelemetry.metrics.enabled")
+	}
+	// Names key the exporters in the rendered config, so duplicates would emit the
+	// same mapping key twice. +listMapKey=name normally stops this at the API
+	// server; this guards the case where the CRD is out of date.
+	seen := make(map[string]struct{}, len(s.Exporters))
+	for _, exp := range s.Exporters {
+		if _, dup := seen[exp.Name]; dup {
+			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
+		}
+		seen[exp.Name] = struct{}{}
+		if exp.MutualTLS != nil && *exp.MutualTLS && strings.HasPrefix(exp.Endpoint, "http://") {
+			return fmt.Errorf("exporter %q sets mutualTLS on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
+		}
+	}
+	return nil
+}
+
+// Deployable reports whether the operator will actually run a collector for this
+// LogCollector: export configured, licensed, and a valid spec. The monitor
+// controller renders the collector's ServiceMonitor and the Prometheus egress
+// rule that reaches it, so it has to agree with the otel controller exactly.
+func (s *OpenTelemetrySpec) Deployable(featureActive bool) bool {
+	return s != nil && featureActive && s.Validate() == nil
 }
 
 func init() {

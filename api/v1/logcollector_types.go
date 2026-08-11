@@ -17,6 +17,9 @@ limitations under the License.
 package v1
 
 import (
+	"fmt"
+	"strings"
+
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -308,6 +311,45 @@ func (s *OpenTelemetrySpec) MetricsEnabled() bool {
 
 func (s *OpenTelemetrySpec) HasDataSources() bool {
 	return s.HasLogs() || s.MetricsEnabled()
+}
+
+// Validate rejects the specs that render a config the collector refuses to start
+// from. otelcol validates most of these itself, but only at boot, by which point
+// the failure is an opaque crash-loop. It lives here rather than in the otel
+// controller so every controller that has to decide whether the collector is
+// deployable answers the question the same way.
+func (s *OpenTelemetrySpec) Validate() error {
+	// Every pipeline we render fans out to all exporters, so with none configured
+	// each pipeline would be exporter-less.
+	if len(s.Exporters) == 0 {
+		return fmt.Errorf("at least one exporter must be configured in spec.openTelemetry.exporters")
+	}
+	// No log types and no metrics means no pipelines at all.
+	if !s.HasDataSources() {
+		return fmt.Errorf("at least one data source must be enabled: set spec.openTelemetry.logs.types or spec.openTelemetry.metrics.enabled")
+	}
+	// Names key the exporters in the rendered config, so duplicates would emit the
+	// same mapping key twice. +listMapKey=name normally stops this at the API
+	// server; this guards the case where the CRD is out of date.
+	seen := make(map[string]struct{}, len(s.Exporters))
+	for _, exp := range s.Exporters {
+		if _, dup := seen[exp.Name]; dup {
+			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
+		}
+		seen[exp.Name] = struct{}{}
+		if exp.MutualTLS != nil && *exp.MutualTLS && strings.HasPrefix(exp.Endpoint, "http://") {
+			return fmt.Errorf("exporter %q sets mutualTLS on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
+		}
+	}
+	return nil
+}
+
+// Deployable reports whether the operator will actually run a collector for this
+// LogCollector: export configured, licensed, and a valid spec. The monitor
+// controller renders the collector's ServiceMonitor and the Prometheus egress
+// rule that reaches it, so it has to agree with the otel controller exactly.
+func (s *OpenTelemetrySpec) Deployable(featureActive bool) bool {
+	return s != nil && featureActive && s.Validate() == nil
 }
 
 func init() {

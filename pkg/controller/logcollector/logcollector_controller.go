@@ -650,26 +650,30 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentBitCfg := &rlogcollector.FluentBitConfiguration{
-		LogCollector:                  instance,
-		S3Credential:                  s3Credential,
-		SplkCredential:                splunkCredential,
-		Filters:                       filters,
-		EKSConfig:                     eksConfig,
-		PullSecrets:                   pullSecrets,
-		Installation:                  installationSpec,
-		ClusterDomain:                 r.opts.ClusterDomain,
-		FluentBitKeyPair:              fluentBitKeyPair,
-		TrustedBundle:                 trustedBundle,
-		ManagedCluster:                managedCluster,
-		UseSyslogCertificate:          useSyslogCertificate,
-		Tenant:                        tenant,
-		ExternalElastic:               r.opts.ElasticExternal,
-		Cloud:                         r.opts.Cloud,
-		EKSLogForwarderKeyPair:        eksLogForwarderKeyPair,
-		NonClusterHost:                nonclusterhost,
-		LicenseExpired:                licenseExpired,
-		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry != nil,
-		OpenTelemetryLogTypes:         otelLogTypes(instance),
+		LogCollector:           instance,
+		S3Credential:           s3Credential,
+		SplkCredential:         splunkCredential,
+		Filters:                filters,
+		EKSConfig:              eksConfig,
+		PullSecrets:            pullSecrets,
+		Installation:           installationSpec,
+		ClusterDomain:          r.opts.ClusterDomain,
+		FluentBitKeyPair:       fluentBitKeyPair,
+		TrustedBundle:          trustedBundle,
+		ManagedCluster:         managedCluster,
+		UseSyslogCertificate:   useSyslogCertificate,
+		Tenant:                 tenant,
+		ExternalElastic:        r.opts.ElasticExternal,
+		Cloud:                  r.opts.Cloud,
+		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
+		NonClusterHost:         nonclusterhost,
+		LicenseExpired:         licenseExpired,
+		// Same predicate the otel controller deploys on. Pointing fluent-bit at a
+		// collector that is never rendered — unlicensed, or an invalid spec — just
+		// fails every chunk and fills the storage buffer.
+		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry.Deployable(
+			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)),
+		OpenTelemetryLogTypes: otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific

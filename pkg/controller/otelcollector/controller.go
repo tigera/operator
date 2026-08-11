@@ -17,13 +17,13 @@ package otelcollector
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/go-logr/logr"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/otelcollector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -271,7 +272,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// Reject specs the collector cannot start from, rather than rendering a config
 	// it will reject at boot. Without this the pod crash-loops while TigeraStatus
 	// sits on Progressing with nothing pointing at the cause.
-	if err := validateOpenTelemetrySpec(logCollector.Spec.OpenTelemetry); err != nil {
+	if err := logCollector.Spec.OpenTelemetry.Validate(); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid OpenTelemetry configuration", err, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -303,7 +304,30 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			return reconcile.Result{}, err
 		}
 
-		trustedBundle = certMgr.CreateTrustedBundle()
+		// The Prometheus serving certificate has to be trusted for the federation
+		// scrape to verify; it is not in the CA bundle when Prometheus uses a
+		// user-supplied cert.
+		var extraCerts []certificatemanagement.CertificateInterface
+		if logCollector.Spec.OpenTelemetry.MetricsEnabled() {
+			prometheusCert, err := certMgr.GetCertificate(r.cli, monitor.PrometheusServerTLSSecretName, common.OperatorNamespace())
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error reading Secret %s", monitor.PrometheusServerTLSSecretName), err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			if prometheusCert == nil {
+				r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for Secret %s, required to verify the Prometheus federation endpoint", monitor.PrometheusServerTLSSecretName), nil, reqLogger)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
+			extraCerts = append(extraCerts, prometheusCert)
+		}
+
+		// Named after the collector rather than using the default bundle name:
+		// calico-system's shared tigera-ca-bundle is rendered by the Installation
+		// controller with a different certificate set, and the component handler
+		// replaces ConfigMap data wholesale, so an unnamed bundle here would fight
+		// it. Same reason fluent-bit carries its own.
+		trustedBundle = certificatemanagement.CreateNamedTrustedBundle(
+			otelcollector.OpenTelemetryCollectorName, certMgr.KeyPair(), false, extraCerts...)
 
 		if logCollector.Spec.OpenTelemetry.HasLogs() {
 			dnsNames := dns.GetServiceDNSNames(otelcollector.OpenTelemetryCollectorServiceName, otelcollector.OpenTelemetryCollectorNamespace, r.opts.ClusterDomain)
@@ -431,22 +455,47 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{RequeueAfter: graceRequeueAfter}, nil
 }
 
+// collectorResourcesExist reports whether any of the collector's resources are
+// still around. It covers both scopes so a partially-removed collector is still
+// finished off rather than being read as "already gone".
+func (r *Reconciler) collectorResourcesExist(ctx context.Context) (bool, error) {
+	ns := otelcollector.OpenTelemetryCollectorNamespace
+	probes := []struct {
+		obj client.Object
+		key client.ObjectKey
+	}{
+		{&appsv1.StatefulSet{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorStatefulSetName, Namespace: ns}},
+		{&corev1.ConfigMap{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorConfigMapName, Namespace: ns}},
+		{&corev1.ServiceAccount{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorServiceAccountName, Namespace: ns}},
+		{&rbacv1.ClusterRole{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorName}},
+	}
+	for _, p := range probes {
+		err := r.cli.Get(ctx, p.key, p.obj)
+		if err == nil {
+			return true, nil
+		}
+		if !errors.IsNotFound(err) {
+			return false, err
+		}
+	}
+	return false, nil
+}
+
 // removeCollector deletes every resource the collector component owns. It is used
 // both when the feature is switched off and when the license expires.
 func (r *Reconciler) removeCollector(ctx context.Context, logCollector *operatorv1.LogCollector, reqLogger logr.Logger) error {
 	// Most clusters never enable this, and the disabled path runs on every
-	// reconcile. Skip unless the workload is actually present, so we are not
-	// issuing deletes for resources that have never existed.
-	err := r.cli.Get(ctx, client.ObjectKey{
-		Name:      otelcollector.OpenTelemetryCollectorStatefulSetName,
-		Namespace: otelcollector.OpenTelemetryCollectorNamespace,
-	}, &appsv1.StatefulSet{})
+	// reconcile, so skip unless something is actually there to remove. Probing
+	// only the StatefulSet would strand the rest: if it is deleted out of band,
+	// or an earlier teardown was interrupted, the RBAC, ConfigMap, Service and
+	// policy would never be collected.
+	present, err := r.collectorResourcesExist(ctx)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil
-		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for an existing OpenTelemetry collector", err, reqLogger)
 		return err
+	}
+	if !present {
+		return nil
 	}
 
 	installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
@@ -469,37 +518,6 @@ func (r *Reconciler) removeCollector(ctx context.Context, logCollector *operator
 	if err := ch.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error removing OpenTelemetry collector resources", err, reqLogger)
 		return err
-	}
-	return nil
-}
-
-// validateOpenTelemetrySpec rejects the two specs that render a config the
-// collector refuses to start from. Both are validated by otelcol itself
-// (service/pipelines/config.go: "service must have at least one pipeline" and
-// "must have at least one exporter"), but it only finds out at boot, by which
-// point the failure is an opaque crash-loop.
-func validateOpenTelemetrySpec(spec *operatorv1.OpenTelemetrySpec) error {
-	// Every pipeline we render fans out to all exporters, so with none configured
-	// each pipeline would be exporter-less.
-	if len(spec.Exporters) == 0 {
-		return fmt.Errorf("at least one exporter must be configured in spec.openTelemetry.exporters")
-	}
-	// No log types and no metrics means no pipelines at all.
-	if !spec.HasDataSources() {
-		return fmt.Errorf("at least one data source must be enabled: set spec.openTelemetry.logs.types or spec.openTelemetry.metrics.enabled")
-	}
-	// Names key the exporters in the rendered config, so duplicates would emit the
-	// same mapping key twice. +listMapKey=name normally stops this at the API
-	// server; this guards the case where the CRD is out of date.
-	seen := make(map[string]struct{}, len(spec.Exporters))
-	for _, exp := range spec.Exporters {
-		if _, dup := seen[exp.Name]; dup {
-			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
-		}
-		seen[exp.Name] = struct{}{}
-		if exp.MutualTLS != nil && *exp.MutualTLS && strings.HasPrefix(exp.Endpoint, "http://") {
-			return fmt.Errorf("exporter %q sets mutualTLS on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
-		}
 	}
 	return nil
 }

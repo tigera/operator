@@ -144,6 +144,13 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 
+	// LogCollector decides whether the OpenTelemetry Collector's ServiceMonitor and
+	// the egress rule that reaches it are rendered, so enabling or disabling export
+	// has to wake this controller.
+	if err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch LogCollector resource: %w", err)
+	}
+
 	if err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch FelixConfiguration resource: %w", err)
 	}
@@ -292,8 +299,8 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	if logCollector != nil {
-		openTelemetryEnabled = logCollector.Spec.OpenTelemetry != nil &&
-			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)
+		openTelemetryEnabled = logCollector.Spec.OpenTelemetry.Deployable(
+			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature))
 	}
 
 	// When in the grace period, schedule a requeue so the controller automatically

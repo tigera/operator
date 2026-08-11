@@ -188,6 +188,75 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 			Expect(test.GetResource(cli, &ss)).To(BeNil())
 			Expect(ss.Spec.Template.Spec.Containers).To(HaveLen(1))
 		})
+
+		It("should carry its own trusted bundle rather than the shared one", func() {
+			// calico-system/tigera-ca-bundle belongs to the Installation controller
+			// and holds a different certificate set. The component handler replaces
+			// ConfigMap data wholesale, so writing that name here would have the two
+			// controllers overwrite each other every reconcile.
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			shared := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "tigera-ca-bundle", Namespace: "calico-system"}}
+			Expect(test.GetResource(cli, &shared)).ToNot(BeNil(), "must not render the Installation controller's bundle")
+
+			own := corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector", Namespace: "calico-system"}}
+			Expect(test.GetResource(cli, &own)).To(BeNil())
+		})
+	})
+
+	Context("metrics export", func() {
+		It("should wait for the Prometheus serving certificate before rendering", func() {
+			// The federation scrape verifies tigera-prometheus against this bundle;
+			// without the serving cert a BYO Prometheus certificate never verifies.
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.LogCollectorSpec{
+					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+						Metrics:   &operatorv1.OpenTelemetryMetrics{Enabled: ptr.To(operatorv1.OpenTelemetryMetricsEnable)},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.AnythingOfType("string"), mock.Anything, mock.Anything)
+		})
+	})
+
+	Context("partially removed collector", func() {
+		It("should finish the teardown when the StatefulSet is already gone", func() {
+			// Probing only the StatefulSet read a half-removed collector as
+			// "already gone" and stranded its RBAC, ConfigMap, Service and policy.
+			lc := &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.LogCollectorSpec{
+					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					},
+				},
+			}
+			Expect(cli.Create(ctx, lc)).ToNot(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			sa := corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: "otel-collector", Namespace: "calico-system"}}
+			Expect(test.GetResource(cli, &sa)).To(BeNil())
+
+			// Simulate the StatefulSet being removed out of band, then disable OTel.
+			Expect(cli.Delete(ctx, &appsv1.StatefulSet{
+				ObjectMeta: metav1.ObjectMeta{Name: "otel-collector", Namespace: "calico-system"},
+			})).ToNot(HaveOccurred())
+
+			lc.Spec.OpenTelemetry = nil
+			Expect(cli.Update(ctx, lc)).ToNot(HaveOccurred())
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(test.GetResource(cli, &sa)).ToNot(BeNil(), "ServiceAccount should have been cleaned up")
+		})
 	})
 
 	Context("feature switched off after being enabled", func() {

@@ -1055,7 +1055,11 @@ spec:
                           name:
                             description: |-
                               Name is a unique identifier for this exporter. It keys the exporter in the
-                              generated collector config, so it must be unique across the list.
+                              generated collector config and names the operator's copies of this
+                              exporter's TLS material, so it is restricted to a DNS label: anything else
+                              produces a ConfigMap or Secret key the API server rejects.
+                            maxLength: 63
+                            pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
                           protocol:
                             default: grpc

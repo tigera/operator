@@ -56,6 +56,9 @@ var _ = Describe("OpenTelemetry rendering", func() {
 		}
 	})
 
+	// deleteCount is 3 whenever no exporter names TLS or auth material: the three
+	// aggregates are deleted rather than omitted, so removing a credential from the
+	// spec does not leave it behind in calico-system.
 	DescribeTable("Object counts",
 		func(cfg *otelcollector.Configuration, createCount, deleteCount int) {
 			component, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -73,7 +76,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			},
-			7, 0,
+			7, 3,
 		),
 		Entry("logs only",
 			&otelcollector.Configuration{
@@ -83,7 +86,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			},
-			7, 0,
+			7, 3,
 		),
 		Entry("metrics only",
 			&otelcollector.Configuration{
@@ -93,7 +96,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			},
-			7, 0,
+			7, 3,
 		),
 		Entry("no logs, no metrics",
 			&otelcollector.Configuration{
@@ -102,7 +105,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
 				},
 			},
-			7, 0,
+			7, 3,
 		),
 	)
 

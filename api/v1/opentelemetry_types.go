@@ -15,6 +15,8 @@
 package v1
 
 import (
+	"strings"
+
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -65,8 +67,12 @@ const (
 // OpenTelemetryExporter defines an OTLP export endpoint.
 type OpenTelemetryExporter struct {
 	// Name is a unique identifier for this exporter. It keys the exporter in the
-	// generated collector config, so it must be unique across the list.
+	// generated collector config and names the operator's copies of this
+	// exporter's TLS material, so it is restricted to a DNS label: anything else
+	// produces a ConfigMap or Secret key the API server rejects.
 	// +required
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 
 	// Endpoint is the OTLP endpoint URL.
@@ -165,6 +171,29 @@ func (e OpenTelemetryExporter) AuthHeaders() []OpenTelemetryExporterHeader {
 		return nil
 	}
 	return e.Auth.Headers
+}
+
+// HeaderEnvName is the environment variable a header credential is passed to the
+// collector in, and the key it is stored under. It lives here so validation and
+// rendering derive it the same way; a mismatch would leave the collector
+// referencing a variable that was never set.
+func HeaderEnvName(exporter, header string) string {
+	return "OTEL_EXPORTER_" + envSafe(exporter) + "_" + envSafe(header)
+}
+
+// envSafe maps a name onto the characters an environment variable allows.
+// Exporter names are restricted to a DNS label, so they cannot collide here;
+// header names are not, which is why Validate rejects any pair that does.
+func envSafe(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToUpper(s) {
+		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+		} else {
+			b.WriteRune('_')
+		}
+	}
+	return b.String()
 }
 
 // OpenTelemetryCollectorStatefulSet is the configuration for the OpenTelemetry Collector StatefulSet.

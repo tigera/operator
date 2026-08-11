@@ -381,6 +381,51 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 						}},
 				},
 			}),
+			Entry("auth headers on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
+				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+				Exporters: []operatorv1.OpenTelemetryExporter{{
+					Name: "backend", Endpoint: "http://otlp.example.com:4318",
+					Auth: &operatorv1.OpenTelemetryExporterAuth{
+						Headers: []operatorv1.OpenTelemetryExporterHeader{{
+							Name: "Authorization",
+							ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{
+								SecretKeyRef: &corev1.SecretKeySelector{
+									LocalObjectReference: corev1.LocalObjectReference{Name: "creds"},
+									Key:                  "token",
+								},
+							},
+						}},
+					},
+				}},
+			}),
+			Entry("two headers that collide once encoded for the environment", &operatorv1.OpenTelemetrySpec{
+				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+				Exporters: []operatorv1.OpenTelemetryExporter{{
+					Name: "backend", Endpoint: "https://otlp.example.com:4318",
+					Auth: &operatorv1.OpenTelemetryExporterAuth{
+						Headers: []operatorv1.OpenTelemetryExporterHeader{
+							{
+								Name: "X-API-KEY",
+								ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "a",
+									},
+								},
+							},
+							{
+								// Sanitises to the same env var as the one above, which
+								// would send one backend's credential under both headers.
+								Name: "X_API_KEY",
+								ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{
+									SecretKeyRef: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{Name: "creds"}, Key: "b",
+									},
+								},
+							},
+						},
+					},
+				}},
+			}),
 		)
 	})
 
@@ -422,6 +467,43 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 						Exporters: []operatorv1.OpenTelemetryExporter{
 							{Name: "backend", Endpoint: "otlp.example.com:4317",
 								TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "backend-mtls"}},
+						},
+					},
+				},
+			})).ToNot(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceValidationError, mock.AnythingOfType("string"), mock.Anything, mock.Anything)
+		})
+
+		It("should validate every header key, not just the first per Secret", func() {
+			// Two headers reading different keys of one Secret: deduping the fetch
+			// must not skip validating the second key, or it renders empty.
+			Expect(cli.Create(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: "shared-creds", Namespace: common.OperatorNamespace()},
+				Data:       map[string][]byte{"token-a": []byte("v")},
+			})).ToNot(HaveOccurred())
+			ref := func(key string) operatorv1.OpenTelemetryHeaderValueSource {
+				return operatorv1.OpenTelemetryHeaderValueSource{
+					SecretKeyRef: &corev1.SecretKeySelector{
+						LocalObjectReference: corev1.LocalObjectReference{Name: "shared-creds"}, Key: key,
+					},
+				}
+			}
+			Expect(cli.Create(ctx, &operatorv1.LogCollector{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.LogCollectorSpec{
+					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
+						Exporters: []operatorv1.OpenTelemetryExporter{
+							{Name: "first", Endpoint: "https://a.example.com:4318",
+								Auth: &operatorv1.OpenTelemetryExporterAuth{Headers: []operatorv1.OpenTelemetryExporterHeader{
+									{Name: "Authorization", ValueFrom: ref("token-a")}}}},
+							// token-b does not exist.
+							{Name: "second", Endpoint: "https://b.example.com:4318",
+								Auth: &operatorv1.OpenTelemetryExporterAuth{Headers: []operatorv1.OpenTelemetryExporterHeader{
+									{Name: "DD-API-KEY", ValueFrom: ref("token-b")}}}},
 						},
 					},
 				},

@@ -20,7 +20,10 @@ package render
 // back to build the collector's ServiceMonitor. Same arrangement as the
 // fluent-bit constants in logcollector.go.
 const (
-	OpenTelemetryCollectorName        = "otel-collector"
-	OpenTelemetryCollectorNamespace   = "calico-system"
-	OpenTelemetryCollectorMetricsPort = "metrics"
+	OpenTelemetryCollectorName      = "otel-collector"
+	OpenTelemetryCollectorNamespace = "calico-system"
+	// OpenTelemetryCollectorOTLPHTTPPort is the receiver's port, shared so
+	// fluent-bit's output and the collector's own Service cannot drift apart.
+	OpenTelemetryCollectorOTLPHTTPPort = 4318
+	OpenTelemetryCollectorMetricsPort  = "metrics"
 )

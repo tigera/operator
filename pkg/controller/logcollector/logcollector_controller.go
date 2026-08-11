@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rlogcollector "github.com/tigera/operator/pkg/render/logcollector"
 	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/otelcollector"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/url"
 )
@@ -479,7 +480,26 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	// the core Installation controller with a different certificate set, and the component handler
 	// replaces ConfigMap data wholesale — an unnamed bundle here would fight it, and additions like
 	// the syslog user CA would be lost to whichever controller wrote last.
-	trustedBundle := certificatemanagement.CreateNamedTrustedBundle(render.FluentBitNodeName, certificateManager.KeyPair(), true, prometheusCertificate, linseedCertificate)
+	// The collector's serving certificate has to be trusted for the OTLP output to
+	// verify it. The operator CA covers an operator-minted cert, but a
+	// user-supplied otel-collector-tls is honoured as-is, and fluent-bit would then
+	// reject every connection with an unknown-authority error while both statuses
+	// still reported Available.
+	extraCerts := []certificatemanagement.CertificateInterface{prometheusCertificate, linseedCertificate}
+	if instance.Spec.OpenTelemetry.HasLogs() {
+		otelCertificate, err := certificateManager.GetCertificate(r.client, otelcollector.OpenTelemetryCollectorServerTLSSecretName, common.OperatorNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get the OpenTelemetry Collector certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		// Absent simply means the otel controller has not minted it yet; it will
+		// trigger another reconcile here when it does.
+		if otelCertificate != nil {
+			extraCerts = append(extraCerts, otelCertificate)
+		}
+	}
+
+	trustedBundle := certificatemanagement.CreateNamedTrustedBundle(render.FluentBitNodeName, certificateManager.KeyPair(), true, extraCerts...)
 
 	certificateManager.AddToStatusManager(r.status, render.LogCollectorNamespace)
 

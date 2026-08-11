@@ -538,21 +538,24 @@ func (r *Reconciler) fetchExporterMaterial(
 
 		for _, h := range exp.AuthHeaders() {
 			ref := h.ValueFrom.SecretKeyRef
-			if _, done := auth[ref.Name]; done {
-				continue
-			}
-			s := &corev1.Secret{}
-			if err := r.cli.Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: ns}, s); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError,
-					fmt.Sprintf("Waiting for Secret %s, named by exporter %q header %q", ref.Name, exp.Name, h.Name), err, reqLogger)
-				return nil, nil, nil, true, err
+			// Dedupe the fetch, not the validation: two headers may read different
+			// keys of the same Secret, and skipping the second would let a missing
+			// key through to render an empty credential.
+			s, fetched := auth[ref.Name]
+			if !fetched {
+				s = &corev1.Secret{}
+				if err := r.cli.Get(ctx, client.ObjectKey{Name: ref.Name, Namespace: ns}, s); err != nil {
+					r.status.SetDegraded(operatorv1.ResourceReadError,
+						fmt.Sprintf("Waiting for Secret %s, named by exporter %q header %q", ref.Name, exp.Name, h.Name), err, reqLogger)
+					return nil, nil, nil, true, err
+				}
+				auth[ref.Name] = s
 			}
 			if len(s.Data[ref.Key]) == 0 {
 				r.status.SetDegraded(operatorv1.ResourceValidationError,
 					fmt.Sprintf("Secret %s must contain key %q, named by exporter %q header %q", ref.Name, ref.Key, exp.Name, h.Name), nil, reqLogger)
 				return nil, nil, nil, true, nil
 			}
-			auth[ref.Name] = s
 		}
 	}
 	return cas, certs, auth, false, nil

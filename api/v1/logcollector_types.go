@@ -332,14 +332,20 @@ func (s *OpenTelemetrySpec) Validate() error {
 	// same mapping key twice. +listMapKey=name normally stops this at the API
 	// server; this guards the case where the CRD is out of date.
 	seen := make(map[string]struct{}, len(s.Exporters))
+	// Header credentials reach the collector as environment variables whose names
+	// are derived from the exporter and header. Two headers can only collide if
+	// they differ solely by characters that sanitise to the same thing, and a
+	// collision would send one backend's credential to another, so reject it.
+	envNames := map[string]string{}
 	for _, exp := range s.Exporters {
 		if _, dup := seen[exp.Name]; dup {
 			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
 		}
 		seen[exp.Name] = struct{}{}
+		plaintext := strings.HasPrefix(exp.Endpoint, "http://")
 		// TLS material on a plaintext endpoint is silently ignored by the collector,
 		// so reject it rather than letting the user believe it took effect.
-		if plaintext := strings.HasPrefix(exp.Endpoint, "http://"); plaintext && exp.TLS != nil {
+		if plaintext && exp.TLS != nil {
 			if exp.TLS.ClientCertSecretName != "" {
 				return fmt.Errorf("exporter %q sets tls.clientCertSecretName on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
 			}
@@ -351,6 +357,15 @@ func (s *OpenTelemetrySpec) Validate() error {
 			if h.ValueFrom.SecretKeyRef == nil || h.ValueFrom.SecretKeyRef.Name == "" || h.ValueFrom.SecretKeyRef.Key == "" {
 				return fmt.Errorf("exporter %q header %q must set valueFrom.secretKeyRef.name and .key", exp.Name, h.Name)
 			}
+			// An http:// endpoint puts the credential on the wire in the clear.
+			if plaintext {
+				return fmt.Errorf("exporter %q sets auth.headers on an http:// endpoint; the credential would be sent unencrypted", exp.Name)
+			}
+			env := HeaderEnvName(exp.Name, h.Name)
+			if prev, dup := envNames[env]; dup {
+				return fmt.Errorf("exporter %q header %q collides with %s once encoded for the environment; rename one of them", exp.Name, h.Name, prev)
+			}
+			envNames[env] = fmt.Sprintf("exporter %q header %q", exp.Name, h.Name)
 		}
 	}
 	return nil

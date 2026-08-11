@@ -72,7 +72,7 @@ const (
 	exporterCertsMountPath  = "/certs/exporter-certs"
 
 	OTLPGRPCPort        = 4317
-	OTLPHTTPPort        = 4318
+	OTLPHTTPPort        = render.OpenTelemetryCollectorOTLPHTTPPort
 	exporterPrefixHTTP  = "otlp_http"
 	exporterPrefixGRPC  = "otlp_grpc"
 	HealthCheckPort     = 13133
@@ -193,9 +193,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		c.clusterRole(),
 		c.clusterRoleBinding(),
 		c.configMap(),
-		c.service(),
-		statefulSet,
-		c.networkPolicy(),
 	}
 
 	objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(OpenTelemetryCollectorNamespace, c.cfg.PullSecrets...)...)...)
@@ -205,17 +202,45 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// across under its original name, gather them into one object per kind keyed
 	// by exporter. That keeps the names the teardown has to know fixed, which it
 	// cannot derive from the spec once the feature is switched off.
-	if cm := c.exporterCAsConfigMap(); cm != nil {
-		objs = append(objs, cm)
-	}
-	if s := c.exporterCertsSecret(); s != nil {
-		objs = append(objs, s)
-	}
-	if s := c.exporterAuthSecret(); s != nil {
-		objs = append(objs, s)
+	//
+	// An exporter that no longer names any TLS or auth material leaves its
+	// aggregate empty, in which case the object is deleted rather than dropped
+	// from the list -- otherwise the previous credentials stay on the cluster.
+	var toDelete []client.Object
+	for _, agg := range []struct {
+		obj   client.Object
+		empty client.Object
+	}{
+		{c.exporterCAsConfigMap(), emptyConfigMap(OpenTelemetryCollectorExporterCAsName)},
+		{c.exporterCertsSecret(), emptySecret(OpenTelemetryCollectorExporterCertsName)},
+		{c.exporterAuthSecret(), emptySecret(OpenTelemetryCollectorExporterAuthName)},
+	} {
+		if agg.obj != nil {
+			objs = append(objs, agg.obj)
+		} else {
+			toDelete = append(toDelete, agg.empty)
+		}
 	}
 
-	return objs, nil
+	// The workload goes last: it mounts the ConfigMap and Secrets above, so
+	// applying it first can leave the pod waiting on volumes that do not exist yet.
+	objs = append(objs, c.service(), statefulSet, c.networkPolicy())
+
+	return objs, toDelete
+}
+
+func emptyConfigMap(name string) client.Object {
+	return &corev1.ConfigMap{
+		TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: OpenTelemetryCollectorNamespace},
+	}
+}
+
+func emptySecret(name string) client.Object {
+	return &corev1.Secret{
+		TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: OpenTelemetryCollectorNamespace},
+	}
 }
 
 // exporterCAsConfigMap gathers every user-supplied exporter CA under one
@@ -264,7 +289,7 @@ func (c *component) exporterAuthSecret() client.Object {
 			if src == nil {
 				continue
 			}
-			data[headerEnvName(exp.Name, h.Name)] = src.Data[h.ValueFrom.SecretKeyRef.Key]
+			data[operatorv1.HeaderEnvName(exp.Name, h.Name)] = src.Data[h.ValueFrom.SecretKeyRef.Key]
 		}
 	}
 	if len(data) == 0 {
@@ -292,18 +317,14 @@ func (c *component) ownedObjects() []client.Object {
 		// deterministically, so they can be cleaned up without knowing whether the
 		// user ever created the originals — otherwise they linger in
 		// calico-system after the feature is switched off.
-		&corev1.ConfigMap{
-			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterCAsName, Namespace: OpenTelemetryCollectorNamespace},
-		},
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterCertsName, Namespace: OpenTelemetryCollectorNamespace},
-		},
-		&corev1.Secret{
-			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: OpenTelemetryCollectorExporterAuthName, Namespace: OpenTelemetryCollectorNamespace},
-		},
+		emptyConfigMap(OpenTelemetryCollectorExporterCAsName),
+		emptySecret(OpenTelemetryCollectorExporterCertsName),
+		emptySecret(OpenTelemetryCollectorExporterAuthName),
+		// Owned by the certificatemanagement component on the create path, which
+		// the teardown does not render, so name them here instead: the trusted
+		// bundle and the copy of the receiver keypair both live in this namespace.
+		emptyConfigMap(certificatemanagement.TrustedBundleName(OpenTelemetryCollectorName, false)),
+		emptySecret(OpenTelemetryCollectorServerTLSSecretName),
 	}
 }
 
@@ -313,25 +334,6 @@ func (c *component) ownedObjects() []client.Object {
 func exporterCAKey(exporter string) string   { return exporter + ".crt" }
 func exporterCertKey(exporter string) string { return exporter + ".crt" }
 func exporterKeyKey(exporter string) string  { return exporter + ".key" }
-
-// headerEnvName builds the env var a header value is read from. Exporter and
-// header names allow characters that are not legal in an env var, so anything
-// outside [A-Za-z0-9_] becomes an underscore.
-func headerEnvName(exporter, header string) string {
-	return "OTEL_EXPORTER_" + envSafe(exporter) + "_" + envSafe(header)
-}
-
-func envSafe(s string) string {
-	var b strings.Builder
-	for _, r := range strings.ToUpper(s) {
-		if (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
-			b.WriteRune(r)
-		} else {
-			b.WriteRune('_')
-		}
-	}
-	return b.String()
-}
 
 func (c *component) Ready() bool {
 	return true
@@ -494,7 +496,7 @@ func (c *component) collectorConfig() (string, error) {
 		for _, h := range exp.AuthHeaders() {
 			entry.Headers = append(entry.Headers, exporterHeader{
 				Name:    h.Name,
-				EnvName: headerEnvName(exp.Name, h.Name),
+				EnvName: operatorv1.HeaderEnvName(exp.Name, h.Name),
 			})
 		}
 		exporters = append(exporters, entry)
@@ -718,7 +720,7 @@ func (c *component) exporterAuthEnv() []corev1.EnvVar {
 	var env []corev1.EnvVar
 	for _, exp := range c.cfg.OpenTelemetry.Exporters {
 		for _, h := range exp.AuthHeaders() {
-			name := headerEnvName(exp.Name, h.Name)
+			name := operatorv1.HeaderEnvName(exp.Name, h.Name)
 			env = append(env, corev1.EnvVar{
 				Name: name,
 				ValueFrom: &corev1.EnvVarSource{

@@ -35,22 +35,22 @@ type OpenTelemetryLogs struct {
 	Types []OpenTelemetryLogType `json:"types,omitempty"`
 }
 
-// OpenTelemetryMetricsEnabled is the option to enable or disable metrics export.
+// OpenTelemetryMetricsState is the option to enable or disable metrics export.
 // +kubebuilder:validation:Enum=Enabled;Disabled
-type OpenTelemetryMetricsEnabled string
+type OpenTelemetryMetricsState string
 
 const (
-	OpenTelemetryMetricsEnable  OpenTelemetryMetricsEnabled = "Enabled"
-	OpenTelemetryMetricsDisable OpenTelemetryMetricsEnabled = "Disabled"
+	OpenTelemetryMetricsEnabled  OpenTelemetryMetricsState = "Enabled"
+	OpenTelemetryMetricsDisabled OpenTelemetryMetricsState = "Disabled"
 )
 
 // OpenTelemetryMetrics configures metrics export.
 type OpenTelemetryMetrics struct {
-	// Enabled specifies whether to scrape and export Calico component metrics via OTLP.
+	// State specifies whether Calico component metrics are scraped and exported via OTLP.
 	// Default: Disabled
 	// +optional
 	// +kubebuilder:default=Disabled
-	Enabled *OpenTelemetryMetricsEnabled `json:"enabled,omitempty"`
+	State *OpenTelemetryMetricsState `json:"state,omitempty"`
 }
 
 // OpenTelemetryExporterProtocol specifies the OTLP transport protocol.
@@ -78,14 +78,93 @@ type OpenTelemetryExporter struct {
 	// +kubebuilder:default=grpc
 	Protocol OpenTelemetryExporterProtocol `json:"protocol,omitempty"`
 
-	// MutualTLS enables client certificate authentication to this exporter's
-	// endpoint. The collector presents the keypair from the
-	// otel-collector-client-certs Secret in the tigera-operator namespace; that
-	// Secret is required when any exporter enables this.
-	// Default: false
+	// TLS configures transport security for this exporter. Backends differ in what
+	// they require, so it is set per exporter rather than once for all of them.
+	// When omitted, an https endpoint is verified against the system roots and an
+	// http endpoint is sent in the clear.
 	// +optional
-	// +kubebuilder:default=false
-	MutualTLS *bool `json:"mutualTLS,omitempty"`
+	TLS *OpenTelemetryExporterTLS `json:"tls,omitempty"`
+
+	// Auth configures how requests to this exporter are authenticated. Backends
+	// differ here too: some take a bearer token, others a vendor-specific header.
+	// +optional
+	Auth *OpenTelemetryExporterAuth `json:"auth,omitempty"`
+}
+
+// OpenTelemetryExporterTLS configures transport security for a single exporter.
+type OpenTelemetryExporterTLS struct {
+	// CAConfigMapName names a ConfigMap in the tigera-operator namespace holding
+	// the CA that signs this exporter's serving certificate, under a tls.crt key.
+	// It is loaded alongside the system roots, so publicly-signed and
+	// privately-signed endpoints can be mixed. A CA is not secret, so this follows
+	// the ConfigMap convention already used for the syslog and Splunk CAs.
+	// +optional
+	CAConfigMapName string `json:"caConfigMapName,omitempty"`
+
+	// ClientCertSecretName names a Secret in the tigera-operator namespace holding
+	// the client keypair to present to this exporter, under tls.crt and tls.key.
+	// Setting it turns on mutual TLS for this exporter alone, so backends that
+	// require different client identities can each be given their own.
+	// +optional
+	ClientCertSecretName string `json:"clientCertSecretName,omitempty"`
+}
+
+// OpenTelemetryExporterAuth configures request authentication for a single exporter.
+type OpenTelemetryExporterAuth struct {
+	// Headers are attached to every request to this exporter. Values are read from
+	// Secrets rather than set inline, so credentials are not stored in the
+	// LogCollector resource.
+	// +optional
+	// +listType=map
+	// +listMapKey=name
+	Headers []OpenTelemetryExporterHeader `json:"headers,omitempty"`
+}
+
+// OpenTelemetryExporterHeader is a single request header and where its value comes from.
+type OpenTelemetryExporterHeader struct {
+	// Name is the header name, for example Authorization or DD-API-KEY.
+	// +required
+	Name string `json:"name"`
+
+	// ValueFrom selects the Secret key holding this header's value.
+	// +required
+	ValueFrom OpenTelemetryHeaderValueSource `json:"valueFrom"`
+}
+
+// OpenTelemetryHeaderValueSource selects where a header value is read from.
+type OpenTelemetryHeaderValueSource struct {
+	// SecretKeyRef selects a key of a Secret in the tigera-operator namespace.
+	// +required
+	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef"`
+}
+
+// MutualTLS reports whether this exporter presents a client certificate.
+func (e OpenTelemetryExporter) MutualTLS() bool {
+	return e.TLS != nil && e.TLS.ClientCertSecretName != ""
+}
+
+// CAConfigMap returns the user-supplied CA ConfigMap for this exporter, if any.
+func (e OpenTelemetryExporter) CAConfigMap() string {
+	if e.TLS == nil {
+		return ""
+	}
+	return e.TLS.CAConfigMapName
+}
+
+// ClientCertSecret returns the client keypair Secret for this exporter, if any.
+func (e OpenTelemetryExporter) ClientCertSecret() string {
+	if e.TLS == nil {
+		return ""
+	}
+	return e.TLS.ClientCertSecretName
+}
+
+// AuthHeaders returns the configured auth headers for this exporter, if any.
+func (e OpenTelemetryExporter) AuthHeaders() []OpenTelemetryExporterHeader {
+	if e.Auth == nil {
+		return nil
+	}
+	return e.Auth.Headers
 }
 
 // OpenTelemetryCollectorStatefulSet is the configuration for the OpenTelemetry Collector StatefulSet.

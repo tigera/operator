@@ -268,8 +268,8 @@ func (c *fluentBitComponent) addOpenTelemetryOutputs(cfg *fluentBitConfig) {
 			cfg.Pipeline.Outputs = append(cfg.Pipeline.Outputs, map[string]interface{}{
 				"name":         "opentelemetry",
 				"match":        match,
-				"host":         fmt.Sprintf("otel-collector.%s.svc", common.CalicoNamespace),
-				"port":         4318,
+				"host":         fmt.Sprintf("%s.%s.svc", render.OpenTelemetryCollectorName, common.CalicoNamespace),
+				"port":         render.OpenTelemetryCollectorOTLPHTTPPort,
 				"logs_uri":     "/v1/logs",
 				"tls":          "on",
 				"tls.verify":   "on",

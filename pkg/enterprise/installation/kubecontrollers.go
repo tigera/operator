@@ -131,8 +131,8 @@ func modifyKubeControllers(ri render.Inputs, objs, del []client.Object) ([]clien
 		del = append(del, webhookObjs...)
 	}
 
-	// The rbacsync controller's namespaced Role/RoleBinding. Created when RBAC management
-	// is enabled, deleted otherwise so toggling Manager.spec.rbacUI off cleans them up.
+	// The rbacsync controller's namespaced Role/RoleBinding. Deleted when RBAC
+	// management is off, so switching the gate off cleans them up.
 	if data.rbacManagementEnabled {
 		objs = append(objs, rbacSyncIDPGroupsRole()...)
 	} else {

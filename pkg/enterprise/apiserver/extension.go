@@ -52,6 +52,7 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -85,7 +86,7 @@ type apiServerRenderData struct {
 	// run. The base render resolves it too, but a modifier runs with no ImageSet.
 	calicoImage string
 
-	// rbacManagementEnabled mirrors Manager.spec.rbacUI. ui-apis writes role bindings
+	// rbacManagementEnabled mirrors the rbac-ui-config gate. ui-apis writes role bindings
 	// impersonating the caller, so tigera-network-admin needs the verbs itself.
 	rbacManagementEnabled bool
 
@@ -153,11 +154,14 @@ func (e *Extension) Watches(c ctrlruntime.Controller) error {
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
 		&operatorv1.Authentication{},
-		&operatorv1.Manager{},
 	} {
 		if err := c.WatchObject(obj, &handler.EnqueueRequestForObject{}); err != nil {
 			return err
 		}
+	}
+	// The switch gating the RBAC management UI rules.
+	if err := utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return err
 	}
 	for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
 		for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
@@ -200,9 +204,9 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		return ci, nil, extensions.InvalidConfigf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 	}
 
-	managerCR, err := utils.GetManager(ctx, ci.Client, false, "")
+	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, ci.Client, e.variant, e.opts.MultiTenant)
 	if err != nil {
-		return ci, nil, fmt.Errorf("error reading Manager: %w", err)
+		return ci, nil, fmt.Errorf("error reading the RBAC management UI ConfigMap: %w", err)
 	}
 
 	// Management cluster only: the apiserver mounts the tunnel CA secret so it can sign
@@ -320,7 +324,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		calicoImage:                 calicoImage,
 		bindingNamespaces:           bindingNamespaces,
 		cloud:                       e.opts.Cloud,
-		rbacManagementEnabled:       managerCR.RBACManagementEnabled(),
+		rbacManagementEnabled:       rbacManagementEnabled,
 	}
 	return ci, nil, nil
 }
@@ -436,7 +440,9 @@ func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, creat
 	}
 
 	// Clean up cluster-scoped resources that were created with the 'tigera' prefix.
-	del = append(del, c.deprecatedResources()...)
+	if !c.cfg.HoldAPIServiceCutover {
+		del = append(del, c.deprecatedResources()...)
+	}
 
 	// Re-apply deployment overrides so the modifier-added query server container picks up
 	// any per-container overrides. The override appliers use replace/merge semantics, so

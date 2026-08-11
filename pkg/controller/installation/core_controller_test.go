@@ -36,7 +36,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedv1 "k8s.io/api/scheduling/v1"
 	storagev1 "k8s.io/api/storage/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -2462,119 +2461,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
-		// The admin owns whether the ConfigMap exists and what it says; the operator only
-		// reads it.
-		Context("RBAC management UI feature gate", func() {
-			gateKey := client.ObjectKey{Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace}
-
-			// enabledControllers is where the gate's value is observable.
-			enabledControllers := func() string {
-				d := &appsv1.Deployment{}
-				Expect(c.Get(ctx, client.ObjectKey{
-					Name: "calico-kube-controllers", Namespace: common.CalicoNamespace,
-				}, d)).ShouldNot(HaveOccurred())
-
-				container := test.GetContainer(d.Spec.Template.Spec.Containers, "calico-kube-controllers")
-				Expect(container).NotTo(BeNil())
-				for _, env := range container.Env {
-					if env.Name == "ENABLED_CONTROLLERS" {
-						return env.Value
-					}
-				}
-				Fail("calico-kube-controllers has no ENABLED_CONTROLLERS env var")
-				return ""
-			}
-
-			writeGate := func(value string) {
-				cm := &corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{Name: gateKey.Name, Namespace: gateKey.Namespace},
-					Data:       map[string]string{rbacmanagement.ConfigMapKey: value},
-				}
-				Expect(c.Create(ctx, cm)).ShouldNot(HaveOccurred())
-			}
-
-			It("does not create the ConfigMap", func() {
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				err = c.Get(ctx, gateKey, &corev1.ConfigMap{})
-				Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the operator not to create rbac-ui-config")
-			})
-
-			It("reads a missing ConfigMap as disabled", func() {
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(enabledControllers()).NotTo(ContainSubstring("rbacsync"))
-			})
-
-			It("follows the admin's value once they create the ConfigMap", func() {
-				writeGate("true")
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(enabledControllers()).To(ContainSubstring("rbacsync"))
-			})
-
-			// Multi-tenant force-disables the feature on the ui-apis side.
-			It("withholds rbacsync on a multi-tenant management cluster even with the gate on", func() {
-				r.multiTenant = true
-				writeGate("true")
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				Expect(enabledControllers()).NotTo(ContainSubstring("rbacsync"))
-			})
-
-			It("leaves the admin's value untouched across reconciles", func() {
-				writeGate("true")
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-
-				cm := &corev1.ConfigMap{}
-				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
-				Expect(cm.Data).To(HaveKeyWithValue(rbacmanagement.ConfigMapKey, "true"))
-				// Deleting the Installation must not take the admin's toggle with it.
-				Expect(cm.GetOwnerReferences()).To(BeEmpty())
-			})
-
-			It("switches the feature back off when the admin deletes the ConfigMap", func() {
-				writeGate("true")
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(enabledControllers()).To(ContainSubstring("rbacsync"))
-
-				cm := &corev1.ConfigMap{}
-				Expect(c.Get(ctx, gateKey, cm)).ShouldNot(HaveOccurred())
-				Expect(c.Delete(ctx, cm)).ShouldNot(HaveOccurred())
-
-				// Fail-closed, and the operator does not put the ConfigMap back.
-				_, err = r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).ShouldNot(HaveOccurred())
-				Expect(enabledControllers()).NotTo(ContainSubstring("rbacsync"))
-				Expect(apierrors.IsNotFound(c.Get(ctx, gateKey, cm))).To(BeTrue())
-			})
-
-			// An unreadable ConfigMap is unknown state, not absent, so it degrades rather
-			// than rendering as disabled.
-			It("degrades and requeues when the ConfigMap cannot be read", func() {
-				readErr := fmt.Errorf("the API server is having a bad day")
-				r.client = failingGateReadClient{Client: c, err: readErr}
-				mockStatus.On("SetDegraded", operator.ResourceReadError,
-					"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything).Return().Once()
-
-				_, err := r.Reconcile(ctx, reconcile.Request{})
-				Expect(err).To(MatchError(readErr))
-				// The shared mockStatus expects a full reconcile, which this returns early
-				// from, so assert the one call.
-				mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceReadError,
-					"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything)
-			})
-		})
 	})
 
 	Context("with a fake component handler", func() {
@@ -3322,17 +3208,3 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
 	})
 })
-
-// failingGateReadClient fails the read of the gate ConfigMap and passes everything else
-// through, to distinguish an unreadable ConfigMap from an absent one.
-type failingGateReadClient struct {
-	client.Client
-	err error
-}
-
-func (f failingGateReadClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
-		return f.err
-	}
-	return f.Client.Get(ctx, key, obj, opts...)
-}

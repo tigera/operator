@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -62,7 +63,7 @@ type installationRenderData struct {
 	kubeControllerRules       []rbacv1.PolicyRule
 	kubeControllerControllers []string
 
-	// rbacManagementEnabled mirrors Manager.spec.rbacUI being enabled; the kube-controllers
+	// rbacManagementEnabled mirrors the rbac-ui-config gate; the kube-controllers
 	// modifier uses it to create the rbacsync controller's namespaced Role/RoleBinding.
 	rbacManagementEnabled bool
 
@@ -138,8 +139,6 @@ func (e *Extension) Watches(c ctrlruntime.Controller) error {
 		&operatorv1.ManagementCluster{},
 		&operatorv1.ManagementClusterConnection{},
 		&operatorv1.LogCollector{},
-		// Manager.spec.rbacUI gates the rbacsync controller and its RBAC.
-		&operatorv1.Manager{},
 		// GatewayAPI.spec.extensions.waf.state gates the WAF v3 surface on calico-kube-controllers.
 		&operatorv1.GatewayAPI{},
 	} {
@@ -147,6 +146,11 @@ func (e *Extension) Watches(c ctrlruntime.Controller) error {
 			return err
 		}
 	}
+	// The switch gating the rbacsync controller and its RBAC.
+	if err := utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
+		return err
+	}
+
 	// The core controller watches the Calico CRDs; these are the ones this variant adds.
 	if e.opts.ManageCRDs {
 		if err := utils.AddCRDWatches(c, enterpriseOnlyCRDs(e.opts.UseV3CRDs)); err != nil {
@@ -221,13 +225,12 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		return ci, nil, fmt.Errorf("error preparing WAF configuration: %w", err)
 	}
 
-	// The rbacsync controller reconciles the ClusterRoles backing the Manager UI's RBAC
-	// management feature; it runs only when Manager.spec.rbacUI is enabled.
-	managerCR, err := utils.GetManager(ctx, ci.Client, false, "")
+	// The rbacsync controller reconciles the ClusterRoles backing the Manager UI's
+	// RBAC management feature.
+	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, ci.Client, e.variant, e.opts.MultiTenant)
 	if err != nil {
-		return ci, nil, fmt.Errorf("error reading Manager: %w", err)
+		return ci, nil, fmt.Errorf("error reading the RBAC management UI ConfigMap: %w", err)
 	}
-	rbacManagementEnabled := managerCR.RBACManagementEnabled()
 
 	ci.RenderInputs.Extension = installationRenderData{
 		nodePrometheusTLS:         nodePrometheusTLS,

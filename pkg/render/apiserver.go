@@ -39,7 +39,6 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
-	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -154,10 +153,6 @@ type APIServerConfiguration struct {
 	MultiTenant                  bool
 	KubernetesVersion            *common.VersionInfo
 	ClusterDomain                string
-
-	// RBACManagementEnabled reports whether to render the RBAC management UI access.
-	// The controller has already applied the variant, the admin's gate and tenancy.
-	RBACManagementEnabled bool
 
 	// Whether or not we should run the aggregation API server for projectcalico.org/v3 APIs
 	// as part of this component.
@@ -638,9 +633,8 @@ func (c *apiServerComponent) calicoCustomResourcesClusterRoleBinding() *rbacv1.C
 	subjects := []rbacv1.Subject{
 		{Kind: "ServiceAccount", Name: APIServerServiceAccountName, Namespace: APIServerNamespace},
 	}
-	// The previous API server is still serving while the cutover is held, and it reads its own
-	// storage through this binding, so dropping it here would take the API down.
 	if c.cfg.HoldAPIServiceCutover {
+		// The previous API server is still serving, and reads its storage through this binding.
 		subjects = append(subjects, rbacv1.Subject{
 			Kind:      "ServiceAccount",
 			Name:      deprecatedAPIServerServiceAccountName,

@@ -55,7 +55,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"

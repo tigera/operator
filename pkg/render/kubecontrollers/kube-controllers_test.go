@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/testutils"

@@ -78,7 +78,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/resourcequota"
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -1144,12 +1143,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating namespaces", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, r.client, instance.Spec.Variant, r.multiTenant)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 

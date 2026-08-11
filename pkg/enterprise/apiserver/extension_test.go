@@ -16,6 +16,7 @@ package apiserver_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -28,8 +29,8 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -45,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -55,10 +57,11 @@ const apiServerClusterDomain = "cluster.local"
 // certificate manager and trusted bundle, so ExtendInputs can create the query server
 // cert and the bundle the modifiers consume.
 func apiServerControllerInputs(variant operatorv1.ProductVariant, install *operatorv1.InstallationSpec, objs ...client.Object) controller.Inputs {
-	scheme := runtime.NewScheme()
-	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
-	c := ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+	return apiServerControllerInputsWith(ctrlrfake.DefaultFakeClientBuilder(apiServerScheme()).Build(), variant, install, objs...)
+}
 
+// apiServerControllerInputsWith is apiServerControllerInputs against a caller-supplied client.
+func apiServerControllerInputsWith(c client.WithWatch, variant operatorv1.ProductVariant, install *operatorv1.InstallationSpec, objs ...client.Object) controller.Inputs {
 	for _, o := range objs {
 		Expect(c.Create(context.Background(), o)).NotTo(HaveOccurred())
 	}
@@ -78,6 +81,35 @@ func apiServerControllerInputs(variant operatorv1.ProductVariant, install *opera
 		},
 		Client:             c,
 		CertificateManager: certManager,
+	}
+}
+
+func apiServerScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
+	Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+	return scheme
+}
+
+// failingConfigMapInputs returns controller inputs whose client fails every read of
+// the named ConfigMap with readErr.
+func failingConfigMapInputs(name string, readErr error) controller.Inputs {
+	c := ctrlrfake.DefaultFakeClientBuilder(apiServerScheme()).WithInterceptorFuncs(interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == name {
+				return readErr
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	}).Build()
+	return apiServerControllerInputsWith(c, operatorv1.CalicoEnterprise, nil)
+}
+
+// rbacManagementGate builds the admin-owned ConfigMap that switches the RBAC
+// management UI on for a cluster.
+func rbacManagementGate(enabled string) *corev1.ConfigMap {
+	return &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace},
+		Data:       map[string]string{rbacmanagement.ConfigMapKey: enabled},
 	}
 }
 
@@ -269,18 +301,18 @@ var _ = Describe("API server enterprise modifier", func() {
 		Expect(svc.Spec.Ports).To(ContainElement(HaveField("Name", render.QueryServerPortName)))
 	})
 
-	DescribeTable("grants tigera-network-admin the role management verbs only when rbacUI is enabled",
-		func(rbacUI *operatorv1.RBACUI, expected bool) {
-			manager := &operatorv1.Manager{
-				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
-				Spec:       operatorv1.ManagerSpec{RBACUI: rbacUI},
+	DescribeTable("grants tigera-network-admin the role management verbs only when RBAC management is enabled",
+		func(gate *corev1.ConfigMap, expected bool) {
+			var objs []client.Object
+			if gate != nil {
+				objs = append(objs, gate)
 			}
-			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, manager)
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, objs...)
 			eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
 			Expect(err).NotTo(HaveOccurred())
 
-			objs, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
-			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+			rendered, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](rendered, "tigera-network-admin")
 			Expect(ok).To(BeTrue())
 
 			// ui-apis writes bindings impersonating the caller, so the caller's own role
@@ -296,10 +328,36 @@ var _ = Describe("API server enterprise modifier", func() {
 				Expect(networkAdmin.Rules).NotTo(matcher)
 			}
 		},
-		Entry("enabled", &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIEnabled)}, true),
-		Entry("disabled", &operatorv1.RBACUI{State: ptr.To(operatorv1.RBACUIDisabled)}, false),
-		Entry("unset", nil, false),
+		Entry("enabled", rbacManagementGate("true"), true),
+		Entry("disabled", rbacManagementGate("false"), false),
+		Entry("no ConfigMap", nil, false),
 	)
+
+	It("reads the gate on a managed cluster, which carries tigera-network-admin too", func() {
+		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil,
+			&operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}},
+			rbacManagementGate("true"))
+		eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+		Expect(err).NotTo(HaveOccurred())
+
+		objs, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+		networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+		Expect(ok).To(BeTrue())
+		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+		}))
+	})
+
+	It("fails the reconcile when the gate ConfigMap cannot be read", func() {
+		// Unknown state is not the same as absent, so it must not render as disabled.
+		readErr := fmt.Errorf("the API server is having a bad day")
+		ci := failingConfigMapInputs(rbacmanagement.ConfigMapName, readErr)
+
+		_, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+		Expect(err).To(MatchError(readErr))
+	})
 
 	Context("Calico Cloud", func() {
 		cloudExt := func() extensions.Extensions {
@@ -509,6 +567,16 @@ var _ = Describe("API server enterprise modifier", func() {
 		multiTenantExt := func() extensions.Extensions {
 			return enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{MultiTenant: true})
 		}
+
+		It("does not render tigera-network-admin, so the RBAC management gate needs no tenancy term", func() {
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, rbacManagementGate("true"))
+			eci, _, err := multiTenantExt().APIServer().ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			objs, _ := renderMultiTenantAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			_, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, "tigera-network-admin")
+			Expect(ok).To(BeFalse())
+		})
 
 		It("grants each tenant's calico-apiserver service account least-privilege Linseed access", func() {
 			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, tenant("tenant-a"), tenant("tenant-b"))

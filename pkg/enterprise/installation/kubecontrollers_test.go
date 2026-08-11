@@ -37,13 +37,16 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/enterprise"
 	"github.com/tigera/operator/pkg/enterprise/installation"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/applicationlayer"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
@@ -312,6 +315,76 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 			[]client.Object{&operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}},
 			render.GuardianEntityRule),
 	)
+
+	Context("RBAC management gate", func() {
+		gate := func(value string) client.Object {
+			return &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace},
+				Data:       map[string]string{rbacmanagement.ConfigMapKey: value},
+			}
+		}
+
+		// renderWith runs the extension end to end and returns the created and deleted objects.
+		renderWith := func(s extensions.Extensions, objs ...client.Object) ([]client.Object, []client.Object) {
+			ci := newControllerInputs(operatorv1.CalicoEnterprise, objs...)
+			eci, _, err := s.Installation().ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			comp := kubecontrollers.NewCalicoKubeControllers(calicoKubeControllersCfg(ci))
+			Expect(comp.ResolveImages(nil)).NotTo(HaveOccurred())
+			create, del := comp.Objects()
+			return s.Installation().Modify(extensionstest.KubeControllersStub{StubComponent: extensionstest.StubComponent{Create: create, Delete: del}, Cfg: nil}, eci.RenderInputs).Objects()
+		}
+
+		enabledControllers := func(objs []client.Object) string {
+			for _, env := range kubeContainer(objs).Env {
+				if env.Name == "ENABLED_CONTROLLERS" {
+					return env.Value
+				}
+			}
+			Fail("no ENABLED_CONTROLLERS env on the kube-controllers container")
+			return ""
+		}
+
+		It("reads a missing ConfigMap as disabled", func() {
+			create, del := renderWith(ext)
+			Expect(enabledControllers(create)).NotTo(ContainSubstring("rbacsync"))
+
+			_, ok := extensions.FindObject[*rbacv1.Role](del, "calico-kube-controllers-rbac-sync")
+			Expect(ok).To(BeTrue(), "the rbacsync Role should be queued for deletion")
+		})
+
+		It("follows the admin's value once they create the ConfigMap", func() {
+			create, _ := renderWith(ext, gate("true"))
+			Expect(enabledControllers(create)).To(ContainSubstring("rbacsync"))
+
+			_, ok := extensions.FindObject[*rbacv1.Role](create, "calico-kube-controllers-rbac-sync")
+			Expect(ok).To(BeTrue())
+			_, ok = extensions.FindObject[*rbacv1.RoleBinding](create, "calico-kube-controllers-rbac-sync")
+			Expect(ok).To(BeTrue())
+		})
+
+		It("switches the feature back off when the admin sets the value to false", func() {
+			create, del := renderWith(ext, gate("false"))
+			Expect(enabledControllers(create)).NotTo(ContainSubstring("rbacsync"))
+
+			_, ok := extensions.FindObject[*rbacv1.Role](del, "calico-kube-controllers-rbac-sync")
+			Expect(ok).To(BeTrue())
+		})
+
+		It("withholds rbacsync on a multi-tenant management cluster even with the gate on", func() {
+			// Multi-tenant force-disables the feature on the ui-apis side.
+			multiTenant := enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{MultiTenant: true})
+			create, _ := renderWith(multiTenant, gate("true"))
+			Expect(enabledControllers(create)).NotTo(ContainSubstring("rbacsync"))
+		})
+
+		It("never creates the ConfigMap itself", func() {
+			create, _ := renderWith(ext, gate("true"))
+			_, ok := extensions.FindObject[*corev1.ConfigMap](create, rbacmanagement.ConfigMapName)
+			Expect(ok).To(BeFalse(), "the gate is admin-owned, so the operator must not render it")
+		})
+	})
 
 	It("binds kube-controllers to the managed-cluster watch role only on a management cluster", func() {
 		ci := newControllerInputs(operatorv1.CalicoEnterprise,

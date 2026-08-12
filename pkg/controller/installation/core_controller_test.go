@@ -410,7 +410,7 @@ var _ = Describe("Testing core-controller installation", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).To(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceValidationError, "Invalid installation configuration", mock.Anything, mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.ResourceValidationError, "felixConfiguration prometheusReporterPort=0 not supported", mock.Anything, mock.Anything)
 		})
 
 		Context("image tests", func() {

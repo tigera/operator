@@ -94,30 +94,29 @@ var _ = Describe("installation controller extension", func() {
 		Expect(names).To(ConsistOf(render.NodePrometheusTLSServerSecret, kubecontrollers.KubeControllerPrometheusTLSSecret))
 	})
 
-	It("deletes the Goldmane CR", func() {
+	It("rejects an existing Goldmane CR", func() {
 		ci := newControllerInputs(operatorv1.CalicoEnterprise, &operatorv1.Goldmane{
 			ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultInstanceKey.Name},
 		})
 
 		_, _, err := ext.Installation().ExtendInputs(ctx, ci)
-		Expect(err).NotTo(HaveOccurred())
+		Expect(err).To(MatchError(ContainSubstring("delete the Goldmane \"default\" resource")))
+		reason, ok := extensions.DegradedReason(err)
+		Expect(ok).To(BeTrue())
+		Expect(reason).To(Equal(operatorv1.ResourceValidationError))
 
 		goldmane, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, ci.Client)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(goldmane).To(BeNil())
+		Expect(goldmane).NotTo(BeNil())
 	})
 
-	It("leaves the Goldmane CR alone while the installation is still Calico", func() {
+	It("accepts a Goldmane CR while the installation is still Calico", func() {
 		ci := newControllerInputs(operatorv1.Calico, &operatorv1.Goldmane{
 			ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultInstanceKey.Name},
 		})
 
 		_, _, err := ext.Installation().ExtendInputs(ctx, ci)
 		Expect(err).NotTo(HaveOccurred())
-
-		goldmane, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, ci.Client)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(goldmane).NotTo(BeNil())
 	})
 
 	It("is a no-op when the operator runs as Calico", func() {

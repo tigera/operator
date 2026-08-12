@@ -984,15 +984,14 @@ spec:
                         description: OpenTelemetryExporter defines an OTLP export endpoint.
                         properties:
                           auth:
-                            description: |-
-                              Auth configures how requests to this exporter are authenticated. Backends
-                              differ here too: some take a bearer token, others a vendor-specific header.
+                            description:
+                              Auth configures how requests to this exporter
+                              are authenticated.
                             properties:
                               headers:
                                 description: |-
                                   Headers are attached to every request to this exporter. Values are read from
-                                  Secrets rather than set inline, so credentials are not stored in the
-                                  LogCollector resource.
+                                  Secrets rather than set inline.
                                 items:
                                   description:
                                     OpenTelemetryExporterHeader is a single
@@ -1004,9 +1003,10 @@ spec:
                                         Authorization or DD-API-KEY.
                                       type: string
                                     valueFrom:
-                                      description:
-                                        ValueFrom selects the Secret key
-                                        holding this header's value.
+                                      description: |-
+                                        ValueFrom selects the Secret key holding this header's value. The value is
+                                        sent verbatim, so a bearer token must include the "Bearer " prefix in the
+                                        Secret: "Bearer eyJhbGci...", not "eyJhbGci...".
                                       properties:
                                         secretKeyRef:
                                           description:
@@ -1051,13 +1051,13 @@ spec:
                             type: object
                           endpoint:
                             description: Endpoint is the OTLP endpoint URL.
+                            pattern: ^(http|https)://.+$
                             type: string
                           name:
                             description: |-
-                              Name is a unique identifier for this exporter. It keys the exporter in the
-                              generated collector config and names the operator's copies of this
-                              exporter's TLS material, so it is restricted to a DNS label: anything else
-                              produces a ConfigMap or Secret key the API server rejects.
+                              Name is a unique identifier for this exporter, restricted to a DNS label
+                              because it keys the exporter in the generated collector config and names the
+                              operator's copies of this exporter's TLS material.
                             maxLength: 63
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
@@ -1072,25 +1072,22 @@ spec:
                             type: string
                           tls:
                             description: |-
-                              TLS configures transport security for this exporter. Backends differ in what
-                              they require, so it is set per exporter rather than once for all of them.
-                              When omitted, an https endpoint is verified against the system roots and an
-                              http endpoint is sent in the clear.
+                              TLS configures transport security for this exporter. When omitted, an https
+                              endpoint is verified against the system roots and an http endpoint is sent
+                              in the clear.
                             properties:
                               caConfigMapName:
                                 description: |-
                                   CAConfigMapName names a ConfigMap in the tigera-operator namespace holding
                                   the CA that signs this exporter's serving certificate, under a tls.crt key.
-                                  It is loaded alongside the system roots, so publicly-signed and
-                                  privately-signed endpoints can be mixed. A CA is not secret, so this follows
-                                  the ConfigMap convention already used for the syslog and Splunk CAs.
+                                  When set, this CA alone is trusted for this exporter; the system roots are
+                                  not, so a certificate from any public authority is rejected.
                                 type: string
                               clientCertSecretName:
                                 description: |-
                                   ClientCertSecretName names a Secret in the tigera-operator namespace holding
                                   the client keypair to present to this exporter, under tls.crt and tls.key.
-                                  Setting it turns on mutual TLS for this exporter alone, so backends that
-                                  require different client identities can each be given their own.
+                                  Setting it turns on mutual TLS for this exporter.
                                 type: string
                             type: object
                         required:

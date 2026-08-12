@@ -73,7 +73,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			},
 			7, 3,
@@ -83,7 +83,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: &operatorv1.InstallationSpec{KubernetesProvider: operatorv1.ProviderGKE},
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryAuditLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			},
 			7, 3,
@@ -93,7 +93,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: &operatorv1.InstallationSpec{KubernetesProvider: operatorv1.ProviderGKE},
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			},
 			7, 3,
@@ -102,7 +102,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			&otelcollector.Configuration{
 				Installation: &operatorv1.InstallationSpec{KubernetesProvider: operatorv1.ProviderGKE},
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			},
 			7, 3,
@@ -115,7 +115,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			component, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -222,7 +222,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 				TrustedCertBundle: trustedBundle,
 			}
@@ -246,7 +246,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 				ReceiverTLSSecret: receiverKeyPair,
 				TrustedCertBundle: trustedBundle,
@@ -270,7 +270,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -294,7 +294,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 				ReceiverTLSSecret: receiverKeyPair,
 				TrustedCertBundle: trustedBundle,
@@ -319,7 +319,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 				TrustedCertBundle: trustedBundle,
 			}
@@ -346,7 +346,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -389,7 +389,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Exporters: []operatorv1.OpenTelemetryExporter{
-						{Name: "grpcbackend", Endpoint: "otlp.example.com:4317", Protocol: operatorv1.OpenTelemetryProtocolGRPC},
+						{Name: "grpcbackend", Endpoint: "https://otlp.example.com:4317", Protocol: operatorv1.OpenTelemetryProtocolGRPC},
 					},
 				},
 			}
@@ -422,7 +422,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					TrustedCertBundle: bundle,
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				}
 				comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -462,7 +462,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Installation: defaultInstallation,
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs:                              &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters:                         []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters:                         []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 						OpenTelemetryCollectorStatefulSet: ss,
 					},
 				}
@@ -506,7 +506,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Exporters: []operatorv1.OpenTelemetryExporter{
 						{Name: "plain", Endpoint: "http://lgtm.otel-demo.svc:4317"},
-						{Name: "secure", Endpoint: "otlp.example.com:4317"},
+						{Name: "secure", Endpoint: "https://otlp.example.com:4317"},
 					},
 				},
 			}
@@ -557,7 +557,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -603,11 +603,18 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cm, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OpenTelemetryCollectorConfigMapName, otelcollector.OpenTelemetryCollectorNamespace)
 			Expect(err).ShouldNot(HaveOccurred())
 			config := cm.Data["config.yaml"]
-			// Loaded in addition to the system pool, so public endpoints keep working.
-			Expect(config).To(ContainSubstring("include_system_ca_certs_pool: true"))
 			// Only the exporter that named a CA gets one.
 			Expect(config).To(ContainSubstring("ca_file: /certs/exporter-cas/corp.crt"))
 			Expect(strings.Count(config, "ca_file: /certs/exporter-cas/")).To(Equal(1))
+
+			// A pinned CA is the only thing trusted for that exporter: keeping the
+			// system roots would let any public authority satisfy it. The exporter
+			// without a CA still verifies against them.
+			corp := config[strings.Index(config, "otlp_http/corp:"):strings.Index(config, "otlp_http/public:")]
+			public := config[strings.Index(config, "otlp_http/public:"):]
+			Expect(corp).ToNot(ContainSubstring("include_system_ca_certs_pool"),
+				"a pinned CA must not be combined with the system roots")
+			Expect(public).To(ContainSubstring("include_system_ca_certs_pool: true"))
 
 			// Gathered into one operator-managed ConfigMap keyed by exporter.
 			agg, err := rtest.GetResourceOfType[*corev1.ConfigMap](objs, otelcollector.OpenTelemetryCollectorExporterCAsName, otelcollector.OpenTelemetryCollectorNamespace)
@@ -631,9 +638,9 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Exporters: []operatorv1.OpenTelemetryExporter{
-						{Name: "mtlsbackend", Endpoint: "otlp.example.com:4317",
+						{Name: "mtlsbackend", Endpoint: "https://otlp.example.com:4317",
 							TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "backend-mtls"}},
-						{Name: "plainbackend", Endpoint: "other.example.com:4317"},
+						{Name: "plainbackend", Endpoint: "https://other.example.com:4317"},
 					},
 				},
 				ExporterClientCerts: map[string]*corev1.Secret{
@@ -756,7 +763,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -778,7 +785,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -800,7 +807,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -830,7 +837,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -849,7 +856,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -923,7 +930,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -941,7 +948,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -968,7 +975,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				DomainEgressAllowed: true,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Exporters: []operatorv1.OpenTelemetryExporter{
-						{Name: "byname", Endpoint: "otlp.example.com:4317"},
+						{Name: "byname", Endpoint: "https://otlp.example.com:4317"},
 						{Name: "byip", Endpoint: "10.1.2.3:4318"},
 					},
 				},
@@ -999,7 +1006,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation:        defaultInstallation,
 				DomainEgressAllowed: false,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "byname", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "byname", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -1018,9 +1025,11 @@ var _ = Describe("OpenTelemetry rendering", func() {
 
 		DescribeTable("should always emit a rule for an endpoint carrying no port",
 			func(protocol operatorv1.OpenTelemetryExporterProtocol, wantPort uint16) {
-				// The OTLP exporters accept a bare host and default the port
-				// themselves. Skipping the rule left the default-deny silently
-				// dropping every export while the operator still reported Available.
+				// The endpoint Pattern normally requires a scheme, so a bare host
+				// only reaches here if the CRD is out of date. Rendering no rule at
+				// all left the default-deny silently dropping every export while the
+				// operator still reported Available, so fall back to the protocol's
+				// default port rather than emitting nothing.
 				cfg := &otelcollector.Configuration{
 					Installation:        defaultInstallation,
 					DomainEgressAllowed: true,
@@ -1079,7 +1088,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					OpenTelemetryCollectorStatefulSet: &operatorv1.OpenTelemetryCollectorStatefulSet{
 						Spec: &operatorv1.OpenTelemetryCollectorStatefulSetSpec{
 							Template: &operatorv1.OpenTelemetryCollectorStatefulSetPodTemplateSpec{
@@ -1134,7 +1143,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				Installation: defaultInstallation,
 				PullSecrets:  pullSecrets,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			}
 			comp, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -1149,7 +1158,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 		component, err := otelcollector.OpenTelemetryCollector(&otelcollector.Configuration{
 			Installation: defaultInstallation,
 			OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-				Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())

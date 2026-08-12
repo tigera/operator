@@ -171,7 +171,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -219,7 +219,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -239,7 +239,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			}
@@ -271,7 +271,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			}
@@ -307,7 +307,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs:      &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -346,13 +346,13 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 			}),
 			Entry("no data sources, so there would be no pipelines at all", &operatorv1.OpenTelemetrySpec{
-				Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+				Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 			}),
 			Entry("duplicate exporter names, which would emit the same config key twice", &operatorv1.OpenTelemetrySpec{
 				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 				Exporters: []operatorv1.OpenTelemetryExporter{
-					{Name: "backend", Endpoint: "otlp.example.com:4317"},
-					{Name: "backend", Endpoint: "other.example.com:4317"},
+					{Name: "backend", Endpoint: "https://otlp.example.com:4317"},
+					{Name: "backend", Endpoint: "https://other.example.com:4317"},
 				},
 			}),
 			Entry("a client certificate on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
@@ -465,7 +465,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 						Exporters: []operatorv1.OpenTelemetryExporter{
-							{Name: "backend", Endpoint: "otlp.example.com:4317",
+							{Name: "backend", Endpoint: "https://otlp.example.com:4317",
 								TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "backend-mtls"}},
 						},
 					},
@@ -556,7 +556,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 						Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 						Exporters: []operatorv1.OpenTelemetryExporter{
-							{Name: "backend", Endpoint: "otlp.example.com:4317",
+							{Name: "backend", Endpoint: "https://otlp.example.com:4317",
 								TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "missing-secret"}},
 						},
 					},
@@ -578,7 +578,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -605,7 +605,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -625,7 +625,7 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 				Spec: operatorv1.LogCollectorSpec{
 					OpenTelemetry: &operatorv1.OpenTelemetrySpec{
-						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "otlp.example.com:4317"}},
+						Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 					},
 				},
 			})).ToNot(HaveOccurred())

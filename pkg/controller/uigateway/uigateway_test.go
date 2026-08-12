@@ -259,13 +259,12 @@ var _ = Describe("Cleanup helpers", func() {
 			Expect(backends).To(ConsistOf(backendNS, backendNS))
 		})
 
-		It("includes the backend namespace even when no labeled Gateway exists", func() {
+		It("deletes nothing when no labeled Gateway exists", func() {
 			build()
 			components, err := h.Teardown(ctx)
 			Expect(err).NotTo(HaveOccurred())
-
-			gateways, _ := deletionNamespaces(components)
-			Expect(gateways).To(Equal([]string{backendNS}))
+			Expect(components).To(BeEmpty(),
+				"the Gateway is rendered first, so without one nothing of ours is on the cluster and the Backend's kind may not even be served")
 		})
 
 		It("returns nothing when the gateway CRDs are absent", func() {

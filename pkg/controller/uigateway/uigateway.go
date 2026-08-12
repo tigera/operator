@@ -113,16 +113,23 @@ func (c *Config) MoveCleanup(ctx context.Context, desiredNS string) ([]render.Co
 	return components, nil
 }
 
-// Teardown returns deletion components for every labeled Gateway's namespace.
-// The backend namespace is always included: it holds the Backend and
-// ReferenceGrant, and this covers partial renders that never produced a
-// labeled Gateway.
+// Teardown returns deletion components for every labeled Gateway's namespace,
+// plus the backend namespace, which holds the Backend and ReferenceGrant.
+//
+// Without a labeled Gateway it returns nothing. The Gateway is rendered before
+// every other gateway resource, so none of them can be on the cluster without
+// it. That also keeps the reconcile away from kinds the cluster may not serve:
+// the Backend belongs to Envoy Gateway, which can be absent where the Gateway
+// API CRDs came from somewhere else, and deleting an unserved kind fails.
 func (c *Config) Teardown(ctx context.Context) ([]render.Component, error) {
 	namespaces, gatewayCRDsPresent, err := c.Namespaces(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if gatewayCRDsPresent && !slices.Contains(namespaces, c.BackendNamespace) {
+	if !gatewayCRDsPresent || len(namespaces) == 0 {
+		return nil, nil
+	}
+	if !slices.Contains(namespaces, c.BackendNamespace) {
 		namespaces = append(namespaces, c.BackendNamespace)
 	}
 	var components []render.Component

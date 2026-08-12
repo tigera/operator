@@ -103,7 +103,12 @@ func (c *gatewayComponent) Ready() bool {
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var objs []client.Object
 
+	// The Gateway goes first: it carries the cleanup label, so a render that
+	// fails partway must not leave behind a resource cleanup can no longer find.
+	objs = append(objs, c.gateway())
+
 	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
+		// Ahead of the HTTPRoute, whose cross-namespace backendRef it permits.
 		objs = append(objs, c.referenceGrant())
 	}
 
@@ -112,7 +117,6 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 	// GatewayAPI controller creates once it sees the Gateway there, so the
 	// secret create fails on the first reconcile and succeeds on the retry.
 	objs = append(objs,
-		c.gateway(),
 		c.backend(),
 		c.httpRoute(),
 		c.tlsSecret(),
@@ -403,10 +407,6 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: c.cfg.TLSSecretName, Namespace: gwNS},
 		},
-		&gapi.Gateway{
-			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
-		},
 		&gapi.HTTPRoute{
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: gwNS},
@@ -453,6 +453,14 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 			)
 		}
 	}
+
+	// The Gateway goes last, mirroring the render, where it goes first. If an
+	// earlier delete fails, it stays and the next reconcile still finds the
+	// leftovers by its label.
+	objs = append(objs, &gapi.Gateway{
+		TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
+	})
 
 	return nil, objs
 }

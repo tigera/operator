@@ -214,6 +214,28 @@ var _ = Describe("Gateway component render", func() {
 			}
 		})
 
+		It("renders the Gateway before every other resource", func() {
+			Expect(toCreate).NotTo(BeEmpty())
+			_, ok := toCreate[0].(*gapi.Gateway)
+			Expect(ok).To(BeTrue(),
+				"the Gateway carries the cleanup label, so a partial render must not leave anything uigateway.Teardown can no longer find")
+		})
+
+		It("renders the ReferenceGrant before the HTTPRoute", func() {
+			grantIdx, routeIdx := -1, -1
+			for i, obj := range toCreate {
+				switch obj.(type) {
+				case *gapi.ReferenceGrant:
+					grantIdx = i
+				case *gapi.HTTPRoute:
+					routeIdx = i
+				}
+			}
+			Expect(grantIdx).To(BeNumerically(">=", 0))
+			Expect(routeIdx).To(BeNumerically(">", grantIdx),
+				"the grant must exist before the route so its cross-namespace backendRef resolves on the first pass")
+		})
+
 		It("renders the TLS secret after the Gateway", func() {
 			gatewayIdx, secretIdx := -1, -1
 			for i, obj := range toCreate {
@@ -336,6 +358,13 @@ var _ = Describe("Gateway deletion component", func() {
 		It("returns all objects in objsToDelete and nothing in objsToCreate", func() {
 			Expect(toCreate).To(BeNil())
 			Expect(toDelete).NotTo(BeEmpty())
+		})
+
+		It("deletes the Gateway last", func() {
+			Expect(toDelete).NotTo(BeEmpty())
+			_, ok := toDelete[len(toDelete)-1].(*gapi.Gateway)
+			Expect(ok).To(BeTrue(),
+				"an earlier failed delete must leave the labeled Gateway in place so the next reconcile finds the leftovers")
 		})
 
 		It("targets the correct resource names", func() {

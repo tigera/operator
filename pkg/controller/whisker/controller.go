@@ -292,7 +292,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
-	if gw := whiskerCR.Spec.IngressGateway; gw != nil {
+	// Whisker is only rendered on Calico; every other variant deletes it. A
+	// gateway there would front a Service the same reconcile is removing, so
+	// treat it like an unset spec and tear any existing resources down.
+	if gw := whiskerCR.Spec.IngressGateway; gw != nil && installationSpec.Variant == operatorv1.Calico {
 		gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.cli)
 		if err != nil {
 			if kerrors.IsNotFound(err) {

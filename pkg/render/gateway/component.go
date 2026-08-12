@@ -66,13 +66,14 @@ type Configuration struct {
 	// open. Nil keeps the Envoy Gateway default.
 	RouteRequestTimeout *string
 
-	// Enterprise controls whether the proxy SA and RoleBinding are rendered.
-	// The proxy NetworkPolicy is rendered on both variants. All three are only
-	// rendered when the Gateway is placed in the backend (install) namespace:
-	// the GatewayAPI controller skips calico-system (lifecycle guard), so this
-	// component fills that gap. For custom gateway namespaces the GatewayAPI
-	// controller creates the SA/RoleBinding itself and no NetworkPolicy is
-	// rendered, matching user-brought Gateways.
+	// Enterprise controls whether the WAF filter's ServiceAccount and
+	// RoleBinding are rendered. The proxy NetworkPolicy is rendered on both
+	// variants. All three are only rendered when the Gateway is placed in the
+	// backend (install) namespace: the GatewayAPI controller skips
+	// calico-system (lifecycle guard), so this component fills that gap. For
+	// custom gateway namespaces the GatewayAPI controller creates the
+	// SA/RoleBinding itself and no NetworkPolicy is rendered, matching
+	// user-brought Gateways.
 	Enterprise bool
 
 	OpenShift bool
@@ -125,8 +126,10 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 		// get.
 		objs = append(objs, c.proxyNetworkPolicy())
 		if c.cfg.Enterprise {
-			// The proxy SA and RoleBinding (pull secrets) are Enterprise-only;
-			// in a custom namespace the GatewayAPI controller creates them.
+			// The WAF HTTP filter's ServiceAccount and the RoleBinding giving
+			// it Gateway API reads. The proxy pod runs as that account on
+			// Enterprise. In a custom namespace the GatewayAPI controller
+			// creates them instead.
 			objs = append(objs,
 				rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
 				rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),

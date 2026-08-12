@@ -286,6 +286,33 @@ var _ = Describe("whisker controller tests", func() {
 			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
 		})
 
+		It("renders no gateway and tears down leftovers on a non-Calico variant", func() {
+			// Whisker's own Deployment is deleted on other variants.
+			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+			createGatewayAPI()
+			setIngressGateway(nil)
+
+			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
+			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+
+			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: "ns-b",
+				Labels:    map[string]string{rgateway.GatewayLabel: whisker.GatewayResourcePrefix},
+			}}
+			Expect(cli.Create(ctx, stray)).NotTo(HaveOccurred())
+
+			_, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred(),
+				"Whisker is deleted on other variants, so its gateway must not be rendered")
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-b"}, gw)).To(HaveOccurred(),
+				"gateway resources left from a Calico install should be torn down")
+		})
+
 		It("tears down labeled gateway resources when spec.ingressGateway is nil", func() {
 			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
 				Name:      gatewayName,

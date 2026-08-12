@@ -31,6 +31,35 @@ const (
 	CloudConfigConfigMapName = "tigera-secure-cloud-config"
 )
 
+// TenantOption customizes the Tenant that ToTenant returns.
+type TenantOption func(*v1.Tenant)
+
+// WithStandardIndices declares the standard single-index base names on the Tenant. Only clusters
+// that have migrated to single-index storage should ask for them: index base names are otherwise
+// left off the artificial single-tenant Tenant, and components fall back to their default names.
+func WithStandardIndices() TenantOption {
+	return func(tenant *v1.Tenant) {
+		for dataType := range v1.DataTypes {
+			tenant.Spec.Indices = append(tenant.Spec.Indices, v1.Index{DataType: dataType, BaseIndexName: cloudStandardIndices[dataType]})
+		}
+
+		// DataTypes is a map, so iteration order is random. Sort by data type to keep the generated
+		// index list - and therefore the env vars rendered from it - stable across reconciles.
+		sort.Slice(tenant.Spec.Indices, func(i, j int) bool {
+			return tenant.Spec.Indices[i].DataType < tenant.Spec.Indices[j].DataType
+		})
+	}
+}
+
+// WithStandardIndicesIf applies WithStandardIndices only if useSingleIndex is set, for callers that
+// carry that flag around as a bool.
+func WithStandardIndicesIf(useSingleIndex bool) TenantOption {
+	if !useSingleIndex {
+		return func(*v1.Tenant) {}
+	}
+	return WithStandardIndices()
+}
+
 // cloudStandardIndices maps each data type to the standard index base name used by clusters that
 // have migrated to single-index storage.
 var cloudStandardIndices = map[v1.DataType]string{
@@ -102,11 +131,7 @@ type CloudConfig struct {
 // ToTenant converts the given CloudConfig structure to a Tenant object.
 // This allows controllers that have been converted to support multi-tenancy to still leverage
 // the single-tenant CloudConfig structure using the same code path as in multi-tenancy.
-//
-// useSingleIndex declares the standard single-index base names on the returned Tenant. Only clusters
-// migrating to single-index storage should set it: index base names are otherwise not carried on the
-// artificial single-tenant Tenant, and components fall back to their default index names.
-func (c CloudConfig) ToTenant(useSingleIndex bool) *v1.Tenant {
+func (c CloudConfig) ToTenant(opts ...TenantOption) *v1.Tenant {
 	tenant := &v1.Tenant{
 		// We don't specify a Namespace for this tenant because it represents a singular tenant installed
 		// in this management cluster. The signals to the render code that this is a single-tenant cluster and not
@@ -123,19 +148,9 @@ func (c CloudConfig) ToTenant(useSingleIndex bool) *v1.Tenant {
 		},
 	}
 
-	if !useSingleIndex {
-		return tenant
+	for _, opt := range opts {
+		opt(tenant)
 	}
-
-	for dataType := range v1.DataTypes {
-		tenant.Spec.Indices = append(tenant.Spec.Indices, v1.Index{DataType: dataType, BaseIndexName: cloudStandardIndices[dataType]})
-	}
-
-	// DataTypes is a map, so iteration order is random. Sort by data type to keep the generated
-	// index list - and therefore the env vars rendered from it - stable across reconciles.
-	sort.Slice(tenant.Spec.Indices, func(i, j int) bool {
-		return tenant.Spec.Indices[i].DataType < tenant.Spec.Indices[j].DataType
-	})
 
 	return tenant
 }

@@ -191,8 +191,8 @@ var _ = Describe("LogStorage users controller", func() {
 	})
 
 	// singleTenant builds the Tenant that the controller derives from the cloud config ConfigMap created above.
-	singleTenant := func(useSingleIndex bool) *operatorv1.Tenant {
-		return cloudconfig.NewCloudConfig(tenantID, "tenant-a-name", "es.example.com", "kb.example.com", false).ToTenant(useSingleIndex)
+	singleTenant := func(opts ...cloudconfig.TenantOption) *operatorv1.Tenant {
+		return cloudconfig.NewCloudConfig(tenantID, "tenant-a-name", "es.example.com", "kb.example.com", false).ToTenant(opts...)
 	}
 
 	// secretValue reads a value from a Secret. The fake client doesn't convert StringData into Data
@@ -212,7 +212,7 @@ var _ = Describe("LogStorage users controller", func() {
 
 		// The Linseed user should be created in ES with the name es-kube-controllers used, and with
 		// privileges on the single-index calico_* indices.
-		expected := utils.LinseedUserSingleTenant(singleTenant(true), true)
+		expected := utils.LinseedUserSingleTenant(singleTenant(cloudconfig.WithStandardIndices()), true)
 		Expect(expected.Username).To(Equal("tigera-ee-linseed-tenant-a-secure"))
 		Expect(esClient.created).To(HaveLen(2))
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
@@ -238,7 +238,7 @@ var _ = Describe("LogStorage users controller", func() {
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		Expect(err).NotTo(HaveOccurred())
 
-		expected := utils.LinseedUserSingleTenant(singleTenant(true), true)
+		expected := utils.LinseedUserSingleTenant(singleTenant(cloudconfig.WithStandardIndices()), true)
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, common.OperatorNamespace(), "username")).To(Equal(expected.Username))
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal(expected.Username))
 
@@ -255,7 +255,7 @@ var _ = Describe("LogStorage users controller", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// The user keeps its name, but is only granted access to this tenant's multi-index format indices.
-		expected := utils.LinseedUserSingleTenant(singleTenant(false), true)
+		expected := utils.LinseedUserSingleTenant(singleTenant(), true)
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
 		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.tenant-a.*.*"}))
 	})

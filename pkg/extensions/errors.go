@@ -17,26 +17,42 @@ package extensions
 import (
 	"errors"
 	"fmt"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// ErrInvalidConfig marks configuration an extension does not support. Controllers
-// match on it to degrade with a validation reason rather than a create reason.
-var ErrInvalidConfig = errors.New("invalid configuration")
-
-// InvalidConfigf returns an error that matches ErrInvalidConfig and reports the
-// given message.
-func InvalidConfigf(format string, args ...any) error {
-	return invalidConfig{fmt.Errorf(format, args...)}
-}
-
-type invalidConfig struct {
+// degraded carries the status reason a controller reports for an error the
+// extension returned.
+type degraded struct {
 	error
+	reason operatorv1.TigeraStatusReason
 }
 
-func (invalidConfig) Is(target error) bool {
-	return target == ErrInvalidConfig
-}
-
-func (e invalidConfig) Unwrap() error {
+func (e degraded) Unwrap() error {
 	return e.error
+}
+
+// Degradedf returns an error the controller degrades with under the given reason.
+func Degradedf(reason operatorv1.TigeraStatusReason, format string, args ...any) error {
+	return degraded{error: fmt.Errorf(format, args...), reason: reason}
+}
+
+// InvalidConfigf reports configuration the variant does not support.
+func InvalidConfigf(format string, args ...any) error {
+	return Degradedf(operatorv1.ResourceValidationError, format, args...)
+}
+
+// NotReadyf reports a dependency the extension is waiting on. Controllers wait for
+// a watch rather than failing.
+func NotReadyf(format string, args ...any) error {
+	return Degradedf(operatorv1.ResourceNotReady, format, args...)
+}
+
+// DegradedReason returns the reason an extension attached to err, if it attached one.
+func DegradedReason(err error) (operatorv1.TigeraStatusReason, bool) {
+	var d degraded
+	if errors.As(err, &d) {
+		return d.reason, true
+	}
+	return "", false
 }

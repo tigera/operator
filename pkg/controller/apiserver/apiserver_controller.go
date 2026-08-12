@@ -16,7 +16,6 @@ package apiserver
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 
 	v1 "k8s.io/api/apps/v1"
@@ -332,11 +331,16 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	ci, extraKeyPairs, err := r.ext.ExtendInputs(ctx, ci)
 	if err != nil {
-		if stderrors.Is(err, extensions.ErrInvalidConfig) {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid API server configuration", err, reqLogger)
-		} else {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
+		if reason, ok := extensions.DegradedReason(err); ok {
+			r.status.SetDegraded(reason, err.Error(), nil, reqLogger)
+			if reason == operatorv1.ResourceNotReady {
+				// The controller watches what the extension is waiting on, so let the
+				// watch trigger the next reconcile.
+				return reconcile.Result{}, nil
+			}
+			return reconcile.Result{}, err
 		}
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	trustedBundle := ci.RenderInputs.TrustedBundle

@@ -328,6 +328,37 @@ var _ = Describe("apiserver controller tests", func() {
 			Expect(secret.GetOwnerReferences()).To(HaveLen(1))
 		})
 
+		It("should wait for the Dex TLS secret rather than fail the reconcile", func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+
+			// Status is dropped on create, so mark Authentication ready explicitly.
+			auth := &operatorv1.Authentication{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, auth)).NotTo(HaveOccurred())
+			auth.Status.State = "Ready"
+			Expect(cli.Status().Update(ctx, auth)).NotTo(HaveOccurred())
+
+			Expect(cli.Delete(ctx, &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{Name: render.DexTLSSecretName, Namespace: common.OperatorNamespace()},
+			})).NotTo(HaveOccurred())
+
+			r := ReconcileAPIServer{
+				ext:                 testExtensions.APIServer(),
+				client:              cli,
+				scheme:              scheme,
+				status:              mockStatus,
+				tierWatchReady:      ready,
+				migrationWatchReady: &utils.ReadyFlag{},
+				opts: options.ControllerOptions{
+					Extensions:       testExtensions,
+					Variant:          operatorv1.CalicoEnterprise,
+					DetectedProvider: operatorv1.ProviderNone,
+				},
+			}
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
+		})
+
 		It("should render calico-system policy when tier and tier watch are ready", func() {
 			Expect(cli.Create(ctx, installation)).To(BeNil())
 

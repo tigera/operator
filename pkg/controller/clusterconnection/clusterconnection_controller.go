@@ -16,7 +16,6 @@ package clusterconnection
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -265,8 +264,11 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 	}
 	ci, _, err = r.ext.ExtendInputs(ctx, ci)
 	if err != nil {
-		if errors.Is(err, extensions.ErrInvalidConfig) {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid ManagementClusterConnection configuration", err, reqLogger)
+		if reason, ok := extensions.DegradedReason(err); ok {
+			r.status.SetDegraded(reason, err.Error(), nil, reqLogger)
+			if reason == operatorv1.ResourceNotReady {
+				return reconcile.Result{}, nil
+			}
 			return reconcile.Result{}, err
 		}
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the clusterconnection extension", err, reqLogger)

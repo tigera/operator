@@ -64,7 +64,9 @@ var _ = Describe("clusterconnection enterprise controller extension", func() {
 		It("rejects a cluster that is both a management and a managed cluster", func() {
 			cli = newClient(&operatorv1.ManagementCluster{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})
 			_, _, err := ext.ClusterConnection().ExtendInputs(ctx, controllerInputs())
-			Expect(err).To(MatchError(extensions.ErrInvalidConfig))
+			reason, ok := extensions.DegradedReason(err)
+			Expect(ok).To(BeTrue())
+			Expect(reason).To(Equal(operatorv1.ResourceValidationError))
 			Expect(err.Error()).To(ContainSubstring("not supported"))
 		})
 

@@ -43,7 +43,9 @@ var _ = Describe("installation controller extension", func() {
 			Spec: v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
 		}
 		_, _, err := ext.Installation().ExtendInputs(ctx, ci)
-		Expect(err).To(MatchError(extensions.ErrInvalidConfig))
+		reason, ok := extensions.DegradedReason(err)
+		Expect(ok).To(BeTrue())
+		Expect(reason).To(Equal(operatorv1.ResourceValidationError))
 	})
 
 	DescribeTable("defaults dnsTrustedServers for providers whose DNS service isn't kube-dns",

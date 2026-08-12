@@ -1105,8 +1105,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	ci, extraKeyPairs, err := r.ext.ExtendInputs(ctx, ci)
 	if err != nil {
-		if errors.Is(err, extensions.ErrInvalidConfig) {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid installation configuration", err, reqLogger)
+		if reason, ok := extensions.DegradedReason(err); ok {
+			r.status.SetDegraded(reason, err.Error(), nil, reqLogger)
+			if reason == operatorv1.ResourceNotReady {
+				return reconcile.Result{}, nil
+			}
 			return reconcile.Result{}, err
 		}
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing installation extension", err, reqLogger)

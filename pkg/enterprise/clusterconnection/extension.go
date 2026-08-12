@@ -123,7 +123,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 
 	clusterInformation, err := utils.FetchClusterInformation(ctx, ci.Client)
 	if err != nil {
-		return ci, nil, fmt.Errorf("error querying ClusterInformation: %w", err)
+		return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "error querying ClusterInformation: %s", err)
 	}
 
 	// Ensure the license can support enterprise policy before enabling the
@@ -132,7 +132,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 	if license, err := utils.FetchLicenseKey(ctx, ci.Client); err == nil {
 		includeEgressNetworkPolicy = utils.IsFeatureActive(license, common.EgressAccessControlFeature)
 	} else if !k8serrors.IsNotFound(err) {
-		return ci, nil, fmt.Errorf("error querying license: %w", err)
+		return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "error querying license: %s", err)
 	}
 
 	ci.RenderInputs.Extension = render.GuardianRenderData{

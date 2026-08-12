@@ -167,7 +167,30 @@ var _ = Describe("API server enterprise controller extension", func() {
 
 		It("rejects a cluster that is both a management cluster and a managed cluster", func() {
 			err := extendInputs(managementCluster(), tunnelSecret(), managementClusterConnection())
-			Expect(err).To(MatchError(extensions.ErrInvalidConfig))
+			reason, ok := extensions.DegradedReason(err)
+			Expect(ok).To(BeTrue())
+			Expect(reason).To(Equal(operatorv1.ResourceValidationError))
+		})
+	})
+
+	Describe("Dex", func() {
+		readyAuthentication := func() *operatorv1.Authentication {
+			return &operatorv1.Authentication{
+				ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name},
+				Status:     operatorv1.AuthenticationStatus{State: operatorv1.TigeraStatusReady},
+			}
+		}
+
+		It("reports not ready while the Dex TLS secret is missing", func() {
+			// WithObjects, since Create drops the status the extension keys off.
+			c := ctrlrfake.DefaultFakeClientBuilder(apiServerScheme()).WithObjects(readyAuthentication()).Build()
+			ci := apiServerControllerInputsWith(c, operatorv1.CalicoEnterprise, nil)
+
+			_, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+			reason, ok := extensions.DegradedReason(err)
+			Expect(ok).To(BeTrue())
+			Expect(reason).To(Equal(operatorv1.ResourceNotReady))
+			Expect(err.Error()).To(ContainSubstring(render.DexTLSSecretName))
 		})
 	})
 })

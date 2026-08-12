@@ -241,21 +241,21 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 	var keyValidatorConfig authentication.KeyValidatorConfig
 	authenticationCR, err := utils.GetAuthentication(ctx, ci.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
-		return ci, nil, fmt.Errorf("error while fetching Authentication: %w", err)
+		return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "error while fetching Authentication: %s", err)
 	}
 	if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
 		if utils.DexEnabled(authenticationCR) {
 			certificate, err := ci.CertificateManager.GetCertificate(ci.Client, render.DexTLSSecretName, common.OperatorNamespace())
 			if err != nil {
-				return ci, nil, fmt.Errorf("failed to retrieve %s: %w", render.DexTLSSecretName, err)
+				return ci, nil, extensions.Degradedf(operatorv1.CertificateError, "failed to retrieve %s: %s", render.DexTLSSecretName, err)
 			} else if certificate == nil {
-				return ci, nil, fmt.Errorf("waiting for secret %q to become available", render.DexTLSSecretName)
+				return ci, nil, extensions.NotReadyf("waiting for secret '%s' to become available", render.DexTLSSecretName)
 			}
 			trustedBundle.AddCertificates(certificate)
 		}
 		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, ci.Client, authenticationCR, ci.RenderInputs.ClusterDomain, false)
 		if err != nil {
-			return ci, nil, fmt.Errorf("failed to get KeyValidator config: %w", err)
+			return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "failed to get KeyValidator config: %s", err)
 		}
 	}
 

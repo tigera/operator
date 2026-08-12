@@ -64,11 +64,15 @@ exporters:
       insecure: true
 {{- else}}
     tls:
-      # Load the system roots alongside any per-exporter CA, so publicly-signed
-      # and privately-signed endpoints both verify. Verification is never disabled.
-      include_system_ca_certs_pool: true
 {{- if .CAFile}}
+      # A pinned CA is the only thing trusted for this exporter. Keeping the
+      # system roots as well would let any public authority satisfy it, which is
+      # what pinning is meant to prevent.
       ca_file: {{.CAFile}}
+{{- else}}
+      # No CA named, so verify against the system roots. Verification is never
+      # disabled.
+      include_system_ca_certs_pool: true
 {{- end}}
 {{- if .CertFile}}
       cert_file: {{.CertFile}}

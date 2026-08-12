@@ -134,6 +134,9 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		rlogcollector.S3FluentBitSecretName, rlogcollector.EksLogForwarderSecret,
 		rlogcollector.SplunkFluentBitTokenSecretName, monitor.PrometheusClientTLSSecretName,
 		rlogcollector.FluentBitTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, rlogcollector.EKSLogForwarderTLSSecretName,
+		// The collector's serving certificate goes into fluent-bit's trusted
+		// bundle, so creating or rotating it has to rebuild that bundle.
+		otelcollector.OpenTelemetryCollectorServerTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("log-collector-controller failed to watch the Secret resource(%s): %v", secretName, err)

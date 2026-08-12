@@ -481,7 +481,7 @@ func (c *component) collectorConfig() (string, error) {
 			Prefix:    prefix,
 			Name:      exp.Name,
 			Endpoint:  exp.Endpoint,
-			Plaintext: strings.HasPrefix(exp.Endpoint, "http://"),
+			Plaintext: exp.Plaintext(),
 		}
 		// Each exporter points at its own CA and client keypair inside the
 		// aggregated mounts, so backends needing different trust or a different

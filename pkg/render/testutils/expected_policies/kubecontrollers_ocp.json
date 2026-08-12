@@ -10,15 +10,14 @@
     "tier": "calico-system",
     "selector": "k8s-app == 'calico-kube-controllers'",
     "types": [
-      "Egress",
-      "Ingress"
+      "Egress","Ingress"
     ],
     "egress": [
       {
         "action": "Allow",
         "protocol": "UDP",
         "destination": {
-          "namespaceSelector": "projectcalico.org/name == 'openshift-dns'",
+          "namespaceSelector": "kubernetes.io/metadata.name == 'openshift-dns'",
           "selector": "dns.operator.openshift.io/daemonset-dns == 'default'",
           "ports": [
             5353
@@ -29,7 +28,7 @@
         "action": "Allow",
         "protocol": "TCP",
         "destination": {
-          "namespaceSelector": "projectcalico.org/name == 'openshift-dns'",
+          "namespaceSelector": "kubernetes.io/metadata.name == 'openshift-dns'",
           "selector": "dns.operator.openshift.io/daemonset-dns == 'default'",
           "ports": [
             5353

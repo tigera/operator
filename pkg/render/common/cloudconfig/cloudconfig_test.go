@@ -106,7 +106,7 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 		})
 
 		It("should return a single-tenant Tenant with the Elastic configuration from the CloudConfig", func() {
-			tenant := cloudConfig.ToTenant(false)
+			tenant := cloudConfig.ToTenant()
 			Expect(tenant.Name).To(Equal("default"))
 			Expect(tenant.Namespace).To(BeEmpty())
 			Expect(tenant.MultiTenant()).To(BeFalse())
@@ -118,11 +118,11 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 		})
 
 		It("should not declare any indices when not using single-index storage", func() {
-			Expect(cloudConfig.ToTenant(false).Spec.Indices).To(BeEmpty())
+			Expect(cloudConfig.ToTenant().Spec.Indices).To(BeEmpty())
 		})
 
 		It("should declare the standard index for every data type when using single-index storage", func() {
-			indices := cloudConfig.ToTenant(true).Spec.Indices
+			indices := cloudConfig.ToTenant(WithStandardIndices()).Spec.Indices
 			Expect(indices).To(HaveLen(len(v1.DataTypes)))
 			for _, index := range indices {
 				Expect(index.BaseIndexName).To(Equal(cloudStandardIndices[index.DataType]))
@@ -131,9 +131,9 @@ var _ = Describe("CloudConfig ConfigMap tests", func() {
 		})
 
 		It("should declare indices in a stable order", func() {
-			expected := cloudConfig.ToTenant(true).Spec.Indices
+			expected := cloudConfig.ToTenant(WithStandardIndices()).Spec.Indices
 			for i := 0; i < 10; i++ {
-				Expect(cloudConfig.ToTenant(true).Spec.Indices).To(Equal(expected))
+				Expect(cloudConfig.ToTenant(WithStandardIndices()).Spec.Indices).To(Equal(expected))
 			}
 		})
 	})

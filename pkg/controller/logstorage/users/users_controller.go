@@ -79,9 +79,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
-	if !opts.MultiTenant && !opts.Cloud {
-		// The operator creates users for multi-tenant clusters, and for the single-tenant clusters of
-		// Calico Cloud - which build their tenant configuration from the cloud config ConfigMap. Anywhere
+	if !opts.Cloud {
+		// The operator creates users for cloud clusters. Anywhere
 		// else, user creation is handled by es-kube-controllers instead.
 		return nil
 	}
@@ -212,7 +211,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant(r.useSingleIndex)
+		tenant = cloudConfig.ToTenant(cloudconfig.WithStandardIndicesIf(r.useSingleIndex))
 		tenantID = tenant.Spec.ID
 	}
 

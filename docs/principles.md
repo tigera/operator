@@ -31,6 +31,10 @@ API design principles and the Go/kubebuilder coding conventions for `api/v1` CRD
 - **Render packages are pure.** The `pkg/render` package generates Kubernetes manifests from inputs. It should not make API calls or have side effects — that's the controller's job.
 - **Status messages are for users, not developers.** TigeraStatus conditions should be actionable and user-facing. Don't surface internal error strings or stack traces.
 
+## Variants
+
+- **Core code is variant-blind.** Controllers and render packages outside `pkg/enterprise` must not name a variant, in code or in comments. Behavior a single variant needs registers through `pkg/extensions`.
+
 ## Security
 
 - **Component-to-component communication must be authenticated and encrypted.** Use mTLS or TLS + token-based authentication for all internal communication between operator-managed components.

@@ -171,10 +171,10 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		return ci, nil, err
 	}
 
-	// Goldmane is Calico-only, so an installation switched to Enterprise has to lose it.
+	// Goldmane is Calico-only, so an Enterprise installation can't run alongside it.
 	if ci.RenderInputs.Installation.Variant == operatorv1.CalicoEnterprise {
-		if err := deleteGoldmane(ctx, ci.Client); err != nil {
-			return ci, nil, fmt.Errorf("error deleting Goldmane: %w", err)
+		if err := validateNoGoldmane(ctx, ci.Client); err != nil {
+			return ci, nil, err
 		}
 	}
 

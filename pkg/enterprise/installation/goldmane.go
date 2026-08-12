@@ -16,23 +16,28 @@ package installation
 
 import (
 	"context"
+	"fmt"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/extensions"
 )
 
-// deleteGoldmane removes the Calico-only Goldmane CR. Its controller tears down the
-// objects it owns once the CR is gone.
-func deleteGoldmane(ctx context.Context, c client.Client) error {
-	goldmane := &operatorv1.Goldmane{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultInstanceKey.Name}}
-	err := c.Delete(ctx, goldmane)
-	if apierrors.IsNotFound(err) || meta.IsNoMatchError(err) {
+// validateNoGoldmane rejects a Goldmane CR, which Enterprise doesn't support. The
+// operator never deletes it; the user does.
+func validateNoGoldmane(ctx context.Context, c client.Client) error {
+	goldmane, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, c)
+	if err != nil {
+		if meta.IsNoMatchError(err) {
+			return nil
+		}
+		return fmt.Errorf("error reading Goldmane: %w", err)
+	}
+	if goldmane == nil {
 		return nil
 	}
-	return err
+	return extensions.InvalidConfigf("Goldmane is not supported by Calico Enterprise; delete the Goldmane %q resource", goldmane.Name)
 }

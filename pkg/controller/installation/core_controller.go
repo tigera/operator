@@ -1324,7 +1324,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Goldmane runs whenever its CR is present; Enterprise degrades earlier if it is.
+	// Goldmane runs whenever its CR is present. A variant that can't support it
+	// rejects the CR in its extension.
 	goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.client)
 	if err != nil && !meta.IsNoMatchError(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Unable retrieve Goldmane CR", err, reqLogger)

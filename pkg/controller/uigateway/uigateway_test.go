@@ -195,9 +195,8 @@ var _ = Describe("Cleanup helpers", func() {
 				labeledGateway("gw-2", "ns-a"),
 				labeledGateway("gw-3", "ns-a"),
 			)
-			namespaces, crdsPresent, err := h.Namespaces(ctx)
+			namespaces, err := h.Namespaces(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(crdsPresent).To(BeTrue())
 			Expect(namespaces).To(Equal([]string{"ns-a", "ns-b"}))
 		})
 
@@ -207,18 +206,16 @@ var _ = Describe("Cleanup helpers", func() {
 			unlabeled := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{Name: "gw-user", Namespace: "ns-d"}}
 			build(labeledGateway("gw-1", "ns-a"), other, unlabeled)
 
-			namespaces, crdsPresent, err := h.Namespaces(ctx)
+			namespaces, err := h.Namespaces(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(crdsPresent).To(BeTrue())
 			Expect(namespaces).To(Equal([]string{"ns-a"}))
 		})
 
-		It("reports the gateway CRDs absent on NoKindMatchError", func() {
+		It("returns empty, not an error, when the Gateway kind is not served", func() {
 			build()
 			h.Client = noGatewayKindClient{cli}
-			namespaces, crdsPresent, err := h.Namespaces(ctx)
+			namespaces, err := h.Namespaces(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			Expect(crdsPresent).To(BeFalse())
 			Expect(namespaces).To(BeEmpty())
 		})
 	})

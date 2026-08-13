@@ -57,8 +57,9 @@ type Config struct {
 	// BackendNamespace holds the Backend and ReferenceGrant.
 	BackendNamespace string
 
-	// Enterprise controls whether the proxy SA, RoleBinding, and
-	// NetworkPolicy are part of the component's rendered set.
+	// Enterprise controls whether the proxy SA and RoleBinding are part of
+	// the component's rendered set; the proxy NetworkPolicy is rendered on
+	// both variants.
 	Enterprise bool
 }
 
@@ -112,16 +113,23 @@ func (c *Config) MoveCleanup(ctx context.Context, desiredNS string) ([]render.Co
 	return components, nil
 }
 
-// Teardown returns deletion components for every labeled Gateway's namespace.
-// The backend namespace is always included: it holds the Backend and
-// ReferenceGrant, and this covers partial renders that never produced a
-// labeled Gateway.
+// Teardown returns deletion components for every labeled Gateway's namespace,
+// plus the backend namespace, which holds the Backend and ReferenceGrant.
+//
+// Without a labeled Gateway it returns nothing. The Gateway is rendered before
+// every other gateway resource, so none of them can be on the cluster without
+// it. That also keeps the reconcile away from kinds the cluster may not serve:
+// the Backend belongs to Envoy Gateway, which can be absent where the Gateway
+// API CRDs came from somewhere else, and deleting an unserved kind fails.
 func (c *Config) Teardown(ctx context.Context) ([]render.Component, error) {
 	namespaces, gatewayCRDsPresent, err := c.Namespaces(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if gatewayCRDsPresent && !slices.Contains(namespaces, c.BackendNamespace) {
+	if !gatewayCRDsPresent || len(namespaces) == 0 {
+		return nil, nil
+	}
+	if !slices.Contains(namespaces, c.BackendNamespace) {
 		namespaces = append(namespaces, c.BackendNamespace)
 	}
 	var components []render.Component
@@ -196,8 +204,8 @@ func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix strin
 // EnsureNamespace creates the gateway namespace if it does not exist.
 // The namespace is created without an owner reference and is never deleted by
 // the operator: a user-provided namespace may hold other workloads.
-func (c *Config) EnsureNamespace(ctx context.Context, name string) error {
-	err := c.Client.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
+func EnsureNamespace(ctx context.Context, c client.Client, name string) error {
+	err := c.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
 	if err == nil || !errors.IsNotFound(err) {
 		return err
 	}
@@ -208,7 +216,7 @@ func (c *Config) EnsureNamespace(ctx context.Context, name string) error {
 			Labels: map[string]string{"name": name},
 		},
 	}
-	if err := c.Client.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+	if err := c.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 	return nil

@@ -17,26 +17,15 @@ package extensions
 import (
 	"context"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
-
-// TLSAsset is one certificate the CSR controller will sign for, keyed elsewhere by
-// the secret name the requesting pod mounts.
-type TLSAsset struct {
-	ServiceAccountName      string
-	ServiceAccountNamespace string
-	ValidDNSNames           []string
-}
 
 // CSRExtension is the variant's hook into the CSR controller.
 type CSRExtension interface {
-	// AllowedAssets are the certificates the variant adds to the signable set.
-	AllowedAssets(clusterDomain string) map[string]TLSAsset
-
-	// NeedsCSRRole reports whether a variant component will submit a signing request.
-	NeedsCSRRole(ctx context.Context, c client.Client) (bool, error)
+	// ExtendInputs stashes the variant's render.CSRData in the render inputs.
+	ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error)
 
 	// Watches registers the variant's watches.
 	Watches(c ctrlruntime.Controller) error
@@ -45,12 +34,8 @@ type CSRExtension interface {
 // noopCSR runs the core operator's behavior unchanged.
 type noopCSR struct{}
 
-func (noopCSR) AllowedAssets(string) map[string]TLSAsset {
-	return nil
-}
-
-func (noopCSR) NeedsCSRRole(context.Context, client.Client) (bool, error) {
-	return false, nil
+func (noopCSR) ExtendInputs(_ context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
+	return ci, nil, nil
 }
 
 func (noopCSR) Watches(ctrlruntime.Controller) error {

@@ -69,12 +69,10 @@ type KubeControllersConfiguration struct {
 	K8sServiceEp           k8sapi.ServiceEndpoint
 	K8sServiceEpPodNetwork k8sapi.ServiceEndpoint
 
-	Installation   *operatorv1.InstallationSpec
-	Authentication *operatorv1.Authentication
+	Installation *operatorv1.InstallationSpec
 
-	// ManagementCluster and ManagementClusterConnection are inputs for the enterprise
-	// es-kube-controllers assembler. No base rendering reads them.
-	ManagementCluster           *operatorv1.ManagementCluster
+	// ManagementClusterConnection is an input for the enterprise es-kube-controllers
+	// assembler. No base rendering reads it.
 	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 
 	// ManagedClusterWatchBinding binds kube-controllers to the managed-cluster watch
@@ -109,10 +107,6 @@ type KubeControllersConfiguration struct {
 
 	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
 	BindingNamespaces []string
-
-	// Tenant object provides tenant configuration for both single and multi-tenant modes.
-	// If this is nil, then we should run in zero-tenant mode.
-	Tenant *operatorv1.Tenant
 
 	// The fields below parameterize the generic kube-controllers component. The
 	// variant assemblers (NewCalicoKubeControllers, the enterprise es builder)

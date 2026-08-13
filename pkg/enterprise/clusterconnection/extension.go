@@ -30,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -87,6 +88,11 @@ func (e *Extension) Watches(c ctrlruntime.Controller, cs kubernetes.Interface) e
 	return imageset.AddImageSetWatch(c)
 }
 
+// TrustedBundleSecrets are the Enterprise components Guardian proxies to.
+func (e *Extension) TrustedBundleSecrets() []string {
+	return []string{render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName}
+}
+
 // ValidateAndDefault accepts the Enterprise-only fields and defaults impersonation
 // to empty lists so Guardian renders a stable config.
 func (e *Extension) ValidateAndDefault(cr *operatorv1.ManagementClusterConnection) error {
@@ -101,7 +107,7 @@ func (e *Extension) ValidateAndDefault(cr *operatorv1.ManagementClusterConnectio
 }
 
 func (e *Extension) validate(ctx context.Context, ci controller.Inputs) error {
-	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return fmt.Errorf("error reading ManagementCluster: %w", err)
 	}

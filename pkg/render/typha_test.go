@@ -63,12 +63,6 @@ var _ = Describe("Typha rendering tests", func() {
 				Type: operatorv1.PluginCalico,
 			},
 		}
-		nonclusterhost := &operatorv1.NonClusterHost{
-			Spec: operatorv1.NonClusterHostSpec{
-				Endpoint:      "https://127.0.0.1:9443",
-				TyphaEndpoint: "127.0.0.1:5473",
-			},
-		}
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
@@ -81,7 +75,7 @@ var _ = Describe("Typha rendering tests", func() {
 			Installation:    installation,
 			ClusterDomain:   defaultClusterDomain,
 			FelixHealthPort: 9099,
-			NonClusterHost:  nonclusterhost,
+			NonClusterHost:  true,
 		}
 	})
 

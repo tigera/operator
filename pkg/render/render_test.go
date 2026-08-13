@@ -98,7 +98,6 @@ func allCalicoComponents(
 	kcCfg := &kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:                k8sServiceEp,
 		Installation:                cr,
-		ManagementCluster:           managementCluster,
 		ManagementClusterConnection: managementClusterConnection,
 		ClusterDomain:               clusterDomain,
 		MetricsPort:                 kubeControllersMetricsPort,

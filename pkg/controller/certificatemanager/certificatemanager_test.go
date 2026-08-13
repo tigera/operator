@@ -613,25 +613,13 @@ var _ = Describe("Test CertificateManagement suite", func() {
 		})
 
 		It("should render correct CA secret name for single-tenant configuration", func() {
-			singleTenant := operatorv1.Tenant{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "single-tenant",
-					Namespace: "",
-				},
-			}
-			zeroTenantCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation(), certificatemanager.WithTenant(&singleTenant))
+			zeroTenantCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(false))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(zeroTenantCM.KeyPair().GetName()).To(Equal(certificatemanagement.CASecretName))
 		})
 
 		It("should render correct CA secret name for multi-tenant configuration", func() {
-			singleTenant := operatorv1.Tenant{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "multi-tenant",
-					Namespace: "tenant-namespace-a",
-				},
-			}
-			singleTenantCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation(), certificatemanager.WithTenant(&singleTenant))
+			singleTenantCM, err := certificatemanager.Create(cli, installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(true))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(singleTenantCM.KeyPair().GetName()).To(Equal(certificatemanagement.TenantCASecretName))
 		})

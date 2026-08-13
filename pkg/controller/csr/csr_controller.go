@@ -33,12 +33,11 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
-	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	authv1 "k8s.io/api/authorization/v1"
@@ -102,23 +101,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return err
 	}
 
-	if opts.Variant.IsEnterprise() {
-		if err = c.WatchObject(&operatorv1.Monitor{}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
-		}
+	if err = opts.Extensions.CSR().Watches(c); err != nil {
+		return fmt.Errorf("csr-controller failed to set up extension watches: %w", err)
 	}
 
 	if err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
+		return fmt.Errorf("csr-controller failed to watch Installation: %w", err)
 	}
 
 	return utils.AddCSRWatchWithRelevancyFn(c, relevantCSR)
-}
-
-type tlsAsset struct {
-	serviceaccountName      string
-	serviceaccountNamespace string
-	validDNSNames           []string
 }
 
 func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconcile.Reconciler, error) {
@@ -134,8 +125,8 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconci
 		scheme:           mgr.GetScheme(),
 		provider:         opts.DetectedProvider,
 		clusterDomain:    opts.ClusterDomain,
-		allowedTLSAssets: allowedAssets(opts.ClusterDomain),
-		variant:          opts.Variant,
+		allowedTLSAssets: allowedAssets(opts.ClusterDomain, opts.Extensions),
+		extensions:       opts.Extensions,
 	}, nil
 }
 
@@ -147,20 +138,19 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconci
 //   - DNS names: these will be checked against pre-defined dns names for that specific secret name.
 //
 // The combination of this information (among other checks) will help us reject/approve requests.
-func allowedAssets(clusterDomain string) map[string]tlsAsset {
-	return map[string]tlsAsset{
-		rmonitor.PrometheusServerTLSSecretName: {
-			serviceaccountName:      rmonitor.PrometheusServiceAccountName,
-			serviceaccountNamespace: rmonitor.TigeraPrometheusObjectName,
-			validDNSNames:           monitor.PrometheusTLSServerDNSNames(clusterDomain),
-		},
+func allowedAssets(clusterDomain string, e extensions.Extensions) map[string]extensions.TLSAsset {
+	assets := map[string]extensions.TLSAsset{
 		// The node-certs-noncluster-host signing request originates from non-cluster hosts.
 		// To accommodate our customers' use of different non-cluster service accounts,
 		// we will perform a SubjectAccessReview to validate the requestor's permission.
 		render.NodeTLSSecretNameNonClusterHost: {
-			validDNSNames: []string{render.FelixCommonName + render.TyphaNonClusterHostSuffix},
+			ValidDNSNames: []string{render.FelixCommonName + render.TyphaNonClusterHostSuffix},
 		},
 	}
+	for name, asset := range e.CSR().AllowedAssets(clusterDomain) {
+		assets[name] = asset
+	}
+	return assets
 }
 
 // blank assignment to verify that ReconcileCompliance implements reconcile.Reconciler
@@ -176,8 +166,8 @@ type reconcileCSR struct {
 	scheme           *runtime.Scheme
 	provider         operatorv1.Provider
 	clusterDomain    string
-	allowedTLSAssets map[string]tlsAsset
-	variant          operatorv1.ProductVariant
+	allowedTLSAssets map[string]extensions.TLSAsset
+	extensions       extensions.Extensions
 }
 
 func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -194,24 +184,11 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	}
 
 	needsCSRRole := instance.Spec.CertificateManagement != nil
-	if !needsCSRRole && r.variant.IsEnterprise() {
-		monitorCR := &operatorv1.Monitor{}
-		if err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, monitorCR); err != nil {
-			if apierrors.IsNotFound(err) {
-				return reconcile.Result{}, nil
-			}
+	if !needsCSRRole {
+		var err error
+		needsCSRRole, err = r.extensions.CSR().NeedsCSRRole(ctx, r.client)
+		if err != nil {
 			return reconcile.Result{}, err
-		}
-		needsCSRRole = monitorCR.Spec.ExternalPrometheus != nil
-
-		// Check whether the non-cluster host feature is enabled.
-		// Non-cluster hosts generate CSRs to establish mTLS connections with the cluster.
-		if !needsCSRRole {
-			nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			needsCSRRole = nonclusterhost != nil
 		}
 	}
 
@@ -325,7 +302,7 @@ func validate[T PodOrHostEndpoint](
 	clientset kubernetes.Interface,
 	csr *certificatesv1.CertificateSigningRequest,
 	obj T,
-	allowedTLSAssets map[string]tlsAsset,
+	allowedTLSAssets map[string]extensions.TLSAsset,
 ) (*x509.Certificate, error) {
 	iv := reflect.ValueOf(obj)
 	if !iv.IsValid() || iv.IsNil() {
@@ -374,8 +351,8 @@ func validate[T PodOrHostEndpoint](
 	}
 
 	// Validate whether the requestor of the CSR is registered for the given CSR
-	if asset.serviceaccountNamespace != "" && asset.serviceaccountName != "" {
-		if fmt.Sprintf("system:serviceaccount:%s:%s", asset.serviceaccountNamespace, asset.serviceaccountName) != csr.Spec.Username {
+	if asset.ServiceAccountNamespace != "" && asset.ServiceAccountName != "" {
+		if fmt.Sprintf("system:serviceaccount:%s:%s", asset.ServiceAccountNamespace, asset.ServiceAccountName) != csr.Spec.Username {
 			return nil, fmt.Errorf("invalid requestor %s for CSR with name %s", csr.Spec.Username, csr.Name)
 		}
 	} else {
@@ -407,7 +384,7 @@ func validate[T PodOrHostEndpoint](
 	// Validate whether the DNS names are permitted for the request.
 	for _, name := range append(certificateRequest.DNSNames, certificateRequest.Subject.CommonName) {
 		var found bool
-		for _, valid := range asset.validDNSNames {
+		for _, valid := range asset.ValidDNSNames {
 			if valid == name {
 				found = true
 				break

@@ -38,10 +38,12 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
@@ -99,7 +101,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -188,7 +190,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// When running in multi-tenant mode, we need to install Dashboards in tenant Namespaces.
 	// We use the tenant API to determine the set of namespaces that should have a K8S job that installs dashboards.
-	tenant, _, err := utils.GetTenant(ctx, d.multiTenant, d.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, d.multiTenant, d.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -266,7 +268,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	var externalKibanaSecret *corev1.Secret
 	if !d.elasticExternal {
 		// Wait for Elasticsearch to be installed and available.
-		elasticsearch, err := utils.GetElasticsearch(ctx, d.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, d.client)
 		if err != nil {
 			d.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -290,7 +292,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 				d.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = eutils.TenantFromCloudConfig(cloudConfig)
 		}
 
 		// Determine the host and port from the URL.
@@ -337,7 +339,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	// Collect the certificates we need to provision Dashboards. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	cm, err := certificatemanager.Create(d.client, installationSpec, d.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {

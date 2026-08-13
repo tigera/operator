@@ -27,6 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/webhooks"
 
@@ -199,14 +200,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 	It("should register ManagedCluster webhook and MCM flags on management clusters", func() {
 		installation.Variant = operatorv1.CalicoEnterprise
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{
-			Spec: operatorv1.ManagementClusterSpec{
-				Address: "mgmt.example.com:9449",
-				TLS: &operatorv1.TLS{
-					SecretName: "test-tunnel-secret",
-				},
-			},
-		}
+		cfg.ManagementCluster = render.NewManagementCluster("mgmt.example.com:9449", "test-tunnel-secret")
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		resources, _ := component.Objects()
@@ -234,14 +228,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 	It("should set Public CA type when tunnel secret is manager-tls", func() {
 		installation.Variant = operatorv1.CalicoEnterprise
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{
-			Spec: operatorv1.ManagementClusterSpec{
-				Address: "mgmt.example.com:9449",
-				TLS: &operatorv1.TLS{
-					SecretName: "manager-tls",
-				},
-			},
-		}
+		cfg.ManagementCluster = render.NewManagementCluster("mgmt.example.com:9449", "manager-tls")
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		resources, _ := component.Objects()
@@ -253,7 +240,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 	It("should pass multi-tenant flag when multi-tenancy is enabled", func() {
 		installation.Variant = operatorv1.CalicoEnterprise
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{}
+		cfg.ManagementCluster = render.NewManagementCluster("", "")
 		cfg.MultiTenant = true
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -290,13 +277,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should render tunnel secret RBAC for a single-tenant management cluster", func() {
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{
-			Spec: operatorv1.ManagementClusterSpec{
-				TLS: &operatorv1.TLS{
-					SecretName: "test-tunnel-secret",
-				},
-			},
-		}
+		cfg.ManagementCluster = render.NewManagementCluster("", "test-tunnel-secret")
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		resources, _ := component.Objects()
@@ -320,13 +301,7 @@ var _ = Describe("Webhooks rendering tests", func() {
 	})
 
 	It("should render tunnel secret RBAC for a multi-tenant management cluster", func() {
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{
-			Spec: operatorv1.ManagementClusterSpec{
-				TLS: &operatorv1.TLS{
-					SecretName: "test-tunnel-secret",
-				},
-			},
-		}
+		cfg.ManagementCluster = render.NewManagementCluster("", "test-tunnel-secret")
 		cfg.MultiTenant = true
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())

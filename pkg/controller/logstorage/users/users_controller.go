@@ -28,11 +28,13 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
 	corev1 "k8s.io/api/core/v1"
 
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crypto"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -59,6 +61,11 @@ type UserController struct {
 	esClientFn      utils.ElasticsearchClientCreator
 	multiTenant     bool
 	elasticExternal bool
+
+	// useSingleIndex indicates that this single-tenant cluster stores its data in single-index format,
+	// in which case the users provisioned here are granted access to the single-index names rather than
+	// to the per-cluster multi-index ones.
+	useSingleIndex bool
 }
 
 type UsersCleanupController struct {
@@ -72,9 +79,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
-	if !opts.MultiTenant {
-		// For now, the operator only creates users in multi-tenant mode. In single-tenant mode,
-		// user creation is handled by es-kube-controllers instead.
+	if !opts.Cloud {
+		// The operator creates users for cloud clusters. Anywhere
+		// else, user creation is handled by es-kube-controllers instead.
 		return nil
 	}
 
@@ -83,6 +90,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		multiTenant:     opts.MultiTenant,
+		useSingleIndex:  opts.UseSingleIndex,
 		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageUsers, opts.KubernetesVersion),
 		esClientFn:      utils.NewElasticClient,
 		elasticExternal: opts.ElasticExternal,
@@ -119,6 +127,16 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-user-controller failed to watch Tenant resource: %w", err)
 		}
+	} else {
+		// In single-tenant mode the tenant configuration comes from a ConfigMap rather than a Tenant
+		// resource, and which one depends on where Elasticsearch lives. See singleTenant.
+		configMap := utils.CloudAuthConfig
+		if opts.ElasticExternal {
+			configMap = cloudconfig.CloudConfigConfigMapName
+		}
+		if err = utils.AddConfigMapWatch(c, configMap, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-user-controller failed to watch the ConfigMap resource: %w", err)
+		}
 	}
 
 	// Watch for Elasticsearch.
@@ -131,6 +149,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
 	if err != nil {
 		return fmt.Errorf("log-storage-user-controller failed to create periodic reconcile watch: %w", err)
+	}
+
+	if !opts.MultiTenant {
+		// The cleanup controller reconciles Tenant resources, which only exist in multi-tenant mode.
+		return nil
 	}
 
 	// Now that the users controller is set up, we can also set up the controller that cleans up stale users
@@ -159,6 +182,23 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	return nil
 }
 
+// singleTenant builds the tenant configuration for a single-tenant cluster, which has no Tenant
+// resource, and returns the ConfigMap it was read from so the caller can name it when waiting.
+// Clusters sharing an external Elasticsearch are described by the cloud config; clusters on their own
+// Elasticsearch by the cloud auth config, which carries the tenant ID alone.
+func (r *UserController) singleTenant(ctx context.Context) (*operatorv1.Tenant, string, error) {
+	if !r.elasticExternal {
+		tenant, err := utils.GetTenantFromCloudAuthConfig(ctx, r.client)
+		return tenant, utils.CloudAuthConfig, err
+	}
+
+	cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+	if err != nil {
+		return nil, cloudconfig.CloudConfigConfigMapName, err
+	}
+	return cloudConfig.ToTenant(cloudconfig.WithStandardIndicesIf(r.useSingleIndex)), cloudconfig.CloudConfigConfigMapName, nil
+}
+
 func (r *UserController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
@@ -177,6 +217,24 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	} else if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Tenant", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	if !r.multiTenant {
+		// Single-tenant clusters have no Tenant resource. Build the equivalent tenant configuration
+		// from the ConfigMap describing this cluster, so that we provision the users against the right
+		// Elasticsearch.
+		var configMap string
+		tenant, configMap, err = r.singleTenant(ctx)
+		if errors.IsNotFound(err) {
+			// The ConfigMap is written out of band, and may not exist yet. Wait for it rather than
+			// retrying with backoff - we watch it, so we reconcile again once it appears.
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for ConfigMap %s to be available", configMap), nil, reqLogger)
+			return reconcile.Result{}, nil
+		} else if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the tenant configuration", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		tenantID = tenant.Spec.ID
 	}
 
 	// Get LogStorage resource.
@@ -215,33 +273,26 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		}
 	}
 
-	clusterIDConfigMap := corev1.ConfigMap{}
-	clusterIDConfigMapKey := client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}
-	err = r.client.Get(ctx, clusterIDConfigMapKey, &clusterIDConfigMap)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Waiting for ConfigMap %s/%s to be available", clusterIDConfigMapKey.Namespace, clusterIDConfigMapKey.Name),
-			nil, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
-	if !ok {
-		err = fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	if clusterID == "" {
-		err = fmt.Errorf("%s/%s ConfigMap value for key 'cluster-id' must be non-empty",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
-		return reconcile.Result{}, err
+	// Determine the names of the users to provision. In multi-tenant clusters the cluster ID forms part
+	// of the user names, and is read from the cluster-info ConfigMap written at install time.
+	// Single-tenant clusters have no such ConfigMap - their user names are derived from the tenant ID
+	// alone, matching the names es-kube-controllers used before the operator took over provisioning.
+	var linseedUser, dashboardUser *utils.User
+	if r.multiTenant {
+		clusterID, err := utils.GetClusterID(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for the cluster ID to be available", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		linseedUser = utils.LinseedUser(clusterID, tenant)
+		dashboardUser = utils.DashboardUser(clusterID, tenantID)
+	} else {
+		linseedUser = utils.LinseedUserSingleTenant(tenant, r.elasticExternal)
+		dashboardUser = utils.DashboardUserSingleTenant(tenantID, r.elasticExternal)
 	}
 
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
-	linseedUser := utils.LinseedUser(clusterID, tenantID)
 	linseedUserSecret := corev1.Secret{}
 	var credentialSecrets []client.Object
 	key := types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.TruthNamespace()}
@@ -256,14 +307,19 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 
 		// Make sure we install the generated credentials into the truth namespace.
 		credentialSecrets = append(credentialSecrets, &linseedUserSecret)
+	} else if string(linseedUserSecret.Data["username"]) != linseedUser.Username {
+		// The credentials exist, but reference a different Elasticsearch user than the one we provision -
+		// e.g. because they were created by es-kube-controllers before the operator took over user
+		// provisioning. Point them at our user, keeping the existing password.
+		linseedUserSecret.StringData = map[string]string{"username": linseedUser.Username}
+		credentialSecrets = append(credentialSecrets, &linseedUserSecret)
 	}
 
 	// Query any existing username and password for this Dashboards instance. If one already exists, we'll simply
 	// use that. Otherwise, generate a new one.
 	keyDashboardCred := types.NamespacedName{Name: dashboards.ElasticCredentialsSecret, Namespace: helper.TruthNamespace()}
-	dashboardUser := utils.DashboardUser(clusterID, tenantID)
 	dashboardUserSecret := corev1.Secret{}
-	if err = r.client.Get(ctx, key, &dashboardUserSecret); err != nil && !errors.IsNotFound(err) {
+	if err = r.client.Get(ctx, keyDashboardCred, &dashboardUserSecret); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", keyDashboardCred), err, reqLogger)
 		return reconcile.Result{}, err
 	} else if errors.IsNotFound(err) {
@@ -273,6 +329,10 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		dashboardUserSecret.StringData = map[string]string{"username": dashboardUser.Username, "password": crypto.GeneratePassword(16)}
 
 		// Make sure we install the generated credentials into the truth namespace.
+		credentialSecrets = append(credentialSecrets, &dashboardUserSecret)
+	} else if string(dashboardUserSecret.Data["username"]) != dashboardUser.Username {
+		// As above - point the existing credentials at the user we provision.
+		dashboardUserSecret.StringData = map[string]string{"username": dashboardUser.Username}
 		credentialSecrets = append(credentialSecrets, &dashboardUserSecret)
 	}
 
@@ -297,7 +357,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 
 	// Add a finalizer to the Tenant instance if it exists so that we can clean up the Linseed user when the Tenant
 	// is deleted. The finalizer will be removed by the user cleanup controller when the user is deleted from ES.
-	if tenant != nil && tenant.GetDeletionTimestamp().IsZero() && !stringsutil.StringInSlice(userCleanupFinalizer, tenant.GetFinalizers()) {
+	if r.multiTenant && tenant != nil && tenant.GetDeletionTimestamp().IsZero() && !stringsutil.StringInSlice(userCleanupFinalizer, tenant.GetFinalizers()) {
 		tenant.SetFinalizers(append(tenant.GetFinalizers(), userCleanupFinalizer))
 		if err = r.client.Update(ctx, tenant); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error adding finalizer to Tenant", err, reqLogger)
@@ -384,21 +444,9 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 		return fmt.Errorf("failed to fetch TenantList")
 	}
 
-	clusterIDConfigMap := corev1.ConfigMap{}
-	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
+	clusterID, err := utils.GetClusterID(ctx, r.client)
 	if err != nil {
-		return fmt.Errorf("failed to fetch cluster-info configmap")
-	}
-
-	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
-	if !ok {
-		return fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
-	}
-
-	if clusterID == "" {
-		return fmt.Errorf("%s/%s ConfigMap value for key 'cluster-id' must be non-empty",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+		return err
 	}
 
 	var t operatorv1.Tenant
@@ -419,7 +467,7 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 			return fmt.Errorf("failed to fetch users from Elasticsearch")
 		}
 
-		lu := utils.LinseedUser(clusterID, t.Spec.ID)
+		lu := utils.LinseedUser(clusterID, &t)
 		dashboardsUser := utils.DashboardUser(clusterID, t.Spec.ID)
 		for _, user := range allESUsers {
 			if user.Username == lu.Username || user.Username == dashboardsUser.Username {

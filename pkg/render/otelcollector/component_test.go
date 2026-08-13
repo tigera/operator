@@ -58,7 +58,8 @@ var _ = Describe("OpenTelemetry rendering", func() {
 
 	// deleteCount is 3 whenever no exporter names TLS or auth material: the three
 	// aggregates are deleted rather than omitted, so removing a credential from the
-	// spec does not leave it behind in calico-system.
+	// spec does not leave it behind in calico-system. Without logs the receiver
+	// keypair is deleted too, making 4.
 	DescribeTable("Object counts",
 		func(cfg *otelcollector.Configuration, createCount, deleteCount int) {
 			component, err := otelcollector.OpenTelemetryCollector(cfg)
@@ -96,7 +97,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			},
-			7, 3,
+			7, 4,
 		),
 		Entry("no logs, no metrics",
 			&otelcollector.Configuration{
@@ -105,7 +106,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
 				},
 			},
-			7, 3,
+			7, 4,
 		),
 	)
 
@@ -799,6 +800,36 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(svc.Spec.Ports[1].Port).To(Equal(int32(otelcollector.InternalMetricsPort)))
 			Expect(svc.Spec.Ports[1].Name).To(Equal("metrics"))
 			Expect(svc.Spec.Selector).To(Equal(map[string]string{"k8s-app": otelcollector.OpenTelemetryCollectorStatefulSetName}))
+		})
+	})
+
+	Context("Receiver keypair lifecycle", func() {
+		metricsOnly := func() *otelcollector.Configuration {
+			return &otelcollector.Configuration{
+				Installation: defaultInstallation,
+				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
+					Metrics:   &operatorv1.OpenTelemetryMetrics{State: ptr.To(operatorv1.OpenTelemetryMetricsEnabled)},
+					Exporters: []operatorv1.OpenTelemetryExporter{{Name: "backend", Endpoint: "https://otlp.example.com:4317"}},
+				},
+			}
+		}
+
+		It("should delete the receiver keypair when logs are turned off", func() {
+			// Metrics keep the collector running, so this is not the teardown path:
+			// nothing else would remove a copy the previous logs config left behind.
+			comp, err := otelcollector.OpenTelemetryCollector(metricsOnly())
+			Expect(err).NotTo(HaveOccurred())
+			_, toDelete := comp.Objects()
+			Expect(toDelete).To(ContainElement(HaveField("ObjectMeta.Name", otelcollector.OpenTelemetryCollectorServerTLSSecretName)))
+		})
+
+		It("should keep the receiver keypair while logs are exported", func() {
+			cfg := metricsOnly()
+			cfg.OpenTelemetry.Logs = &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}}
+			comp, err := otelcollector.OpenTelemetryCollector(cfg)
+			Expect(err).NotTo(HaveOccurred())
+			_, toDelete := comp.Objects()
+			Expect(toDelete).NotTo(ContainElement(HaveField("ObjectMeta.Name", otelcollector.OpenTelemetryCollectorServerTLSSecretName)))
 		})
 	})
 

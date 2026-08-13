@@ -63,19 +63,17 @@ type Config struct {
 	Enterprise bool
 }
 
-// Namespaces returns the sorted, de-duplicated namespaces of Gateways
-// carrying this component's gateway label. The bool reports whether the
-// Gateway API CRDs are installed at all: when they are not, no gateway
-// object can exist and cleanup must be skipped — even a Delete call fails
-// against a kind the API server does not serve.
-func (c *Config) Namespaces(ctx context.Context) ([]string, bool, error) {
+// Namespaces returns the sorted, de-duplicated namespaces of Gateways carrying
+// this component's gateway label. A cluster that does not serve the Gateway kind
+// has none, so it returns empty rather than an error.
+func (c *Config) Namespaces(ctx context.Context) ([]string, error) {
 	gwList := &gapi.GatewayList{}
 	if err := c.Client.List(ctx, gwList, client.MatchingLabels{rgateway.GatewayLabel: c.ResourcePrefix}); err != nil {
 		var noMatch *apimeta.NoKindMatchError
 		if stderrors.As(err, &noMatch) {
-			return nil, false, nil
+			return nil, nil
 		}
-		return nil, false, err
+		return nil, err
 	}
 	var namespaces []string
 	for _, gw := range gwList.Items {
@@ -84,7 +82,7 @@ func (c *Config) Namespaces(ctx context.Context) ([]string, bool, error) {
 		}
 	}
 	slices.Sort(namespaces)
-	return namespaces, true, nil
+	return namespaces, nil
 }
 
 // MoveCleanup returns deletion components for every labeled Gateway outside
@@ -92,7 +90,7 @@ func (c *Config) Namespaces(ctx context.Context) ([]string, bool, error) {
 // Backend is kept and the ReferenceGrant handled per the move target; see
 // DeletionConfiguration.MoveTargetNamespace.
 func (c *Config) MoveCleanup(ctx context.Context, desiredNS string) ([]render.Component, error) {
-	strays, _, err := c.Namespaces(ctx)
+	strays, err := c.Namespaces(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,11 +121,11 @@ func (c *Config) MoveCleanup(ctx context.Context, desiredNS string) ([]render.Co
 // the Gateway API CRDs were installed independently. Attempting to delete an
 // unserved kind would fail the reconcile.
 func (c *Config) Teardown(ctx context.Context) ([]render.Component, error) {
-	namespaces, gatewayCRDsPresent, err := c.Namespaces(ctx)
+	namespaces, err := c.Namespaces(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if !gatewayCRDsPresent || len(namespaces) == 0 {
+	if len(namespaces) == 0 {
 		return nil, nil
 	}
 	if !slices.Contains(namespaces, c.BackendNamespace) {

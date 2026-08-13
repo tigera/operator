@@ -54,7 +54,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return logCollector, nil
 }
 
-// Return the AplicationLayer CR if present. No error is returned if it was not
+// Return the ApplicationLayer CR if present. No error is returned if it was not
 // found.
 func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.ApplicationLayer, error) {
 	applicationLayer := &operatorv1.ApplicationLayer{}

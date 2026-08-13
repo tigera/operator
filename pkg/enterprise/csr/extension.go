@@ -72,10 +72,13 @@ func (e *Extension) NeedsCSRRole(ctx context.Context, c client.Client) (bool, er
 	return nonclusterhost != nil, nil
 }
 
-// Watches registers the Monitor CR, which decides whether the CSR role is needed.
+// Watches registers the CRs that decide whether the CSR role is needed.
 func (e *Extension) Watches(c ctrlruntime.Controller) error {
 	if err := c.WatchObject(&operatorv1.Monitor{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("csr-controller failed to watch Monitor: %w", err)
+	}
+	if err := c.WatchObject(&operatorv1.NonClusterHost{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("csr-controller failed to watch NonClusterHost: %w", err)
 	}
 	return nil
 }

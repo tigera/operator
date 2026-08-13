@@ -257,8 +257,9 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	// alone, matching the names es-kube-controllers used before the operator took over provisioning.
 	var linseedUser, dashboardUser *utils.User
 	if r.multiTenant {
-		clusterID, err := r.clusterID(ctx, reqLogger)
+		clusterID, err := utils.GetClusterID(ctx, r.client)
 		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Waiting for the cluster ID to be available", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 		linseedUser = utils.LinseedUser(clusterID, tenant)
@@ -362,35 +363,6 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-// clusterID reads the cluster ID from the cluster-info ConfigMap. This ConfigMap is written at install
-// time and only exists in multi-tenant clusters.
-func (r *UserController) clusterID(ctx context.Context, reqLogger logr.Logger) (string, error) {
-	clusterIDConfigMap := corev1.ConfigMap{}
-	clusterIDConfigMapKey := client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}
-	if err := r.client.Get(ctx, clusterIDConfigMapKey, &clusterIDConfigMap); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Waiting for ConfigMap %s/%s to be available", clusterIDConfigMapKey.Namespace, clusterIDConfigMapKey.Name),
-			nil, reqLogger)
-		return "", err
-	}
-
-	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
-	if !ok {
-		err := fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
-		return "", err
-	}
-
-	if clusterID == "" {
-		err := fmt.Errorf("%s/%s ConfigMap value for key 'cluster-id' must be non-empty",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
-		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("%v", err), err, reqLogger)
-		return "", err
-	}
-
-	return clusterID, nil
-}
-
 func (r *UserController) createUserLogin(ctx context.Context, elasticEndpoint string, secret *corev1.Secret, user *utils.User, reqLogger logr.Logger) error {
 	esClient, err := r.esClientFn(r.client, ctx, elasticEndpoint, r.elasticExternal)
 	if err != nil {
@@ -450,21 +422,9 @@ func (r *UsersCleanupController) cleanupStaleUsers(ctx context.Context, logger l
 		return fmt.Errorf("failed to fetch TenantList")
 	}
 
-	clusterIDConfigMap := corev1.ConfigMap{}
-	err = r.client.Get(ctx, client.ObjectKey{Name: "cluster-info", Namespace: "tigera-operator"}, &clusterIDConfigMap)
+	clusterID, err := utils.GetClusterID(ctx, r.client)
 	if err != nil {
-		return fmt.Errorf("failed to fetch cluster-info configmap")
-	}
-
-	clusterID, ok := clusterIDConfigMap.Data["cluster-id"]
-	if !ok {
-		return fmt.Errorf("%s/%s ConfigMap does not contain expected 'cluster-id' key",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
-	}
-
-	if clusterID == "" {
-		return fmt.Errorf("%s/%s ConfigMap value for key 'cluster-id' must be non-empty",
-			clusterIDConfigMap.Namespace, clusterIDConfigMap.Name)
+		return err
 	}
 
 	var t operatorv1.Tenant

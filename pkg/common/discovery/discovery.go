@@ -307,7 +307,7 @@ func ElasticIsMigrating(config *corev1.ConfigMap) bool {
 	return false
 }
 
-// UseSingleIndex returns true if this cluster is in the last phase of a migration to single-index
+// UseSingleIndex returns true if this single tenant management cluster is in the last phase of a migration to single-index
 // storage, during which the operator must reconfigure Linseed to use the single-index names.
 func UseSingleIndex(config *corev1.ConfigMap) bool {
 	if config == nil {

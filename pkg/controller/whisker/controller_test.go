@@ -23,16 +23,21 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/stretchr/testify/mock"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/extensions"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/tls"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
@@ -65,7 +70,12 @@ var _ = Describe("whisker controller tests", func() {
 		Expect(networkingv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
 
 		ctx = context.Background()
-		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		// Gateway and HTTPRoute status is written by the Envoy Gateway
+		// controller, not by the operator's spec updates — model that as a
+		// status subresource so reconcile updates don't wipe it.
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).
+			WithStatusSubresource(&gapi.Gateway{}, &gapi.HTTPRoute{}).
+			Build()
 
 		// Create a CertificateManagement instance for tests that need it.
 		ca, err := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
@@ -161,6 +171,173 @@ var _ = Describe("whisker controller tests", func() {
 				Expect(secret.Data).To(HaveKey("tls.crt"))
 				Expect(secret.Data).To(HaveKey("tls.key"))
 			}
+		})
+	})
+
+	Context("gateway reconciliation", func() {
+		const gatewayName = whisker.GatewayResourcePrefix + "-gateway"
+
+		var reconciler Reconciler
+
+		doReconcile := func() (reconcile.Result, error) {
+			return reconciler.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default", Namespace: "calico-system"}})
+		}
+
+		setIngressGateway := func(gatewayNS *string) {
+			w := &operatorv1.Whisker{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, w)).NotTo(HaveOccurred())
+			w.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{
+				Hostname:         "whisker.test.local",
+				GatewayNamespace: gatewayNS,
+			}
+			Expect(cli.Update(ctx, w)).NotTo(HaveOccurred())
+		}
+
+		createGatewayAPI := func() {
+			Expect(cli.Create(ctx, &operatorv1.GatewayAPI{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec: operatorv1.GatewayAPISpec{
+					GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				},
+			})).NotTo(HaveOccurred())
+		}
+
+		BeforeEach(func() {
+			Expect(cli.Create(ctx, installation)).To(BeNil())
+			reconciler = Reconciler{
+				cli:      cli,
+				scheme:   scheme,
+				provider: operatorv1.ProviderNone,
+				status:   mockStatus,
+			}
+		})
+
+		It("degrades when spec.ingressGateway is set but the GatewayAPI CR is missing", func() {
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.Anything, mock.Anything, mock.Anything).Return()
+			setIngressGateway(nil)
+
+			_, err := doReconcile()
+			Expect(err).To(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotFound, mock.Anything, mock.Anything, mock.Anything)
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred())
+		})
+
+		It("renders the gateway resources when spec.ingressGateway is set", func() {
+			createGatewayAPI()
+			setIngressGateway(nil)
+
+			_, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).NotTo(HaveOccurred())
+			Expect(gw.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, whisker.GatewayResourcePrefix))
+			Expect(string(gw.Spec.GatewayClassName)).To(Equal("tigera-gateway-class"))
+
+			route := &gapi.HTTPRoute{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.GatewayResourcePrefix + "-route", Namespace: whisker.WhiskerNamespace}, route)).NotTo(HaveOccurred())
+			Expect(route.Spec.Rules).To(HaveLen(1))
+			Expect(route.Spec.Rules[0].Timeouts).NotTo(BeNil(), "SSE flow-log streams need the request timeout disabled")
+			Expect(*route.Spec.Rules[0].Timeouts.Request).To(Equal(gapi.Duration("0s")))
+
+			backend := &envoyapi.Backend{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.GatewayResourcePrefix + "-backend", Namespace: whisker.WhiskerNamespace}, backend)).NotTo(HaveOccurred())
+
+			secret := &corev1.Secret{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.GatewayTLSSecretName, Namespace: whisker.WhiskerNamespace}, secret)).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.GatewayTLSSecretName, Namespace: common.OperatorNamespace()}, secret)).NotTo(HaveOccurred(),
+				"the truth-namespace copy must persist so the certificate is not re-minted every reconcile")
+		})
+
+		It("creates a user-chosen gateway namespace and renders the Gateway there", func() {
+			createGatewayAPI()
+			setIngressGateway(ptr.To("ns-a"))
+
+			_, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+
+			ns := &corev1.Namespace{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-a"}, gw)).NotTo(HaveOccurred())
+		})
+
+		It("degrades and requeues while the Gateway is unhealthy", func() {
+			createGatewayAPI()
+			setIngressGateway(nil)
+
+			gw := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: whisker.WhiskerNamespace,
+				Labels:    map[string]string{rgateway.GatewayLabel: whisker.GatewayResourcePrefix},
+			}}
+			Expect(cli.Create(ctx, gw)).NotTo(HaveOccurred())
+			gw.Status.Conditions = []metav1.Condition{{
+				Type:               string(gapi.GatewayConditionProgrammed),
+				Status:             metav1.ConditionFalse,
+				Reason:             "AddressNotAssigned",
+				Message:            "no addresses assigned",
+				LastTransitionTime: metav1.Now(),
+			}}
+			Expect(cli.Status().Update(ctx, gw)).NotTo(HaveOccurred())
+
+			result, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.RequeueAfter).To(Equal(utils.StandardRetry))
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
+		})
+
+		It("renders no gateway and tears down leftovers on a non-Calico variant", func() {
+			// Whisker's own Deployment is deleted on other variants.
+			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+			createGatewayAPI()
+			setIngressGateway(nil)
+
+			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
+			installation.Spec.Variant = operatorv1.CalicoEnterprise
+			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+
+			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: "ns-b",
+				Labels:    map[string]string{rgateway.GatewayLabel: whisker.GatewayResourcePrefix},
+			}}
+			Expect(cli.Create(ctx, stray)).NotTo(HaveOccurred())
+
+			result, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred(),
+				"Whisker is deleted on other variants, so its gateway must not be rendered")
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-b"}, gw)).To(HaveOccurred(),
+				"gateway resources left from a Calico install should be torn down")
+
+			// The health read-back must be gated the same way as the render. If it
+			// is not, the reconcile degrades over a gateway it just tore down and
+			// requeues forever, never reaching ReadyToMonitor.
+			Expect(result.RequeueAfter).To(BeZero(), "no requeue: there is no gateway to wait for")
+			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady,
+				mock.Anything, mock.Anything, mock.Anything)
+		})
+
+		It("tears down labeled gateway resources when spec.ingressGateway is nil", func() {
+			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: "ns-b",
+				Labels:    map[string]string{rgateway.GatewayLabel: whisker.GatewayResourcePrefix},
+			}}
+			Expect(cli.Create(ctx, stray)).NotTo(HaveOccurred())
+
+			_, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-b"}, gw)).To(HaveOccurred(),
+				"the stray labeled Gateway should be torn down")
 		})
 	})
 })

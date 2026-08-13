@@ -332,7 +332,7 @@ var _ = Describe("Utils ElasticSearch test", func() {
 
 	It("should generate a single-tenant Linseed user granted the indices its cluster stores data in", func() {
 		tenant := &opv1.Tenant{Spec: opv1.TenantSpec{ID: tenantID}}
-		expectedName := fmt.Sprintf("%s-%s-%s", ElasticsearchUserNameLinseed, tenantID, ElasticsearchSecureUserSuffix)
+		expectedName := fmt.Sprintf("%s-%s-%s", ElasticsearchUserNameLinseed, tenantID, LegacySingleTenantUserSuffix)
 
 		// A cluster still on multi-index storage declares no indices, and gets access to the indices
 		// named for its tenant.
@@ -341,8 +341,11 @@ var _ = Describe("Utils ElasticSearch test", func() {
 		Expect(linseedUser.Roles[0].Name).To(Equal(expectedName))
 		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID)}))
 
-		// Indices in the cluster's own Elasticsearch are not qualified by tenant, so neither is the pattern.
+		// A cluster on its own Elasticsearch is not qualified by tenant - neither its index pattern, nor
+		// its user name, which es-kube-controllers built without a tenant ID.
 		linseedUser = LinseedUserSingleTenant(tenant, false)
+		Expect(linseedUser.Username).To(Equal("tigera-ee-linseed-secure"))
+		Expect(linseedUser.Roles[0].Name).To(Equal("tigera-ee-linseed-secure"))
 		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{indexPattern("tigera_secure_ee_*", "*", ".*", "")}))
 
 		// Once it moves to single-index storage, it gets access to the declared indices instead.

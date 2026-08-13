@@ -18,6 +18,7 @@ import (
 	"context"
 	"testing"
 
+	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	corev1 "k8s.io/api/core/v1"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -151,12 +152,16 @@ var _ = Describe("LogStorage users controller", func() {
 		scheme   *runtime.Scheme
 		esClient *fakeESClient
 		r        *UserController
+
+		// cloudConfigMap describes a single-tenant cluster sharing an external Elasticsearch.
+		cloudConfigMap *corev1.ConfigMap
 	)
 
 	BeforeEach(func() {
 		scheme = runtime.NewScheme()
 		Expect(operatorv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(esv1.AddToScheme(scheme)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
 
@@ -167,7 +172,8 @@ var _ = Describe("LogStorage users controller", func() {
 
 		// Note that no cluster-info ConfigMap is created here: single-tenant clusters don't have one,
 		// and the controller must not require it.
-		Expect(cli.Create(ctx, cloudconfig.NewCloudConfig(tenantID, "tenant-a-name", "es.example.com", "kb.example.com", false).ConfigMap())).NotTo(HaveOccurred())
+		cloudConfigMap = cloudconfig.NewCloudConfig(tenantID, "tenant-a-name", "es.example.com", "kb.example.com", false).ConfigMap()
+		Expect(cli.Create(ctx, cloudConfigMap)).NotTo(HaveOccurred())
 
 		mockStatus := &status.MockStatus{}
 		mockStatus.On("OnCRFound").Return()
@@ -225,7 +231,7 @@ var _ = Describe("LogStorage users controller", func() {
 		// The credentials should be written to the Elasticsearch namespace for Linseed to consume.
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal(expected.Username))
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "password")).NotTo(BeEmpty())
-		Expect(secretValue(dashboards.ElasticCredentialsSecret, render.ElasticsearchNamespace, "username")).To(Equal(utils.DashboardUserSingleTenant(tenantID).Username))
+		Expect(secretValue(dashboards.ElasticCredentialsSecret, render.ElasticsearchNamespace, "username")).To(Equal(utils.DashboardUserSingleTenant(tenantID, true).Username))
 	})
 
 	It("should re-point existing credentials at the operator provisioned user", func() {
@@ -258,5 +264,68 @@ var _ = Describe("LogStorage users controller", func() {
 		expected := utils.LinseedUserSingleTenant(singleTenant(), true)
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
 		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.tenant-a.*.*"}))
+	})
+
+	Context("single-tenant cluster on its own Elasticsearch", func() {
+		BeforeEach(func() {
+			// The two single-tenant flavours are mutually exclusive: a cluster on its own Elasticsearch
+			// has no cloud config ConfigMap, and is described by the cloud auth ConfigMap instead.
+			Expect(cli.Delete(ctx, cloudConfigMap)).NotTo(HaveOccurred())
+			Expect(cli.Create(ctx, &corev1.ConfigMap{
+				ObjectMeta: apiv1.ObjectMeta{Name: utils.CloudAuthConfig, Namespace: common.OperatorNamespace()},
+				Data:       map[string]string{"tenantID": tenantID},
+			})).NotTo(HaveOccurred())
+
+			// On its own Elasticsearch the controller waits for the ES cluster to be operational.
+			es := &esv1.Elasticsearch{}
+			es.Name = "tigera-secure"
+			es.Namespace = render.ElasticsearchNamespace
+			es.Status.Phase = esv1.ElasticsearchReadyPhase
+			Expect(cli.Create(ctx, es)).NotTo(HaveOccurred())
+
+			r.elasticExternal = false
+		})
+
+		It("should read the tenant from the cloud auth ConfigMap", func() {
+			tenant, configMap, err := r.singleTenant(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(configMap).To(Equal(utils.CloudAuthConfig))
+			Expect(tenant.Spec.ID).To(Equal(tenantID))
+
+			// The cloud auth config carries the tenant ID alone, so no indices are declared even though
+			// useSingleIndex is set - a cluster on its own Elasticsearch does not migrate.
+			Expect(tenant.Spec.Indices).To(BeEmpty())
+			Expect(tenant.Spec.Elastic).To(BeNil())
+		})
+
+		It("should provision users against the internal Elasticsearch", func() {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			// es-kube-controllers is given no tenant ID on a cluster running its own Elasticsearch, so the
+			// users it provisioned there carry no tenant qualifier - and neither do ours.
+			Expect(esClient.created).To(HaveLen(2))
+			Expect(esClient.created[0].Username).To(Equal("tigera-ee-linseed-secure"))
+			Expect(esClient.created[1].Username).To(Equal("tigera-ee-dashboards-installer-secure"))
+
+			// Indices in the cluster's own Elasticsearch carry no tenant qualifier, so neither does the
+			// pattern the Linseed user is granted.
+			Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.*.*"}))
+
+			Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal("tigera-ee-linseed-secure"))
+			Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "password")).NotTo(BeEmpty())
+		})
+
+		It("should wait when the cloud auth ConfigMap does not exist yet", func() {
+			Expect(cli.Delete(ctx, &corev1.ConfigMap{
+				ObjectMeta: apiv1.ObjectMeta{Name: utils.CloudAuthConfig, Namespace: common.OperatorNamespace()},
+			})).NotTo(HaveOccurred())
+
+			// Waiting, not erroring - the ConfigMap is written out of band and we watch for it.
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Requeue).To(BeFalse())
+			Expect(esClient.created).To(BeEmpty())
+		})
 	})
 })

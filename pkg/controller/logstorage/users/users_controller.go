@@ -128,9 +128,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			return fmt.Errorf("log-storage-user-controller failed to watch Tenant resource: %w", err)
 		}
 	} else {
-		// In single-tenant mode, the tenant configuration - including the Elasticsearch endpoint -
-		// comes from the cloud config ConfigMap.
-		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+		// In single-tenant mode the tenant configuration comes from a ConfigMap rather than a Tenant
+		// resource, and which one depends on where Elasticsearch lives. See singleTenant.
+		configMap := utils.CloudAuthConfig
+		if opts.ElasticExternal {
+			configMap = cloudconfig.CloudConfigConfigMapName
+		}
+		if err = utils.AddConfigMapWatch(c, configMap, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-user-controller failed to watch the ConfigMap resource: %w", err)
 		}
 	}
@@ -178,6 +182,23 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	return nil
 }
 
+// singleTenant builds the tenant configuration for a single-tenant cluster, which has no Tenant
+// resource, and returns the ConfigMap it was read from so the caller can name it when waiting.
+// Clusters sharing an external Elasticsearch are described by the cloud config; clusters on their own
+// Elasticsearch by the cloud auth config, which carries the tenant ID alone.
+func (r *UserController) singleTenant(ctx context.Context) (*operatorv1.Tenant, string, error) {
+	if !r.elasticExternal {
+		tenant, err := utils.GetTenantFromCloudAuthConfig(ctx, r.client)
+		return tenant, utils.CloudAuthConfig, err
+	}
+
+	cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+	if err != nil {
+		return nil, cloudconfig.CloudConfigConfigMapName, err
+	}
+	return cloudConfig.ToTenant(cloudconfig.WithStandardIndicesIf(r.useSingleIndex)), cloudconfig.CloudConfigConfigMapName, nil
+}
+
 func (r *UserController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
@@ -200,18 +221,19 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 
 	if !r.multiTenant {
 		// Single-tenant clusters have no Tenant resource. Build the equivalent tenant configuration
-		// from the cloud config, so that we provision the users against the right Elasticsearch.
-		cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+		// from the ConfigMap describing this cluster, so that we provision the users against the right
+		// Elasticsearch.
+		var configMap string
+		tenant, configMap, err = r.singleTenant(ctx)
 		if errors.IsNotFound(err) {
-			// The cloud config is written out of band, and may not exist yet. Wait for it rather than
-			// retrying with backoff - we watch the ConfigMap, so we reconcile again once it appears.
-			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for ConfigMap %s to be available", cloudconfig.CloudConfigConfigMapName), nil, reqLogger)
+			// The ConfigMap is written out of band, and may not exist yet. Wait for it rather than
+			// retrying with backoff - we watch it, so we reconcile again once it appears.
+			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for ConfigMap %s to be available", configMap), nil, reqLogger)
 			return reconcile.Result{}, nil
 		} else if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read the tenant configuration", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant(cloudconfig.WithStandardIndicesIf(r.useSingleIndex))
 		tenantID = tenant.Spec.ID
 	}
 
@@ -266,7 +288,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 		dashboardUser = utils.DashboardUser(clusterID, tenantID)
 	} else {
 		linseedUser = utils.LinseedUserSingleTenant(tenant, r.elasticExternal)
-		dashboardUser = utils.DashboardUserSingleTenant(tenantID)
+		dashboardUser = utils.DashboardUserSingleTenant(tenantID, r.elasticExternal)
 	}
 
 	// Query any existing username and password for this Linseed instance. If one already exists, we'll simply

@@ -20,12 +20,14 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
@@ -60,8 +62,15 @@ type Configuration struct {
 	// "calico-manager-gateway", "calico-manager-route", etc.
 	ResourcePrefix string
 
-	// Enterprise controls whether the proxy SA, RoleBinding, and NetworkPolicy
-	// are rendered. They are only rendered when the Gateway is placed in the
+	// RouteRequestTimeout, when set, becomes the HTTPRoute rule's request
+	// timeout. Whisker sets "0s" to disable Envoy Gateway's 15-second
+	// default — its flow-log stream is server-sent events and must stay
+	// open. Nil keeps the Envoy Gateway default.
+	RouteRequestTimeout *string
+
+	// Enterprise controls whether the WAF filter's ServiceAccount and
+	// RoleBinding are rendered. The proxy NetworkPolicy is rendered on both
+	// variants. All three are only rendered when the Gateway is placed in the
 	// backend (install) namespace: the GatewayAPI controller skips
 	// calico-system (lifecycle guard), so this component fills that gap. For
 	// custom gateway namespaces the GatewayAPI controller creates the
@@ -96,7 +105,24 @@ func (c *gatewayComponent) Ready() bool {
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var objs []client.Object
 
+	// The writer Role comes first: the operator's ClusterRole holds only
+	// get/list/watch on these kinds, so it has to self-grant the write verbs in
+	// this namespace before it can create anything else here. The first
+	// reconcile's writes may still be denied while the authorizer catches up;
+	// the requeue succeeds, the same way the TLS secret does below.
+	objs = append(objs, writerObjects(c.cfg.ResourcePrefix, c.cfg.GatewayNamespace)...)
 	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
+		// The Backend and ReferenceGrant are written in the backend namespace.
+		objs = append(objs, writerObjects(c.cfg.ResourcePrefix, c.cfg.BackendNamespace)...)
+	}
+
+	// The Gateway goes first among the gateway resources: it carries the cleanup
+	// label, so a render that fails partway must not leave behind a resource
+	// cleanup can no longer find.
+	objs = append(objs, c.gateway())
+
+	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
+		// Ahead of the HTTPRoute, whose cross-namespace backendRef it permits.
 		objs = append(objs, c.referenceGrant())
 	}
 
@@ -105,27 +131,83 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 	// GatewayAPI controller creates once it sees the Gateway there, so the
 	// secret create fails on the first reconcile and succeeds on the retry.
 	objs = append(objs,
-		c.gateway(),
 		c.backend(),
 		c.httpRoute(),
 		c.tlsSecret(),
 	)
 
-	if c.cfg.Enterprise && c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
-		// calico-system has an operator-managed default-deny, and the
-		// GatewayAPI controller skips it (lifecycle guard), so the proxy SA,
-		// RoleBinding, and NetworkPolicy are rendered here. In a custom
-		// namespace the GatewayAPI controller creates the SA and RoleBinding,
-		// and no NetworkPolicy is rendered — the same treatment user-brought
-		// Gateways get.
-		objs = append(objs,
-			rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
-			rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
-			c.proxyNetworkPolicy(),
-		)
+	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
+		// calico-system has an operator-managed default-deny on both variants,
+		// and the GatewayAPI controller skips it (lifecycle guard), so the
+		// proxy NetworkPolicy is rendered here. In a custom namespace no
+		// NetworkPolicy is rendered — the same treatment user-brought Gateways
+		// get.
+		objs = append(objs, c.proxyNetworkPolicy())
+		if c.cfg.Enterprise {
+			// The WAF HTTP filter's ServiceAccount and the RoleBinding giving
+			// it Gateway API reads. The proxy pod runs as that account on
+			// Enterprise. In a custom namespace the GatewayAPI controller
+			// creates them instead.
+			objs = append(objs,
+				rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
+				rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
+			)
+		}
 	}
 
 	return objs, nil
+}
+
+// WriterRoleName is the Role and RoleBinding through which the operator grants
+// itself write access to gateway resources in one namespace.
+func WriterRoleName(resourcePrefix string) string {
+	return resourcePrefix + "-gateway-writer"
+}
+
+// writerObjects returns the Role and RoleBinding that let the operator create,
+// update and delete this component's gateway resources in namespace. The
+// cluster-wide ClusterRole grants only the read verbs — the controller-runtime
+// cache lists and watches these kinds across all namespaces — so writes are
+// confined to the namespaces the user actually configured, following the same
+// pattern as the waypoint EnvoyFilter writer Role. Creating a Role carrying
+// verbs the operator's own ClusterRole lacks relies on its escalate verb, and
+// the RoleBinding on its bind verb.
+func writerObjects(resourcePrefix, namespace string) []client.Object {
+	name := WriterRoleName(resourcePrefix)
+	return []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					APIGroups: []string{gapi.GroupName},
+					Resources: []string{"gateways", "httproutes", "referencegrants"},
+					Verbs:     []string{"create", "update", "delete"},
+				},
+				{
+					APIGroups: []string{EnvoyGatewayGroup},
+					Resources: []string{"backends"},
+					Verbs:     []string{"create", "update", "delete"},
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     name,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      common.OperatorServiceAccount(),
+					Namespace: common.OperatorNamespace(),
+				},
+			},
+		},
+	}
 }
 
 func (c *gatewayComponent) tlsSecret() *corev1.Secret {
@@ -182,6 +264,11 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 	backendNS := gapi.Namespace(c.cfg.BackendNamespace)
 	group := gapi.Group(EnvoyGatewayGroup)
 
+	var timeouts *gapi.HTTPRouteTimeouts
+	if c.cfg.RouteRequestTimeout != nil {
+		timeouts = &gapi.HTTPRouteTimeouts{Request: ptr.To(gapi.Duration(*c.cfg.RouteRequestTimeout))}
+	}
+
 	return &gapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -199,6 +286,7 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 			},
 			Rules: []gapi.HTTPRouteRule{
 				{
+					Timeouts: timeouts,
 					BackendRefs: []gapi.HTTPBackendRef{
 						{
 							BackendRef: gapi.BackendRef{
@@ -385,10 +473,6 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: c.cfg.TLSSecretName, Namespace: gwNS},
 		},
-		&gapi.Gateway{
-			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
-		},
 		&gapi.HTTPRoute{
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: gwNS},
@@ -413,15 +497,13 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 		)
 	}
 
-	if c.cfg.Enterprise && gwNS == bkNS {
+	if gwNS == bkNS {
 		// Mirrors the main path: these are only rendered when the Gateway is
 		// in the backend namespace. In a custom namespace the SA and
 		// RoleBinding belong to the GatewayAPI controller's per-namespace
 		// lifecycle — deleting them here could break other Gateways in that
 		// namespace.
 		objs = append(objs,
-			rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
-			rgatewayapi.GatewayNamespaceRoleBinding(gwNS),
 			&v3.NetworkPolicy{
 				TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -430,7 +512,37 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 				},
 			},
 		)
+		if c.cfg.Enterprise {
+			objs = append(objs,
+				rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
+				rgatewayapi.GatewayNamespaceRoleBinding(gwNS),
+			)
+		}
 	}
 
-	return nil, objs
+	// The Gateway goes last, mirroring the render, where it goes first. If an
+	// earlier delete fails, it stays and the next reconcile still finds the
+	// leftovers by its label.
+	objs = append(objs, &gapi.Gateway{
+		TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
+	})
+
+	// Deleting these resources needs the same write verbs creating them did, and
+	// the Role may be gone — a user pruning RBAC, or a namespace recreated. The
+	// handler applies objsToCreate before objsToDelete, so re-rendering the Role
+	// here re-grants the operator before the deletes are issued, then the Role
+	// and RoleBinding are dropped once nothing is left to delete. The grant is
+	// only removed after the deletes above, so a failure part-way leaves it in
+	// place for the next reconcile.
+	writers := writerObjects(prefix, gwNS)
+	if gwNS != bkNS {
+		writers = append(writers, writerObjects(prefix, bkNS)...)
+	}
+	// RoleBinding first, then Role: the reverse of the render order.
+	for i := len(writers) - 1; i >= 0; i-- {
+		objs = append(objs, writers[i])
+	}
+
+	return writers, objs
 }

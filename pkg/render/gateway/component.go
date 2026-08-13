@@ -105,7 +105,7 @@ func (c *gatewayComponent) Ready() bool {
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var objs []client.Object
 
-	// The writer Role comes first because it grants the write permissions needed
+	// The access Role comes first because it grants the write permissions needed
 	// for the resources below. The first reconcile may still be denied while the
 	// authorizer catches up; the requeue will retry, as with the TLS Secret below.
 	objs = append(objs, c.role(c.cfg.GatewayNamespace), c.roleBinding(c.cfg.GatewayNamespace))
@@ -162,8 +162,12 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 // verbs are confined to the namespaces the user configured.
 func (c *gatewayComponent) role(namespace string) *rbacv1.Role {
 	return &rbacv1.Role{
-		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + "-gateway-writer", Namespace: namespace},
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      c.cfg.ResourcePrefix + "-ingressgateway-access",
+			Namespace: namespace,
+			Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
+		},
 		Rules: []rbacv1.PolicyRule{
 			{
 				APIGroups: []string{gapi.GroupName},
@@ -182,10 +186,14 @@ func (c *gatewayComponent) role(namespace string) *rbacv1.Role {
 // roleBinding binds role to the operator's own ServiceAccount, the identity that
 // renders the gateway resources.
 func (c *gatewayComponent) roleBinding(namespace string) *rbacv1.RoleBinding {
-	name := c.cfg.ResourcePrefix + "-gateway-writer"
+	name := c.cfg.ResourcePrefix + "-ingressgateway-access"
 	return &rbacv1.RoleBinding{
-		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
+		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: "rbac.authorization.k8s.io",
 			Kind:     "Role",
@@ -533,13 +541,13 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 func (c *gatewayDeletionComponent) role(namespace string) *rbacv1.Role {
 	return &rbacv1.Role{
 		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + "-gateway-writer", Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + "-ingressgateway-access", Namespace: namespace},
 	}
 }
 
 func (c *gatewayDeletionComponent) roleBinding(namespace string) *rbacv1.RoleBinding {
 	return &rbacv1.RoleBinding{
 		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + "-gateway-writer", Namespace: namespace},
+		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + "-ingressgateway-access", Namespace: namespace},
 	}
 }

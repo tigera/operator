@@ -166,8 +166,8 @@ var _ = Describe("Gateway component render", func() {
 					if _, ok := obj.(*corev1.ServiceAccount); ok {
 						Fail("ServiceAccount should not be rendered when Enterprise is false")
 					}
-					if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-gateway-writer" {
-						Fail("only the gateway writer RoleBinding should be rendered when Enterprise is false")
+					if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-ingressgateway-access" {
+						Fail("only the gateway access RoleBinding should be rendered when Enterprise is false")
 					}
 				}
 				np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -194,20 +194,20 @@ var _ = Describe("Gateway component render", func() {
 		})
 
 		It("grants itself write access in both namespaces it writes to", func() {
-			writerName := prefix + "-gateway-writer"
+			accessName := prefix + "-ingressgateway-access"
 			for _, ns := range []string{"custom-gateway-ns", bkNS} {
-				role := findObject[*rbacv1.Role](toCreate, writerName, ns)
-				Expect(role).NotTo(BeNil(), "expected a writer Role in %s", ns)
+				role := findObject[*rbacv1.Role](toCreate, accessName, ns)
+				Expect(role).NotTo(BeNil(), "expected a access Role in %s", ns)
 				Expect(role.Rules).To(HaveLen(2))
 				Expect(role.Rules[0].Resources).To(ConsistOf("gateways", "httproutes", "referencegrants"))
 				Expect(role.Rules[0].Verbs).To(ConsistOf("create", "update", "delete"))
 				Expect(role.Rules[1].Resources).To(ConsistOf("backends"))
-				Expect(findObject[*rbacv1.RoleBinding](toCreate, writerName, ns)).NotTo(BeNil(),
-					"expected a writer RoleBinding in %s", ns)
+				Expect(findObject[*rbacv1.RoleBinding](toCreate, accessName, ns)).NotTo(BeNil(),
+					"expected a access RoleBinding in %s", ns)
 			}
 			for _, obj := range toCreate {
 				if r, ok := obj.(*rbacv1.Role); ok {
-					Expect(r.Name).To(Equal(writerName), "the writer Role is the only Role this component renders")
+					Expect(r.Name).To(Equal(accessName), "the access Role is the only Role this component renders")
 				}
 			}
 		})
@@ -218,8 +218,8 @@ var _ = Describe("Gateway component render", func() {
 				case *corev1.ServiceAccount:
 					Fail("ServiceAccount should not be rendered for a custom gateway namespace")
 				case *rbacv1.RoleBinding:
-					Expect(o.Name).To(Equal(prefix+"-gateway-writer"),
-						"only the gateway writer RoleBinding belongs to this component in a custom namespace")
+					Expect(o.Name).To(Equal(prefix+"-ingressgateway-access"),
+						"only the gateway access RoleBinding belongs to this component in a custom namespace")
 				case *v3.NetworkPolicy:
 					Fail("NetworkPolicy should not be rendered for a custom gateway namespace")
 				}
@@ -228,10 +228,10 @@ var _ = Describe("Gateway component render", func() {
 
 		It("grants write access before rendering anything it has to write", func() {
 			Expect(toCreate).NotTo(BeEmpty())
-			writerName := prefix + "-gateway-writer"
+			accessName := prefix + "-ingressgateway-access"
 			role, ok := toCreate[0].(*rbacv1.Role)
-			Expect(ok).To(BeTrue(), "the writer Role must come first — nothing else can be created without it")
-			Expect(role.Name).To(Equal(writerName))
+			Expect(ok).To(BeTrue(), "the access Role must come first — nothing else can be created without it")
+			Expect(role.Name).To(Equal(accessName))
 
 			gatewayIdx, otherIdx := -1, -1
 			for i, obj := range toCreate {
@@ -388,14 +388,14 @@ var _ = Describe("Gateway deletion component", func() {
 			Expect(toDelete).NotTo(BeEmpty())
 		})
 
-		It("drops the writer grant last, after the resources it permits deleting", func() {
+		It("drops the access grant last, after the resources it permits deleting", func() {
 			// RoleBinding then Role, so losing the grant cannot strand an
 			// earlier delete.
 			last := toDelete[len(toDelete)-1]
 			secondLast := toDelete[len(toDelete)-2]
 			Expect(last).To(BeAssignableToTypeOf(&rbacv1.Role{}))
 			Expect(secondLast).To(BeAssignableToTypeOf(&rbacv1.RoleBinding{}))
-			Expect(findObject[*rbacv1.Role](toDelete, prefix+"-gateway-writer", gwNS)).NotTo(BeNil())
+			Expect(findObject[*rbacv1.Role](toDelete, prefix+"-ingressgateway-access", gwNS)).NotTo(BeNil())
 		})
 
 		It("deletes the Gateway after the resources found through it", func() {
@@ -448,8 +448,8 @@ var _ = Describe("Gateway deletion component", func() {
 				if _, ok := obj.(*corev1.ServiceAccount); ok {
 					Fail("ServiceAccount should not appear when Enterprise is false")
 				}
-				if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-gateway-writer" {
-					Fail("only the gateway writer RoleBinding should appear when Enterprise is false")
+				if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-ingressgateway-access" {
+					Fail("only the gateway access RoleBinding should appear when Enterprise is false")
 				}
 			}
 			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -473,7 +473,7 @@ var _ = Describe("Gateway deletion component", func() {
 				case *corev1.ServiceAccount:
 					Fail("ServiceAccount in a custom namespace belongs to the GatewayAPI controller and must not be deleted here")
 				case *rbacv1.RoleBinding:
-					Expect(o.Name).To(Equal(prefix+"-gateway-writer"),
+					Expect(o.Name).To(Equal(prefix+"-ingressgateway-access"),
 						"the tigera-operator-secrets RoleBinding belongs to the GatewayAPI controller and must not be deleted here")
 				case *v3.NetworkPolicy:
 					Fail("NetworkPolicy is not rendered for a custom namespace and must not be deleted here")
@@ -506,13 +506,13 @@ var _ = Describe("Gateway deletion component", func() {
 			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
-		It("keeps the backend namespace's writer grant, and drops the old namespace's", func() {
-			writerName := prefix + "-gateway-writer"
-			Expect(findObject[*rbacv1.Role](toDelete, writerName, "old-ns")).NotTo(BeNil(),
+		It("keeps the backend namespace's access grant, and drops the old namespace's", func() {
+			accessName := prefix + "-ingressgateway-access"
+			Expect(findObject[*rbacv1.Role](toDelete, accessName, "old-ns")).NotTo(BeNil(),
 				"the old namespace is no longer written to, so its grant goes")
-			Expect(findObject[*rbacv1.Role](toDelete, writerName, bkNS)).To(BeNil(),
+			Expect(findObject[*rbacv1.Role](toDelete, accessName, bkNS)).To(BeNil(),
 				"the backend namespace keeps its resources on a move, so it keeps the grant that writes them")
-			Expect(findObject[*rbacv1.RoleBinding](toDelete, writerName, bkNS)).To(BeNil())
+			Expect(findObject[*rbacv1.RoleBinding](toDelete, accessName, bkNS)).To(BeNil())
 		})
 
 		Context("moving into the backend namespace", func() {
@@ -524,12 +524,12 @@ var _ = Describe("Gateway deletion component", func() {
 				Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 			})
 
-			It("still keeps the backend namespace's writer grant", func() {
+			It("still keeps the backend namespace's access grant", func() {
 				// The new render writes the Backend there, so the grant stays
 				// even though this pass deletes the ReferenceGrant.
-				writerName := prefix + "-gateway-writer"
-				Expect(findObject[*rbacv1.Role](toDelete, writerName, bkNS)).To(BeNil())
-				Expect(findObject[*rbacv1.RoleBinding](toDelete, writerName, bkNS)).To(BeNil())
+				accessName := prefix + "-ingressgateway-access"
+				Expect(findObject[*rbacv1.Role](toDelete, accessName, bkNS)).To(BeNil())
+				Expect(findObject[*rbacv1.RoleBinding](toDelete, accessName, bkNS)).To(BeNil())
 			})
 		})
 

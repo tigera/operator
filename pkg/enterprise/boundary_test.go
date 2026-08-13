@@ -109,21 +109,16 @@ var enterpriseKinds = []string{
 var knownKindExceptions = []string{
 	"pkg/controller/apiserver/apiserver_controller.go",
 	"pkg/controller/certificatemanager/certificatemanager.go",
-	"pkg/controller/installation/core_controller.go",
 	"pkg/controller/secrets/tenant_controller.go",
 	"pkg/controller/tiers/tiers_controller.go",
 	"pkg/controller/utils/auth.go",
 	"pkg/controller/utils/cloudconfig.go",
 	"pkg/controller/utils/namespace_helper.go",
-	"pkg/controller/utils/policy_sync.go",
 	"pkg/controller/utils/tenant_event_handler.go",
 	"pkg/controller/utils/utils.go",
 	"pkg/render/common/cloudconfig/cloudconfig.go",
 	"pkg/render/kubecontrollers/kube-controllers.go",
-	"pkg/render/tunnel_secret_rbac.go",
-	"pkg/render/typha.go",
 	"pkg/render/utils.go",
-	"pkg/render/webhooks/render.go",
 }
 
 var _ = Describe("Enterprise boundary", func() {

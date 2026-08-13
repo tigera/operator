@@ -82,7 +82,7 @@ type TyphaConfiguration struct {
 	TLS               *TyphaNodeTLS
 	MigrateNamespaces bool
 	ClusterDomain     string
-	NonClusterHost    *operatorv1.NonClusterHost
+	NonClusterHost    bool
 
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
@@ -466,7 +466,7 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 	// fix up the other places.
 	c.applyPostOverrideFixUps(deploy)
 
-	if c.cfg.NonClusterHost != nil {
+	if c.cfg.NonClusterHost {
 		// Create a separate deployment to handle non-cluster host requests.
 		deployNonClusterHost := deploy.DeepCopy()
 		deployNonClusterHost.Name += TyphaNonClusterHostSuffix
@@ -736,7 +736,7 @@ func (c *typhaComponent) typhaServices() []client.Object {
 		},
 	}
 
-	if c.cfg.NonClusterHost != nil {
+	if c.cfg.NonClusterHost {
 		svcNonClusterHost := svc.DeepCopy()
 		svcNonClusterHost.Name += TyphaNonClusterHostSuffix
 		svcNonClusterHost.Labels[AppLabelName] += TyphaNonClusterHostSuffix

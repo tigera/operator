@@ -22,6 +22,7 @@ type Set struct {
 	APIServer         APIServerExtension
 	ClusterConnection ClusterConnectionExtension
 	CSR               CSRExtension
+	Istio             IstioExtension
 	Startup           StartupExtension
 }
 
@@ -70,6 +71,13 @@ func (e Extensions) CSR() CSRExtension {
 		return noopCSR{}
 	}
 	return e.set.CSR
+}
+
+func (e Extensions) Istio() IstioExtension {
+	if e.set.Istio == nil {
+		return noopIstio{}
+	}
+	return e.set.Istio
 }
 
 func (e Extensions) Startup() StartupExtension {

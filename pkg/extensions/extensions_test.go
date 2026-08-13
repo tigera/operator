@@ -58,6 +58,7 @@ var _ = Describe("Decorate", func() {
 	})
 
 	It("runs the modifier for the deprecated Enterprise spelling", func() {
+		//nolint:staticcheck // SA1019: the deprecated spelling is what this covers
 		c := extensions.Decorate(baseComponent(), inputsFor(operatorv1.TigeraSecureEnterprise), operatorv1.CalicoEnterprise, addConfigMap)
 
 		create, _ := c.Objects()

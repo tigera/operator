@@ -87,6 +87,7 @@ var _ = Describe("enterprise typha modifier integration", func() {
 			Expect(role.Rules).To(ContainElement(HaveField("Resources", ContainElement("licensekeys"))))
 		},
 		Entry("CalicoEnterprise", operatorv1.CalicoEnterprise),
+		//nolint:staticcheck // SA1019: the deprecated spelling is what this covers
 		Entry("TigeraSecureEnterprise", operatorv1.TigeraSecureEnterprise),
 	)
 })

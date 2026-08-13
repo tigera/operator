@@ -338,7 +338,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	// Collect the certificates we need to provision Dashboards. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	cm, err := certificatemanager.Create(d.client, installationSpec, d.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {

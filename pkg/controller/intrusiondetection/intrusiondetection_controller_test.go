@@ -741,7 +741,7 @@ var _ = Describe("IntrusionDetection controller tests", func() {
 			err := c.Create(ctx, &operatorv1.IntrusionDetection{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure", Namespace: tenantANamespace}})
 			Expect(err).NotTo(HaveOccurred())
 
-			certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+			certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantA.MultiTenant()))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 			tenantABundle, err := certificateManagerTenantA.CreateMultiTenantTrustedBundleWithSystemRootCertificates()

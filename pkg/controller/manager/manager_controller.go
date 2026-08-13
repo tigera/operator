@@ -393,7 +393,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// When creating the certificate manager, pass in the logger and tenant (if one exists).
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(logc),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {

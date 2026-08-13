@@ -74,6 +74,7 @@ var enterpriseRenderFiles = []string{
 	"pkg/render/manager",
 	"pkg/render/packet_capture_api",
 	"pkg/render/policyrecommendation",
+	"pkg/render/tenant",
 }
 
 // knownExceptions are the core files that still import an Enterprise renderer. The
@@ -108,7 +109,6 @@ var enterpriseKinds = []string{
 // list must only ever shrink.
 var knownKindExceptions = []string{
 	"pkg/controller/apiserver/apiserver_controller.go",
-	"pkg/controller/certificatemanager/certificatemanager.go",
 	"pkg/controller/secrets/tenant_controller.go",
 	"pkg/controller/tiers/tiers_controller.go",
 	"pkg/controller/utils/auth.go",
@@ -118,7 +118,6 @@ var knownKindExceptions = []string{
 	"pkg/controller/utils/utils.go",
 	"pkg/render/common/cloudconfig/cloudconfig.go",
 	"pkg/render/kubecontrollers/kube-controllers.go",
-	"pkg/render/utils.go",
 }
 
 var _ = Describe("Enterprise boundary", func() {

@@ -1198,7 +1198,7 @@ var _ = Describe("Manager controller tests", func() {
 				}
 				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
 
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantA.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
@@ -1208,7 +1208,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, bundleA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantB.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
 				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})
@@ -1382,7 +1382,7 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(c.Create(ctx, tenantC)).NotTo(HaveOccurred())
 
 					// Create certificates for this tenant.
-					certificateManagerTenantC, err := certificatemanager.Create(c, nil, "", tenantCNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantC))
+					certificateManagerTenantC, err := certificatemanager.Create(c, nil, "", tenantCNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantC.MultiTenant()))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(c.Create(ctx, certificateManagerTenantC.KeyPair().Secret(tenantCNamespace)))
 					managerTLStenantC, err := certificateManagerTenantC.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantCNamespace, []string{render.ManagerInternalTLSSecretName})

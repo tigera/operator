@@ -152,7 +152,7 @@ func (r *TenantController) Reconcile(ctx context.Context, request reconcile.Requ
 	opts := []certificatemanager.Option{
 		certificatemanager.AllowCACreation(),
 		certificatemanager.WithLogger(logc),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, tenant.Namespace, opts...)
 	if err != nil {

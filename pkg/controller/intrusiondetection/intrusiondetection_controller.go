@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/logcollector"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/tenancy"
@@ -48,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -87,7 +89,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	policiesToWatch := []types.NamespacedName{
@@ -220,7 +222,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -267,7 +269,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 	isManagedCluster := managementClusterConnection != nil
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -286,7 +288,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if !isManagedCluster && !r.opts.ElasticExternal {
 		// Check if Elasticsearch is ready.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -360,7 +362,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// When creating the certificate manager, pass in the logger and tenant (if one exists).
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
@@ -444,7 +446,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving tenant namespaces", err, reqLogger)
 		return reconcile.Result{}, err

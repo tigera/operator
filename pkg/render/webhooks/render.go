@@ -58,7 +58,7 @@ type Configuration struct {
 	KeyPair           certificatemanagement.KeyPairInterface
 	Installation      *operatorv1.InstallationSpec
 	APIServer         *operatorv1.APIServerSpec
-	ManagementCluster *operatorv1.ManagementCluster
+	ManagementCluster *render.ManagementCluster
 	MultiTenant       bool
 	OpenShift         bool
 }
@@ -195,20 +195,19 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	// generate the installation manifest with the correct tunnel address and certs.
 	if c.cfg.ManagementCluster != nil {
 		mc := c.cfg.ManagementCluster
-		if mc.Spec.Address != "" {
+		if mc.Address != "" {
 			dep.Spec.Template.Spec.Containers[0].Args = append(
 				dep.Spec.Template.Spec.Containers[0].Args,
-				fmt.Sprintf("--mcm-management-cluster-addr=%s", mc.Spec.Address),
+				fmt.Sprintf("--mcm-management-cluster-addr=%s", mc.Address),
 			)
 		}
 
-		secretName := render.TunnelSecretName(mc)
 		dep.Spec.Template.Spec.Containers[0].Args = append(
 			dep.Spec.Template.Spec.Containers[0].Args,
-			fmt.Sprintf("--mcm-tunnel-secret-name=%s", secretName),
+			fmt.Sprintf("--mcm-tunnel-secret-name=%s", mc.TunnelSecretName),
 		)
 
-		if mc.Spec.TLS != nil && mc.Spec.TLS.SecretName == render.ManagerTLSSecretName {
+		if mc.TunnelSecretName == render.ManagerTLSSecretName {
 			dep.Spec.Template.Spec.Containers[0].Args = append(
 				dep.Spec.Template.Spec.Containers[0].Args,
 				"--mcm-management-cluster-ca-type=Public",

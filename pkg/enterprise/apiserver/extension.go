@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
@@ -163,6 +164,11 @@ func (e *Extension) Watches(c ctrlruntime.Controller) error {
 	if err := utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return err
 	}
+	for _, secretName := range []string{render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName} {
+		if err := utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
+			return err
+		}
+	}
 	for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
 		for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
 			if err := utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -185,12 +191,12 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		return ci, nil, fmt.Errorf("unable to create the trusted bundle: %w", err)
 	}
 
-	applicationLayer, err := utils.GetApplicationLayer(ctx, ci.Client)
+	applicationLayer, err := eutils.GetApplicationLayer(ctx, ci.Client)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error reading ApplicationLayer: %w", err)
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return ci, nil, fmt.Errorf("error reading ManagementCluster: %w", err)
 	}
@@ -239,12 +245,12 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 	// Authentication: when a Dex-backed Authentication CR is ready, add its cert to the
 	// bundle and build the key validator config for the query server and the policy.
 	var keyValidatorConfig authentication.KeyValidatorConfig
-	authenticationCR, err := utils.GetAuthentication(ctx, ci.Client)
+	authenticationCR, err := eutils.GetAuthentication(ctx, ci.Client)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "error while fetching Authentication: %s", err)
 	}
 	if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
-		if utils.DexEnabled(authenticationCR) {
+		if eutils.DexEnabled(authenticationCR) {
 			certificate, err := ci.CertificateManager.GetCertificate(ci.Client, render.DexTLSSecretName, common.OperatorNamespace())
 			if err != nil {
 				return ci, nil, extensions.Degradedf(operatorv1.CertificateError, "failed to retrieve %s: %s", render.DexTLSSecretName, err)
@@ -253,7 +259,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 			}
 			trustedBundle.AddCertificates(certificate)
 		}
-		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, ci.Client, authenticationCR, ci.RenderInputs.ClusterDomain, false)
+		keyValidatorConfig, err = eutils.GetKeyValidatorConfig(ctx, ci.Client, authenticationCR, ci.RenderInputs.ClusterDomain, false)
 		if err != nil {
 			return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "failed to get KeyValidator config: %s", err)
 		}
@@ -306,7 +312,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 	// is covered by its own binding.
 	var bindingNamespaces []string
 	if e.opts.MultiTenant {
-		bindingNamespaces, err = utils.TenantNamespaces(ctx, ci.Client, nil)
+		bindingNamespaces, err = eutils.TenantNamespaces(ctx, ci.Client, nil)
 		if err != nil {
 			return ci, nil, fmt.Errorf("error reading tenant namespaces: %w", err)
 		}
@@ -341,6 +347,10 @@ func (CalicoCleanup) ExtendInputs(_ context.Context, ci controller.Inputs) (cont
 
 func (CalicoCleanup) Watches(ctrlruntime.Controller) error {
 	return nil
+}
+
+func (CalicoCleanup) ManagementCluster(context.Context, client.Client) (*render.ManagementCluster, error) {
+	return nil, nil
 }
 
 func (CalicoCleanup) Modify(c render.Component, ri render.Inputs) render.Component {
@@ -781,11 +791,32 @@ func (c *apiServer) auditVolumes() []corev1.Volume {
 }
 
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, true)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, managementCluster(c.data.managementCluster), true)
 }
 
 func (c *apiServer) secretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, false)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, managementCluster(c.data.managementCluster), false)
+}
+
+// managementCluster converts the CR to the setup the renderers take.
+func managementCluster(mc *operatorv1.ManagementCluster) *render.ManagementCluster {
+	if mc == nil {
+		return nil
+	}
+	var tunnelSecretName string
+	if mc.Spec.TLS != nil {
+		tunnelSecretName = mc.Spec.TLS.SecretName
+	}
+	return render.NewManagementCluster(mc.Spec.Address, tunnelSecretName)
+}
+
+// ManagementCluster reads the ManagementCluster resource for the apiserver controller.
+func (e *Extension) ManagementCluster(ctx context.Context, c client.Client) (*render.ManagementCluster, error) {
+	mc, err := eutils.GetManagementCluster(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	return managementCluster(mc), nil
 }
 
 // linseedAccessClusterRole is a minimal, least-privilege ClusterRole granting the calico-apiserver

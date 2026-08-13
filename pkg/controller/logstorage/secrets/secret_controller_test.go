@@ -625,7 +625,7 @@ var _ = Describe("LogStorage Secrets controller", func() {
 				dns.DefaultClusterDomain,
 				tenantNS,
 				certificatemanager.AllowCACreation(),
-				certificatemanager.WithTenant(tenant))
+				certificatemanager.WithMultiTenant(tenant.MultiTenant()))
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(cli.Create(ctx, cm.KeyPair().Secret(tenantNS))).ShouldNot(HaveOccurred())
 		})

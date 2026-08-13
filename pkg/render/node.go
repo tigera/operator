@@ -1727,7 +1727,7 @@ func (c *nodeComponent) nodeProbes() (*corev1.Probe, *corev1.Probe, *corev1.Prob
 		TimeoutSeconds: 5,
 	}
 
-	// Poll often so readiness is picked up quickly; the 300s budget covers slow startup on large clusters.
+	// Poll every 2s so readiness lands fast; 150 failures gives ~300s of startup, more if checks time out.
 	sp := &corev1.Probe{
 		ProbeHandler:     corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: readinessCmd}},
 		PeriodSeconds:    2,

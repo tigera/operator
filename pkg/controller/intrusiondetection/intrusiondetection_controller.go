@@ -439,7 +439,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant()
+		tenant = eutils.TenantFromCloudConfig(cloudConfig)
 	}
 
 	// Create a component handler to manage the rendered component.

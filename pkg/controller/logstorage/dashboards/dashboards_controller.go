@@ -292,7 +292,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 				d.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = eutils.TenantFromCloudConfig(cloudConfig)
 		}
 
 		// Determine the host and port from the URL.

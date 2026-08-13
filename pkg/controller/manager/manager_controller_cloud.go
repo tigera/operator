@@ -123,7 +123,7 @@ func (r *ReconcileManager) handleCloudReconcile(
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return nil, render.ManagerCloudResources{}, nil, nil, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = eutils.TenantFromCloudConfig(cloudConfig)
 		} else {
 			var err error
 			tenant, err = eutils.GetTenantFromCloudAuthConfig(ctx, r.client)

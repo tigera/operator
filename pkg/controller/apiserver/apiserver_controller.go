@@ -342,15 +342,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	trustedBundle := ci.RenderInputs.TrustedBundle
 
-	// The webhooks component (v3-CRD mode) needs the ManagementCluster to register the
-	// managed-cluster webhook. Reading it requires the enterprise CRDs.
-	var managementCluster *operatorv1.ManagementCluster
-	if r.opts.Variant.IsEnterprise() {
-		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	// The webhooks component (v3-CRD mode) needs the management-cluster setup to
+	// register the managed-cluster webhook.
+	managementCluster, err := r.ext.ManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the management cluster configuration", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	includeV3NetworkPolicy := false

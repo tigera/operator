@@ -17,6 +17,8 @@ package extensions
 import (
 	"context"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
@@ -27,6 +29,10 @@ import (
 type APIServerExtension interface {
 	ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error)
 	Watches(c ctrlruntime.Controller) error
+
+	// ManagementCluster returns the management-cluster setup the webhooks register
+	// against, or nil when the cluster does not manage others.
+	ManagementCluster(ctx context.Context, c client.Client) (*render.ManagementCluster, error)
 
 	// Modify layers the variant onto a component the controller rendered.
 	Modify(c render.Component, ri render.Inputs) render.Component
@@ -41,6 +47,10 @@ func (noopAPIServer) ExtendInputs(_ context.Context, ci controller.Inputs) (cont
 
 func (noopAPIServer) Watches(ctrlruntime.Controller) error {
 	return nil
+}
+
+func (noopAPIServer) ManagementCluster(context.Context, client.Client) (*render.ManagementCluster, error) {
+	return nil, nil
 }
 
 func (noopAPIServer) Modify(c render.Component, _ render.Inputs) render.Component {

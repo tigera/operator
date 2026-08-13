@@ -348,6 +348,10 @@ func (CalicoCleanup) Watches(ctrlruntime.Controller) error {
 	return nil
 }
 
+func (CalicoCleanup) ManagementCluster(context.Context, client.Client) (*render.ManagementCluster, error) {
+	return nil, nil
+}
+
 func (CalicoCleanup) Modify(c render.Component, ri render.Inputs) render.Component {
 	t, ok := c.(render.APIServerComponent)
 	if !ok {
@@ -786,11 +790,32 @@ func (c *apiServer) auditVolumes() []corev1.Volume {
 }
 
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, true)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, managementCluster(c.data.managementCluster), true)
 }
 
 func (c *apiServer) secretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, false)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, managementCluster(c.data.managementCluster), false)
+}
+
+// managementCluster converts the CR to the setup the renderers take.
+func managementCluster(mc *operatorv1.ManagementCluster) *render.ManagementCluster {
+	if mc == nil {
+		return nil
+	}
+	var tunnelSecretName string
+	if mc.Spec.TLS != nil {
+		tunnelSecretName = mc.Spec.TLS.SecretName
+	}
+	return render.NewManagementCluster(mc.Spec.Address, tunnelSecretName)
+}
+
+// ManagementCluster reads the ManagementCluster resource for the apiserver controller.
+func (e *Extension) ManagementCluster(ctx context.Context, c client.Client) (*render.ManagementCluster, error) {
+	mc, err := utils.GetManagementCluster(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	return managementCluster(mc), nil
 }
 
 // linseedAccessClusterRole is a minimal, least-privilege ClusterRole granting the calico-apiserver

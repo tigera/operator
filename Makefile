@@ -143,6 +143,7 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 		-e KUBECONFIG=/go/src/$(PACKAGE_NAME)/kubeconfig.yaml \
 		-e ACK_GINKGO_RC=true \
 		-e ACK_GINKGO_DEPRECATIONS=1.16.5 \
+		-e GOTOOLCHAIN=go1.26.4+auto \
 		-w /go/src/$(PACKAGE_NAME) \
 		--net=host \
 		$(EXTRA_DOCKER_ARGS)

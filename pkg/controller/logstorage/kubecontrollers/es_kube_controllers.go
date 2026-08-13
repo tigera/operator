@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -45,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -252,7 +254,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, nil
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -260,7 +262,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	if !r.elasticExternal {
 		// Wait for Elasticsearch to be installed and available
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -293,7 +295,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 
 	// Get the Authentication resource.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
 		return reconcile.Result{}, err
@@ -337,27 +339,28 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
-		K8sServiceEp:                 k8sapi.Endpoint,
-		K8sServiceEpPodNetwork:       k8sapi.PodNetworkEndpoint,
-		Installation:                 installationSpec,
-		ManagementCluster:            managementCluster,
-		ClusterDomain:                r.clusterDomain,
-		Authentication:               authentication,
-		KubeControllersGatewaySecret: kubeControllersUserSecret,
-		TrustedBundle:                trustedBundle,
-		Namespace:                    helper.InstallNamespace(),
-		BindingNamespaces:            namespaces,
-		Tenant:                       nil,
-		Cloud:                        r.cloud,
+	kubeControllersCfg := entkubecontrollers.ElasticsearchConfiguration{
+		KubeControllersConfiguration: &kubecontrollers.KubeControllersConfiguration{
+			K8sServiceEp:                 k8sapi.Endpoint,
+			K8sServiceEpPodNetwork:       k8sapi.PodNetworkEndpoint,
+			Installation:                 installationSpec,
+			ClusterDomain:                r.clusterDomain,
+			KubeControllersGatewaySecret: kubeControllersUserSecret,
+			TrustedBundle:                trustedBundle,
+			Namespace:                    helper.InstallNamespace(),
+			BindingNamespaces:            namespaces,
+			Cloud:                        r.cloud,
+		},
+		ManagementCluster: managementCluster,
+		Authentication:    authentication,
 	}
 	if r.cloud {
-		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(kubeControllersCfg.KubeControllersConfiguration, reqLogger, ctx); err != nil || !proceed {
 			return result, err
 		}
 	}

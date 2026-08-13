@@ -18,8 +18,12 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
+	"github.com/tigera/operator/pkg/enterprise/csr"
 	"github.com/tigera/operator/pkg/enterprise/installation"
+	"github.com/tigera/operator/pkg/enterprise/istio"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
+	"github.com/tigera/operator/pkg/enterprise/startup"
+	"github.com/tigera/operator/pkg/enterprise/tiers"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
 )
@@ -36,6 +40,10 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 			Windows:           windows.New(variant),
 			APIServer:         apiserver.New(variant, o),
 			ClusterConnection: clusterconnection.New(variant),
+			CSR:               csr.New(),
+			Istio:             istio.New(),
+			Tiers:             tiers.New(o),
+			Startup:           startup.New(o),
 		})
 	}
 

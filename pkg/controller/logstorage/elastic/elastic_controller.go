@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -52,6 +53,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -77,7 +79,7 @@ type ElasticSubController struct {
 	scheme         *runtime.Scheme
 	status         status.StatusManager
 	provider       operatorv1.Provider
-	esCliCreator   utils.ElasticsearchClientCreator
+	esCliCreator   esutils.ElasticsearchClientCreator
 	clusterDomain  string
 	variant        operatorv1.ProductVariant
 	tierWatchReady *utils.ReadyFlag
@@ -99,7 +101,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ElasticSubController{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		esCliCreator:   utils.NewElasticClient,
+		esCliCreator:   esutils.NewElasticClient,
 		tierWatchReady: &utils.ReadyFlag{},
 		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
@@ -313,7 +315,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -337,7 +339,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
 		return reconcile.Result{}, err
@@ -410,7 +412,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		esAdminUserSecret = rsecret.CopyToNamespace(common.OperatorNamespace(), esAdminUserSecret)[0]
 	}
 
-	esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
+	esLicenseType, err = esutils.GetElasticLicenseType(ctx, r.client, reqLogger)
 	if err != nil {
 		// If LicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
 		if errors.IsNotFound(err) {
@@ -421,7 +423,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+	elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 		return reconcile.Result{}, err
@@ -619,7 +621,7 @@ func (r *ElasticSubController) handleLogStorageFinalizer(ctx context.Context, ls
 	// instances. So, check if those have been deleted before removing the finalizer.
 	if isTerminating(ls) {
 		// The LogStorage instance is terminating. Check whether ES and Kibana CRs exist.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return err

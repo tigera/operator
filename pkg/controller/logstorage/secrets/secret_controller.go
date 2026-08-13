@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/logcollector"
@@ -92,7 +93,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -197,7 +198,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	if r.multiTenant && request.Namespace == "" {
 		return reconcile.Result{}, nil
 	}
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -238,7 +239,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -301,7 +302,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	cm = operatorSigner
 	if r.multiTenant {
 		// Override with a tenant-scoped certificate manager which uses the CA in the tenant's namespace.
-		opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger), certificatemanager.WithTenant(tenant)}
+		opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger), certificatemanager.WithMultiTenant(tenant.MultiTenant())}
 		cm, err = certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.InstallNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)

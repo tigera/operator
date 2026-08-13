@@ -82,7 +82,6 @@ var enterpriseRenderFiles = []string{
 var knownExceptions = []string{
 	"cmd/main.go",
 	"pkg/controller/secrets/tenant_controller.go",
-	"pkg/controller/tiers/tiers_controller.go",
 }
 
 // enterpriseKinds are the operator API kinds that only Calico Enterprise installs.
@@ -109,7 +108,6 @@ var enterpriseKinds = []string{
 // list must only ever shrink.
 var knownKindExceptions = []string{
 	"pkg/controller/secrets/tenant_controller.go",
-	"pkg/controller/tiers/tiers_controller.go",
 }
 
 var _ = Describe("Enterprise boundary", func() {

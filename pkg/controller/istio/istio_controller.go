@@ -375,8 +375,13 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *
 	return true, nil
 }
 
-// configurePolicySyncPathPrefix reconciles FelixConfiguration.policySyncPathPrefix,
-// which the variant extension shares with this controller.
+// configurePolicySyncPathPrefix reconciles FelixConfiguration.policySyncPathPrefix
+// for the Istio side. The L7 ambient waypoint pod's l7-collector sidecar
+// dials Felix's nodeagent socket, which Felix only opens when this field
+// is set. The applicationlayer controller writes this same field for the
+// Dikastes/sidecar/WAF flow; both controllers consult each other's state
+// (via utils.{ApplicationLayerRequiresPolicySync,IstioRequiresPolicySync})
+// so that deleting one CR does not strand the other.
 func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
 	var istioNeeds bool
 	if !remove {

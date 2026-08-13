@@ -58,6 +58,10 @@ const (
 	GoldmaneServicePort         = 7443
 	GoldmaneNamespace           = common.CalicoNamespace
 
+	// GatewayResourcePrefix names the CIG resources exposing Whisker.
+	GatewayResourcePrefix = "calico-whisker"
+	GatewayTLSSecretName  = "calico-whisker-gateway-tls"
+
 	configMapName    = "whisker-nginx-config"
 	configVolumeName = "nginx-config"
 	configMountPath  = "/etc/nginx/conf.d"
@@ -91,6 +95,11 @@ type Configuration struct {
 	CalicoVersion         string
 	ClusterType           string
 	ClusterDomain         string
+
+	// IngressGatewayNamespace, when non-empty, is the namespace of the CIG
+	// Envoy proxy that fronts Whisker. The NetworkPolicy gains a scoped
+	// ingress rule from those proxy pods; Whisker is deny-all otherwise.
+	IngressGatewayNamespace string
 }
 
 type Component struct {
@@ -296,6 +305,22 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 	}
 	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, c.cfg.OpenShift)
 
+	var ingressRules []v3.Rule
+	if c.cfg.IngressGatewayNamespace != "" {
+		// Envoy Gateway labels its proxy pods with the owning Gateway name.
+		ingressRules = append(ingressRules, v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Source: v3.EntityRule{
+				NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", c.cfg.IngressGatewayNamespace),
+				Selector:          fmt.Sprintf("gateway.envoyproxy.io/owning-gateway-name == '%s'", GatewayResourcePrefix+"-gateway"),
+			},
+			Destination: v3.EntityRule{
+				Ports: networkpolicy.Ports(WhiskerServicePort),
+			},
+		})
+	}
+
 	return &v3.NetworkPolicy{
 		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{Name: WhiskerPolicyName, Namespace: WhiskerNamespace},
@@ -304,6 +329,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			Tier:     networkpolicy.CalicoTierName,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
 			Selector: networkpolicy.KubernetesAppSelector(WhiskerDeploymentName),
+			Ingress:  ingressRules,
 			Egress:   egressRules,
 		},
 	}

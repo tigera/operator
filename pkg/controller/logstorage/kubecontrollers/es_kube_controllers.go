@@ -344,22 +344,23 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, err
 	}
 
-	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
-		K8sServiceEp:                 k8sapi.Endpoint,
-		K8sServiceEpPodNetwork:       k8sapi.PodNetworkEndpoint,
-		Installation:                 installationSpec,
-		ManagementCluster:            managementCluster,
-		ClusterDomain:                r.clusterDomain,
-		Authentication:               authentication,
-		KubeControllersGatewaySecret: kubeControllersUserSecret,
-		TrustedBundle:                trustedBundle,
-		Namespace:                    helper.InstallNamespace(),
-		BindingNamespaces:            namespaces,
-		Tenant:                       nil,
-		Cloud:                        r.cloud,
+	kubeControllersCfg := entkubecontrollers.ElasticsearchConfiguration{
+		KubeControllersConfiguration: &kubecontrollers.KubeControllersConfiguration{
+			K8sServiceEp:                 k8sapi.Endpoint,
+			K8sServiceEpPodNetwork:       k8sapi.PodNetworkEndpoint,
+			Installation:                 installationSpec,
+			ClusterDomain:                r.clusterDomain,
+			KubeControllersGatewaySecret: kubeControllersUserSecret,
+			TrustedBundle:                trustedBundle,
+			Namespace:                    helper.InstallNamespace(),
+			BindingNamespaces:            namespaces,
+			Cloud:                        r.cloud,
+		},
+		ManagementCluster: managementCluster,
+		Authentication:    authentication,
 	}
 	if r.cloud {
-		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(kubeControllersCfg.KubeControllersConfiguration, reqLogger, ctx); err != nil || !proceed {
 			return result, err
 		}
 	}

@@ -25,6 +25,7 @@ import (
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -46,20 +47,28 @@ const (
 	ElasticsearchKubeControllersVerificationUserSecret = "tigera-ee-kube-controllers-gateway-verification-credentials"
 )
 
+// ElasticsearchConfiguration is the generic kube-controllers configuration plus the
+// Enterprise CRs only this assembler reads.
+type ElasticsearchConfiguration struct {
+	*rkc.KubeControllersConfiguration
+
+	Authentication    *operatorv1.Authentication
+	ManagementCluster *operatorv1.ManagementCluster
+}
+
 // NewElasticsearchKubeControllers fills the generic kube-controllers configuration
 // for the enterprise es-calico-kube-controllers deployment and returns the rendered
 // component. es-kube-controllers is a distinct deployment (talks to Elasticsearch via
 // es-gateway) reconciled by the logstorage kube-controllers controller, so it's
 // assembled here rather than through the render-time modifier mechanism.
-func NewElasticsearchKubeControllers(cfg *rkc.KubeControllersConfiguration) render.Component {
+func NewElasticsearchKubeControllers(cfg *ElasticsearchConfiguration) render.Component {
 	cfg.Name = EsKubeController
 	cfg.ConfigName = "elasticsearch"
 	cfg.RoleName = EsKubeControllerRole
 	cfg.RoleBindingName = EsKubeControllerRoleBinding
 	cfg.MetricsName = EsKubeControllerMetrics
-	cfg.DisableConfigAPI = cfg.Tenant.MultiTenant()
 
-	cfg.Rules = rkc.KubeControllersRoleCommonRules(cfg)
+	cfg.Rules = rkc.KubeControllersRoleCommonRules(cfg.KubeControllersConfiguration)
 	cfg.Rules = append(cfg.Rules, KubeControllersEnterpriseCommonRules(false, cfg.ManagementClusterConnection != nil)...)
 	// Calico Cloud's es-kube-controllers provisions RBAC for managed-cluster access, so it needs to
 	// create and update cluster roles and bindings. Enterprise only reads them.
@@ -81,31 +90,25 @@ func NewElasticsearchKubeControllers(cfg *rkc.KubeControllersConfiguration) rend
 		},
 	)
 
-	if !cfg.Tenant.MultiTenant() {
-		// Zero and single tenant clusters need elasticsearch configuration.
-		cfg.EnabledControllers = append(cfg.EnabledControllers, "authorization", "elasticsearchconfiguration")
-		if cfg.ManagementCluster != nil && cfg.Tenant == nil {
-			cfg.ManagedClusterWatchBinding = true
-			// Enterprise requires the managedcluster controller to push licenses.
-			cfg.EnabledControllers = append(cfg.EnabledControllers, "managedcluster")
-		}
+	cfg.EnabledControllers = append(cfg.EnabledControllers, "authorization", "elasticsearchconfiguration")
+	if cfg.ManagementCluster != nil {
+		cfg.ManagedClusterWatchBinding = true
+		// Enterprise requires the managedcluster controller to push licenses.
+		cfg.EnabledControllers = append(cfg.EnabledControllers, "managedcluster")
 	}
 
 	cfg.NetworkPolicy = esKubeControllersCalicoSystemPolicy(cfg)
 	cfg.DeprecatedNetworkPolicyName = "es-kube-controller-access"
 	cfg.ExtraEnv = esKubeControllersEnv(cfg)
 
-	return rkc.NewKubeControllers(cfg)
+	return rkc.NewKubeControllers(cfg.KubeControllersConfiguration)
 }
 
 // esKubeControllersEnv builds the enterprise env vars for es-calico-kube-controllers.
-func esKubeControllersEnv(cfg *rkc.KubeControllersConfiguration) []corev1.EnvVar {
+func esKubeControllersEnv(cfg *ElasticsearchConfiguration) []corev1.EnvVar {
 	var env []corev1.EnvVar
 
-	if cfg.Tenant != nil {
-		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: cfg.Tenant.Spec.ID})
-	} else if cfg.TenantID != "" {
-		// Calico Cloud reads the tenant from its cloud config rather than a Tenant CR.
+	if cfg.TenantID != "" {
 		env = append(env, corev1.EnvVar{Name: "TENANT_ID", Value: cfg.TenantID})
 	}
 
@@ -127,7 +130,7 @@ func esKubeControllersEnv(cfg *rkc.KubeControllersConfiguration) []corev1.EnvVar
 		env = append(env, corev1.EnvVar{Name: "MULTI_INTERFACE_MODE", Value: cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value()})
 	}
 
-	if !cfg.Tenant.MultiTenant() {
+	{
 		_, esHost, esPort, _ := url.ParseEndpoint(relasticsearch.GatewayEndpoint(rmeta.OSTypeLinux, cfg.ClusterDomain, render.ElasticsearchNamespace))
 		env = append(env,
 			relasticsearch.ElasticHostEnvVar(esHost),
@@ -299,7 +302,7 @@ func wafRules() []rbacv1.PolicyRule {
 	}
 }
 
-func esKubeControllersCalicoSystemPolicy(cfg *rkc.KubeControllersConfiguration) *v3.NetworkPolicy {
+func esKubeControllersCalicoSystemPolicy(cfg *ElasticsearchConfiguration) *v3.NetworkPolicy {
 	if cfg.ManagementClusterConnection != nil {
 		return nil
 	}
@@ -324,7 +327,7 @@ func esKubeControllersCalicoSystemPolicy(cfg *rkc.KubeControllersConfiguration) 
 		},
 	}...)
 
-	networkpolicyHelper := networkpolicy.Helper(cfg.Tenant.MultiTenant(), cfg.Namespace)
+	networkpolicyHelper := networkpolicy.Helper(false, cfg.Namespace)
 	egressRules = append(egressRules, []v3.Rule{
 		{
 			Action:      v3.Allow,

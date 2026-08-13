@@ -20,7 +20,6 @@ import (
 	"sort"
 	"time"
 
-	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -95,14 +94,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Compare and update the current StatusCondition if there are any new changes
-	conditions := updateConditions(currentConditions, desiredConditions)
-
-	// Skip the write if nothing changed. This controller watches LogStorage, so a no-op write would
-	// re-trigger it and spin: each reconcile would bump the resourceVersion and enqueue another one.
-	if equality.Semantic.DeepEqual(ls.Status.Conditions, conditions) {
-		return reconcile.Result{}, nil
-	}
-	ls.Status.Conditions = conditions
+	ls.Status.Conditions = updateConditions(currentConditions, desiredConditions)
 
 	if err := r.client.Status().Update(ctx, ls); err != nil {
 		if errors.IsConflict(err) {

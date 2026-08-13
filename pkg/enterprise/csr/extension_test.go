@@ -15,16 +15,21 @@
 package csr_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/monitor"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
@@ -73,6 +78,12 @@ var _ = Describe("CSR extension", func() {
 		Expect(ext.CSR().NeedsCSRRole(ctx, cli)).To(BeTrue())
 	})
 
+	It("watches every CR the CSR role decision reads", func() {
+		rec := &watchRecorder{}
+		Expect(ext.CSR().Watches(rec)).NotTo(HaveOccurred())
+		Expect(rec.watched).To(ConsistOf("*v1.Monitor", "*v1.NonClusterHost"))
+	})
+
 	It("does not need the CSR role when Prometheus is internal", func() {
 		Expect(cli.Create(ctx, &operatorv1.Monitor{
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -80,3 +91,16 @@ var _ = Describe("CSR extension", func() {
 		Expect(ext.CSR().NeedsCSRRole(ctx, cli)).To(BeFalse())
 	})
 })
+
+// watchRecorder collects the objects an extension asks to watch. Only WatchObject is
+// called, so the embedded interface stays nil.
+type watchRecorder struct {
+	ctrlruntime.Controller
+
+	watched []string
+}
+
+func (w *watchRecorder) WatchObject(obj client.Object, _ handler.EventHandler, _ ...predicate.Predicate) error {
+	w.watched = append(w.watched, fmt.Sprintf("%T", obj))
+	return nil
+}

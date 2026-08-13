@@ -709,7 +709,7 @@ func StrToElasticLicenseType(license string, logger logr.Logger) render.Elastics
 		license == string(render.ElasticsearchLicenseTypeEnterpriseTrial) {
 		return render.ElasticsearchLicenseType(license)
 	}
-	logger.V(3).Info("Elasticsearch license %s is unexpected", license)
+	logger.V(3).Info("Elasticsearch license is unexpected", "license", license)
 	return render.ElasticsearchLicenseTypeUnknown
 }
 

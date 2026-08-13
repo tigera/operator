@@ -106,7 +106,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	if err = c.WatchObject(&operatorv1.Installation{}, &handler.EnqueueRequestForObject{}); err != nil {
-		return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
+		return fmt.Errorf("csr-controller failed to watch Installation: %w", err)
 	}
 
 	return utils.AddCSRWatchWithRelevancyFn(c, relevantCSR)

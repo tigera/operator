@@ -21,6 +21,8 @@ type Set struct {
 	Windows           WindowsExtension
 	APIServer         APIServerExtension
 	ClusterConnection ClusterConnectionExtension
+	CSR               CSRExtension
+	Startup           StartupExtension
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -61,4 +63,18 @@ func (e Extensions) ClusterConnection() ClusterConnectionExtension {
 		return noopClusterConnection{}
 	}
 	return e.set.ClusterConnection
+}
+
+func (e Extensions) CSR() CSRExtension {
+	if e.set.CSR == nil {
+		return noopCSR{}
+	}
+	return e.set.CSR
+}
+
+func (e Extensions) Startup() StartupExtension {
+	if e.set.Startup == nil {
+		return noopStartup{}
+	}
+	return e.set.Startup
 }

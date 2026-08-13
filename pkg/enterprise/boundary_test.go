@@ -108,11 +108,8 @@ var enterpriseKinds = []string{
 // knownKindExceptions are the core files that still name an Enterprise-only kind. The
 // list must only ever shrink.
 var knownKindExceptions = []string{
-	"pkg/controller/apiserver/apiserver_controller.go",
 	"pkg/controller/secrets/tenant_controller.go",
 	"pkg/controller/tiers/tiers_controller.go",
-	"pkg/render/common/cloudconfig/cloudconfig.go",
-	"pkg/render/kubecontrollers/kube-controllers.go",
 }
 
 var _ = Describe("Enterprise boundary", func() {

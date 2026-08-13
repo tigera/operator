@@ -16,9 +16,12 @@ package otelcollector
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"crypto/x509"
 	_ "embed"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"text/template"
 
@@ -222,9 +225,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		}
 	}
 
-	// The receiver keypair exists only for the OTLP receiver. Turning logs off
-	// while keeping metrics stops it being rendered, which on its own would leave
-	// the previous copy -- a server key nothing serves with -- in the namespace.
+	// Turning logs off while keeping metrics stops the receiver keypair being
+	// rendered; without this the previous copy stays in the namespace.
 	if !c.hasLogs() {
 		toDelete = append(toDelete, emptySecret(OpenTelemetryCollectorServerTLSSecretName))
 	}
@@ -711,13 +713,25 @@ func (c *component) podAnnotations() map[string]string {
 	if cm, ok := c.exporterCAsConfigMap().(*corev1.ConfigMap); ok && cm != nil {
 		annotations[exporterCAHashAnnotation] = rmeta.AnnotationHash(cm.Data)
 	}
+	// Private keys and bearer tokens, so SHA-256 rather than the SHA-1 in
+	// rmeta.AnnotationHash: the digest lands in a readable pod annotation.
 	if s, ok := c.exporterCertsSecret().(*corev1.Secret); ok && s != nil {
-		annotations[exporterClientTLSHashAnnotation] = rmeta.AnnotationHash(s.Data)
+		annotations[exporterClientTLSHashAnnotation] = secretHash(s.Data)
 	}
 	if s, ok := c.exporterAuthSecret().(*corev1.Secret); ok && s != nil {
-		annotations[exporterAuthHashAnnotation] = rmeta.AnnotationHash(s.Data)
+		annotations[exporterAuthHashAnnotation] = secretHash(s.Data)
 	}
 	return annotations
+}
+
+// secretHash is rmeta.AnnotationHash with SHA-256. Keys are sorted so the digest
+// does not depend on map iteration order.
+func secretHash(data map[string][]byte) string {
+	h := sha256.New()
+	for _, k := range slices.Sorted(maps.Keys(data)) {
+		fmt.Fprintf(h, "%q%q", k, data[k])
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
 // exporterAuthEnv exposes each header credential as an environment variable the

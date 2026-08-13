@@ -54,7 +54,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -119,8 +118,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	for _, secretName := range []string{
 		"calico-apiserver-certs",
 		certificatemanagement.CASecretName,
-		render.DexTLSSecretName,
-		monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
@@ -161,18 +158,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("apiserver-controller failed to create periodic reconcile watch: %w", err)
-	}
-
-	if opts.MultiTenant {
-		// On a multi-tenant management cluster the aggregated API server remains a single cluster-scoped
-		// component in calico-system, but each tenant's calico-apiserver identity must be granted Linseed
-		// access via a ClusterRoleBinding with one subject per tenant namespace. That binding is rendered by
-		// the (cluster-scoped) reconcile over the current set of tenant namespaces, so a Tenant change just
-		// needs to trigger a reconcile; the binding is then re-rendered with the up-to-date namespace set,
-		// which also drops a deleted tenant's subject.
-		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch Tenant resource: %w", err)
-		}
 	}
 
 	// Watch DatastoreMigration CRs so the apiserver controller reacts promptly
@@ -345,15 +330,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 	trustedBundle := ci.RenderInputs.TrustedBundle
 
-	// The webhooks component (v3-CRD mode) needs the ManagementCluster to register the
-	// managed-cluster webhook. Reading it requires the enterprise CRDs.
-	var managementCluster *operatorv1.ManagementCluster
-	if r.opts.Variant.IsEnterprise() {
-		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-			return reconcile.Result{}, err
-		}
+	// The webhooks component (v3-CRD mode) needs the management-cluster setup to
+	// register the managed-cluster webhook.
+	managementCluster, err := r.ext.ManagementCluster(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the management cluster configuration", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	includeV3NetworkPolicy := false

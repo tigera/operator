@@ -353,7 +353,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				}
 				Expect(c.Create(ctx, tenantB)).NotTo(HaveOccurred())
 
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantA.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
@@ -362,7 +362,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, linseedTLSTenantA.Secret(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantB.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
 				Expect(c.Create(ctx, certificateManagerTenantB.CreateTrustedBundle().ConfigMap(tenantBNamespace))).NotTo(HaveOccurred())
@@ -455,7 +455,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				Expect(err.Error()).Should(ContainSubstring("CA secret"))
 
 				// Create a CA secret for the test, and create its KeyPair.
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantA.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace))).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.CreateTrustedBundle().ConfigMap(tenantANamespace))).NotTo(HaveOccurred())

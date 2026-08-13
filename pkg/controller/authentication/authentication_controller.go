@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -186,7 +187,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	reqLogger.Info("Reconciling ", "controller", controllerName)
 
 	// Fetch the Authentication spec. If present, we deploy dex in the cluster.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.OnCRNotFound()
@@ -293,7 +294,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Dex will be configured with the contents of this secret, such as clientID and clientSecret.
-	secretProviderClass, idpSecret, err := utils.GetSecretOrProviderClass(ctx, r.client, authentication)
+	secretProviderClass, idpSecret, err := eutils.GetSecretOrProviderClass(ctx, r.client, authentication)
 	if err != nil {
 		r.status.SetDegraded(oprv1.ResourceValidationError, "Invalid or missing IDP secret or IDP secret provider", err, reqLogger)
 		return reconcile.Result{}, err
@@ -377,7 +378,7 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
-	enableDex := utils.DexEnabled(authentication)
+	enableDex := eutils.DexEnabled(authentication)
 
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg := render.NewDexConfig(installationSpec.CertificateManagement, authentication, idpSecret, secretProviderClass, r.clusterDomain)

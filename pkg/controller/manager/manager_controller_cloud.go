@@ -32,6 +32,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 )
@@ -47,7 +48,7 @@ func addCloudWatch(c ctrlruntime.Controller, eventHandler handler.EventHandler, 
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 		}
 	} else {
-		if err := utils.AddConfigMapWatch(c, utils.CloudAuthConfig, common.OperatorNamespace(), eventHandler); err != nil {
+		if err := utils.AddConfigMapWatch(c, eutils.CloudAuthConfig, common.OperatorNamespace(), eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
 		}
 	}
@@ -122,10 +123,10 @@ func (r *ReconcileManager) handleCloudReconcile(
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return nil, render.ManagerCloudResources{}, nil, nil, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = eutils.TenantFromCloudConfig(cloudConfig)
 		} else {
 			var err error
-			tenant, err = utils.GetTenantFromCloudAuthConfig(ctx, r.client)
+			tenant, err = eutils.GetTenantFromCloudAuthConfig(ctx, r.client)
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to fetch tenant information from config map", err, reqLogger)
 			}

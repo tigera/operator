@@ -33,6 +33,7 @@ const (
 	Windows           Name = "windows"
 	APIServer         Name = "apiserver"
 	ClusterConnection Name = "clusterconnection"
+	CSR               Name = "csr"
 )
 
 // Inputs is what a controller hands its variant extension: the render-phase inputs

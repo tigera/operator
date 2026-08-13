@@ -168,6 +168,11 @@ func (e *Extension) Watches(c ctrlruntime.Controller) error {
 	if err := utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, &handler.EnqueueRequestForObject{}); err != nil {
 		return err
 	}
+	for _, secretName := range []string{render.DexTLSSecretName, monitor.PrometheusClientTLSSecretName} {
+		if err := utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
+			return err
+		}
+	}
 	for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
 		for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
 			if err := utils.AddSecretsWatch(c, secretName, namespace); err != nil {

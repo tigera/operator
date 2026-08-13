@@ -46,13 +46,51 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/ctrlruntime"
 	ctrlrclient "github.com/tigera/operator/pkg/ctrlruntime/client"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
+
+// stubExtension contributes one signable asset, standing in for whatever a variant adds.
+type stubExtension struct {
+	extensions.CSRExtension
+	needsRole bool
+}
+
+func (s stubExtension) AllowedAssets(string) map[string]extensions.TLSAsset {
+	return map[string]extensions.TLSAsset{
+		stubSecretName: {
+			ServiceAccountName:      stubServiceAccount,
+			ServiceAccountNamespace: stubNamespace,
+			ValidDNSNames:           stubDNSNames,
+		},
+	}
+}
+
+func (s stubExtension) NeedsCSRRole(context.Context, client.Client) (bool, error) {
+	return s.needsRole, nil
+}
+
+func (s stubExtension) Watches(ctrlruntime.Controller) error {
+	return nil
+}
+
+func stubExtensions(needsRole bool) extensions.Extensions {
+	return extensions.New(extensions.Set{CSR: stubExtension{needsRole: needsRole}})
+}
+
+const (
+	stubSecretName     = "stub-server-tls"
+	stubServiceAccount = "stub-server"
+	stubNamespace      = "stub-ns"
+	stubPodName        = "stub-server-0"
+)
+
+var stubDNSNames = []string{"stub-server", "stub-server.stub-ns", "stub-server.stub-ns.svc", "stub-server.stub-ns.svc.cluster.local"}
 
 var _ = Describe("CSR controller tests", func() {
 	var (
@@ -88,10 +126,6 @@ var _ = Describe("CSR controller tests", func() {
 			},
 		}
 		Expect(cli.Create(ctx, installation)).NotTo(HaveOccurred())
-		Expect(cli.Create(ctx, &operatorv1.Monitor{
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-			Spec:       operatorv1.MonitorSpec{ExternalPrometheus: &operatorv1.ExternalPrometheus{Namespace: "default"}},
-		})).NotTo(HaveOccurred())
 		certificateManager, err = certificatemanager.Create(cli, &installation.Spec, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
 		Expect(cli.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -104,8 +138,8 @@ var _ = Describe("CSR controller tests", func() {
 			scheme:           scheme,
 			provider:         operatorv1.ProviderNone,
 			clusterDomain:    dns.DefaultClusterDomain,
-			allowedTLSAssets: allowedAssets(dns.DefaultClusterDomain),
-			variant:          operatorv1.CalicoEnterprise,
+			allowedTLSAssets: allowedAssets(dns.DefaultClusterDomain, stubExtensions(true)),
+			extensions:       stubExtensions(true),
 		}
 	})
 
@@ -172,15 +206,15 @@ var _ = Describe("CSR controller tests", func() {
 	})
 
 	DescribeTable("csr validation for pods", func(csr *certificatesv1.CertificateSigningRequest, pod *corev1.Pod, expectError, expectRelevant bool) {
-		certificate, err := validate(clientset, csr, pod, allowedAssets(dns.DefaultClusterDomain))
+		certificate, err := validate(clientset, csr, pod, allowedAssets(dns.DefaultClusterDomain, stubExtensions(true)))
 		if expectError {
 			Expect(err).To(HaveOccurred())
 		} else if expectRelevant {
 			Expect(relevantCSR(csr)).To(BeTrue())
 			Expect(err).ToNot(HaveOccurred())
 			Expect(certificate.ExtKeyUsage).To(Equal(extKeyUsage))
-			Expect(certificate.DNSNames).To(Equal(monitor.PrometheusTLSServerDNSNames(dns.DefaultClusterDomain)))
-			Expect(certificate.Subject.CommonName).To(Equal(monitor.PrometheusTLSServerDNSNames(dns.DefaultClusterDomain)[0]))
+			Expect(certificate.DNSNames).To(Equal(stubDNSNames))
+			Expect(certificate.Subject.CommonName).To(Equal(stubDNSNames[0]))
 			Expect(certificate.IPAddresses).To(Equal([]net.IP{net.ParseIP(pod.Status.PodIP).To4()}))
 			Expect(certificate.IsCA).To(BeFalse())
 		} else {
@@ -208,7 +242,7 @@ var _ = Describe("CSR controller tests", func() {
 				},
 			}, nil
 		})
-		certificate, err := validate(clientset, csr, hep, allowedAssets(dns.DefaultClusterDomain))
+		certificate, err := validate(clientset, csr, hep, allowedAssets(dns.DefaultClusterDomain, stubExtensions(true)))
 		if expectError {
 			Expect(err).To(HaveOccurred())
 		} else if expectRelevant {
@@ -296,7 +330,7 @@ var _ = Describe("CSR controller tests", func() {
 
 func validPodX509CR() *x509.CertificateRequest {
 	subj := pkix.Name{
-		CommonName: "prometheus-http-api",
+		CommonName: "stub-server",
 	}
 	extKeyUsages := []asn1.ObjectIdentifier{
 		// ExtKeyUsageServerAuth
@@ -309,7 +343,7 @@ func validPodX509CR() *x509.CertificateRequest {
 	Expect(err).NotTo(HaveOccurred())
 	return &x509.CertificateRequest{
 		Subject:            subj,
-		DNSNames:           []string{"prometheus-http-api", "prometheus-http-api.tigera-prometheus", "prometheus-http-api.tigera-prometheus.svc", "prometheus-http-api.tigera-prometheus.svc.cluster.local"},
+		DNSNames:           stubDNSNames,
 		IPAddresses:        []net.IP{net.ParseIP("1.2.3.4")},
 		SignatureAlgorithm: x509.SHA256WithRSA,
 		ExtraExtensions: []pkix.Extension{
@@ -357,10 +391,10 @@ func validPodCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.C
 	Expect(err).NotTo(HaveOccurred())
 	return &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: "calico-node-prometheus-tls:prometheus-calico-node-prometheus-0",
+			Name: stubSecretName + ":" + stubPodName,
 			Labels: map[string]string{
-				"k8s-app":                "tigera-prometheus",
-				"operator.tigera.io/csr": "tigera-prometheus",
+				"k8s-app":                stubServiceAccount,
+				"operator.tigera.io/csr": stubServiceAccount,
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
@@ -368,7 +402,7 @@ func validPodCSR(cr *x509.CertificateRequest, pod *corev1.Pod) *certificatesv1.C
 				Type: "CERTIFICATE REQUEST", Bytes: certificateRequest,
 			}),
 			SignerName: "tigera.io/operator-signer",
-			Username:   "system:serviceaccount:tigera-prometheus:prometheus",
+			Username:   "system:serviceaccount:" + stubNamespace + ":" + stubServiceAccount,
 			Extra: map[string]certificatesv1.ExtraValue{
 				"authentication.kubernetes.io/pod-name": []string{pod.Name},
 				"authentication.kubernetes.io/pod-uid":  []string{string(pod.UID)},
@@ -412,15 +446,15 @@ func validPod() *corev1.Pod {
 	return &corev1.Pod{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "prometheus-calico-node-prometheus-0",
-			Namespace: "tigera-prometheus",
+			Name:      stubPodName,
+			Namespace: stubNamespace,
 			Labels: map[string]string{
-				"k8s-app": "tigera-prometheus",
+				"k8s-app": stubServiceAccount,
 			},
 			UID: "uid",
 		},
 		Spec: corev1.PodSpec{
-			ServiceAccountName: "prometheus",
+			ServiceAccountName: stubServiceAccount,
 		},
 		Status: corev1.PodStatus{
 			PodIP: "1.2.3.4",
@@ -490,7 +524,7 @@ func invalidPodCSR(cr *x509.CertificateRequest, pod *corev1.Pod, invalidations .
 		case invalidExtraPodNames:
 			csr.Spec.Extra["authentication.kubernetes.io/pod-name"] = []string{"a"}
 		case invalidExtraPodNamesLen:
-			csr.Spec.Extra["authentication.kubernetes.io/pod-name"] = []string{"prometheus-calico-node-prometheus-0", "b"}
+			csr.Spec.Extra["authentication.kubernetes.io/pod-name"] = []string{stubPodName, "b"}
 		case invalidExtraPodUIDs:
 			csr.Spec.Extra["authentication.kubernetes.io/pod-uid"] = []string{"a"}
 		case invalidExtraPodUIDsLen:

@@ -54,7 +54,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -119,8 +118,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	for _, secretName := range []string{
 		"calico-apiserver-certs",
 		certificatemanagement.CASecretName,
-		render.DexTLSSecretName,
-		monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)

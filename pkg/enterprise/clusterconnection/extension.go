@@ -86,6 +86,11 @@ func (e *Extension) Watches(c ctrlruntime.Controller, cs kubernetes.Interface) e
 	return imageset.AddImageSetWatch(c)
 }
 
+// TrustedBundleSecrets are the Enterprise components Guardian proxies to.
+func (e *Extension) TrustedBundleSecrets() []string {
+	return []string{render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName}
+}
+
 // ValidateAndDefault accepts the Enterprise-only fields and defaults impersonation
 // to empty lists so Guardian renders a stable config.
 func (e *Extension) ValidateAndDefault(cr *operatorv1.ManagementClusterConnection) error {

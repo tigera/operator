@@ -23,6 +23,7 @@ type Set struct {
 	ClusterConnection ClusterConnectionExtension
 	CSR               CSRExtension
 	Istio             IstioExtension
+	Tiers             TiersExtension
 	Startup           StartupExtension
 }
 
@@ -78,6 +79,13 @@ func (e Extensions) Istio() IstioExtension {
 		return noopIstio{}
 	}
 	return e.set.Istio
+}
+
+func (e Extensions) Tiers() TiersExtension {
+	if e.set.Tiers == nil {
+		return noopTiers{}
+	}
+	return e.set.Tiers
 }
 
 func (e Extensions) Startup() StartupExtension {

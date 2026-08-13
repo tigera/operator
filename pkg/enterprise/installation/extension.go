@@ -21,8 +21,8 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/controller/utils"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
@@ -63,7 +63,7 @@ func (e *Extension) Images() *imageoverride.Overrides {
 
 // NonClusterHostEnabled reports whether a NonClusterHost resource exists.
 func (e *Extension) NonClusterHostEnabled(ctx context.Context, c client.Client) (bool, error) {
-	nch, err := utils.GetNonClusterHost(ctx, c)
+	nch, err := eutils.GetNonClusterHost(ctx, c)
 	if err != nil {
 		return false, err
 	}

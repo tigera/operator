@@ -19,8 +19,8 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/enterprise/policysync"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 )
 
@@ -37,7 +37,7 @@ func New() *Extension {
 // PolicySyncRequired reports whether the ApplicationLayer flow needs the policy-sync
 // socket, so deleting the Istio CR does not strand it.
 func (e *Extension) PolicySyncRequired(ctx context.Context, c client.Client) (bool, error) {
-	al, err := utils.GetApplicationLayer(ctx, c)
+	al, err := eutils.GetApplicationLayer(ctx, c)
 	if err != nil {
 		return false, err
 	}

@@ -77,7 +77,7 @@ var enterpriseRenderFiles = []string{
 	"pkg/render/tenant",
 }
 
-// knownExceptions are the core files that still import an Enterprise renderer. The
+// knownExceptions are the core files that still import Enterprise-only code. The
 // list must only ever shrink.
 var knownExceptions = []string{
 	"cmd/main.go",
@@ -111,11 +111,6 @@ var knownKindExceptions = []string{
 	"pkg/controller/apiserver/apiserver_controller.go",
 	"pkg/controller/secrets/tenant_controller.go",
 	"pkg/controller/tiers/tiers_controller.go",
-	"pkg/controller/utils/auth.go",
-	"pkg/controller/utils/cloudconfig.go",
-	"pkg/controller/utils/namespace_helper.go",
-	"pkg/controller/utils/tenant_event_handler.go",
-	"pkg/controller/utils/utils.go",
 	"pkg/render/common/cloudconfig/cloudconfig.go",
 	"pkg/render/kubecontrollers/kube-controllers.go",
 }
@@ -208,6 +203,9 @@ func isEnterpriseImport(path string) bool {
 		return false
 	}
 	pkg := strings.TrimPrefix(path, modulePath)
+	if pkg == "pkg/enterprise" || strings.HasPrefix(pkg, "pkg/enterprise/") {
+		return true
+	}
 	for _, prefix := range enterpriseRender {
 		if pkg == prefix || strings.HasPrefix(pkg, prefix+"/") {
 			return true

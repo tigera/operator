@@ -222,6 +222,13 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		}
 	}
 
+	// The receiver keypair exists only for the OTLP receiver. Turning logs off
+	// while keeping metrics stops it being rendered, which on its own would leave
+	// the previous copy -- a server key nothing serves with -- in the namespace.
+	if !c.hasLogs() {
+		toDelete = append(toDelete, emptySecret(OpenTelemetryCollectorServerTLSSecretName))
+	}
+
 	// The workload goes last: it mounts the ConfigMap and Secrets above, so
 	// applying it first can leave the pod waiting on volumes that do not exist yet.
 	objs = append(objs, c.service(), statefulSet, c.networkPolicy())

@@ -512,11 +512,6 @@ func (e OpenTelemetryExporter) Plaintext() bool {
 	return strings.HasPrefix(strings.ToLower(e.Endpoint), "http://")
 }
 
-// MutualTLS reports whether this exporter presents a client certificate.
-func (e OpenTelemetryExporter) MutualTLS() bool {
-	return e.TLS != nil && e.TLS.ClientCertSecretName != ""
-}
-
 // CAConfigMap returns the user-supplied CA ConfigMap for this exporter, if any.
 func (e OpenTelemetryExporter) CAConfigMap() string {
 	if e.TLS == nil {

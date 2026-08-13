@@ -32,8 +32,8 @@ API design principles and the Go/kubebuilder coding conventions for `api/v1` CRD
 
 ## Product Variants
 
-- **Core code is variant-blind.** Code outside `pkg/enterprise` must not branch on the product variant, and must not name an Enterprise-only resource, secret, or CRD — not even in a comment. Variant behavior is layered on through `pkg/extensions`, whose zero value runs the core behavior unchanged.
-- **Enterprise-only render packages stay out of core.** `pkg/enterprise/boundary_test.go` enforces this, with an exception list that must only ever shrink.
+- **Core code is variant-blind.** Code outside `pkg/enterprise` must not branch on the product variant, and must not name an Enterprise-only resource, secret, or CRD, not even in a comment. Variant behavior is layered on through `pkg/extensions`, whose zero value runs the core behavior unchanged.
+- **Enterprise-only renderers and API kinds stay out of core.** `pkg/enterprise/boundary_test.go` fails the build when core code imports an Enterprise render package or names an Enterprise-only operator API kind. Both exception lists must only ever shrink.
 - **An Enterprise-only controller gates in one place.** Return early from `Add()` when the variant is not Enterprise, rather than gating each resource it renders.
 
 ## Security

@@ -15,6 +15,7 @@
 package enterprise_test
 
 import (
+	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
@@ -26,7 +27,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const modulePath = "github.com/tigera/operator/"
+const (
+	modulePath = "github.com/tigera/operator/"
+	apiPath    = "github.com/tigera/operator/api/v1"
+)
 
 // enterpriseRender are the render packages that only Calico Enterprise installs. Core
 // code must not reach into them.
@@ -72,7 +76,7 @@ var enterpriseRenderFiles = []string{
 	"pkg/render/policyrecommendation",
 }
 
-// knownExceptions are the core files that still name an Enterprise resource. The
+// knownExceptions are the core files that still import an Enterprise renderer. The
 // list must only ever shrink.
 var knownExceptions = []string{
 	"cmd/main.go",
@@ -80,53 +84,115 @@ var knownExceptions = []string{
 	"pkg/controller/tiers/tiers_controller.go",
 }
 
-var _ = Describe("Enterprise render package boundary", func() {
-	It("is not crossed by core code", func() {
-		var offenders []string
+// enterpriseKinds are the operator API kinds that only Calico Enterprise installs.
+// The OSS operator does not ship their CRDs.
+var enterpriseKinds = []string{
+	"ApplicationLayer",
+	"Authentication",
+	"EgressGateway",
+	"IntrusionDetection",
+	"LogCollector",
+	"LogStorage",
+	"ManagementCluster",
+	"Manager",
+	"Monitor",
+	"NonClusterHost",
+	"PacketCaptureAPI",
+	"PolicyRecommendation",
+	"TLSPassThroughRoute",
+	"TLSTerminatedRoute",
+	"Tenant",
+}
 
-		root := filepath.Join("..", "..")
-		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				return err
-			}
-			rel, relErr := filepath.Rel(root, path)
-			if relErr != nil {
-				return relErr
-			}
-			rel = filepath.ToSlash(rel)
+// knownKindExceptions are the core files that still name an Enterprise-only kind. The
+// list must only ever shrink.
+var knownKindExceptions = []string{
+	"pkg/controller/apiserver/apiserver_controller.go",
+	"pkg/controller/certificatemanager/certificatemanager.go",
+	"pkg/controller/installation/core_controller.go",
+	"pkg/controller/secrets/tenant_controller.go",
+	"pkg/controller/tiers/tiers_controller.go",
+	"pkg/controller/utils/auth.go",
+	"pkg/controller/utils/cloudconfig.go",
+	"pkg/controller/utils/namespace_helper.go",
+	"pkg/controller/utils/policy_sync.go",
+	"pkg/controller/utils/tenant_event_handler.go",
+	"pkg/controller/utils/utils.go",
+	"pkg/render/common/cloudconfig/cloudconfig.go",
+	"pkg/render/kubecontrollers/kube-controllers.go",
+	"pkg/render/tunnel_secret_rbac.go",
+	"pkg/render/typha.go",
+	"pkg/render/utils.go",
+	"pkg/render/webhooks/render.go",
+}
 
-			if d.IsDir() {
-				if d.Name() == ".git" || d.Name() == "vendor" || isEnterprise(rel) {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			if !strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, "_test.go") {
-				return nil
-			}
-			if isEnterprise(rel) || contains(knownExceptions, rel) {
-				return nil
-			}
+var _ = Describe("Enterprise boundary", func() {
+	var renderImports, kindRefs []string
 
-			f, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, parser.ImportsOnly)
-			if parseErr != nil {
-				return parseErr
+	BeforeEach(func() {
+		var err error
+		renderImports, kindRefs, err = scanCore()
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("is not crossed by an Enterprise render import", func() {
+		Expect(renderImports).To(BeEmpty(), "core code must reach Enterprise renderers through pkg/extensions")
+	})
+
+	It("is not crossed by an Enterprise API kind reference", func() {
+		Expect(kindRefs).To(BeEmpty(), "core code must not name an Enterprise-only operator API kind")
+	})
+})
+
+// scanCore walks every non-Enterprise Go file and reports the two ways core code can
+// reach Enterprise-only code.
+func scanCore() (renderImports, kindRefs []string, err error) {
+	root := filepath.Join("..", "..")
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+
+		if d.IsDir() {
+			if d.Name() == ".git" || d.Name() == "vendor" || rel == "api" || isEnterprise(rel) {
+				return filepath.SkipDir
 			}
+			return nil
+		}
+		if !strings.HasSuffix(rel, ".go") || strings.HasSuffix(rel, "_test.go") || isEnterprise(rel) {
+			return nil
+		}
+
+		f, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
+		if parseErr != nil {
+			return parseErr
+		}
+
+		if !contains(knownExceptions, rel) {
 			for _, imp := range f.Imports {
 				p, quoteErr := strconv.Unquote(imp.Path.Value)
 				if quoteErr != nil {
 					return quoteErr
 				}
 				if isEnterpriseImport(p) {
-					offenders = append(offenders, rel+" imports "+p)
+					renderImports = append(renderImports, rel+" imports "+p)
 				}
 			}
-			return nil
-		})
-		Expect(err).NotTo(HaveOccurred())
-		Expect(offenders).To(BeEmpty(), "core code must reach Enterprise renderers through pkg/extensions")
+		}
+		if !contains(knownKindExceptions, rel) {
+			for _, kind := range enterpriseKindsIn(f) {
+				kindRefs = append(kindRefs, rel+" names "+kind)
+			}
+		}
+		return nil
 	})
-})
+	return renderImports, kindRefs, err
+}
 
 // isEnterprise reports whether a repo-relative path is Enterprise-only code.
 func isEnterprise(rel string) bool {
@@ -154,6 +220,58 @@ func isEnterpriseImport(path string) bool {
 		}
 	}
 	return false
+}
+
+// enterpriseKindsIn reports the Enterprise-only API kinds a file selects off its
+// operator API import, whatever alias it gave that import.
+func enterpriseKindsIn(f *ast.File) []string {
+	aliases := map[string]bool{}
+	for _, imp := range f.Imports {
+		p, err := strconv.Unquote(imp.Path.Value)
+		if err != nil || p != apiPath {
+			continue
+		}
+		if imp.Name != nil {
+			aliases[imp.Name.Name] = true
+		} else {
+			aliases["v1"] = true
+		}
+	}
+	if len(aliases) == 0 {
+		return nil
+	}
+
+	var found []string
+	seen := map[string]bool{}
+	ast.Inspect(f, func(n ast.Node) bool {
+		sel, ok := n.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		pkg, ok := sel.X.(*ast.Ident)
+		if !ok || !aliases[pkg.Name] {
+			return true
+		}
+		kind := enterpriseKindOf(sel.Sel.Name)
+		if kind != "" && !seen[kind] {
+			seen[kind] = true
+			found = append(found, kind)
+		}
+		return true
+	})
+	return found
+}
+
+// enterpriseKindOf matches a kind and the types generated alongside it.
+func enterpriseKindOf(name string) string {
+	for _, kind := range enterpriseKinds {
+		for _, suffix := range []string{"", "List", "Spec", "Status"} {
+			if name == kind+suffix {
+				return kind
+			}
+		}
+	}
+	return ""
 }
 
 func contains(list []string, s string) bool {

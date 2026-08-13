@@ -28,4 +28,9 @@ type Options struct {
 	// installation hook watches the CRDs the variant adds.
 	ManageCRDs bool
 	UseV3CRDs  bool
+
+	// ExternalElastic and ESMigration mirror the operator's Elasticsearch mode. The
+	// startup hook rejects a mode the cluster's certificates contradict.
+	ExternalElastic bool
+	ESMigration     bool
 }

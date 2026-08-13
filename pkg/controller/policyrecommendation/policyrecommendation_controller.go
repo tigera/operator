@@ -42,6 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
@@ -78,7 +79,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("policy-recommendation-controller failed to watch Tenant resource: %w", err)
 		}
@@ -219,7 +220,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		logc.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -321,7 +322,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
 		return reconcile.Result{}, err
@@ -349,7 +350,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, logc)
 			return reconcile.Result{}, err
 		}
-		tenant = cloudConfig.ToTenant()
+		tenant = eutils.TenantFromCloudConfig(cloudConfig)
 	}
 
 	// Create a component handler to manage the rendered component.
@@ -359,7 +360,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
 	// For single-tenant or zero-tenant, the cluster role will be bind to the tigera-policy-recommendation service account
 	// in the calico-system namespace
-	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -373,7 +374,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	if !isManagedCluster {
 		opts := []certificatemanager.Option{
 			certificatemanager.WithLogger(logc),
-			certificatemanager.WithTenant(tenant),
+			certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 		}
 		certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 		if err != nil {

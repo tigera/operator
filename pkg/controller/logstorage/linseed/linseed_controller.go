@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -46,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -102,7 +104,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenatn clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -212,7 +214,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// When running in multi-tenant mode, we need to install Linseed in tenant Namespaces. However, the LogStorage
 	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
 	// which tenant namespaces require a Linseed instance. We use the tenant API to determine the set of namespaces that should have a Linseed.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -294,7 +296,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -312,7 +314,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	var esClientSecret *corev1.Secret
 	if !r.elasticExternal {
 		// Wait for Elasticsearch to be installed and available.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -336,7 +338,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return reconcile.Result{}, err
 			}
-			tenant = cloudConfig.ToTenant()
+			tenant = eutils.TenantFromCloudConfig(cloudConfig)
 		}
 
 		// Determine the host and port from the URL.
@@ -377,7 +379,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
@@ -440,7 +442,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	hasDPIResource := len(dpiList.Items) != 0
 
 	// Determine the namespaces to which we must bind the linseed cluster role.
-	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

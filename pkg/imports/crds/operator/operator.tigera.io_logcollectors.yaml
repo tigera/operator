@@ -976,10 +976,8 @@ spec:
                   properties:
                     exporters:
                       description: |-
-                        Exporters configures the OTLP export endpoints. At least one is required:
-                        every rendered pipeline exports to all of them, and the collector refuses
-                        to start with an exporter-less pipeline. Names key the exporters in the
-                        generated config, so they are merged and deduplicated by name.
+                        Exporters configures the OTLP export endpoints. At least one is required,
+                        and everything exported is sent to all of them.
                       items:
                         description: OpenTelemetryExporter defines an OTLP export endpoint.
                         properties:
@@ -1054,10 +1052,9 @@ spec:
                             pattern: ^(http|https)://.+$
                             type: string
                           name:
-                            description: |-
-                              Name is a unique identifier for this exporter, restricted to a DNS label
-                              because it keys the exporter in the generated collector config and names the
-                              operator's copies of this exporter's TLS material.
+                            description:
+                              Name uniquely identifies this exporter. Must
+                              be a DNS label.
                             maxLength: 63
                             pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
                             type: string
@@ -1080,8 +1077,7 @@ spec:
                                 description: |-
                                   CAConfigMapName names a ConfigMap in the tigera-operator namespace holding
                                   the CA that signs this exporter's serving certificate, under a tls.crt key.
-                                  When set, this CA alone is trusted for this exporter; the system roots are
-                                  not, so a certificate from any public authority is rejected.
+                                  When set, this CA alone is trusted for this exporter; the system roots are not.
                                 type: string
                               clientCertSecretName:
                                 description: |-

@@ -286,10 +286,8 @@ type OpenTelemetrySpec struct {
 	// +optional
 	Metrics *OpenTelemetryMetrics `json:"metrics,omitempty"`
 
-	// Exporters configures the OTLP export endpoints. At least one is required:
-	// every rendered pipeline exports to all of them, and the collector refuses
-	// to start with an exporter-less pipeline. Names key the exporters in the
-	// generated config, so they are merged and deduplicated by name.
+	// Exporters configures the OTLP export endpoints. At least one is required,
+	// and everything exported is sent to all of them.
 	// +optional
 	// +kubebuilder:validation:MinItems=1
 	// +listType=map
@@ -430,9 +428,7 @@ const (
 
 // OpenTelemetryExporter defines an OTLP export endpoint.
 type OpenTelemetryExporter struct {
-	// Name is a unique identifier for this exporter, restricted to a DNS label
-	// because it keys the exporter in the generated collector config and names the
-	// operator's copies of this exporter's TLS material.
+	// Name uniquely identifies this exporter. Must be a DNS label.
 	// +required
 	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
 	// +kubebuilder:validation:MaxLength=63
@@ -463,8 +459,7 @@ type OpenTelemetryExporter struct {
 type OpenTelemetryExporterTLS struct {
 	// CAConfigMapName names a ConfigMap in the tigera-operator namespace holding
 	// the CA that signs this exporter's serving certificate, under a tls.crt key.
-	// When set, this CA alone is trusted for this exporter; the system roots are
-	// not, so a certificate from any public authority is rejected.
+	// When set, this CA alone is trusted for this exporter; the system roots are not.
 	// +optional
 	CAConfigMapName string `json:"caConfigMapName,omitempty"`
 

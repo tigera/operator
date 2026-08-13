@@ -60,6 +60,7 @@ var enterpriseControllers = []string{
 	"pkg/controller/nonclusterhost",
 	"pkg/controller/packetcapture",
 	"pkg/controller/policyrecommendation",
+	"pkg/controller/tenantsecrets",
 	"pkg/enterprise",
 }
 
@@ -81,7 +82,6 @@ var enterpriseRenderFiles = []string{
 // list must only ever shrink.
 var knownExceptions = []string{
 	"cmd/main.go",
-	"pkg/controller/secrets/tenant_controller.go",
 }
 
 // enterpriseKinds are the operator API kinds that only Calico Enterprise installs.
@@ -106,9 +106,7 @@ var enterpriseKinds = []string{
 
 // knownKindExceptions are the core files that still name an Enterprise-only kind. The
 // list must only ever shrink.
-var knownKindExceptions = []string{
-	"pkg/controller/secrets/tenant_controller.go",
-}
+var knownKindExceptions = []string{}
 
 var _ = Describe("Enterprise boundary", func() {
 	var renderImports, kindRefs []string

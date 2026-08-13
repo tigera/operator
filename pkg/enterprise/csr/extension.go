@@ -26,6 +26,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/monitor"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 )
@@ -64,7 +65,7 @@ func (e *Extension) NeedsCSRRole(ctx context.Context, c client.Client) (bool, er
 	}
 
 	// Non-cluster hosts generate CSRs to establish mTLS connections with the cluster.
-	nonclusterhost, err := utils.GetNonClusterHost(ctx, c)
+	nonclusterhost, err := eutils.GetNonClusterHost(ctx, c)
 	if err != nil {
 		return false, err
 	}

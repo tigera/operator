@@ -43,6 +43,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
@@ -100,7 +101,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -189,7 +190,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// When running in multi-tenant mode, we need to install Dashboards in tenant Namespaces.
 	// We use the tenant API to determine the set of namespaces that should have a K8S job that installs dashboards.
-	tenant, _, err := utils.GetTenant(ctx, d.multiTenant, d.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, d.multiTenant, d.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil

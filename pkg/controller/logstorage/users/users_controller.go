@@ -33,6 +33,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crypto"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -100,7 +101,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenatn clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -171,7 +172,7 @@ func (r *UserController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, tenantID, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, tenantID, err := eutils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil

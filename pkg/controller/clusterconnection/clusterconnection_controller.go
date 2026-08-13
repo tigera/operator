@@ -53,7 +53,6 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/goldmane"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -97,8 +96,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	go utils.WaitToAddClusterInformationWatch(c, opts.K8sClientset, log, clusterInfoWatchReady)
 
 	for _, secretName := range []string{
-		render.PacketCaptureServerCert,
-		monitor.PrometheusServerTLSSecretName,
 		goldmane.GoldmaneKeyPairSecret,
 		certificatemanagement.TrustedBundleName("guardian", false),
 		render.CalicoAPIServerTLSSecretName,
@@ -278,9 +275,10 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 
 	includeSystem := managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic
 
+	bundleSecrets := append([]string{render.CalicoAPIServerTLSSecretName, goldmane.GoldmaneKeyPairSecret},
+		r.ext.TrustedBundleSecrets()...)
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
-		common.OperatorNamespace(), includeSystem,
-		render.CalicoAPIServerTLSSecretName, render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
+		common.OperatorNamespace(), includeSystem, bundleSecrets...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}

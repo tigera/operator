@@ -373,7 +373,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	if !isManagedCluster {
 		opts := []certificatemanager.Option{
 			certificatemanager.WithLogger(logc),
-			certificatemanager.WithTenant(tenant),
+			certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 		}
 		certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 		if err != nil {

@@ -378,7 +378,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	// Collect the certificates we need to provision Linseed. These will have been provisioned already by the ES secrets controller.
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {

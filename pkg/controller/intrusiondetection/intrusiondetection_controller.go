@@ -361,7 +361,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	// When creating the certificate manager, pass in the logger and tenant (if one exists).
 	opts := []certificatemanager.Option{
 		certificatemanager.WithLogger(reqLogger),
-		certificatemanager.WithTenant(tenant),
+		certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 	}
 	certificateManager, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {

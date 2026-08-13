@@ -301,7 +301,7 @@ func (r *SecretSubController) Reconcile(ctx context.Context, request reconcile.R
 	cm = operatorSigner
 	if r.multiTenant {
 		// Override with a tenant-scoped certificate manager which uses the CA in the tenant's namespace.
-		opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger), certificatemanager.WithTenant(tenant)}
+		opts := []certificatemanager.Option{certificatemanager.WithLogger(reqLogger), certificatemanager.WithMultiTenant(tenant.MultiTenant())}
 		cm, err = certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.InstallNamespace(), opts...)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error building certificate manager", err, reqLogger)

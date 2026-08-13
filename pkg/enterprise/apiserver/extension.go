@@ -176,6 +176,17 @@ func (e *Extension) Watches(c ctrlruntime.Controller) error {
 			}
 		}
 	}
+	if e.opts.MultiTenant {
+		// On a multi-tenant management cluster the aggregated API server remains a single cluster-scoped
+		// component in calico-system, but each tenant's calico-apiserver identity must be granted Linseed
+		// access via a ClusterRoleBinding with one subject per tenant namespace. That binding is rendered by
+		// the (cluster-scoped) reconcile over the current set of tenant namespaces, so a Tenant change just
+		// needs to trigger a reconcile; the binding is then re-rendered with the up-to-date namespace set,
+		// which also drops a deleted tenant's subject.
+		if err := c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return err
+		}
+	}
 	return utils.AddSecretsWatch(c, render.VoltronLinseedPublicCert, common.OperatorNamespace())
 }
 

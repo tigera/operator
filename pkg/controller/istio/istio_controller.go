@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/render/istio"
@@ -119,6 +120,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *Reconci
 		scheme:   mgr.GetScheme(),
 		status:   status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
 		provider: opts.DetectedProvider,
+		ext:      opts.Extensions,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -131,6 +133,7 @@ type ReconcileIstio struct {
 	scheme   *runtime.Scheme
 	status   status.StatusManager
 	provider operatorv1.Provider
+	ext      extensions.Extensions
 }
 
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -377,7 +380,7 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *
 // dials Felix's nodeagent socket, which Felix only opens when this field
 // is set. The applicationlayer controller writes this same field for the
 // Dikastes/sidecar/WAF flow; both controllers consult each other's state
-// (via utils.{ApplicationLayerRequiresPolicySync,IstioRequiresPolicySync})
+// (via IstioRequiresPolicySync and ApplicationLayerRequiresPolicySync)
 // so that deleting one CR does not strand the other.
 func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
 	var istioNeeds bool
@@ -397,11 +400,10 @@ func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, inst
 		istioNeeds = utils.IstioRequiresPolicySync(instance, variant)
 	}
 
-	al, err := utils.GetApplicationLayer(ctx, r.Client)
+	alNeeds, err := r.ext.Istio().PolicySyncRequired(ctx, r.Client)
 	if err != nil {
 		return false, err
 	}
-	alNeeds := utils.ApplicationLayerRequiresPolicySync(al)
 
 	desired := utils.DesiredPolicySyncPathPrefix(fc.Spec.PolicySyncPathPrefix, alNeeds, istioNeeds)
 	if fc.Spec.PolicySyncPathPrefix == desired {

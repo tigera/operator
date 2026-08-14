@@ -336,7 +336,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			// Create a CA secret for the test, and create its KeyPair.
 			opts := []certificatemanager.Option{
 				certificatemanager.AllowCACreation(),
-				certificatemanager.WithTenant(tenant),
+				certificatemanager.WithMultiTenant(tenant.MultiTenant()),
 			}
 			cm, err := certificatemanager.Create(cli, &install.Spec, dns.DefaultClusterDomain, tenantNS, opts...)
 			Expect(err).ShouldNot(HaveOccurred())

@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -619,7 +620,7 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 
 // patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err := sharedconfig.NewWriter(r.client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
 		policySyncPrefixSetDesired := DefaultPolicySyncPrefix == policySyncPrefix
 

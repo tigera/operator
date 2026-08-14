@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -521,7 +522,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 	}
 	istioNeeds := utils.IstioRequiresPolicySync(istioCR, r.variant)
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err = sharedconfig.NewWriter(r.client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		wafEventLogsFileEnabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
 
 		var tproxyMode string

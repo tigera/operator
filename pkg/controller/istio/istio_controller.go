@@ -36,6 +36,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/istio/waypoint"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -257,7 +258,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err = sharedconfig.NewWriter(r.Client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		return r.setIstioFelixConfiguration(ctx, instance, fc, false)
 	})
 	if err != nil {
@@ -415,7 +416,7 @@ func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, inst
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !instance.DeletionTimestamp.IsZero() {
-		if _, err = utils.PatchFelixConfiguration(ctx, r.Client, func(fc *v3.FelixConfiguration) (bool, error) {
+		if _, err = sharedconfig.NewWriter(r.Client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
 		}); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)

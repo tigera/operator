@@ -34,7 +34,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -717,7 +716,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, etenant.LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, false),
+			Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",
@@ -750,7 +749,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 
 		if c.cfg.Tenant.MultiTenant() {
 			envs = append(envs, corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: c.cfg.Tenant.Namespace})
-			envs = append(envs, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: etenant.ManagerService(c.cfg.Tenant)})
+			envs = append(envs, corev1.EnvVar{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: ManagerService(c.cfg.Tenant)})
 		}
 	}
 	sc := securitycontext.NewNonRootContext()

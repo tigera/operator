@@ -23,7 +23,6 @@ import (
 	"sigs.k8s.io/yaml"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -340,7 +339,7 @@ func splitEndpoint(endpoint string) (string, int) {
 // picked up without a restart. certPath/keyPath are the mTLS client keypair;
 // storageLimit, when non-empty, caps this output's filesystem buffer.
 func (c *fluentBitComponent) linseedHTTPOutput(tag, certPath, keyPath, storageLimit string) map[string]interface{} {
-	host, port := splitEndpoint(relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, etenant.LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true))
+	host, port := splitEndpoint(relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true))
 	out := map[string]interface{}{
 		"name":   "http",
 		"match":  tag,

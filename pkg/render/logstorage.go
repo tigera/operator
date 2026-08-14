@@ -39,7 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/dns"
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -52,7 +51,7 @@ import (
 type ElasticsearchLicenseType string
 
 const (
-	ElasticsearchObjectName = etenant.ElasticsearchNamespace
+	ElasticsearchObjectName = "tigera-elasticsearch"
 	ElasticsearchNamespace  = ElasticsearchObjectName
 
 	// TigeraLinseedSecret is the name of the secret that holds the TLS key pair mounted into Linseed.

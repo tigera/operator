@@ -33,7 +33,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
@@ -52,13 +51,13 @@ import (
 )
 
 const (
-	ManagerPort                 = etenant.ManagerPort
+	ManagerPort                 = 9443
 	managerTargetPort           = 9443
-	ManagerServiceName          = etenant.ManagerServiceName
+	ManagerServiceName          = "calico-manager"
 	LegacyManagerServiceName    = "tigera-manager"
 	ManagerDeploymentName       = "calico-manager"
 	LegacyManagerDeploymentName = "tigera-manager"
-	ManagerNamespace            = etenant.ManagerNamespace
+	ManagerNamespace            = common.CalicoNamespace
 	LegacyManagerNamespace      = "tigera-manager"
 	ManagerServiceAccount       = "calico-manager"
 	LegacyManagerServiceAccount = "tigera-manager"
@@ -710,7 +709,7 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 		{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", ElasticsearchNamespace, c.cfg.ClusterDomain)},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
-		{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: etenant.ManagerService(c.cfg.Tenant)},
+		{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: ManagerService(c.cfg.Tenant)},
 		{Name: "HEALTH_PORT", Value: DashboardAPIHealthPort},
 	}
 
@@ -770,7 +769,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_CERT", Value: certPath},
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
-		{Name: "VOLTRON_URL", Value: etenant.ManagerService(c.cfg.Tenant)},
+		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

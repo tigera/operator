@@ -34,7 +34,6 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -411,7 +410,7 @@ func (l *linseed) linseedDeployment() *appsv1.Deployment {
 
 		if l.cfg.Tenant.MultiTenant() {
 			// For clusters shared between multiple tenants, we need to configure Linseed with the correct namespace information for its tenant.
-			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: etenant.ManagerService(l.cfg.Tenant)})
+			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(l.cfg.Tenant)})
 			envVars = append(envVars, corev1.EnvVar{Name: "LINSEED_TENANT_NAMESPACE", Value: l.cfg.Tenant.Namespace})
 
 			if l.cfg.Tenant.Spec.ManagedClusterVariant != nil {

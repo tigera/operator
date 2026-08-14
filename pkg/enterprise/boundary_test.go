@@ -75,6 +75,7 @@ var enterpriseRenderFiles = []string{
 	"pkg/render/manager",
 	"pkg/render/packet_capture_api",
 	"pkg/render/policyrecommendation",
+	"pkg/render/tenant",
 }
 
 // knownExceptions are the core files that still import Enterprise-only code. The

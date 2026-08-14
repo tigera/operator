@@ -23,7 +23,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	"github.com/tigera/operator/pkg/render"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -115,7 +114,7 @@ func (c *fluentBitComponent) eksLogForwarderDeployment() *appsv1.Deployment {
 		// Linseed for the last ingested audit timestamp on startup).
 		// Determine the namespace in which Linseed is running. For managed and standalone clusters, this is always the elasticsearch
 		// namespace. For multi-tenant management clusters, this may vary.
-		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, etenant.LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true)},
+		{Name: "LINSEED_ENDPOINT", Value: relasticsearch.LinseedEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain, render.LinseedNamespace(c.cfg.Tenant), c.cfg.ManagedCluster, true)},
 		{Name: "LINSEED_CA_PATH", Value: c.trustedBundlePath()},
 		{Name: "TLS_CRT_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountCertificateFilePath()},
 		{Name: "TLS_KEY_PATH", Value: c.cfg.EKSLogForwarderKeyPair.VolumeMountKeyFilePath()},

@@ -40,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -158,7 +157,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "LINSEED_CLIENT_CERT", Value: "/internal-manager-tls/tls.crt"},
 			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
-			{Name: "VOLTRON_URL", Value: etenant.ManagerService(nil)},
+			{Name: "VOLTRON_URL", Value: render.ManagerService(nil)},
 		}
 		Expect(uiAPIs.Env).To(Equal(uiAPIsExpectedEnvVars))
 
@@ -189,7 +188,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "LINSEED_URL", Value: fmt.Sprintf("https://tigera-linseed.%s.svc.%s", render.ElasticsearchNamespace, clusterDomain)},
 			{Name: "LINSEED_CLIENT_KEY", Value: fmt.Sprintf("/%s/tls.key", render.ManagerInternalTLSSecretName)},
 			{Name: "LINSEED_CLIENT_CERT", Value: fmt.Sprintf("/%s/tls.crt", render.ManagerInternalTLSSecretName)},
-			{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: etenant.ManagerService(nil)},
+			{Name: "MULTI_CLUSTER_FORWARDING_ENDPOINT", Value: render.ManagerService(nil)},
 			{Name: "HEALTH_PORT", Value: render.DashboardAPIHealthPort},
 		}
 		Expect(dashboard.Env).To(Equal(dashboardExpectedEnv))
@@ -1421,7 +1420,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: fmt.Sprintf("https://tigera-linseed.%s.svc", tenantANamespace)}))
-			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: etenant.ManagerService(tenant)}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: render.ManagerService(tenant)}))
 			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_NAMESPACE", Value: tenantANamespace}))
 		})
@@ -1589,7 +1588,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_ID", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
-			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: etenant.ManagerService(nil)}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: render.ManagerService(nil)}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: "https://tigera-linseed.tigera-elasticsearch.svc.cluster.local"}))
 			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "TENANT_ID", Value: "tenant-a"}))
 
@@ -1624,7 +1623,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_REQUIRE_TENANT_CLAIM", Value: "true"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_TENANT_CLAIM", Value: "tenant-a"}))
 			Expect(envs).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_LINSEED_ENDPOINT", Value: elasticsearch.LinseedEndpoint(rmeta.OSTypeWindows, "cluster.local", render.ElasticsearchNamespace, false, false)}))
-			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: etenant.ManagerService(nil)}))
+			Expect(uiAPIsEnv).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_URL", Value: render.ManagerService(nil)}))
 
 			// Make sure we don't render multi-tenant environment variables
 			for _, env := range envs {

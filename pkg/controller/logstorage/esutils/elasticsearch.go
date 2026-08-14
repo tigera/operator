@@ -230,6 +230,12 @@ var (
 	ElasticsearchUserNameDashboardInstaller = "tigera-ee-dashboards-installer"
 )
 
+// policyActivityIndexPattern grants Linseed access to the policy activity index, where per-rule
+// evaluation timestamps are stored. The base name is hardcoded here because the operator cannot import
+// the linseed package. If it changes in linseed/pkg/backend/legacy/index.PolicyActivityIndex(), it must
+// be updated here as well.
+const policyActivityIndexPattern = "calico_policy_activity*"
+
 // LegacySingleTenantUserSuffix is the suffix es-kube-controllers appended to the single-tenant
 // Elasticsearch users. Kept for backwards compatibility: the credentials and role mappings it already
 // created only keep resolving if the operator provisions the same names.
@@ -281,14 +287,22 @@ func singleIndexNames(tenant *operatorv1.Tenant) []string {
 	return names
 }
 
-// multiIndexNames returns the index pattern covering multi-index storage, where every cluster writes to
+// multiIndexNames returns the index patterns covering multi-index storage, where every cluster writes to
 // its own indices. Only a shared Elasticsearch carries the tenant ID in its index names, so only there
 // is the pattern scoped to it.
 func multiIndexNames(tenant string, externalElastic bool) []string {
 	if !externalElastic {
 		tenant = ""
 	}
-	return []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenant)}
+	return []string{
+		indexPattern("tigera_secure_ee_*", "*", ".*", tenant),
+
+		// Policy activity is only ever stored in single-index format, so it is named outside the
+		// tigera_secure_ee_ pattern even on clusters that have not moved to single-index storage. The
+		// wildcard covers both Linseed's default calico_policy_activity name and the
+		// calico_policy_activity_standard name pinned for clusters sharing an external Elasticsearch.
+		policyActivityIndexPattern,
+	}
 }
 
 func linseedUser(username string, indices []string) *User {

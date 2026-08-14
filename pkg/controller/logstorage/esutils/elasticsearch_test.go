@@ -411,20 +411,46 @@ var _ = Describe("Elasticsearch users and roles", func() {
 		linseedUser := LinseedUserSingleTenant(tenant, true)
 		Expect(linseedUser.Username).To(Equal(expectedName))
 		Expect(linseedUser.Roles[0].Name).To(Equal(expectedName))
-		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID)}))
+		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{
+			indexPattern("tigera_secure_ee_*", "*", ".*", tenantID),
+			"calico_policy_activity*",
+		}))
 
 		// A cluster on its own Elasticsearch is not qualified by tenant - neither its index pattern, nor
 		// its user name, which es-kube-controllers built without a tenant ID.
 		linseedUser = LinseedUserSingleTenant(tenant, false)
 		Expect(linseedUser.Username).To(Equal("tigera-ee-linseed-secure"))
 		Expect(linseedUser.Roles[0].Name).To(Equal("tigera-ee-linseed-secure"))
-		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{indexPattern("tigera_secure_ee_*", "*", ".*", "")}))
+		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{
+			indexPattern("tigera_secure_ee_*", "*", ".*", ""),
+			"calico_policy_activity*",
+		}))
 
 		// Once it moves to single-index storage, it gets access to the declared indices instead.
 		tenant.Spec.Indices = []operatorv1.Index{{DataType: operatorv1.DataTypeFlowLogs, BaseIndexName: "calico_flowlogs_standard"}}
 		linseedUser = LinseedUserSingleTenant(tenant, true)
 		Expect(linseedUser.Username).To(Equal(expectedName))
 		Expect(linseedUser.Roles[0].Definition.Indices[0].Names).To(Equal([]string{"calico_flowlogs_standard*"}))
+	})
+
+	It("should grant a single-tenant Linseed user the policy activity index on multi-index storage", func() {
+		// Policy activity is stored in single-index format regardless of where the rest of the cluster's
+		// data lives, so it falls outside the tigera_secure_ee_ pattern and has to be granted separately.
+		// Without it Linseed is denied indices:admin/aliases/get when ingesting policy activity logs.
+		tenant := &operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: tenantID}}
+		Expect(LinseedUserSingleTenant(tenant, false).Roles[0].Definition.Indices[0].Names).To(ContainElement("calico_policy_activity*"))
+		Expect(LinseedUserSingleTenant(tenant, true).Roles[0].Definition.Indices[0].Names).To(ContainElement("calico_policy_activity*"))
+
+		// Once the cluster moves to single-index storage the index is declared on the Tenant like any
+		// other, so it is granted from there rather than by the multi-index pattern.
+		tenant.Spec.Indices = []operatorv1.Index{
+			{DataType: operatorv1.DataTypeFlowLogs, BaseIndexName: "calico_flowlogs_standard"},
+			{DataType: operatorv1.DataTypePolicyActivity, BaseIndexName: "calico_policy_activity_standard"},
+		}
+		Expect(LinseedUserSingleTenant(tenant, true).Roles[0].Definition.Indices[0].Names).To(Equal([]string{
+			"calico_flowlogs_standard*",
+			"calico_policy_activity_standard*",
+		}))
 	})
 
 	It("should never widen the single-index pattern to all indices when a base index name is empty", func() {

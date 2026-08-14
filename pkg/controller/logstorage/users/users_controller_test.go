@@ -38,9 +38,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
+	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/logstorage/dashboards"
 )
 
@@ -264,7 +264,7 @@ var _ = Describe("LogStorage users controller", func() {
 		// The user keeps its name, but is only granted access to this tenant's multi-index format indices.
 		expected := esutils.LinseedUserSingleTenant(singleTenant(), true)
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
-		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.tenant-a.*.*"}))
+		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.tenant-a.*.*", "calico_policy_activity*"}))
 	})
 
 	Context("single-tenant cluster on its own Elasticsearch", func() {
@@ -311,7 +311,7 @@ var _ = Describe("LogStorage users controller", func() {
 
 			// Indices in the cluster's own Elasticsearch carry no tenant qualifier, so neither does the
 			// pattern the Linseed user is granted.
-			Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.*.*"}))
+			Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(Equal([]string{"tigera_secure_ee_*.*.*", "calico_policy_activity*"}))
 
 			Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal("tigera-ee-linseed-secure"))
 			Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "password")).NotTo(BeEmpty())

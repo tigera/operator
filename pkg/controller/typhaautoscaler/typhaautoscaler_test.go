@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package typhaautoscaler
 
 import (
 	"context"
@@ -42,7 +42,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 	var c client.Client
 	var ctx context.Context
 	var cancel context.CancelFunc
-	var ta *TyphaAutoscaler
+	var ta *Autoscaler
 
 	BeforeEach(func() {
 		ta = nil
@@ -72,7 +72,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 	It("should initialize an autoscaler", func() {
 		createNode(ctx, c, "node1", map[string]string{"kubernetes.io/os": "linux"})
 
-		ta = NewTyphaAutoscaler(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager)
+		ta = New(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager)
 		ta.Start(ctx)
 	})
 
@@ -102,7 +102,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createNode(ctx, c, "node2", map[string]string{"kubernetes.io/os": "linux"})
 
 		// Create the autoscaler and run it
-		ta = NewTyphaAutoscaler(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, TyphaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = New(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, OptionPeriod(10*time.Millisecond))
 		ta.Start(ctx)
 
 		// For clusters smaller than 3 nodes we only expect 1 replica.
@@ -136,7 +136,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createNode(ctx, c, "node5", map[string]string{"kubernetes.io/os": "linux", "projectcalico.org/operator-node-migration": "pre-operator"})
 
 		// Create the autoscaler and run it
-		ta = NewTyphaAutoscaler(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, TyphaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = New(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, OptionPeriod(10*time.Millisecond))
 		ta.Start(ctx)
 
 		verifyTyphaReplicas(c, 3)
@@ -153,7 +153,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createNode(ctx, c, "node5", map[string]string{"kubernetes.io/os": "linux", "kubernetes.azure.com/cluster": "foo", "type": "virtual-kubelet"})
 
 		// Create the autoscaler and run it
-		ta = NewTyphaAutoscaler(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, TyphaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = New(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, OptionPeriod(10*time.Millisecond))
 		ta.Start(ctx)
 
 		// normally we'd expect to see three replicas for five nodes, but since one node is a virtual-kubelet,
@@ -171,7 +171,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createHostEndpoint(ctx, c, "hep3", nil)
 		createHostEndpoint(ctx, c, "auto-hep", map[string]string{hepCreatedLabelKey: hepCreatedLabelValue})
 
-		ta = NewTyphaAutoscaler(c, name, HostEndpointReplicaCounter, statusManager, TyphaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = New(c, name, HostEndpointReplicaCounter, statusManager, OptionPeriod(10*time.Millisecond))
 		ta.Start(ctx)
 
 		verifyTyphaReplicasFor(c, name, 2)
@@ -190,7 +190,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		createNode(ctx, c, "node5", map[string]string{"kubernetes.io/os": "windows"})
 
 		// Create the autoscaler and run it
-		ta = NewTyphaAutoscaler(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, TyphaAutoscalerOptionPeriod(10*time.Millisecond))
+		ta = New(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager, OptionPeriod(10*time.Millisecond))
 		ta.Start(ctx)
 
 		// This blocks until the first run is done.
@@ -206,7 +206,7 @@ var _ = Describe("Test typha autoscaler ", func() {
 		cancelledCtx, cancelStart := context.WithCancel(context.Background())
 		cancelStart()
 
-		ta = NewTyphaAutoscaler(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager)
+		ta = New(c, common.TyphaDeploymentName, NodeReplicaCounter, statusManager)
 		ta.Start(cancelledCtx)
 
 		// The goroutine should observe the cancelled context and exit without autoscaling.

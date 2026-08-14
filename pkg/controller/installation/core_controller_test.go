@@ -56,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
+	"github.com/tigera/operator/pkg/controller/typhaautoscaler"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -164,12 +165,13 @@ var _ = Describe("Testing core-controller installation", func() {
 					Extensions:       testExtensions,
 					DetectedProvider: operator.ProviderNone,
 					Variant:          operator.CalicoEnterprise,
+					ShutdownContext:  ctx,
 				},
 				config:              nil, // there is no fake for config
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
+				typhaAutoscaler:     typhaautoscaler.New(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -237,13 +239,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					ObjectMeta: nonClusterHostObjectMeta,
 				})).NotTo(HaveOccurred())
 
-				nchName := common.TyphaDeploymentName + render.TyphaNonClusterHostSuffix
-				r.typhaAutoscalerNonClusterHost = NewTyphaAutoscaler(c, nchName, fixedReplicaCounter(1), mockStatus)
-				r.typhaAutoscalerNonClusterHost.Start(ctx)
 			})
 
 			AfterEach(func() {
-				r.typhaAutoscalerNonClusterHost = nil
 				Expect(c.Delete(ctx, &operator.NonClusterHost{ObjectMeta: nonClusterHostObjectMeta})).NotTo(HaveOccurred())
 			})
 
@@ -788,7 +786,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
+				typhaAutoscaler:     typhaautoscaler.New(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -963,12 +961,13 @@ var _ = Describe("Testing core-controller installation", func() {
 					Extensions:       testExtensions,
 					DetectedProvider: operator.ProviderNone,
 					Variant:          operator.CalicoEnterprise,
+					ShutdownContext:  ctx,
 				},
 				config:              nil, // there is no fake for config
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
+				typhaAutoscaler:     typhaautoscaler.New(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -2278,7 +2277,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
+				typhaAutoscaler:     typhaautoscaler.New(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -2386,12 +2385,13 @@ var _ = Describe("Testing core-controller installation", func() {
 					Extensions:       testExtensions,
 					DetectedProvider: operator.ProviderNone,
 					Variant:          operator.CalicoEnterprise,
+					ShutdownContext:  ctx,
 				},
 				config:              nil, // there is no fake for config
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
+				typhaAutoscaler:     typhaautoscaler.New(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -3064,7 +3064,7 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 	})
 })
 
-func fixedReplicaCounter(replicas int) ReplicaCounter {
+func fixedReplicaCounter(replicas int) typhaautoscaler.ReplicaCounter {
 	return func(context.Context, client.Client) (int, error) {
 		return replicas, nil
 	}

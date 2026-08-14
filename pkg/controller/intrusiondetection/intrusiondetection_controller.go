@@ -212,7 +212,7 @@ func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns s
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.IntrusionDetectionNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.IntrusionDetectionNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling IntrusionDetection")
 

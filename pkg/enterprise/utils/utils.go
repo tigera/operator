@@ -197,7 +197,7 @@ func TenantNamespaces(ctx context.Context, cli client.Client, include TenantFilt
 
 // HelperNamespaces is TenantNamespaces for a component, returning the install namespace
 // when the helper is single-tenant.
-func HelperNamespaces(ctx context.Context, cli client.Client, helper utils.NamespaceHelper, include TenantFilter) ([]string, error) {
+func HelperNamespaces(ctx context.Context, cli client.Client, helper NamespaceHelper, include TenantFilter) ([]string, error) {
 	if !helper.MultiTenant() {
 		return []string{helper.InstallNamespace()}, nil
 	}

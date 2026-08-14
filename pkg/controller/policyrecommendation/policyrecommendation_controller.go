@@ -210,7 +210,7 @@ func GetPolicyRecommendation(ctx context.Context, cli client.Client, mt bool, ns
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.PolicyRecommendationNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.PolicyRecommendationNamespace, request.Namespace)
 	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	logc.Info("Reconciling PolicyRecommendation")
 

@@ -126,7 +126,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the tigera-manager namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	helper := eutils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
@@ -179,7 +179,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(d.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(d.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Dashboards")
 

@@ -102,7 +102,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	}
 
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
+	helper := eutils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
 	if err := utils.AddSecretsWatch(c, render.VoltronLinseedTLS, helper.InstallNamespace()); err != nil {
 		return err
@@ -291,7 +291,7 @@ type ReconcileManager struct {
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Perform any common preparation that needs to be done for single-tenant and multi-tenant scenarios.
-	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.ManagerNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.ManagerNamespace, request.Namespace)
 	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace(), "multi-tenant", r.opts.MultiTenant)
 	logc.Info("Reconciling Manager")
 
@@ -1049,7 +1049,7 @@ func (r *ReconcileManager) resolveGateway(
 	instance *operatorv1.Manager,
 	authenticationCR *operatorv1.Authentication,
 	certManager certificatemanager.CertificateManager,
-	helper utils.NamespaceHelper,
+	helper eutils.NamespaceHelper,
 	logc logr.Logger,
 ) (render.Component, certificatemanagement.KeyPairInterface, reconcile.Result, error) {
 	gw := instance.Spec.IngressGateway

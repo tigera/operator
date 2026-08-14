@@ -162,7 +162,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func (r *UserController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Users")
 
@@ -354,7 +354,7 @@ func (r *UserController) createUserLogin(ctx context.Context, elasticEndpoint st
 }
 
 func (r *UsersCleanupController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(true, render.ElasticsearchNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(true, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := logf.Log.WithName("controller_logstorage_users_cleanup").WithValues("Request.Namespace",
 		request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Cleanup")

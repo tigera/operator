@@ -30,6 +30,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	etenant "github.com/tigera/operator/pkg/enterprise/tenant"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -311,11 +312,11 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 		},
 		{
 			Name:  "MULTI_CLUSTER_FORWARDING_ENDPOINT",
-			Value: ManagerService(pr.cfg.Tenant),
+			Value: etenant.ManagerService(pr.cfg.Tenant),
 		},
 		{
 			Name:  "LINSEED_URL",
-			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, LinseedNamespace(pr.cfg.Tenant), pr.cfg.ManagedCluster, false),
+			Value: relasticsearch.LinseedEndpoint(pr.SupportedOSType(), pr.cfg.ClusterDomain, etenant.LinseedNamespace(pr.cfg.Tenant), pr.cfg.ManagedCluster, false),
 		},
 		{
 			Name:  "LINSEED_CA",

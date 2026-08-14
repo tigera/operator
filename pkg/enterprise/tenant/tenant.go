@@ -12,17 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package render
+package tenant
 
 import (
 	"fmt"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 )
 
-// LinseedNamespace determine the namespace in which Linseed is running.
-// For management and standalone clusters, this is always the tigera-elasticsearch
-// namespace. For multi-tenant management clusters, this is the tenant namespace
+// These are re-exported by pkg/render, which cannot own them without importing
+// this package back.
+const (
+	ElasticsearchNamespace = "tigera-elasticsearch"
+	ManagerServiceName     = "calico-manager"
+	ManagerNamespace       = common.CalicoNamespace
+	ManagerPort            = 9443
+)
+
+// LinseedNamespace is the namespace Linseed runs in. Multi-tenant management
+// clusters use the tenant namespace, everything else tigera-elasticsearch.
 func LinseedNamespace(tenant *operatorv1.Tenant) string {
 	if tenant.MultiTenant() {
 		return tenant.Namespace
@@ -30,10 +39,8 @@ func LinseedNamespace(tenant *operatorv1.Tenant) string {
 	return ElasticsearchNamespace
 }
 
-// ManagerService determine the name of the calico manager service.
-// For management and standalone clusters, this is always the calico-manager.calico-system
-// namespace. For multi-tenant management clusters, this is a service that resides within the
-// tenant namespace
+// ManagerService is the URL of the Calico manager service. Multi-tenant
+// management clusters use the tenant namespace, everything else calico-system.
 func ManagerService(tenant *operatorv1.Tenant) string {
 	if tenant.MultiTenant() {
 		return fmt.Sprintf("https://%s.%s.svc:%d", ManagerServiceName, tenant.Namespace, ManagerPort)

@@ -150,6 +150,79 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(getFelixConfig().Spec.VXLANPort).To(BeNil())
 		})
+
+		Context("a cluster the operator wrote before it applied", func() {
+			declareBPF := func(policy sharedconfig.ConflictPolicy) sharedconfig.DeclareFelixConfiguration {
+				return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
+					return &sharedconfig.FelixConfigurationDeclaration{
+						Manager:  "installation-bpf",
+						Owned:    &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{BPFEnabled: ptr.To(false)}},
+						Policies: map[string]sharedconfig.ConflictPolicy{"spec.bpfEnabled": policy},
+					}, nil
+				}
+			}
+
+			// createByUpdate writes the way the operator's merge patch used to, recorded against a
+			// manager that never applied.
+			createByUpdate := func(annotations map[string]string, spec v3.FelixConfigurationSpec) {
+				Expect(c.Create(ctx, &v3.FelixConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: annotations},
+					Spec:       spec,
+				})).NotTo(HaveOccurred())
+			}
+
+			It("should take over a field it recorded as its own", func() {
+				createByUpdate(map[string]string{render.BPFOperatorAnnotation: "true"},
+					v3.FelixConfigurationSpec{BPFEnabled: ptr.To(true)})
+
+				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).NotTo(HaveOccurred())
+
+				fc := getFelixConfig()
+				Expect(fc.Spec.BPFEnabled).To(Equal(ptr.To(false)))
+				Expect(fc.ManagedFields).To(ContainElement(SatisfyAll(
+					HaveField("Manager", "tigera-operator/installation-bpf"),
+					HaveField("Operation", metav1.ManagedFieldsOperationApply),
+				)))
+			})
+
+			It("should refuse a field it has no record of writing", func() {
+				createByUpdate(nil, v3.FelixConfigurationSpec{BPFEnabled: ptr.To(true)})
+
+				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).To(BeAssignableToTypeOf(&sharedconfig.ConflictingFieldsError{}))
+				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(true)))
+			})
+
+			It("should stop trusting its old record once ownership has moved", func() {
+				createByUpdate(map[string]string{render.BPFOperatorAnnotation: "true"},
+					v3.FelixConfigurationSpec{BPFEnabled: ptr.To(true)})
+				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).NotTo(HaveOccurred())
+
+				// The stale annotation still reads "true", which is what a user now applies.
+				other := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "projectcalico.org/v3",
+					"kind":       "FelixConfiguration",
+					"metadata":   map[string]any{"name": "default"},
+					"spec":       map[string]any{"bpfEnabled": true},
+				}}
+				Expect(c.Patch(ctx, other, client.Apply, client.FieldOwner("kubectl"), client.ForceOwnership)).NotTo(HaveOccurred())
+
+				_, err = w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).To(BeAssignableToTypeOf(&sharedconfig.ConflictingFieldsError{}))
+				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(true)))
+			})
+
+			It("should defer on a field it never recorded, leaving the value alone", func() {
+				createByUpdate(nil, v3.FelixConfigurationSpec{HealthPort: ptr.To(9100)})
+
+				fc, err := w.ApplyFelixConfiguration(ctx, declare(sharedconfig.ConflictDefer, sharedconfig.ConflictDefer))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(fc.Spec.HealthPort).To(Equal(ptr.To(9100)))
+				Expect(fc.Spec.VXLANPort).To(Equal(ptr.To(4789)))
+			})
+		})
 	})
 
 	Context("crd.projectcalico.org/v1, where the operator tracks what it wrote", func() {

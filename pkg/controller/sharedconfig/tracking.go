@@ -71,6 +71,20 @@ func changedByOther(currentContent map[string]any, lastWritten map[string]any, p
 	return !reflect.DeepEqual(canonical, written), nil
 }
 
+// valuesAgree reports whether the value about to be written is already there.
+func valuesAgree(currentContent, payloadObj map[string]any, path string) (bool, error) {
+	keys := strings.Split(path, ".")
+	current, found, err := unstructured.NestedFieldNoCopy(currentContent, keys...)
+	if err != nil || !found {
+		return false, err
+	}
+	written, found, err := unstructured.NestedFieldNoCopy(payloadObj, keys...)
+	if err != nil || !found {
+		return false, err
+	}
+	return reflect.DeepEqual(current, written), nil
+}
+
 // recordWrittenValues stores the values being written so the next reconcile can compare against them.
 func recordWrittenValues(fc *v3.FelixConfiguration, payload *unstructured.Unstructured, d *FelixConfigurationDeclaration, deferred []string) error {
 	values, err := lastWrittenValues(fc)

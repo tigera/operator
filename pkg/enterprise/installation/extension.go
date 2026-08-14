@@ -15,11 +15,14 @@
 package installation
 
 import (
+	"context"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
+	"github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
@@ -56,6 +59,15 @@ func New(variant operatorv1.ProductVariant, opts eoptions.Options) *Extension {
 
 func (e *Extension) Images() *imageoverride.Overrides {
 	return e.images
+}
+
+// NonClusterHostEnabled reports whether a NonClusterHost resource exists.
+func (e *Extension) NonClusterHostEnabled(ctx context.Context, c client.Client) (bool, error) {
+	nch, err := utils.GetNonClusterHost(ctx, c)
+	if err != nil {
+		return false, err
+	}
+	return nch != nil, nil
 }
 
 // Modify dispatches over the components the installation controller renders.

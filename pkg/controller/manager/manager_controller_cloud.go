@@ -32,6 +32,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 )
@@ -68,7 +69,7 @@ func addCloudWatch(c ctrlruntime.Controller, eventHandler handler.EventHandler, 
 func (r *ReconcileManager) handleCloudReconcile(
 	ctx context.Context,
 	reqLogger logr.Logger,
-	helper utils.NamespaceHelper,
+	helper eutils.NamespaceHelper,
 	tenant *operatorv1.Tenant,
 	authenticationCR *operatorv1.Authentication,
 	certificateManager certificatemanager.CertificateManager,

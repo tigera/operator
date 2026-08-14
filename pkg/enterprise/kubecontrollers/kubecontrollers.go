@@ -52,8 +52,9 @@ const (
 type ElasticsearchConfiguration struct {
 	*rkc.KubeControllersConfiguration
 
-	Authentication    *operatorv1.Authentication
-	ManagementCluster *operatorv1.ManagementCluster
+	Authentication              *operatorv1.Authentication
+	ManagementCluster           *operatorv1.ManagementCluster
+	ManagementClusterConnection *operatorv1.ManagementClusterConnection
 }
 
 // NewElasticsearchKubeControllers fills the generic kube-controllers configuration

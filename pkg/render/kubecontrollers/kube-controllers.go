@@ -71,10 +71,6 @@ type KubeControllersConfiguration struct {
 
 	Installation *operatorv1.InstallationSpec
 
-	// ManagementClusterConnection is an input for the enterprise es-kube-controllers
-	// assembler. No base rendering reads it.
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-
 	// ManagedClusterWatchBinding binds kube-controllers to the managed-cluster watch
 	// ClusterRole. The assemblers set it; multi-cluster management is not a core feature.
 	ManagedClusterWatchBinding bool

@@ -56,10 +56,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		cli          client.Client
 	)
 
-	expectedPolicyForUnmanaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
-	expectedPolicyForUnmanagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
-	expectedPolicyForManaged := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed.json")
-	expectedPolicyForManagedOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_managed_ocp.json")
+	expectedPolicy := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers.json")
+	expectedPolicyOCP := testutils.GetExpectedPolicyFromFile("../testutils/expected_policies/kubecontrollers_ocp.json")
 
 	BeforeEach(func() {
 		// Initialize a default instance to use. Each test can override this to its
@@ -704,11 +702,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				} else {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
 				}
-				if scenario.ManagedCluster {
-					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
-				} else {
-					cfg.ManagementClusterConnection = nil
-				}
 				instance.Variant = operatorv1.CalicoEnterprise
 				defaultDenyPolicy := &v3.NetworkPolicy{
 					ObjectMeta: metav1.ObjectMeta{
@@ -723,21 +716,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 				Expect(resources).Should(ContainElement(defaultDenyPolicy))
 
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
-				expectedPolicy := testutils.SelectPolicyByClusterTypeAndProvider(
-					scenario,
-					map[string]*v3.NetworkPolicy{
-						"unmanaged":           expectedPolicyForUnmanaged,
-						"unmanaged-openshift": expectedPolicyForUnmanagedOCP,
-						"managed":             expectedPolicyForManaged,
-						"managed-openshift":   expectedPolicyForManagedOCP,
-					},
-				)
-				Expect(policy).To(Equal(expectedPolicy))
+				Expect(policy).To(Equal(testutils.SelectPolicyByProvider(scenario, expectedPolicy, expectedPolicyOCP)))
 			},
-			Entry("for management/standalone, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: false}),
-			Entry("for management/standalone, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: false, OpenShift: true}),
-			Entry("for managed, kube-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: false}),
-			Entry("for managed, openshift-dns", testutils.CalicoSystemScenario{ManagedCluster: true, OpenShift: true}),
+			Entry("kube-dns", testutils.CalicoSystemScenario{OpenShift: false}),
+			Entry("openshift-dns", testutils.CalicoSystemScenario{OpenShift: true}),
 		)
 
 		It("policy should omit prometheus ingress rule when metrics port is 0", func() {

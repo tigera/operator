@@ -29,6 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -100,7 +101,7 @@ func (e *Extension) ValidateAndDefault(cr *operatorv1.ManagementClusterConnectio
 }
 
 func (e *Extension) validate(ctx context.Context, ci controller.Inputs) error {
-	managementCluster, err := utils.GetManagementCluster(ctx, ci.Client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, ci.Client)
 	if err != nil {
 		return extensions.Degradedf(operatorv1.ResourceReadError, "error reading ManagementCluster: %w", err)
 	}
@@ -110,14 +111,19 @@ func (e *Extension) validate(ctx context.Context, ci controller.Inputs) error {
 	return nil
 }
 
-// ExtendInputs computes the Enterprise-specific Guardian inputs the controller
-// reads back: the managed cluster version (CNXVersion) and whether the license
-// permits the domain-based egress network policy. It creates no certificates, so it
-// returns no managed keypairs. The OSS controller path supplies its own defaults
-// when this hook is absent.
+// ExtendInputs adds the certificates Guardian must trust, the managed cluster version,
+// and the license-gated egress policy flag.
 func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (controller.Inputs, []certificatemanagement.KeyPairInterface, error) {
 	if err := e.validate(ctx, ci); err != nil {
 		return ci, nil, err
+	}
+
+	for _, secretName := range []string{render.PacketCaptureServerCert, monitor.PrometheusServerTLSSecretName} {
+		cert, err := ci.CertificateManager.GetCertificate(ci.Client, secretName, common.OperatorNamespace())
+		if err != nil {
+			return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "failed to retrieve secret %s: %w", secretName, err)
+		}
+		ci.RenderInputs.TrustedBundle.AddCertificates(cert)
 	}
 
 	clusterInformation, err := utils.FetchClusterInformation(ctx, ci.Client)

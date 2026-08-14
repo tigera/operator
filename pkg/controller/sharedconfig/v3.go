@@ -65,7 +65,7 @@ func (w *v3Writer) ApplyFelixConfiguration(ctx context.Context, declare DeclareF
 		return nil, err
 	}
 
-	force, err := w.resolveConflicts(err, declaration, payload)
+	force, err := w.resolveConflicts(err, current, declaration, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -73,10 +73,15 @@ func (w *v3Writer) ApplyFelixConfiguration(ctx context.Context, declare DeclareF
 }
 
 // resolveConflicts drops deferred fields from payload and reports whether the retry must force.
-func (w *v3Writer) resolveConflicts(applyErr error, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured) (bool, error) {
+func (w *v3Writer) resolveConflicts(applyErr error, current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured) (bool, error) {
 	paths := conflictPaths(applyErr)
 	if len(paths) == 0 {
 		return false, applyErr
+	}
+
+	reclaimable, err := reclaimablePaths(current)
+	if err != nil {
+		return false, err
 	}
 
 	force := false
@@ -85,6 +90,11 @@ func (w *v3Writer) resolveConflicts(applyErr error, d *FelixConfigurationDeclara
 		declared, policy, ok := d.policyFor(path)
 		if !ok {
 			undeclared = append(undeclared, path)
+			continue
+		}
+		if reclaimable[declared] || reclaimable[path] {
+			// The operator wrote this before it applied, so take the field rather than arbitrate.
+			force = true
 			continue
 		}
 		switch policy {

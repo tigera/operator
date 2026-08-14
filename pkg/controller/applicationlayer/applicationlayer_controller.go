@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -80,6 +81,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseA
 		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "applicationlayer", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
+		useV3CRDs:       opts.UseV3CRDs,
 		variant:         opts.Variant,
 		licenseAPIReady: licenseAPIReady,
 	}
@@ -166,6 +168,7 @@ type ReconcileApplicationLayer struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
+	useV3CRDs       bool
 	variant         operatorv1.ProductVariant
 	licenseAPIReady *utils.ReadyFlag
 }
@@ -521,7 +524,7 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 	}
 	istioNeeds := utils.IstioRequiresPolicySync(istioCR, r.variant)
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err = sharedconfig.NewWriter(r.client, r.useV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		wafEventLogsFileEnabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
 
 		var tproxyMode string

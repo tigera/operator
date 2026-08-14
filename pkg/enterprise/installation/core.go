@@ -16,7 +16,6 @@ package installation
 
 import (
 	"context"
-	"strings"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -96,11 +95,9 @@ func (e *Extension) ProductVersion() string {
 	return components.EnterpriseRelease
 }
 
-// DefaultFelixConfiguration sets the Enterprise-only FelixConfiguration defaults.
-// Some platforms run a DNS service that isn't named "kube-dns", so dnsTrustedServers
-// needs a provider-specific default for Enterprise DNS logging to work. Returns
-// whether it changed fc.
-func (e *Extension) DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error) {
+// DeclareFelixConfiguration defaults dnsTrustedServers per provider, since some platforms
+// name their DNS service something other than "kube-dns".
+func (e *Extension) DeclareFelixConfiguration(install *operatorv1.InstallationSpec, current, owned *v3.FelixConfiguration) ([]string, error) {
 	dnsService := ""
 	switch install.KubernetesProvider {
 	case operatorv1.ProviderOpenShift:
@@ -109,27 +106,22 @@ func (e *Extension) DefaultFelixConfiguration(install *operatorv1.InstallationSp
 		dnsService = "k8s-service:kube-system/rke2-coredns-rke2-coredns"
 	}
 	if dnsService == "" {
-		return false, nil
+		return nil, nil
 	}
 
 	felixDefault := "k8s-service:kube-dns"
 	trustedServers := []string{dnsService}
 	// Keep any other values that are already configured, excepting the value we are
 	// setting and the kube-dns default.
-	existingSetting := ""
-	if fc.Spec.DNSTrustedServers != nil {
-		existingSetting = strings.Join(*fc.Spec.DNSTrustedServers, ",")
-		for _, server := range *fc.Spec.DNSTrustedServers {
+	if current.Spec.DNSTrustedServers != nil {
+		for _, server := range *current.Spec.DNSTrustedServers {
 			if server != felixDefault && server != dnsService {
 				trustedServers = append(trustedServers, server)
 			}
 		}
 	}
-	if strings.Join(trustedServers, ",") == existingSetting {
-		return false, nil
-	}
-	fc.Spec.DNSTrustedServers = &trustedServers
-	return true, nil
+	owned.Spec.DNSTrustedServers = &trustedServers
+	return []string{"spec.dnsTrustedServers"}, nil
 }
 
 // Watches registers the enterprise resources the installation controller

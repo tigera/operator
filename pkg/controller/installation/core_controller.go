@@ -1049,7 +1049,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Set any non-default FelixConfiguration values that we need.
-	felixConfiguration, err := sharedconfig.NewWriter(r.client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
+	felixConfiguration, err := sharedconfig.NewWriter(r.client, r.opts.UseV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		// Configure defaults.
 		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
 		if err != nil {
@@ -1507,7 +1507,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	certificateManager.AddToStatusManager(r.status, common.CalicoNamespace)
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
-	_, err = sharedconfig.NewWriter(r.client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err = sharedconfig.NewWriter(r.client, r.opts.UseV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
 	})
 	if err != nil {

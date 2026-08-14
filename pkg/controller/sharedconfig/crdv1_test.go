@@ -48,7 +48,7 @@ var _ = Describe("crd.projectcalico.org/v1 writer", func() {
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
-		w = sharedconfig.NewWriter(c)
+		w = sharedconfig.NewWriter(c, false)
 	})
 
 	It("should create the default FelixConfiguration when it doesn't exist", func() {

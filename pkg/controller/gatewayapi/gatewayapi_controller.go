@@ -77,6 +77,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
+		useV3CRDs:           opts.UseV3CRDs,
 		variant:             opts.Variant,
 		multiTenant:         opts.MultiTenant,
 		newComponentHandler: utils.NewComponentHandler,
@@ -181,6 +182,7 @@ type ReconcileGatewayAPI struct {
 	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
 	clusterDomain       string
+	useV3CRDs           bool
 	variant             operatorv1.ProductVariant
 	multiTenant         bool
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
@@ -620,7 +622,7 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 
 // patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
-	_, err := sharedconfig.NewWriter(r.client).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
+	_, err := sharedconfig.NewWriter(r.client, r.useV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
 		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
 		policySyncPrefixSetDesired := DefaultPolicySyncPrefix == policySyncPrefix
 

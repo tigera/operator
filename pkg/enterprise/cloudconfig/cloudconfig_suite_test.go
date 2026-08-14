@@ -29,5 +29,5 @@ func TestStatus(t *testing.T) {
 	RegisterFailHandler(Fail)
 	suiteConfig, reporterConfig := GinkgoConfiguration()
 	reporterConfig.JUnitReport = "../../../report/cloudconfig_suite.xml"
-	RunSpecs(t, "pkg/render/common/cloudconfig/CloudConfig Suite", suiteConfig, reporterConfig)
+	RunSpecs(t, "pkg/enterprise/cloudconfig/CloudConfig Suite", suiteConfig, reporterConfig)
 }

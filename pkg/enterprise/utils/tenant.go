@@ -20,7 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	v1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render/common/cloudconfig"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 )
 
 // ToTenant converts the given CloudConfig structure to a Tenant object.

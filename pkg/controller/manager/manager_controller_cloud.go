@@ -32,9 +32,9 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/utils"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 )
 
 var (
@@ -118,7 +118,7 @@ func (r *ReconcileManager) handleCloudReconcile(
 		if r.opts.ElasticExternal {
 			// For single-tenant clusters sharing an external ES, extract the tenant information from
 			// the cloud config map.
-			cloudConfig, err := utils.GetCloudConfig(ctx, r.client)
+			cloudConfig, err := eutils.GetCloudConfig(ctx, r.client)
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return nil, render.ManagerCloudResources{}, nil, nil, err

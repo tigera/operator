@@ -45,10 +45,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/common/cloudconfig"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 	"github.com/tigera/operator/pkg/render/logstorage/esgateway"
@@ -152,7 +152,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
 	if opts.Cloud && opts.ElasticExternal {
-		// This ConfigMap is needed for utils.GetCloudConfig
+		// This ConfigMap is needed for eutils.GetCloudConfig
 		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
 		}

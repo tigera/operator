@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -54,4 +55,15 @@ func GetTenantFromCloudAuthConfig(ctx context.Context, cli client.Client) (*v1.T
 			ID: tenantID,
 		},
 	}, nil
+}
+
+// GetCloudConfig retrieves the config map containing the configuration values needed to set up communications with
+// external Elasticsearch and Kibana, such as the externalESDomain and externalKibanaDomain.
+func GetCloudConfig(ctx context.Context, cli client.Client) (*cloudconfig.CloudConfig, error) {
+	configMap := &corev1.ConfigMap{}
+	if err := cli.Get(ctx, client.ObjectKey{Name: cloudconfig.CloudConfigConfigMapName, Namespace: common.OperatorNamespace()}, configMap); err != nil {
+		return nil, err
+	}
+
+	return cloudconfig.NewCloudConfigFromConfigMap(configMap)
 }

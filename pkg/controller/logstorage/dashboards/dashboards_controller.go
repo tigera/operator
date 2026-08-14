@@ -287,7 +287,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			}
 		} else if d.cloud {
 			// Calico Cloud single-tenant: there is no Tenant CR, so read it from the cloud config map.
-			cloudConfig, err := utils.GetCloudConfig(ctx, d.client)
+			cloudConfig, err := eutils.GetCloudConfig(ctx, d.client)
 			if err != nil {
 				d.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
 				return reconcile.Result{}, err

@@ -50,6 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
@@ -90,7 +91,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = utils.GetManager(ctx, c, false, "")
+		instance, err = eutils.GetManager(ctx, c, false, "")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -104,7 +105,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instanceA)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = utils.GetManager(ctx, c, true, tenantANamespace)
+		instance, err = eutils.GetManager(ctx, c, true, tenantANamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		tenantBNamespace := "tenant-b"
@@ -114,13 +115,13 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err = c.Create(ctx, instanceB)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = utils.GetManager(ctx, c, true, tenantBNamespace)
+		instance, err = eutils.GetManager(ctx, c, true, tenantBNamespace)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
 	It("should return a nil instance and no error when querying a namespace that does not contain a manager instance", func() {
 		nsWithoutManager := "non-manager-ns"
-		instance, err := utils.GetManager(ctx, c, true, nsWithoutManager)
+		instance, err := eutils.GetManager(ctx, c, true, nsWithoutManager)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(instance).To(BeNil())
 	})
@@ -811,7 +812,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := utils.GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -835,7 +836,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := utils.GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -879,7 +880,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := utils.GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -940,7 +941,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := utils.GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -1198,7 +1199,7 @@ var _ = Describe("Manager controller tests", func() {
 				}
 				Expect(c.Create(ctx, managementCluster)).NotTo(HaveOccurred())
 
-				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantA))
+				certificateManagerTenantA, err := certificatemanager.Create(c, nil, "", tenantANamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantA.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantA.KeyPair().Secret(tenantANamespace)))
 				managerTLSTenantA, err := certificateManagerTenantA.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantANamespace, []string{render.ManagerInternalTLSSecretName})
@@ -1208,7 +1209,7 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, bundleA.ConfigMap(tenantANamespace))).NotTo(HaveOccurred())
 
-				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantB))
+				certificateManagerTenantB, err := certificatemanager.Create(c, nil, "", tenantBNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantB.MultiTenant()))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, certificateManagerTenantB.KeyPair().Secret(tenantBNamespace)))
 				managerTLSTenantB, err := certificateManagerTenantB.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantBNamespace, []string{render.ManagerInternalTLSSecretName})
@@ -1382,7 +1383,7 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(c.Create(ctx, tenantC)).NotTo(HaveOccurred())
 
 					// Create certificates for this tenant.
-					certificateManagerTenantC, err := certificatemanager.Create(c, nil, "", tenantCNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithTenant(tenantC))
+					certificateManagerTenantC, err := certificatemanager.Create(c, nil, "", tenantCNamespace, certificatemanager.AllowCACreation(), certificatemanager.WithMultiTenant(tenantC.MultiTenant()))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(c.Create(ctx, certificateManagerTenantC.KeyPair().Secret(tenantCNamespace)))
 					managerTLStenantC, err := certificateManagerTenantC.GetOrCreateKeyPair(c, render.ManagerInternalTLSSecretName, tenantCNamespace, []string{render.ManagerInternalTLSSecretName})

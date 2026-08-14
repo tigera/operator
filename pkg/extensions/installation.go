@@ -18,6 +18,7 @@ import (
 	"context"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
@@ -42,6 +43,10 @@ type InstallationExtension interface {
 	// it changed fc. It runs before Felix defaulting persists.
 	DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error)
 
+	// NonClusterHostEnabled reports whether the variant serves hosts outside the
+	// cluster, which Typha renders a second deployment for.
+	NonClusterHostEnabled(ctx context.Context, c client.Client) (bool, error)
+
 	// ProductVersion is the version the operator writes to the Installation status.
 	ProductVersion() string
 
@@ -64,6 +69,10 @@ func (noopInstallation) Watches(ctrlruntime.Controller) error {
 }
 
 func (noopInstallation) DefaultFelixConfiguration(*operatorv1.InstallationSpec, *v3.FelixConfiguration) (bool, error) {
+	return false, nil
+}
+
+func (noopInstallation) NonClusterHostEnabled(context.Context, client.Client) (bool, error) {
 	return false, nil
 }
 

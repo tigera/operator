@@ -19,7 +19,6 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/tigera/operator/pkg/enterprise/policysync"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 )
@@ -41,5 +40,5 @@ func (e *Extension) PolicySyncRequired(ctx context.Context, c client.Client) (bo
 	if err != nil {
 		return false, err
 	}
-	return policysync.ApplicationLayerRequires(al), nil
+	return eutils.ApplicationLayerRequiresPolicySync(al), nil
 }

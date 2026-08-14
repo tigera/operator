@@ -64,8 +64,8 @@ var enterpriseControllers = []string{
 	"pkg/enterprise",
 }
 
-// enterpriseRenderFiles are the Enterprise-only files that still sit in the shared
-// pkg/render package rather than a package of their own.
+// enterpriseRenderFiles are stems of the Enterprise-only files still in pkg/render.
+// The dex stem also covers dex_config.go.
 var enterpriseRenderFiles = []string{
 	"pkg/render/dex",
 	"pkg/render/guardian",
@@ -183,8 +183,8 @@ func isEnterprise(rel string) bool {
 			return true
 		}
 	}
-	for _, prefix := range enterpriseRenderFiles {
-		if strings.HasPrefix(rel, prefix) {
+	for _, stem := range enterpriseRenderFiles {
+		if rel == stem+".go" || strings.HasPrefix(rel, stem+"_") {
 			return true
 		}
 	}

@@ -446,7 +446,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, eutils.AllTenants)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving tenant namespaces", err, reqLogger)
 		return reconcile.Result{}, err

@@ -442,7 +442,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	hasDPIResource := len(dpiList.Items) != 0
 
 	// Determine the namespaces to which we must bind the linseed cluster role.
-	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
+	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, eutils.AllTenants)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

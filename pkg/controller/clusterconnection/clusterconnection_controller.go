@@ -256,12 +256,8 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
 	}
 
-	// Run the variant extension: it validates the configuration (a cluster cannot be
-	// both a management and a managed cluster), adds the certificates the variant needs
-	// Guardian to trust, and produces the Enterprise-specific Guardian inputs the
-	// controller reads back below (the managed cluster version and the license-gated
-	// egress policy flag). For the core operator this is a no-op and the render inputs
-	// carries no extension data, so the OSS defaults apply.
+	// The variant extension validates the configuration, adds the certificates
+	// Guardian must trust, and supplies the Guardian inputs read back below.
 	ci := controller.Inputs{
 		RenderInputs: render.Inputs{
 			Installation:  installationSpec,

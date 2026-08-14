@@ -12,15 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package policysync
+package utils
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// ApplicationLayerRequires reports whether any enabled ApplicationLayer feature needs
+// ApplicationLayerRequiresPolicySync reports whether any enabled ApplicationLayer feature needs
 // policySyncPathPrefix set. A nil CR returns false.
-func ApplicationLayerRequires(al *operatorv1.ApplicationLayer) bool {
+func ApplicationLayerRequiresPolicySync(al *operatorv1.ApplicationLayer) bool {
 	if al == nil {
 		return false
 	}

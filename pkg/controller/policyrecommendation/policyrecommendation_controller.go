@@ -360,7 +360,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
 	// For single-tenant or zero-tenant, the cluster role will be bind to the tigera-policy-recommendation service account
 	// in the calico-system namespace
-	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
+	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, eutils.AllTenants)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

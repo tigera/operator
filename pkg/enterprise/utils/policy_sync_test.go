@@ -12,23 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package policysync_test
+package utils_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/enterprise/policysync"
+	"github.com/tigera/operator/pkg/enterprise/utils"
 )
 
-var _ = Describe("ApplicationLayerRequires", func() {
+var _ = Describe("ApplicationLayerRequiresPolicySync", func() {
 	It("returns false for a nil receiver", func() {
-		Expect(policysync.ApplicationLayerRequires(nil)).To(BeFalse())
+		Expect(utils.ApplicationLayerRequiresPolicySync(nil)).To(BeFalse())
 	})
 
 	It("returns false when no feature is enabled", func() {
-		Expect(policysync.ApplicationLayerRequires(&operatorv1.ApplicationLayer{})).To(BeFalse())
+		Expect(utils.ApplicationLayerRequiresPolicySync(&operatorv1.ApplicationLayer{})).To(BeFalse())
 	})
 
 	It("returns true when LogCollection is enabled", func() {
@@ -38,26 +38,26 @@ var _ = Describe("ApplicationLayerRequires", func() {
 				LogCollection: &operatorv1.LogCollectionSpec{CollectLogs: &enabled},
 			},
 		}
-		Expect(policysync.ApplicationLayerRequires(al)).To(BeTrue())
+		Expect(utils.ApplicationLayerRequiresPolicySync(al)).To(BeTrue())
 	})
 
 	It("returns true when WAF is enabled", func() {
 		enabled := operatorv1.WAFEnabled
-		Expect(policysync.ApplicationLayerRequires(&operatorv1.ApplicationLayer{
+		Expect(utils.ApplicationLayerRequiresPolicySync(&operatorv1.ApplicationLayer{
 			Spec: operatorv1.ApplicationLayerSpec{WebApplicationFirewall: &enabled},
 		})).To(BeTrue())
 	})
 
 	It("returns true when ApplicationLayerPolicy is enabled", func() {
 		enabled := operatorv1.ApplicationLayerPolicyEnabled
-		Expect(policysync.ApplicationLayerRequires(&operatorv1.ApplicationLayer{
+		Expect(utils.ApplicationLayerRequiresPolicySync(&operatorv1.ApplicationLayer{
 			Spec: operatorv1.ApplicationLayerSpec{ApplicationLayerPolicy: &enabled},
 		})).To(BeTrue())
 	})
 
 	It("returns true when SidecarInjection is enabled", func() {
 		enabled := operatorv1.SidecarEnabled
-		Expect(policysync.ApplicationLayerRequires(&operatorv1.ApplicationLayer{
+		Expect(utils.ApplicationLayerRequiresPolicySync(&operatorv1.ApplicationLayer{
 			Spec: operatorv1.ApplicationLayerSpec{SidecarInjection: &enabled},
 		})).To(BeTrue())
 	})

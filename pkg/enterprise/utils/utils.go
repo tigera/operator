@@ -204,6 +204,11 @@ func HelperNamespaces(ctx context.Context, cli client.Client, helper NamespaceHe
 	return TenantNamespaces(ctx, cli, include)
 }
 
+// AllTenants is a TenantFilter that matches every tenant.
+func AllTenants(*operatorv1.Tenant) bool {
+	return true
+}
+
 // ManagedCalicoOnly is a TenantFilter that matches tenants who manage Calico OSS clusters.
 func ManagedCalicoOnly(t *operatorv1.Tenant) bool {
 	return t.ManagedClusterIsCalico()

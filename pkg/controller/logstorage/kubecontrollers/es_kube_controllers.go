@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -139,7 +140,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the calico-system namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	esKubeControllersNamespace := utils.NewNamespaceHelper(opts.MultiTenant, common.CalicoNamespace, "")
+	esKubeControllersNamespace := eutils.NewNamespaceHelper(opts.MultiTenant, common.CalicoNamespace, "")
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, esKubeControllersNamespace.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
@@ -187,7 +188,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func (r *ESKubeControllersController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.multiTenant, common.CalicoNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.multiTenant, common.CalicoNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
@@ -252,7 +253,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, nil
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -293,7 +294,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 
 	// Get the Authentication resource.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
 		return reconcile.Result{}, err
@@ -308,7 +309,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
 	// via this gateway. However, in multi-tenant mode, es-kube-controllers doesn't talk to elasticsearch,
 	// so this is only needed in single-tenant clusters and zero tenants clusters
-	gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
+	gwNSHelper := eutils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
 	// Query the trusted bundle from the namespace.
 	gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
 	if err != nil {
@@ -337,7 +338,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

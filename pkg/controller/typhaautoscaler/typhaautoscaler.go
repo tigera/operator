@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+// Package typhaautoscaler scales a Typha deployment to match a count of the cluster.
+package typhaautoscaler
 
 import (
 	"context"
@@ -35,7 +36,7 @@ import (
 var typhaLog = logf.Log.WithName("typha_autoscaler")
 
 const (
-	defaultTyphaAutoscalerSyncPeriod = 10 * time.Second
+	defaultSyncPeriod = 10 * time.Second
 
 	hepCreatedLabelKey   = "projectcalico.org/created-by"
 	hepCreatedLabelValue = "calico-kube-controllers"
@@ -44,8 +45,8 @@ const (
 // ReplicaCounter reports how many Typha replicas the cluster needs.
 type ReplicaCounter func(ctx context.Context, cli client.Client) (int, error)
 
-// TyphaAutoscaler periodically recounts the cluster and, if needed, scales the Typha deployment up/down.
-type TyphaAutoscaler struct {
+// Autoscaler periodically recounts the cluster and, if needed, scales the Typha deployment up/down.
+type Autoscaler struct {
 	client         client.Client
 	deployment     string
 	count          ReplicaCounter
@@ -58,24 +59,24 @@ type TyphaAutoscaler struct {
 	done chan struct{}
 }
 
-type TyphaAutoscalerOption func(*TyphaAutoscaler)
+type Option func(*Autoscaler)
 
-// TyphaAutoscalerOptionPeriod is an option that sets a custom sync period for the Typha autoscaler.
-func TyphaAutoscalerOptionPeriod(syncPeriod time.Duration) TyphaAutoscalerOption {
-	return func(t *TyphaAutoscaler) {
+// OptionPeriod is an option that sets a custom sync period for the Typha autoscaler.
+func OptionPeriod(syncPeriod time.Duration) Option {
+	return func(t *Autoscaler) {
 		t.syncPeriod = syncPeriod
 	}
 }
 
-// NewTyphaAutoscaler creates a new Typha autoscaler for the named deployment in the calico-system namespace, sized by
+// New creates a new Typha autoscaler for the named deployment in the calico-system namespace, sized by
 // count, optionally applying any options to the default autoscaler instance. The default sync period is 10 seconds.
-func NewTyphaAutoscaler(cli client.Client, deployment string, count ReplicaCounter, statusManager status.StatusManager, options ...TyphaAutoscalerOption) *TyphaAutoscaler {
-	ta := &TyphaAutoscaler{
+func New(cli client.Client, deployment string, count ReplicaCounter, statusManager status.StatusManager, options ...Option) *Autoscaler {
+	ta := &Autoscaler{
 		client:         cli,
 		deployment:     deployment,
 		count:          count,
 		statusManager:  statusManager,
-		syncPeriod:     defaultTyphaAutoscalerSyncPeriod,
+		syncPeriod:     defaultSyncPeriod,
 		triggerRunChan: make(chan chan error),
 		isDegradedChan: make(chan chan bool),
 	}
@@ -88,7 +89,7 @@ func NewTyphaAutoscaler(cli client.Client, deployment string, count ReplicaCount
 // Start starts the Typha autoscaler, updating the Typha deployment's replica count every sync period. The triggerRunChan
 // can be used to trigger an auto scale run immediately, while the isDegradedChan can be used to get the degraded status
 // of the last run. The TriggerRun and IsDegraded functions should be used instead of instead of access these channels directly.
-func (t *TyphaAutoscaler) Start(ctx context.Context) {
+func (t *Autoscaler) Start(ctx context.Context) {
 	t.done = make(chan struct{})
 	go func() {
 		defer close(t.done)
@@ -107,7 +108,7 @@ func (t *TyphaAutoscaler) Start(ctx context.Context) {
 		if err := t.autoscaleReplicas(ctx); err != nil {
 			degraded = true
 			typhaLog.Error(err, "Failed to autoscale typha")
-			t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, log)
+			t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, typhaLog)
 		}
 
 		for {
@@ -118,7 +119,7 @@ func (t *TyphaAutoscaler) Start(ctx context.Context) {
 					typhaLog.Error(err, "Failed to autoscale typha")
 
 					// Since this run was triggered by the ticker we need to degrade the tigera status now.
-					t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, log)
+					t.statusManager.SetDegraded(operator.ResourceScalingError, fmt.Sprintf("Failed to autoscale typha - %s", err.Error()), nil, typhaLog)
 				} else {
 					degraded = false
 				}
@@ -149,13 +150,13 @@ func (t *TyphaAutoscaler) Start(ctx context.Context) {
 
 // WaitForShutdown blocks until the autoscaler goroutine started by Start has exited. It is a no-op
 // if the autoscaler was never started. Cancel the context passed to Start to trigger shutdown.
-func (t *TyphaAutoscaler) WaitForShutdown() {
+func (t *Autoscaler) WaitForShutdown() {
 	if t.done != nil {
 		<-t.done
 	}
 }
 
-func (t *TyphaAutoscaler) TriggerRun() error {
+func (t *Autoscaler) TriggerRun() error {
 	errChan := make(chan error)
 	t.triggerRunChan <- errChan
 
@@ -163,7 +164,7 @@ func (t *TyphaAutoscaler) TriggerRun() error {
 }
 
 // IsDegraded checks if the last run autoscale run failed and returns true if it did and false otherwise.
-func (t *TyphaAutoscaler) IsDegraded() bool {
+func (t *Autoscaler) IsDegraded() bool {
 	boolChan := make(chan bool)
 	t.isDegradedChan <- boolChan
 
@@ -171,7 +172,7 @@ func (t *TyphaAutoscaler) IsDegraded() bool {
 }
 
 // autoscaleReplicas calculates the number of typha pods that should be running and scales the typha deployment accordingly
-func (t *TyphaAutoscaler) autoscaleReplicas(ctx context.Context) error {
+func (t *Autoscaler) autoscaleReplicas(ctx context.Context) error {
 	expectedReplicas, err := t.count(ctx, t.client)
 	if err != nil {
 		return err
@@ -184,7 +185,7 @@ func (t *TyphaAutoscaler) autoscaleReplicas(ctx context.Context) error {
 }
 
 // updateReplicas updates the Typha deployment to the expected replicas if the current replica count differs.
-func (t *TyphaAutoscaler) updateReplicas(ctx context.Context, expectedReplicas int32) error {
+func (t *Autoscaler) updateReplicas(ctx context.Context, expectedReplicas int32) error {
 	typha := &appsv1.Deployment{}
 	if err := t.client.Get(ctx, types.NamespacedName{Name: t.deployment, Namespace: common.CalicoNamespace}, typha); err != nil {
 		return err

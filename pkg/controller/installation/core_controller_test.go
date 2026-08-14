@@ -41,8 +41,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	kfake "k8s.io/client-go/kubernetes/fake"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -99,7 +97,6 @@ func (f *fakeNamespaceMigration) CleanupMigration(ctx context.Context, log logr.
 
 var _ = Describe("Testing core-controller installation", func() {
 	var c client.Client
-	var cs *kfake.Clientset
 	var ctx context.Context
 	var cancel context.CancelFunc
 	var r ReconcileInstallation
@@ -130,8 +127,6 @@ var _ = Describe("Testing core-controller installation", func() {
 	ready.MarkAsReady()
 
 	Context("mainline tests", func() {
-		var nodeIndexInformer cache.SharedIndexInformer
-
 		BeforeEach(func() {
 			// The schema contains all objects that should be known to the fake client when the test runs.
 			scheme = runtime.NewScheme()
@@ -145,25 +140,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			// Create a client that will have a crud interface of k8s objects.
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
-
-			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
-			objs := []runtime.Object{
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node1",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-				},
-			}
-			cs = kfake.NewClientset(objs...)
 
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
@@ -181,15 +157,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
-			// Create the indexer and informer used by the typhaAutoscaler
-			nlw := test.NewNodeListWatch(cs)
-			nodeIndexInformer = cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
-
-			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
-				time.Sleep(100 * time.Millisecond)
-			}
-
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				ext: testExtensions.Installation(),
@@ -202,7 +169,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -210,7 +177,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				newComponentHandler: utils.NewComponentHandler,
 			}
 
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
@@ -270,8 +237,9 @@ var _ = Describe("Testing core-controller installation", func() {
 					ObjectMeta: nonClusterHostObjectMeta,
 				})).NotTo(HaveOccurred())
 
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus)
-				r.typhaAutoscalerNonClusterHost.start(ctx)
+				nchName := common.TyphaDeploymentName + render.TyphaNonClusterHostSuffix
+				r.typhaAutoscalerNonClusterHost = NewTyphaAutoscaler(c, nchName, fixedReplicaCounter(1), mockStatus)
+				r.typhaAutoscalerNonClusterHost.Start(ctx)
 			})
 
 			AfterEach(func() {
@@ -791,27 +759,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
-			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
-			objs := []runtime.Object{
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node1",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: &replicas,
-					},
-				},
-			}
-			cs = kfake.NewClientset(objs...)
-
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
@@ -828,15 +775,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
-			// Create the indexer and informer used by the typhaAutoscaler
-			nlw := test.NewNodeListWatch(cs)
-			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
-
-			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
-				time.Sleep(100 * time.Millisecond)
-			}
-
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				ext: testExtensions.Installation(),
@@ -850,14 +788,14 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				newComponentHandler: utils.NewComponentHandler,
 			}
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -1005,41 +943,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
-			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
-			objs := []runtime.Object{
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node1",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node2",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node3",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-				},
-			}
-			cs = kfake.NewClientset(objs...)
-
 			// Create an object we can use throughout the test to do the core reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
@@ -1053,16 +956,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
-			// Create the indexer and informer used by the typhaAutoscaler
-			nlw := test.NewNodeListWatch(cs)
-
-			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
-
-			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
-				time.Sleep(100 * time.Millisecond)
-			}
-
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				ext: testExtensions.Installation(),
@@ -1075,7 +968,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -1083,7 +976,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				newComponentHandler: utils.NewComponentHandler,
 			}
 
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 			ca, err := tls.MakeCA("test")
 			Expect(err).NotTo(HaveOccurred())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
@@ -2356,27 +2249,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
-			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
-			objs := []runtime.Object{
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node1",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-					Spec: appsv1.DeploymentSpec{
-						Replicas: &replicas,
-					},
-				},
-			}
-			cs = kfake.NewClientset(objs...)
-
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
@@ -2393,15 +2265,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
-			// Create the indexer and informer used by the typhaAutoscaler
-			nlw := test.NewNodeListWatch(cs)
-			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
-
-			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
-				time.Sleep(100 * time.Millisecond)
-			}
-
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileInstallation{
 				ext: testExtensions.Installation(),
@@ -2415,14 +2278,14 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				newComponentHandler: utils.NewComponentHandler,
 			}
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 
 			cr = &operator.Installation{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
@@ -2500,25 +2363,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 			ctx, cancel = context.WithCancel(context.Background())
 
-			// Create a fake clientset for the autoscaler.
-			var replicas int32 = 1
-			objs := []runtime.Object{
-				&corev1.Node{
-					TypeMeta: metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{
-						Name:   "node1",
-						Labels: map[string]string{"kubernetes.io/os": "linux"},
-					},
-					Spec: corev1.NodeSpec{},
-				},
-				&appsv1.Deployment{
-					TypeMeta:   metav1.TypeMeta{},
-					ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
-					Spec:       appsv1.DeploymentSpec{Replicas: &replicas},
-				},
-			}
-			cs = kfake.NewClientset(objs...)
-
 			// Create an object we can use throughout the test to do the compliance reconcile loops.
 			mockStatus = &status.MockStatus{}
 			mockStatus.On("AddDaemonsets", mock.Anything).Return()
@@ -2535,15 +2379,6 @@ var _ = Describe("Testing core-controller installation", func() {
 			mockStatus.On("ReadyToMonitor")
 			mockStatus.On("SetMetaData", mock.Anything).Return()
 
-			// Create the indexer and informer used by the typhaAutoscaler
-			nlw := test.NewNodeListWatch(cs)
-			nodeIndexInformer := cache.NewSharedIndexInformer(nlw, &corev1.Node{}, 0, cache.Indexers{})
-
-			go nodeIndexInformer.Run(ctx.Done())
-			for nodeIndexInformer.HasSynced() {
-				time.Sleep(100 * time.Millisecond)
-			}
-
 			componentHandler = newFakeComponentHandler()
 			r = ReconcileInstallation{
 				ext: testExtensions.Installation(),
@@ -2556,7 +2391,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				client:              c,
 				scheme:              scheme,
 				status:              mockStatus,
-				typhaAutoscaler:     newTyphaAutoscaler(cs, nodeIndexInformer, test.NewTyphaListWatch(cs), mockStatus),
+				typhaAutoscaler:     NewTyphaAutoscaler(c, common.TyphaDeploymentName, fixedReplicaCounter(1), mockStatus),
 				namespaceMigration:  &fakeNamespaceMigration{},
 				migrationChecked:    true,
 				tierWatchReady:      ready,
@@ -2566,7 +2401,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				},
 			}
 
-			r.typhaAutoscaler.start(ctx)
+			r.typhaAutoscaler.Start(ctx)
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 
@@ -3228,3 +3063,9 @@ var _ = Describe("updateValidatingAdmissionPolicies", func() {
 		Expect(componentHandler.objectsToCreate).To(HaveLen(2))
 	})
 })
+
+func fixedReplicaCounter(replicas int) ReplicaCounter {
+	return func(context.Context, client.Client) (int, error) {
+		return replicas, nil
+	}
+}

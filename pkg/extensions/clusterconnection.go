@@ -38,9 +38,6 @@ type ClusterConnectionExtension interface {
 	// wait on a CRD.
 	Watches(c ctrlruntime.Controller, cs kubernetes.Interface) error
 
-	// TrustedBundleSecrets are the certificates Guardian must trust for the variant.
-	TrustedBundleSecrets() []string
-
 	// Modify layers the variant onto a component the controller rendered.
 	Modify(c render.Component, ri render.Inputs) render.Component
 }
@@ -53,10 +50,6 @@ func (noopClusterConnection) ExtendInputs(_ context.Context, ci controller.Input
 }
 
 func (noopClusterConnection) Watches(ctrlruntime.Controller, kubernetes.Interface) error {
-	return nil
-}
-
-func (noopClusterConnection) TrustedBundleSecrets() []string {
 	return nil
 }
 

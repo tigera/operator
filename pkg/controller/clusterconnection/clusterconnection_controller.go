@@ -249,13 +249,25 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	includeSystem := managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic
+	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
+		common.OperatorNamespace(), includeSystem, render.CalicoAPIServerTLSSecretName, goldmane.GoldmaneKeyPairSecret)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+	}
+
 	// Run the variant extension: it validates the configuration (a cluster cannot be
-	// both a management and a managed cluster) and produces the Enterprise-specific
-	// Guardian inputs the controller reads back below (the managed cluster version and
-	// the license-gated egress policy flag). For the core operator this is a no-op and
-	// the render inputs carries no extension data, so the OSS defaults apply.
+	// both a management and a managed cluster), adds the certificates the variant needs
+	// Guardian to trust, and produces the Enterprise-specific Guardian inputs the
+	// controller reads back below (the managed cluster version and the license-gated
+	// egress policy flag). For the core operator this is a no-op and the render inputs
+	// carries no extension data, so the OSS defaults apply.
 	ci := controller.Inputs{
-		RenderInputs:       render.Inputs{Installation: installationSpec, ClusterDomain: r.opts.ClusterDomain},
+		RenderInputs: render.Inputs{
+			Installation:  installationSpec,
+			ClusterDomain: r.opts.ClusterDomain,
+			TrustedBundle: trustedBundle,
+		},
 		Client:             r.cli,
 		CertificateManager: certificateManager,
 	}
@@ -272,16 +284,6 @@ func (r *ReconcileConnection) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 	guardianData, haveGuardianData := render.GuardianRenderDataFromInputs(ci.RenderInputs)
-
-	includeSystem := managementClusterConnection.Spec.TLS.CA == operatorv1.CATypePublic
-
-	bundleSecrets := append([]string{render.CalicoAPIServerTLSSecretName, goldmane.GoldmaneKeyPairSecret},
-		r.ext.TrustedBundleSecrets()...)
-	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(render.GuardianDeploymentName, r.cli,
-		common.OperatorNamespace(), includeSystem, bundleSecrets...)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
-	}
 
 	// In the OSS (Whisker) path Guardian connects with its own client keypair. The
 	// Enterprise path uses the tunnel secret instead, so when the extension supplied

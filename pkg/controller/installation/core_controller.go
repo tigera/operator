@@ -72,7 +72,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
@@ -1214,44 +1213,42 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}))
 
 	// Check if non-cluster host feature is enabled.
-	var nonclusterhost *operatorv1.NonClusterHost
-	if instance.Spec.Variant.IsEnterprise() {
-		nonclusterhost, err = eutils.GetNonClusterHost(ctx, r.client)
+	nonclusterhost, err := r.ext.NonClusterHostEnabled(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query the non-cluster host configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if nonclusterhost {
+		// This is the default common name in CSR from non-cluster hosts.
+		typhaNodeTLS.NodeNonClusterHostCommonName = render.FelixCommonName + render.TyphaNonClusterHostSuffix
+		// Attempt to retrieve the BYO node certificates for non-cluster hosts if they are present.
+		secret, err := utils.GetSecret(context.TODO(), r.client, render.NodeTLSSecretNameNonClusterHost, common.OperatorNamespace())
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if nonclusterhost != nil {
-			// This is the default common name in CSR from non-cluster hosts.
-			typhaNodeTLS.NodeNonClusterHostCommonName = render.FelixCommonName + render.TyphaNonClusterHostSuffix
-			// Attempt to retrieve the BYO node certificates for non-cluster hosts if they are present.
-			secret, err := utils.GetSecret(context.TODO(), r.client, render.NodeTLSSecretNameNonClusterHost, common.OperatorNamespace())
+			logrus.WithError(err).Warn("failed to retrieve BYO non-cluster host node TLS secret. Using default common name instead.")
+		} else if secret != nil {
+			cn, urisan, err := parseCommonNameAndURISAN(secret)
 			if err != nil {
-				logrus.WithError(err).Warn("failed to retrieve BYO non-cluster host node TLS secret. Using default common name instead.")
-			} else if secret != nil {
-				cn, urisan, err := parseCommonNameAndURISAN(secret)
-				if err != nil {
-					logrus.WithError(err).Warn("failed to parse common name or URI SAN in BYO non-cluster host node TLS secret. Using default common name instead.")
-				}
-
-				typhaNodeTLS.NodeNonClusterHostCommonName = cn
-				typhaNodeTLS.NodeNonClusterHostURISAN = urisan
+				logrus.WithError(err).Warn("failed to parse common name or URI SAN in BYO non-cluster host node TLS secret. Using default common name instead.")
 			}
 
-			if r.typhaAutoscalerNonClusterHost == nil {
-				calicoClient, err := calicoclient.NewForConfig(r.config)
-				if err != nil {
-					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
-					return reconcile.Result{}, err
-				}
+			typhaNodeTLS.NodeNonClusterHostCommonName = cn
+			typhaNodeTLS.NodeNonClusterHostURISAN = urisan
+		}
 
-				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
-				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-				go hepIndexInformer.Run(r.opts.ShutdownContext.Done())
-
-				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-				r.typhaAutoscalerNonClusterHost.start(r.opts.ShutdownContext)
+		if r.typhaAutoscalerNonClusterHost == nil {
+			calicoClient, err := calicoclient.NewForConfig(r.config)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
+				return reconcile.Result{}, err
 			}
+
+			hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
+			hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
+			go hepIndexInformer.Run(r.opts.ShutdownContext.Done())
+
+			typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
+			r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
+			r.typhaAutoscalerNonClusterHost.start(r.opts.ShutdownContext)
 		}
 	}
 
@@ -1454,7 +1451,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the core controller
 	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
 	if includeV3NetworkPolicy {
-		if nonclusterhost != nil {
+		if nonclusterhost {
 			components = append(components, render.NewTyphaNonClusterHostPolicy(&typhaCfg))
 		}
 		components = append(components,

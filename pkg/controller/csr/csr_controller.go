@@ -109,7 +109,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconcile.Reconciler, error) {
-	// Looks up HostEndpoints by node, without the manager's cache holding every one.
+	// Looks up HostEndpoints with a spec.node field selector. Serving that from the
+	// manager's cache would need a registered field index and an informer holding every
+	// HostEndpoint in the cluster, for a lookup that only ever wants one.
 	calicoClient, err := calicoclient.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err

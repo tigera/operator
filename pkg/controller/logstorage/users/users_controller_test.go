@@ -324,7 +324,7 @@ var _ = Describe("LogStorage users controller", func() {
 			// Waiting, not erroring - the ConfigMap is written out of band and we watch for it.
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred())
-			Expect(result.Requeue).To(BeFalse())
+			Expect(result).To(Equal(reconcile.Result{}))
 			Expect(esClient.created).To(BeEmpty())
 		})
 	})

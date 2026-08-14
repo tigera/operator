@@ -39,12 +39,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
@@ -55,7 +53,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	calicoclient "github.com/tigera/api/pkg/client/clientset_generated/clientset"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
@@ -269,14 +266,8 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 
 	statusManager := status.New(mgr.GetClient(), "calico", opts.KubernetesVersion)
 
-	// Create the SharedIndexInformer used by the typhaAutoscaler
-	nodeListWatch := cache.NewListWatchFromClient(opts.K8sClientset.CoreV1().RESTClient(), "nodes", "", fields.Everything())
-	nodeIndexInformer := cache.NewSharedIndexInformer(nodeListWatch, &corev1.Node{}, 0, cache.Indexers{})
-	go nodeIndexInformer.Run(opts.ShutdownContext.Done())
-
 	// Create a Typha autoscaler.
-	typhaListWatch := cache.NewListWatchFromClient(opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"))
-	typhaScaler := newTyphaAutoscaler(opts.K8sClientset, nodeIndexInformer, typhaListWatch, statusManager)
+	typhaScaler := NewTyphaAutoscaler(mgr.GetClient(), common.TyphaDeploymentName, NodeReplicaCounter, statusManager)
 
 	r := &ReconcileInstallation{
 		config:              mgr.GetConfig(),
@@ -293,7 +284,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (*Reconc
 		ext:                 opts.Extensions.Installation(),
 	}
 	r.status.Run(opts.ShutdownContext)
-	r.typhaAutoscaler.start(opts.ShutdownContext)
+	r.typhaAutoscaler.Start(opts.ShutdownContext)
 
 	return r, nil
 }
@@ -335,8 +326,8 @@ type ReconcileInstallation struct {
 	scheme                        *runtime.Scheme
 	watches                       map[runtime.Object]struct{}
 	status                        status.StatusManager
-	typhaAutoscaler               *typhaAutoscaler
-	typhaAutoscalerNonClusterHost *typhaAutoscaler
+	typhaAutoscaler               *TyphaAutoscaler
+	typhaAutoscalerNonClusterHost *TyphaAutoscaler
 	namespaceMigration            migration.NamespaceMigration
 	migrationChecked              bool
 	tierWatchReady                *utils.ReadyFlag
@@ -939,15 +930,15 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if !installationMarkedForDeletion {
 		// If the autoscalar is degraded then trigger a run and recheck the degraded status. If it is still degraded after the
 		// the run the reset the degraded status and requeue the request.
-		if r.typhaAutoscaler.isDegraded() {
-			if err := r.typhaAutoscaler.triggerRun(); err != nil {
+		if r.typhaAutoscaler.IsDegraded() {
+			if err := r.typhaAutoscaler.TriggerRun(); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceScalingError, "Failed to scale typha", err, reqLogger)
 				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
 		}
 
-		if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.isDegraded() {
-			if err := r.typhaAutoscalerNonClusterHost.triggerRun(); err != nil {
+		if r.typhaAutoscalerNonClusterHost != nil && r.typhaAutoscalerNonClusterHost.IsDegraded() {
+			if err := r.typhaAutoscalerNonClusterHost.TriggerRun(); err != nil {
 				r.status.SetDegraded(operatorv1.ResourceScalingError, "Failed to scale typha for noncluster hosts", err, reqLogger)
 				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 			}
@@ -1238,19 +1229,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			}
 
 			if r.typhaAutoscalerNonClusterHost == nil {
-				calicoClient, err := calicoclient.NewForConfig(r.config)
-				if err != nil {
-					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to initialize Calico client", err, reqLogger)
-					return reconcile.Result{}, err
-				}
-
-				hepListWatch := cache.NewListWatchFromClient(calicoClient.ProjectcalicoV3().RESTClient(), "hostendpoints", corev1.NamespaceAll, fields.Everything())
-				hepIndexInformer := cache.NewSharedIndexInformer(hepListWatch, &v3.HostEndpoint{}, 0, cache.Indexers{})
-				go hepIndexInformer.Run(r.opts.ShutdownContext.Done())
-
-				typhaNonClusterHostWatch := cache.NewListWatchFromClient(r.opts.K8sClientset.AppsV1().RESTClient(), "deployments", "calico-system", fields.OneTermEqualSelector("metadata.name", "calico-typha"+render.TyphaNonClusterHostSuffix))
-				r.typhaAutoscalerNonClusterHost = newTyphaAutoscaler(r.opts.K8sClientset, hepIndexInformer, typhaNonClusterHostWatch, r.status, typhaAutoscalerOptionNonclusterHost(true))
-				r.typhaAutoscalerNonClusterHost.start(r.opts.ShutdownContext)
+				name := common.TyphaDeploymentName + render.TyphaNonClusterHostSuffix
+				r.typhaAutoscalerNonClusterHost = NewTyphaAutoscaler(r.client, name, HostEndpointReplicaCounter, r.status)
+				r.typhaAutoscalerNonClusterHost.Start(r.opts.ShutdownContext)
 			}
 		}
 	}

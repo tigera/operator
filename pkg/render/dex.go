@@ -130,17 +130,34 @@ func (*dexComponent) SupportedOSType() rmeta.OSType {
 
 func (c *dexComponent) Objects() ([]client.Object, []client.Object) {
 
+	// c.deployment() and c.configMap() panic on a nil TLSKeyPair, which is what dex being disabled
+	// implies. They are only deleted on that path, so name them instead of rendering them.
+	var dexDeployment, dexConfigMap client.Object
+	if c.cfg.DeleteDex {
+		dexDeployment = &appsv1.Deployment{
+			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: DexObjectName, Namespace: DexNamespace},
+		}
+		dexConfigMap = &corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: DexObjectName, Namespace: DexNamespace},
+		}
+	} else {
+		dexDeployment = c.deployment()
+		dexConfigMap = c.configMap()
+	}
+
 	objs := []client.Object{
 		CreateNamespace(DexObjectName, c.cfg.Installation.KubernetesProvider, PSSRestricted, c.cfg.Installation.Azure),
 		c.calicoSystemNetworkPolicy(c.cfg.Installation.Variant),
 		networkpolicy.CalicoSystemDefaultDeny(DexNamespace),
 		CreateOperatorSecretsRoleBinding(DexNamespace),
 		c.serviceAccount(),
-		c.deployment(),
+		dexDeployment,
 		c.service(),
 		c.clusterRole(),
 		c.clusterRoleBinding(),
-		c.configMap(),
+		dexConfigMap,
 	}
 	objectsToDelete := []client.Object{
 		// Delete the secret called tigera-dex which in the past was used to store a client secret.

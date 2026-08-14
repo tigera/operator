@@ -264,6 +264,20 @@ var _ = Describe("dex rendering tests", func() {
 				"https://example.com/login/oidc/silent-callback"))
 		})
 
+		It("should render the objects to delete without a TLS key pair when dex is disabled", func() {
+			// When dex is disabled no key pair is created for it, so the teardown path must not
+			// depend on one.
+			cfg.DeleteDex = true
+			cfg.TLSKeyPair = nil
+
+			component := render.Dex(cfg)
+			objsToCreate, objsToDelete := component.Objects()
+
+			Expect(objsToCreate).To(BeNil())
+			rtest.ExpectResourceInList(objsToDelete, render.DexObjectName, render.DexNamespace, "apps", "v1", "Deployment")
+			rtest.ExpectResourceInList(objsToDelete, render.DexObjectName, render.DexNamespace, "", "v1", "ConfigMap")
+		})
+
 		It("should render config Map with the HSTS headers", func() {
 			component := render.Dex(cfg)
 			resources, _ := component.Objects()

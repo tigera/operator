@@ -279,11 +279,21 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, r.clusterDomain)
-	tlsKeyPair, err := certificateManager.GetOrCreateKeyPair(r.client, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
-	if err != nil {
-		r.status.SetDegraded(oprv1.ResourceReadError, "Unable to get or create tls key pair", err, reqLogger)
-		return reconcile.Result{}, err
+	enableDex := utils.DexEnabled(authentication)
+
+	// Only maintain a key pair for dex when dex is actually deployed. GetOrCreateKeyPair generates a
+	// new key pair whenever the existing secret is missing, expired or otherwise unusable, but the
+	// component that persists it is only rendered when dex is enabled. Calling it unconditionally
+	// therefore generates and discards a key pair on every reconcile, indefinitely, on clusters that
+	// do not run dex.
+	var tlsKeyPair certificatemanagement.KeyPairInterface
+	if enableDex {
+		dnsNames := dns.GetServiceDNSNames(render.DexObjectName, render.DexNamespace, r.clusterDomain)
+		tlsKeyPair, err = certificateManager.GetOrCreateKeyPair(r.client, render.DexTLSSecretName, common.OperatorNamespace(), dnsNames)
+		if err != nil {
+			r.status.SetDegraded(oprv1.ResourceReadError, "Unable to get or create tls key pair", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// Dex needs to trust a public CA, so we mount all the system certificates.
@@ -378,8 +388,6 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 	r.lastAvailabilityTransition = currentAvailabilityTransition
 
-	enableDex := utils.DexEnabled(authentication)
-
 	// DexConfig adds convenience methods around dex related objects in k8s and can be used to configure Dex.
 	dexCfg := render.NewDexConfig(installationSpec.CertificateManagement, authentication, idpSecret, secretProviderClass, r.clusterDomain)
 
@@ -432,9 +440,11 @@ func (r *ReconcileAuthentication) Reconcile(ctx context.Context, request reconci
 	}
 
 	// Check BYO certificate expiry warnings.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
-		render.DexTLSSecretName: tlsKeyPair,
-	}, r.status)
+	if enableDex {
+		certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+			render.DexTLSSecretName: tlsKeyPair,
+		}, r.status)
+	}
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

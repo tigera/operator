@@ -211,3 +211,43 @@ spec:
 1. Commit everything and post as a `projectcalico/calico` PR.
 
 1. Review, address issues, merge, monitor hashrelease builds, address any further issues, etc.
+
+### Updating the bundled version of Istio
+
+The operator does not vendor Istio's manifests. It downloads Istio's Helm
+charts at build time and renders them itself, so bumping Istio is mostly a
+version change plus a re-render.
+
+Note that this version has to stay in step with the Istio version that
+`projectcalico/calico` builds its Istio images from. The operator renders the
+upstream charts, but the images those manifests point at (`istio-pilot`,
+`istio-install-cni`, `istio-ztunnel`, `istio-proxyv2`) are built in the calico
+repo under `istio/` and `third_party/istio-ztunnel/`. If the two disagree you
+get manifests from one Istio release pointing at images built from another.
+
+1. In `Makefile`, update `ISTIO_VERSION`.
+
+1. Remove the previously downloaded charts, so the new ones are fetched:
+   `rm -f pkg/render/istio/*.tgz` (or `make clean`). They are gitignored and
+   never committed, so a stale copy on disk will silently keep being used.
+
+1. Run `make istio_charts` to download `base`, `istiod`, `cni` and `ztunnel`
+   at the new version.
+
+1. Run `make build`. The charts are embedded into the binary with `go:embed`,
+   so a missing chart shows up as `pattern base.tgz: no matching files found`
+   rather than as a download error.
+
+1. Run `make ut`, or at minimum `go test ./pkg/render/istio/...`. There are no
+   golden files pinned to the chart version — the tests render the charts
+   live — so a rendering change surfaces as a test failure rather than a diff.
+
+1. Check whether the new release adds, removes or renames any rendered
+   resource, and update `pkg/render/istio` if so.
+
+1. In `projectcalico/calico`, update `ISTIO_VERSION` in `istio/Makefile` and
+   `ZTUNNEL_VERSION` in `third_party/istio-ztunnel/Makefile` to the same
+   version, and refresh any patches that no longer apply.
+
+1. Commit everything and post as a `tigera/operator` PR, alongside the
+   corresponding `projectcalico/calico` PR.

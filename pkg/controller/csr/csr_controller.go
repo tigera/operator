@@ -109,7 +109,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconcile.Reconciler, error) {
-	// HostEndpoints live in the Calico API server, which is not in the manager's scheme.
+	// Looks up HostEndpoints by node, without the manager's cache holding every one.
 	calicoClient, err := calicoclient.NewForConfig(mgr.GetConfig())
 	if err != nil {
 		return nil, err

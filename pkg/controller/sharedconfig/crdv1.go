@@ -101,6 +101,15 @@ func resolveTrackedConflicts(current *v3.FelixConfiguration, d *FelixConfigurati
 		if !pathSet(payload.Object, path) {
 			continue
 		}
+		// Writing the value that is already there needs no arbitration, whoever put it there.
+		agree, err := valuesAgree(currentContent, payload.Object, path)
+		if err != nil {
+			return nil, err
+		}
+		if agree {
+			continue
+		}
+
 		changed, err := changedByOther(currentContent, lastWritten, path)
 		if err != nil {
 			return nil, err

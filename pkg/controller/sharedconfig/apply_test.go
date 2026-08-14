@@ -261,7 +261,7 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(true)))
 			})
 
-			It("should report a conflict when the legacy annotation disagrees with the field", func() {
+			It("should take over a value someone else set, when it wanted that value anyway", func() {
 				Expect(c.Create(ctx, &v3.FelixConfiguration{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:        "default",
@@ -271,7 +271,21 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				})).NotTo(HaveOccurred())
 
 				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).NotTo(HaveOccurred())
+				fc := getFelixConfig()
+				Expect(fc.Spec.BPFEnabled).To(Equal(ptr.To(true)))
+				Expect(fc.Annotations).To(HaveKeyWithValue(render.BPFOperatorAnnotation, "true"))
+			})
+
+			It("should refuse to change a value someone else set", func() {
+				Expect(c.Create(ctx, &v3.FelixConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec:       v3.FelixConfigurationSpec{BPFEnabled: ptr.To(false)},
+				})).NotTo(HaveOccurred())
+
+				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
 				Expect(err).To(MatchError(ContainSubstring("spec.bpfEnabled")))
+				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(false)))
 			})
 
 			It("should keep the legacy annotation in step with what it writes", func() {

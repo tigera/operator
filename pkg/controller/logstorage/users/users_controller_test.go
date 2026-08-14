@@ -223,11 +223,13 @@ var _ = Describe("LogStorage users controller", func() {
 		Expect(expected.Username).To(Equal("tigera-ee-linseed-tenant-a-secure"))
 		Expect(esClient.created).To(HaveLen(2))
 		Expect(esClient.created[0].Username).To(Equal(expected.Username))
+		Expect(esClient.created[0].FullName).To(Equal(esutils.SystemUserFullName))
 		Expect(esClient.created[0].Roles).To(Equal(expected.Roles))
 		Expect(esClient.created[0].Roles[0].Name).To(Equal(expected.Username))
 		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(ContainElement("calico_flowlogs_standard*"))
 		Expect(esClient.created[0].Roles[0].Definition.Indices[0].Names).To(HaveLen(len(operatorv1.DataTypes)))
 		Expect(esClient.created[1].Username).To(Equal("tigera-ee-dashboards-installer-tenant-a-secure"))
+		Expect(esClient.created[1].FullName).To(Equal(esutils.SystemUserFullName))
 
 		// The credentials should be written to the Elasticsearch namespace for Linseed to consume.
 		Expect(secretValue(render.ElasticsearchLinseedUserSecret, render.ElasticsearchNamespace, "username")).To(Equal(expected.Username))

@@ -152,6 +152,67 @@ var (
 			})
 		})
 
+		Context("Users", func() {
+			var (
+				eClient *esClient
+				urt     *userRoundTripper
+				ctx     context.Context
+			)
+
+			BeforeEach(func() {
+				urt = &userRoundTripper{putBodies: map[string]string{}}
+				eClient = mockElasticClient(&http.Client{Transport: http.RoundTripper(urt)}, baseURI)
+				ctx = context.Background()
+			})
+
+			It("marks the Linseed user as a system user so es-kube-controllers does not sweep it", func() {
+				user := LinseedUserSingleTenant(&operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: "tenant-a"}}, true)
+				Expect(user.Username).To(Equal("tigera-ee-linseed-tenant-a-secure"))
+				Expect(user.FullName).To(Equal(SystemUserFullName))
+
+				user.Password = "any-password"
+				Expect(eClient.CreateUser(ctx, user)).NotTo(HaveOccurred())
+
+				Expect(urt.putBodies["/_security/user/tigera-ee-linseed-tenant-a-secure"]).To(MatchJSON(`{
+					"password": "any-password",
+					"roles": ["tigera-ee-linseed-tenant-a-secure"],
+					"full_name": "system:serviceaccount"
+				}`))
+			})
+
+			It("marks the Dashboards installer user as a system user too", func() {
+				user := DashboardUserSingleTenant("tenant-a", true)
+				Expect(user.Username).To(Equal("tigera-ee-dashboards-installer-tenant-a-secure"))
+				Expect(user.FullName).To(Equal(SystemUserFullName))
+
+				user.Password = "any-password"
+				Expect(eClient.CreateUser(ctx, user)).NotTo(HaveOccurred())
+
+				Expect(urt.putBodies["/_security/user/tigera-ee-dashboards-installer-tenant-a-secure"]).To(MatchJSON(`{
+					"password": "any-password",
+					"roles": ["tigera-ee-dashboards-installer-tenant-a-secure"],
+					"full_name": "system:serviceaccount"
+				}`))
+			})
+
+			It("marks the users provisioned for a multi-tenant cluster", func() {
+				tenant := &operatorv1.Tenant{Spec: operatorv1.TenantSpec{ID: "tenant-a"}}
+				Expect(LinseedUser("cluster-a", tenant).FullName).To(Equal(SystemUserFullName))
+				Expect(DashboardUser("cluster-a", "tenant-a").FullName).To(Equal(SystemUserFullName))
+			})
+
+			It("leaves full_name out of the request for a user that carries none", func() {
+				// Sending it empty would strip the marker off a user es-kube-controllers created with it.
+				user := &User{Username: "tigera-ee-test", Password: "any-password"}
+				Expect(eClient.CreateUser(ctx, user)).NotTo(HaveOccurred())
+
+				Expect(urt.putBodies["/_security/user/tigera-ee-test"]).To(MatchJSON(`{
+					"password": "any-password",
+					"roles": []
+				}`))
+			})
+		})
+
 		Context("ILM", func() {
 			var (
 				eClient     *esClient
@@ -230,6 +291,29 @@ var (
 		})
 	})
 )
+
+// userRoundTripper records the body of every PUT the Elasticsearch security API receives, keyed by path.
+type userRoundTripper struct {
+	putBodies map[string]string
+}
+
+func (t *userRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	ok := &http.Response{
+		Request:    req,
+		StatusCode: 200,
+		Body:       io.NopCloser(bytes.NewBufferString("{}")),
+	}
+
+	if req.Method != "PUT" {
+		return ok, nil
+	}
+
+	body, err := io.ReadAll(req.Body)
+	Expect(err).To(BeNil())
+	t.putBodies[req.URL.Path] = string(body)
+
+	return ok, nil
+}
 
 type testRoundTripper struct {
 	e                 error

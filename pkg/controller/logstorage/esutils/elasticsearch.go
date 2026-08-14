@@ -241,6 +241,13 @@ const policyActivityIndexPattern = "calico_policy_activity*"
 // created only keep resolving if the operator provisions the same names.
 const LegacySingleTenantUserSuffix = "secure"
 
+// SystemUserFullName marks a user as one of ours rather than one backing a person. es-kube-controllers'
+// authorization controller sweeps Elasticsearch on every resync and deletes any user that is neither
+// marked with this full_name nor present in its OIDC user cache, so a user the operator provisions
+// without it is deleted within one resync period and then recreated on the next reconcile. Must stay in
+// sync with SystemUserFullName in kube-controllers/pkg/elasticsearch/users.
+const SystemUserFullName = "system:serviceaccount"
+
 // formatNameSingleTenant builds the single-tenant ES user name the way es-kube-controllers did:
 // <name>-<tenantID>-secure on a shared external Elasticsearch, and <name>-secure on the cluster's own,
 // where es-kube-controllers is given no tenant ID and so never qualified the name with one.
@@ -308,6 +315,7 @@ func multiIndexNames(tenant string, externalElastic bool) []string {
 func linseedUser(username string, indices []string) *User {
 	return &User{
 		Username: username,
+		FullName: SystemUserFullName,
 		Roles: []Role{
 			{
 				Name: username,
@@ -338,6 +346,7 @@ func DashboardUserSingleTenant(tenant string, externalElastic bool) *User {
 func dashboardUser(username string) *User {
 	return &User{
 		Username: username,
+		FullName: SystemUserFullName,
 		Roles: []Role{
 			{
 				Name: username,
@@ -358,6 +367,9 @@ func dashboardUser(username string) *User {
 type User struct {
 	Username string
 	Password string
+	// FullName is the user's full_name in Elasticsearch. Set it to SystemUserFullName on the users the
+	// operator provisions - see that constant for why.
+	FullName string
 	Roles    []Role
 }
 
@@ -439,6 +451,11 @@ func (es *esClient) CreateUser(ctx context.Context, user *User) error {
 	body := map[string]interface{}{
 		"password": user.Password,
 		"roles":    user.RoleNames(),
+	}
+	// Only send full_name when we have one: this is a full replacement of the user, so sending it empty
+	// would strip the marker off a user that es-kube-controllers had created with it.
+	if user.FullName != "" {
+		body["full_name"] = user.FullName
 	}
 
 	_, err := es.client.XPackSecurityPutUser(user.Username).Body(body).Do(ctx)

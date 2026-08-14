@@ -18,6 +18,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
+	"github.com/tigera/operator/pkg/enterprise/csr"
 	"github.com/tigera/operator/pkg/enterprise/installation"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/enterprise/tiers"
@@ -38,6 +39,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 			APIServer:         apiserver.New(variant, o),
 			ClusterConnection: clusterconnection.New(variant),
 			Tiers:             tiers.New(o),
+			CSR:               csr.New(),
 		})
 	}
 

@@ -68,9 +68,9 @@ func errNoCertificatePEM(secretName, secretNamespace string) error {
 type certificateManager struct {
 	*x509.Certificate
 	*crypto.CA
-	keyPair *certificatemanagement.KeyPair
-	log     logr.Logger
-	tenant  *operatorv1.Tenant
+	keyPair     *certificatemanagement.KeyPair
+	log         logr.Logger
+	multiTenant bool
 
 	// Controls whether this instance of the certificate manager is allowed to
 	// create new CAs. Most instances should simply read the existing CA and use it to sign
@@ -138,9 +138,10 @@ func WithLogger(log logr.Logger) Option {
 	}
 }
 
-func WithTenant(t *operatorv1.Tenant) Option {
+// WithMultiTenant tells the manager to use the per-tenant CA secret.
+func WithMultiTenant(multiTenant bool) Option {
 	return func(cm *certificateManager) error {
-		cm.tenant = t
+		cm.multiTenant = multiTenant
 		return nil
 	}
 }
@@ -171,7 +172,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	// Determine the name of the CA secret to use. Default to the tigera CA name. For
 	// per-tenant CA secrets, we use a different name for differentiation.
 	caSecretName := certificatemanagement.CASecretName
-	if cm.tenant.MultiTenant() {
+	if cm.multiTenant {
 		caSecretName = certificatemanagement.TenantCASecretName
 	}
 

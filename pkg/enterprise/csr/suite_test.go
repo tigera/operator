@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2026 Tigera, Inc. All rights reserved.
+// Copyright (c) 2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package cloudconfig
+package csr_test
 
 import (
+	"context"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/enterprise"
+	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 )
 
-func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(GinkgoWriter)))
+var ext = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
+
+// ctx is the reconcile context the specs pass to the extension hooks.
+var ctx = context.Background()
+
+func TestCSR(t *testing.T) {
 	RegisterFailHandler(Fail)
-	suiteConfig, reporterConfig := GinkgoConfiguration()
-	reporterConfig.JUnitReport = "../../../report/cloudconfig_suite.xml"
-	RunSpecs(t, "pkg/render/common/cloudconfig/CloudConfig Suite", suiteConfig, reporterConfig)
+	RunSpecs(t, "pkg/enterprise/csr Suite")
 }

@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/render/logstorage"
 	"github.com/tigera/operator/pkg/render/logstorage/esmetrics"
+	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -685,6 +686,12 @@ func (l *linseed) linseedCalicoSystemPolicy() *v3.NetworkPolicy {
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
 			Source:      networkpolicyHelper.APIServerSourceEntityRule(l.cfg.Installation.Variant),
+			Destination: linseedIngressDestinationEntityRule,
+		},
+		{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Source:      monitor.AlertmanagerSourceEntityRule,
 			Destination: linseedIngressDestinationEntityRule,
 		},
 	}

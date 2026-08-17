@@ -110,14 +110,6 @@ func addWatch(c ctrlruntime.Controller) error {
 		return fmt.Errorf("failed to watch ServiceMonitor calico-kube-controller-metrics resource: %w", err)
 	}
 
-	if err = utils.AddSecretsWatch(c, monitor.AlertmanagerConfigSecret, common.OperatorNamespace()); err != nil {
-		return fmt.Errorf("failed to watch Alertmanager configuration secret in Operator namespace: %w", err)
-	}
-
-	if err = utils.AddSecretsWatch(c, monitor.AlertmanagerConfigSecret, common.TigeraPrometheusNamespace); err != nil {
-		return fmt.Errorf("failed to watch Alertmanager configuration secret in Prometheus namespace: %w", err)
-	}
-
 	return err
 }
 

@@ -3289,12 +3289,17 @@ var _ = Describe("Node rendering tests", func() {
 	}
 })
 
-// verifyProbesAndLifecycle asserts the expected node liveness and readiness probe plus pod lifecycle settings.
+// verifyProbesAndLifecycle asserts the expected node startup, liveness and readiness probes plus pod lifecycle settings.
 func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bool) {
 	// Verify readiness and liveness probes.
 	expectedReadiness := &corev1.Probe{
 		PeriodSeconds:  10,
 		TimeoutSeconds: 5,
+	}
+	expectedStartup := &corev1.Probe{
+		PeriodSeconds:    2,
+		TimeoutSeconds:   5,
+		FailureThreshold: 150,
 	}
 	expectedLiveness := &corev1.Probe{
 		ProbeHandler: corev1.ProbeHandler{
@@ -3341,9 +3346,11 @@ func verifyProbesAndLifecycle(ds *appsv1.DaemonSet, isOpenshift, isEnterprise bo
 		}
 	}
 	expectedReadiness.ProbeHandler = corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: expectedReadinessCmd}}
+	expectedStartup.ProbeHandler = corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: expectedReadinessCmd}}
 
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].ReadinessProbe).To(Equal(expectedReadiness))
 	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].LivenessProbe).To(Equal(expectedLiveness))
+	ExpectWithOffset(1, ds.Spec.Template.Spec.Containers[0].StartupProbe).To(Equal(expectedStartup))
 
 	expectedPreStopCmd := []string{"/bin/calico-node", "-shutdown"}
 	if isEnterprise {

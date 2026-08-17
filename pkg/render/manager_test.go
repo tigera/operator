@@ -259,6 +259,54 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}))
 	})
 
+	It("should wire the flow logs UI module when whisker is enabled", func() {
+		resourcesToCreate, _ := renderObjects(renderConfig{
+			installation:   installation,
+			ns:             render.ManagerNamespace,
+			whiskerEnabled: true,
+		})
+		deployment := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		manager := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.ManagerName)
+		Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "SUPPORTS_FLOW_LOGS", Value: "true"}))
+
+		voltron := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
+		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "VOLTRON_WHISKER_BACKEND_ENDPOINT",
+			Value: "https://whisker-backend.calico-system.svc.cluster.local:8443",
+		}))
+		Expect(voltron.Env).To(ContainElement(corev1.EnvVar{
+			Name:  "VOLTRON_WHISKER_BACKEND_CA_BUNDLE_PATH",
+			Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt",
+		}))
+
+		np := rtest.GetResource(resourcesToCreate, render.ManagerPolicyName, render.ManagerNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		found := false
+		for _, rule := range np.Spec.Egress {
+			if rule.Destination.Selector == networkpolicy.KubernetesAppSelector("whisker") {
+				found = true
+				Expect(rule.Destination.Ports).To(Equal(networkpolicy.Ports(3002)))
+			}
+		}
+		Expect(found).To(BeTrue(), "expected manager egress to whisker-backend")
+	})
+
+	It("should not set the flow logs env when whisker is absent", func() {
+		resourcesToCreate, _ := renderObjects(renderConfig{
+			installation: installation,
+			ns:           render.ManagerNamespace,
+		})
+		deployment := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+
+		manager := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.ManagerName)
+		Expect(manager.Env).To(ContainElement(corev1.EnvVar{Name: "SUPPORTS_FLOW_LOGS", Value: "false"}))
+
+		voltron := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
+		for _, e := range voltron.Env {
+			Expect(e.Name).NotTo(HavePrefix("VOLTRON_WHISKER_BACKEND"))
+		}
+	})
+
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
 			oidc:              false,
@@ -1868,6 +1916,7 @@ type renderConfig struct {
 	rbacManagementEnabled bool
 	cloud                 bool
 	voltronMetricsEnabled bool
+	whiskerEnabled        bool
 	cloudResources        render.ManagerCloudResources
 }
 
@@ -1925,6 +1974,7 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 		Installation:          roc.installation,
 		ManagementCluster:     roc.managementCluster,
 		NonClusterHost:        roc.nonClusterHost,
+		WhiskerEnabled:        roc.whiskerEnabled,
 		TunnelServerCert:      tunnelSecret,
 		VoltronLinseedKeyPair: voltronLinseedKP,
 		InternalTLSKeyPair:    internalTraffic,

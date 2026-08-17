@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package utils
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	operator "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/utils"
+
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -26,7 +26,7 @@ var _ = Describe("Installation defaults recording", func() {
 	It("should return nothing when defaulting added nothing", func() {
 		spec := operator.InstallationSpec{Variant: operator.Calico}
 
-		defaults, err := suppliedDefaults(spec, spec)
+		defaults, err := SuppliedDefaults(spec, spec)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
 	})
@@ -38,7 +38,7 @@ var _ = Describe("Installation defaults recording", func() {
 		defaulted.KubernetesProvider = operator.ProviderEKS
 		defaulted.CalicoLibHostPath = "/var/lib/calico"
 
-		defaults, err := suppliedDefaults(declared, defaulted)
+		defaults, err := SuppliedDefaults(declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(Equal(&operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
@@ -55,7 +55,7 @@ var _ = Describe("Installation defaults recording", func() {
 		defaulted := declared
 		defaulted.CalicoLibHostPath = "/var/lib/calico"
 
-		defaults, err := suppliedDefaults(declared, defaulted)
+		defaults, err := SuppliedDefaults(declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.KubernetesProvider).To(BeEmpty())
 		Expect(defaults.CalicoLibHostPath).To(Equal("/var/lib/calico"))
@@ -75,7 +75,7 @@ var _ = Describe("Installation defaults recording", func() {
 			},
 		}
 
-		defaults, err := suppliedDefaults(declared, defaulted)
+		defaults, err := SuppliedDefaults(declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.CalicoNetwork).NotTo(BeNil())
 		Expect(defaults.CalicoNetwork.MTU).To(BeNil())
@@ -88,7 +88,7 @@ var _ = Describe("Installation defaults recording", func() {
 			ImagePullSecrets: []v1.LocalObjectReference{{Name: "pull-secret"}},
 		}
 
-		defaults, err := suppliedDefaults(declared, defaulted)
+		defaults, err := SuppliedDefaults(declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.ImagePullSecrets).To(HaveLen(1))
 		Expect(defaults.ImagePullSecrets[0].Name).To(Equal("pull-secret"))
@@ -98,7 +98,7 @@ var _ = Describe("Installation defaults recording", func() {
 		recorded := operator.InstallationSpec{KubernetesProvider: operator.ProviderEKS}
 		declared := operator.InstallationSpec{Variant: operator.Calico}
 
-		seeded := utils.OverrideInstallationSpec(recorded, declared)
+		seeded := OverrideInstallationSpec(recorded, declared)
 		Expect(seeded.KubernetesProvider).To(Equal(operator.ProviderEKS))
 		Expect(seeded.Variant).To(Equal(operator.Calico))
 	})
@@ -107,10 +107,10 @@ var _ = Describe("Installation defaults recording", func() {
 		recorded := operator.InstallationSpec{KubernetesProvider: operator.ProviderEKS}
 		declared := operator.InstallationSpec{KubernetesProvider: operator.ProviderGKE}
 
-		seeded := utils.OverrideInstallationSpec(recorded, declared)
+		seeded := OverrideInstallationSpec(recorded, declared)
 		Expect(seeded.KubernetesProvider).To(Equal(operator.ProviderGKE))
 
-		defaults, err := suppliedDefaults(declared, seeded)
+		defaults, err := SuppliedDefaults(declared, seeded)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
 	})

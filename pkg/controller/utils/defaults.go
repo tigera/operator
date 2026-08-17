@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package installation
+package utils
 
 import (
 	"encoding/json"
@@ -22,8 +22,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// suppliedDefaults returns the fields present in defaulted but absent from declared.
-func suppliedDefaults(declared, defaulted operatorv1.InstallationSpec) (*operatorv1.InstallationSpec, error) {
+// SuppliedDefaults returns the fields present in defaulted but absent from declared.
+func SuppliedDefaults(declared, defaulted operatorv1.InstallationSpec) (*operatorv1.InstallationSpec, error) {
 	declaredContent, err := specToMap(declared)
 	if err != nil {
 		return nil, err
@@ -57,6 +57,9 @@ func addedKeys(declared, defaulted map[string]any) map[string]any {
 	for key, defaultedValue := range defaulted {
 		declaredValue, present := declared[key]
 		if !present {
+			if isVacuous(defaultedValue) {
+				continue
+			}
 			added[key] = defaultedValue
 			continue
 		}
@@ -79,6 +82,23 @@ func addedKeys(declared, defaulted map[string]any) map[string]any {
 	return added
 }
 
+// isVacuous reports whether a value the user never declared is empty all the way down.
+func isVacuous(value any) bool {
+	switch typed := value.(type) {
+	case map[string]any:
+		for _, nested := range typed {
+			if !isVacuous(nested) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		return len(typed) == 0
+	default:
+		return false
+	}
+}
+
 func specToMap(spec operatorv1.InstallationSpec) (map[string]any, error) {
 	raw, err := json.Marshal(spec)
 	if err != nil {
@@ -89,5 +109,19 @@ func specToMap(spec operatorv1.InstallationSpec) (map[string]any, error) {
 	if err := json.Unmarshal(raw, &content); err != nil {
 		return nil, fmt.Errorf("unmarshal installation spec: %w", err)
 	}
+	pruneNulls(content)
 	return content, nil
+}
+
+// pruneNulls drops null fields, which the API server prunes too, so they can't read as defaults.
+func pruneNulls(content map[string]any) {
+	for key, value := range content {
+		if value == nil {
+			delete(content, key)
+			continue
+		}
+		if object, isObject := value.(map[string]any); isObject {
+			pruneNulls(object)
+		}
+	}
 }

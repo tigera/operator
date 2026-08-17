@@ -203,7 +203,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Status: operator.InstallationStatus{
 						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
-							Registry: "my-reg",
+							Registry: "some.registry.org/",
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
 						},
@@ -804,7 +804,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Status: operator.InstallationStatus{
 					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
-						Registry: "my-reg",
+						Registry: "some.registry.org/",
 						// The test is provider agnostic.
 						KubernetesProvider: operator.ProviderNone,
 					},
@@ -2232,6 +2232,25 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(instance.Spec.Azure).To(BeNil())
 			Expect(instance.Status.Defaults.Azure).To(BeNil())
 		})
+
+		It("should merge the overlay Installation into the computed spec", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &operator.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "overlay"},
+				Spec: operator.InstallationSpec{
+					ControlPlaneReplicas: ptr.To[int32](3),
+				},
+			})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			instance := &operator.Installation{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).ShouldNot(HaveOccurred())
+
+			Expect(instance.Spec.ControlPlaneReplicas).To(BeNil())
+			Expect(instance.Status.Computed.ControlPlaneReplicas).To(Equal(ptr.To[int32](3)))
+		})
 	})
 
 	Context("Using EKS networking", func() {
@@ -2305,7 +2324,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Status: operator.InstallationStatus{
 					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
-						Registry: "my-reg",
+						Registry: "some.registry.org/",
 						// The test is provider agnostic.
 						KubernetesProvider: operator.ProviderNone,
 					},
@@ -2428,7 +2447,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Status: operator.InstallationStatus{
 						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
-							Registry: "my-reg",
+							Registry: "some.registry.org/",
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
 						},

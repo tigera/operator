@@ -723,7 +723,7 @@ func (c *component) podAnnotations() map[string]string {
 func secretHash(data map[string][]byte) string {
 	h := sha256.New()
 	for _, k := range slices.Sorted(maps.Keys(data)) {
-		fmt.Fprintf(h, "%q%q", k, data[k])
+		_, _ = fmt.Fprintf(h, "%q%q", k, data[k])
 	}
 	return fmt.Sprintf("%x", h.Sum(nil))
 }

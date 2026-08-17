@@ -280,21 +280,11 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	// Reject specs the collector cannot start from, rather than rendering a config
-	// it will reject at boot.
-	if err := logCollector.Spec.OpenTelemetry.Validate(); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid OpenTelemetry configuration", err, reqLogger)
+	// it will reject at boot. Neither error can fix itself, so requeue on the CR
+	// watch rather than backing off.
+	if msg, err := validateSpec(logCollector.Spec.OpenTelemetry); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, msg, err, reqLogger)
 		return reconcile.Result{}, nil
-	}
-
-	if logCollector.Spec.OpenTelemetry.OpenTelemetryCollectorStatefulSet != nil {
-		if err := validation.ValidateReplicatedPodResourceOverrides(
-			logCollector.Spec.OpenTelemetry.OpenTelemetryCollectorStatefulSet,
-			otelvalidation.ValidateOpenTelemetryCollectorStatefulSetContainer,
-			validation.NoContainersDefined,
-		); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid statefulSet overrides", err, reqLogger)
-			return reconcile.Result{}, err
-		}
 	}
 
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.cli)
@@ -392,6 +382,26 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	r.status.ClearDegraded()
 
 	return reconcile.Result{RequeueAfter: graceRequeueAfter}, nil
+}
+
+// validateSpec covers both halves of what the user can get wrong: the export
+// config itself, and the StatefulSet overrides. The latter cannot move into
+// OpenTelemetrySpec.Validate -- that lives in the api module, and the override
+// validator is in pkg/common/validation, which imports the api module.
+func validateSpec(spec *operatorv1.OpenTelemetrySpec) (string, error) {
+	if err := spec.Validate(); err != nil {
+		return "Invalid OpenTelemetry configuration", err
+	}
+	if spec.OpenTelemetryCollectorStatefulSet != nil {
+		if err := validation.ValidateReplicatedPodResourceOverrides(
+			spec.OpenTelemetryCollectorStatefulSet,
+			otelvalidation.ValidateOpenTelemetryCollectorStatefulSetContainer,
+			validation.NoContainersDefined,
+		); err != nil {
+			return "Invalid statefulSet overrides", err
+		}
+	}
+	return "", nil
 }
 
 // disabledConfig is the configuration that renders the collector for removal.

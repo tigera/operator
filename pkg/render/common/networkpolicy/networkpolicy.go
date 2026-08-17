@@ -18,11 +18,11 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"regexp"
 	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -367,9 +367,22 @@ func ParseExternalDestination(endpoint string) (ExternalDestination, bool) {
 	return ExternalDestination{}, false
 }
 
-// clusterServiceHost matches a Kubernetes service DNS name, with or without the
-// cluster domain suffix: <service>.<namespace>.svc[.cluster.local]
-var clusterServiceHost = regexp.MustCompile(`^([a-z0-9]([-a-z0-9]*[a-z0-9])?)\.([a-z0-9]([-a-z0-9]*[a-z0-9])?)\.svc(\.[a-z0-9.-]+)?$`)
+// clusterService splits an in-cluster Service DNS name --
+// <service>.<namespace>.svc[.cluster.local] -- into its namespace and name.
+// Each element is checked with the upstream DNS-label validator rather than a
+// pattern of our own.
+func clusterService(host string) (namespace, name string, ok bool) {
+	parts := strings.Split(host, ".")
+	if len(parts) < 3 || parts[2] != "svc" {
+		return "", "", false
+	}
+	for _, p := range append([]string{parts[0], parts[1]}, parts[3:]...) {
+		if len(validation.IsDNS1123Label(p)) > 0 {
+			return "", "", false
+		}
+	}
+	return parts[1], parts[0], true
+}
 
 // ExternalDestinationEntityRule builds the tightest destination rule available for
 // an external endpoint:
@@ -386,10 +399,10 @@ func ExternalDestinationEntityRule(dest ExternalDestination, allowDomains bool) 
 	// An in-cluster Service is matched by service, not by domain: Calico resolves
 	// Domains rules from observed DNS answers, which does not cover a ClusterIP
 	// reached through the cluster domain.
-	if m := clusterServiceHost.FindStringSubmatch(dest.Host); m != nil {
+	if ns, name, ok := clusterService(dest.Host); ok {
 		// A service match carries the Service's own ports; Calico rejects a rule
 		// that sets both ("cannot specify ports with a service selector").
-		return CreateServiceSelectorEntityRule(m[3], m[1])
+		return CreateServiceSelectorEntityRule(ns, name)
 	}
 	if ip := net.ParseIP(dest.Host); ip != nil {
 		suffix := "/128"

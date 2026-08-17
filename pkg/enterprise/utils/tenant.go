@@ -30,9 +30,21 @@ type TenantOption func(*v1.Tenant)
 // WithStandardIndices declares the standard single-index base names on the Tenant. Only clusters
 // that have migrated to single-index storage should ask for them: index base names are otherwise
 // left off the artificial single-tenant Tenant, and components fall back to their default names.
+//
+// Data types the Tenant already declares are left alone, so that applying this option more than
+// once - or alongside one that declares its own indices - neither duplicates an index nor
+// overrides an explicit base index name.
 func WithStandardIndices() TenantOption {
 	return func(tenant *v1.Tenant) {
+		declared := make(map[v1.DataType]bool, len(tenant.Spec.Indices))
+		for _, index := range tenant.Spec.Indices {
+			declared[index.DataType] = true
+		}
+
 		for dataType := range v1.DataTypes {
+			if declared[dataType] {
+				continue
+			}
 			tenant.Spec.Indices = append(tenant.Spec.Indices, v1.Index{DataType: dataType, BaseIndexName: cloudStandardIndices[dataType]})
 		}
 

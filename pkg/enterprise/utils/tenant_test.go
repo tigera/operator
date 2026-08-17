@@ -60,4 +60,30 @@ var _ = Describe("TenantFromCloudConfig", func() {
 			Expect(TenantFromCloudConfig(cloudConfig, WithStandardIndices()).Spec.Indices).To(Equal(expected))
 		}
 	})
+
+	It("should not duplicate indices when applied more than once", func() {
+		once := TenantFromCloudConfig(cloudConfig, WithStandardIndices()).Spec.Indices
+		twice := TenantFromCloudConfig(cloudConfig, WithStandardIndices(), WithStandardIndices()).Spec.Indices
+
+		Expect(twice).To(HaveLen(len(v1.DataTypes)))
+		Expect(twice).To(Equal(once))
+	})
+
+	It("should leave an index the Tenant already declares alone", func() {
+		// An explicitly declared base index name wins over the standard one, and is not duplicated.
+		declareFlowLogs := func(tenant *v1.Tenant) {
+			tenant.Spec.Indices = []v1.Index{{DataType: v1.DataTypeFlowLogs, BaseIndexName: "custom_flowlogs"}}
+		}
+
+		indices := TenantFromCloudConfig(cloudConfig, declareFlowLogs, WithStandardIndices()).Spec.Indices
+		Expect(indices).To(HaveLen(len(v1.DataTypes)))
+
+		var flowLogs []v1.Index
+		for _, index := range indices {
+			if index.DataType == v1.DataTypeFlowLogs {
+				flowLogs = append(flowLogs, index)
+			}
+		}
+		Expect(flowLogs).To(ConsistOf(v1.Index{DataType: v1.DataTypeFlowLogs, BaseIndexName: "custom_flowlogs"}))
+	})
 })

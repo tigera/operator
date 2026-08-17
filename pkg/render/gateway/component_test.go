@@ -161,15 +161,17 @@ var _ = Describe("Gateway component render", func() {
 				cfg.Enterprise = false
 			})
 
-			It("skips SA and NetworkPolicy", func() {
+			It("skips SA and RoleBinding but keeps the proxy NetworkPolicy", func() {
 				for _, obj := range toCreate {
 					if _, ok := obj.(*corev1.ServiceAccount); ok {
 						Fail("ServiceAccount should not be rendered when Enterprise is false")
 					}
-					if _, ok := obj.(*v3.NetworkPolicy); ok {
-						Fail("NetworkPolicy should not be rendered when Enterprise is false")
+					if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-ingressgateway-access" {
+						Fail("only the gateway access RoleBinding should be rendered when Enterprise is false")
 					}
 				}
+				np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
+				Expect(np).NotTo(BeNil())
 			})
 		})
 	})
@@ -191,25 +193,75 @@ var _ = Describe("Gateway component render", func() {
 			Expect(string(rg.Spec.From[0].Namespace)).To(Equal("custom-gateway-ns"))
 		})
 
-		It("does not include operator Roles", func() {
+		It("grants itself write access in both namespaces it writes to", func() {
+			accessName := prefix + "-ingressgateway-access"
+			for _, ns := range []string{"custom-gateway-ns", bkNS} {
+				role := findObject[*rbacv1.Role](toCreate, accessName, ns)
+				Expect(role).NotTo(BeNil(), "expected a access Role in %s", ns)
+				Expect(role.Rules).To(HaveLen(2))
+				Expect(role.Rules[0].Resources).To(ConsistOf("gateways", "httproutes", "referencegrants"))
+				Expect(role.Rules[0].Verbs).To(ConsistOf("create", "update", "delete"))
+				Expect(role.Rules[1].Resources).To(ConsistOf("backends"))
+				Expect(findObject[*rbacv1.RoleBinding](toCreate, accessName, ns)).NotTo(BeNil(),
+					"expected a access RoleBinding in %s", ns)
+			}
 			for _, obj := range toCreate {
-				if _, ok := obj.(*rbacv1.Role); ok {
-					Fail("Role should not be rendered — operator uses ClusterRole")
+				if r, ok := obj.(*rbacv1.Role); ok {
+					Expect(r.Name).To(Equal(accessName), "the access Role is the only Role this component renders")
 				}
 			}
 		})
 
 		It("leaves SA, RoleBinding, and NetworkPolicy to the GatewayAPI controller even when Enterprise is true", func() {
 			for _, obj := range toCreate {
-				switch obj.(type) {
+				switch o := obj.(type) {
 				case *corev1.ServiceAccount:
 					Fail("ServiceAccount should not be rendered for a custom gateway namespace")
 				case *rbacv1.RoleBinding:
-					Fail("RoleBinding should not be rendered for a custom gateway namespace")
+					Expect(o.Name).To(Equal(prefix+"-ingressgateway-access"),
+						"only the gateway access RoleBinding belongs to this component in a custom namespace")
 				case *v3.NetworkPolicy:
 					Fail("NetworkPolicy should not be rendered for a custom gateway namespace")
 				}
 			}
+		})
+
+		It("grants write access before rendering anything it has to write", func() {
+			Expect(toCreate).NotTo(BeEmpty())
+			accessName := prefix + "-ingressgateway-access"
+			role, ok := toCreate[0].(*rbacv1.Role)
+			Expect(ok).To(BeTrue(), "the access Role must come first — nothing else can be created without it")
+			Expect(role.Name).To(Equal(accessName))
+
+			gatewayIdx, otherIdx := -1, -1
+			for i, obj := range toCreate {
+				switch obj.(type) {
+				case *gapi.Gateway:
+					gatewayIdx = i
+				case *gapi.HTTPRoute, *envoyapi.Backend, *corev1.Secret:
+					if otherIdx == -1 {
+						otherIdx = i
+					}
+				}
+			}
+			Expect(gatewayIdx).To(BeNumerically(">=", 0))
+			Expect(otherIdx).To(BeNumerically(">", gatewayIdx),
+				"the Gateway carries the cleanup label, so it must precede the resources cleanup finds through it")
+		})
+
+		It("renders the ReferenceGrant before the HTTPRoute", func() {
+			grantIdx, routeIdx := -1, -1
+			for i, obj := range toCreate {
+				switch obj.(type) {
+				case *gapi.ReferenceGrant:
+					grantIdx = i
+				case *gapi.HTTPRoute:
+					routeIdx = i
+				}
+			}
+			Expect(grantIdx).To(BeNumerically(">=", 0))
+			Expect(routeIdx).To(BeNumerically(">", grantIdx),
+				"the grant must exist before the route so its cross-namespace backendRef resolves on the first pass")
 		})
 
 		It("renders the TLS secret after the Gateway", func() {
@@ -225,6 +277,30 @@ var _ = Describe("Gateway component render", func() {
 			Expect(gatewayIdx).To(BeNumerically(">=", 0))
 			Expect(secretIdx).To(BeNumerically(">", gatewayIdx),
 				"the Gateway must be created before the TLS secret so the GatewayAPI controller can grant the operator secret access in the custom namespace")
+		})
+	})
+
+	Context("route request timeout", func() {
+		JustBeforeEach(func() {
+			comp := gateway.Component(cfg)
+			toCreate, toDelete = comp.Objects()
+		})
+
+		It("omits timeouts by default", func() {
+			route := findObject[*gapi.HTTPRoute](toCreate, prefix+"-route", gwNS)
+			Expect(route.Spec.Rules[0].Timeouts).To(BeNil())
+		})
+
+		Context("when RouteRequestTimeout is set", func() {
+			BeforeEach(func() {
+				cfg.RouteRequestTimeout = ptr.To("0s")
+			})
+
+			It("sets the request timeout on the route", func() {
+				route := findObject[*gapi.HTTPRoute](toCreate, prefix+"-route", gwNS)
+				Expect(route.Spec.Rules[0].Timeouts).NotTo(BeNil())
+				Expect(*route.Spec.Rules[0].Timeouts.Request).To(Equal(gapi.Duration("0s")))
+			})
 		})
 	})
 
@@ -307,9 +383,33 @@ var _ = Describe("Gateway deletion component", func() {
 	})
 
 	Context("same namespace", func() {
-		It("returns all objects in objsToDelete and nothing in objsToCreate", func() {
+		It("returns everything in objsToDelete and nothing in objsToCreate", func() {
 			Expect(toCreate).To(BeNil())
 			Expect(toDelete).NotTo(BeEmpty())
+		})
+
+		It("drops the access grant last, after the resources it permits deleting", func() {
+			// RoleBinding then Role, so losing the grant cannot strand an
+			// earlier delete.
+			last := toDelete[len(toDelete)-1]
+			secondLast := toDelete[len(toDelete)-2]
+			Expect(last).To(BeAssignableToTypeOf(&rbacv1.Role{}))
+			Expect(secondLast).To(BeAssignableToTypeOf(&rbacv1.RoleBinding{}))
+			Expect(findObject[*rbacv1.Role](toDelete, prefix+"-ingressgateway-access", gwNS)).NotTo(BeNil())
+		})
+
+		It("deletes the Gateway after the resources found through it", func() {
+			gatewayIdx, lastResourceIdx := -1, -1
+			for i, obj := range toDelete {
+				switch obj.(type) {
+				case *gapi.Gateway:
+					gatewayIdx = i
+				case *gapi.HTTPRoute, *envoyapi.Backend, *corev1.Secret, *v3.NetworkPolicy:
+					lastResourceIdx = i
+				}
+			}
+			Expect(gatewayIdx).To(BeNumerically(">", lastResourceIdx),
+				"an earlier failed delete must leave the labeled Gateway in place so the next reconcile finds the leftovers")
 		})
 
 		It("targets the correct resource names", func() {
@@ -343,15 +443,17 @@ var _ = Describe("Gateway deletion component", func() {
 			delCfg.Enterprise = false
 		})
 
-		It("skips Enterprise resources", func() {
+		It("skips SA and RoleBinding but keeps the proxy NetworkPolicy", func() {
 			for _, obj := range toDelete {
 				if _, ok := obj.(*corev1.ServiceAccount); ok {
 					Fail("ServiceAccount should not appear when Enterprise is false")
 				}
-				if _, ok := obj.(*v3.NetworkPolicy); ok {
-					Fail("NetworkPolicy should not appear when Enterprise is false")
+				if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-ingressgateway-access" {
+					Fail("only the gateway access RoleBinding should appear when Enterprise is false")
 				}
 			}
+			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
+			Expect(np).NotTo(BeNil())
 		})
 	})
 
@@ -367,11 +469,12 @@ var _ = Describe("Gateway deletion component", func() {
 
 		It("does not delete GatewayAPI-controller-owned resources even when Enterprise is true", func() {
 			for _, obj := range toDelete {
-				switch obj.(type) {
+				switch o := obj.(type) {
 				case *corev1.ServiceAccount:
 					Fail("ServiceAccount in a custom namespace belongs to the GatewayAPI controller and must not be deleted here")
 				case *rbacv1.RoleBinding:
-					Fail("RoleBinding in a custom namespace belongs to the GatewayAPI controller and must not be deleted here")
+					Expect(o.Name).To(Equal(prefix+"-ingressgateway-access"),
+						"the tigera-operator-secrets RoleBinding belongs to the GatewayAPI controller and must not be deleted here")
 				case *v3.NetworkPolicy:
 					Fail("NetworkPolicy is not rendered for a custom namespace and must not be deleted here")
 				}
@@ -403,6 +506,15 @@ var _ = Describe("Gateway deletion component", func() {
 			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
+		It("keeps the backend namespace's access grant, and drops the old namespace's", func() {
+			accessName := prefix + "-ingressgateway-access"
+			Expect(findObject[*rbacv1.Role](toDelete, accessName, "old-ns")).NotTo(BeNil(),
+				"the old namespace is no longer written to, so its grant goes")
+			Expect(findObject[*rbacv1.Role](toDelete, accessName, bkNS)).To(BeNil(),
+				"the backend namespace keeps its resources on a move, so it keeps the grant that writes them")
+			Expect(findObject[*rbacv1.RoleBinding](toDelete, accessName, bkNS)).To(BeNil())
+		})
+
 		Context("moving into the backend namespace", func() {
 			BeforeEach(func() {
 				delCfg.MoveTargetNamespace = bkNS
@@ -410,6 +522,14 @@ var _ = Describe("Gateway deletion component", func() {
 
 			It("deletes the ReferenceGrant, which is no longer rendered", func() {
 				Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
+			})
+
+			It("still keeps the backend namespace's access grant", func() {
+				// The new render writes the Backend there, so the grant stays
+				// even though this pass deletes the ReferenceGrant.
+				accessName := prefix + "-ingressgateway-access"
+				Expect(findObject[*rbacv1.Role](toDelete, accessName, bkNS)).To(BeNil())
+				Expect(findObject[*rbacv1.RoleBinding](toDelete, accessName, bkNS)).To(BeNil())
 			})
 		})
 

@@ -663,8 +663,8 @@ func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI 
 
 // reconcileGatewayNamespaceResources writes the per-namespace resources owned by the namespace's
 // Gateways, so the GC removes them once the last Gateway is gone (and the GatewayAPI CR's deletion
-// doesn't strand them). Reserved namespaces are skipped; trust bundle on both variants, the rest on
-// Enterprise.
+// doesn't strand them). Reserved namespaces are skipped; trust bundle and operator-secrets
+// RoleBinding on both variants, the rest on Enterprise.
 // Each object is written once per owning Gateway, because the component handler takes a single
 // owner. MultipleOwnersLabel makes it merge that owner reference into the references already on the
 // object instead of replacing them, which is what keeps the namespace's other Gateways — and any
@@ -699,11 +699,15 @@ func gatewayNamespaceObjects(namespace string, bundle certificatemanagement.Trus
 	if bundle != nil {
 		objs = append(objs, bundle.ConfigMap(namespace))
 	}
+	// The operator needs secret CRUD in every gateway namespace on both
+	// variants: it places the UI gateway TLS secret there when
+	// spec.ingressGateway names a custom namespace (Manager on Enterprise,
+	// Whisker on Calico).
+	objs = append(objs, render.CreateOperatorSecretsRoleBinding(namespace))
 	if enterprise {
 		objs = append(objs,
 			gatewayapi.GatewayNamespaceServiceAccount(namespace),
 			gatewayapi.GatewayNamespaceRoleBinding(namespace),
-			render.CreateOperatorSecretsRoleBinding(namespace),
 		)
 		objs = append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(namespace, pullSecrets...)...)...)
 	}

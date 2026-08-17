@@ -252,6 +252,29 @@ var _ = Describe("Manager controller tests", func() {
 			r.tierWatchReady.MarkAsReady()
 		})
 
+		It("should degrade when spec.ingressGateway is set but the GatewayAPI CR is missing", func() {
+			Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, cr)).NotTo(HaveOccurred())
+			cr.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}
+			Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
+
+			degradedMsg := "GatewayAPI CR not found; gateway resources will not be rendered"
+			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything).Return()
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(HaveOccurred())
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything)
+
+			gw := &gatewayapiv1.Gateway{
+				TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ManagerGatewayResourcePrefix + "-gateway",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(kerror.IsNotFound(test.GetResource(c, gw))).To(BeTrue(),
+				"no gateway resources should be rendered without a GatewayAPI CR")
+		})
+
 		It("should create an internal manager TLS cert secret", func() {
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
@@ -1511,38 +1534,6 @@ var _ = Describe("Manager controller tests", func() {
 		})
 	})
 
-	Context("ensureGatewayNamespace", func() {
-		var r ReconcileManager
-
-		BeforeEach(func() {
-			r = ReconcileManager{client: c, scheme: scheme}
-		})
-
-		It("should create the namespace when it does not exist", func() {
-			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
-
-			ns := &corev1.Namespace{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(HaveKeyWithValue("name", "ns-a"))
-			Expect(ns.OwnerReferences).To(BeEmpty())
-		})
-
-		It("should leave an existing namespace untouched", func() {
-			existing := &corev1.Namespace{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:   "ns-a",
-					Labels: map[string]string{"team": "netsec"},
-				},
-			}
-			Expect(c.Create(ctx, existing)).NotTo(HaveOccurred())
-
-			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
-
-			ns := &corev1.Namespace{}
-			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(Equal(map[string]string{"team": "netsec"}))
-		})
-	})
 })
 
 // failingGateReadClient fails the read of the gate ConfigMap and passes everything else

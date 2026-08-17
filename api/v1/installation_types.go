@@ -1135,6 +1135,13 @@ type InstallationStatus struct {
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
 
+	// Defaults holds fields the operator supplied because the spec omitted them
+	// (schemaless, so schema defaults can't inflate).
+	// +optional
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Defaults *InstallationSpec `json:"defaults,omitempty"`
+
 	// CalicoVersion shows the current running version of calico.
 	// CalicoVersion along with Variant is needed to know the exact
 	// version deployed.

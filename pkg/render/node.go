@@ -1696,7 +1696,7 @@ func (c *nodeComponent) nodeLifecycle() *corev1.Lifecycle {
 	}
 }
 
-// nodeProbes creates the node's probes. The startup probe stops a slow Felix start from tripping liveness.
+// nodeProbes creates calico/node health probes. It returns in order: startupProbe, livenessProbe, readinessProbe
 func (c *nodeComponent) nodeProbes() (*corev1.Probe, *corev1.Probe, *corev1.Probe) {
 	// Determine liveness and readiness configuration for node.
 	livenessPort := intstr.FromInt(c.cfg.FelixHealthPort)

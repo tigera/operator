@@ -243,21 +243,25 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 		// This covers the common case where the apiserver source IP survives unmodified
 		// to the webhook pod and matches the kubernetes Service's endpoints.
 		//
-		// Rule 2: Deny traffic from any Kubernetes workload endpoint. The selector
+		// Rule 2: Allow traffic from the konnectivity agents. On AKS and GKE the apiserver
+		// reaches in-cluster webhooks through those pods, so the call arrives with a pod
+		// source IP and would otherwise hit Rule 3.
+		//
+		// Rule 3: Deny traffic from any Kubernetes workload endpoint. The selector
 		// "has(projectcalico.org/orchestrator)" matches only pods — Calico adds this
 		// label to every workload endpoint but not to NetworkSets or host endpoints, so
 		// a user-created NetworkSet (which could otherwise be picked up by a bare
 		// namespaceSelector: all()) does not short-circuit this deny. Traffic that has
 		// been SNAT'd to a node tunnel address (e.g. a hostnet apiserver sending through
 		// an IPIP/VXLAN overlay) arrives from the node, not from a workload endpoint,
-		// and so falls through to Rule 3. This is what makes the policy work for hostnet
+		// and so falls through to Rule 4. This is what makes the policy work for hostnet
 		// apiservers whose traffic arrives at the webhook with a tunnel IP source.
 		//
-		// Rule 3: Fallback allow for everything else on the webhook port. In practice
+		// Rule 4: Fallback allow for everything else on the webhook port. In practice
 		// this covers node-sourced traffic (including the SNAT'd hostnet-apiserver case
 		// above) and cluster-external sources routed to the pod.
 		//
-		// TODO: This three-rule structure exists because Calico's policy model has no
+		// TODO: This rule structure exists because Calico's policy model has no
 		// native way to say "any node" or "any tunnel IP" as a source. If we add a
 		// first-class selector for that (e.g. a built-in label on host endpoints, or a
 		// Source match for tunnel-sourced traffic), we could collapse these rules into a
@@ -268,6 +272,14 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
 				Source:   networkpolicy.KubeAPIServerEntityRule,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source:   networkpolicy.KonnectivityAgentEntityRule,
 				Destination: v3.EntityRule{
 					Ports: networkpolicy.Ports(uint16(containerPort)),
 				},

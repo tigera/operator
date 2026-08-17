@@ -364,6 +364,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 					{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+					{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -558,6 +559,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 					{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+					{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -851,6 +853,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 					{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+					{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -990,6 +993,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 					{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+					{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1261,6 +1265,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/var/log/calico", Name: "var-log-calico"},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 					{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+					{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 
@@ -1397,6 +1402,7 @@ var _ = Describe("Node rendering tests", func() {
 					{MountPath: "/node-certs", Name: render.NodeTLSSecretName, ReadOnly: true},
 					{MountPath: "/sys/fs/bpf", Name: "bpffs"},
 					{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+					{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 				}
 				Expect(ds.Spec.Template.Spec.Containers[0].VolumeMounts).To(ConsistOf(expectedNodeVolumeMounts))
 

@@ -288,7 +288,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		ResourcePrefix:   whisker.GatewayResourcePrefix,
 		TLSSecretName:    whisker.GatewayTLSSecretName,
 		BackendNamespace: whisker.WhiskerNamespace,
-		Enterprise:       false,
+		Enterprise:       !installationSpec.Variant.IsEnterprise(),
 	}
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface

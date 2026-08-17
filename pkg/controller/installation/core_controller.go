@@ -805,7 +805,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	recordedDefaults, err := suppliedDefaults(declaredSpec, instance.Spec)
+	recordedDefaults, err := utils.SuppliedDefaults(declaredSpec, instance.Spec)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to determine installation defaults", err, reqLogger)
 		return reconcile.Result{}, err
@@ -923,8 +923,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if !reflect.DeepEqual(instance.Status.Defaults, recordedDefaults) {
+	// Publish the effective config before the IP pool gate below, since other
+	// controllers read it instead of the spec.
+	computed := instance.Spec.DeepCopy()
+	if !reflect.DeepEqual(instance.Status.Defaults, recordedDefaults) || !reflect.DeepEqual(instance.Status.Computed, computed) {
 		instance.Status.Defaults = recordedDefaults
+		instance.Status.Computed = computed
 		if err := r.writeStatus(ctx, instance); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation defaults", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1634,7 +1638,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	} else {
 		instance.Status.ImageSet = imageSet.Name
 	}
-	instance.Status.Computed = &instance.Spec
 	if err = r.writeStatus(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}

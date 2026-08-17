@@ -79,8 +79,7 @@ var _ = Describe("whisker controller tests", func() {
 				Generation: 2,
 			},
 			Status: operatorv1.InstallationStatus{
-				Variant:  operatorv1.CalicoEnterprise,
-				Computed: &operatorv1.InstallationSpec{},
+				Variant: operatorv1.CalicoEnterprise,
 			},
 			Spec: operatorv1.InstallationSpec{
 				ControlPlaneReplicas: &replicas,
@@ -88,6 +87,7 @@ var _ = Describe("whisker controller tests", func() {
 				Registry:             "some.registry.org/",
 			},
 		}
+		installation.Status.Computed = &installation.Spec
 
 		// Apply prerequisites for the basic reconcile to succeed.
 		certificateManager, err := certificatemanager.Create(cli, nil, "cluster.local", common.OperatorNamespace(), certificatemanager.AllowCACreation())

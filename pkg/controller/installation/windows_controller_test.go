@@ -667,7 +667,7 @@ var _ = Describe("windows-controller installation tests", func() {
 						Status: operator.InstallationStatus{
 							Variant: operator.Calico,
 							Computed: &operator.InstallationSpec{
-								Registry: "my-reg",
+								Registry: "some.registry.org/",
 								// The test is provider agnostic.
 								KubernetesProvider: operator.ProviderNone,
 							},

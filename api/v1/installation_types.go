@@ -701,7 +701,7 @@ type CalicoNetworkSpec struct {
 	// IP pools in this list will be reconciled by the operator and should not be modified out-of-band.
 	// +optional
 	// +kubebuilder:validation:MaxItems=25
-	IPPools []IPPool `json:"ipPools,omitempty"`
+	IPPools []IPPool `json:"ipPools"`
 
 	// MTU specifies the maximum transmission unit to use on the pod network.
 	// If not specified, Calico will perform MTU auto-detection based on the cluster network.

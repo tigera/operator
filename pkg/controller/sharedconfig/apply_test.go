@@ -162,13 +162,17 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				}
 			}
 
-			// createByUpdate writes the way the operator's merge patch used to, recorded against a
-			// manager that never applied.
-			createByUpdate := func(annotations map[string]string, spec v3.FelixConfigurationSpec) {
+			// createAsManager writes the way the operator's merge patch used to, against a manager
+			// that never applied.
+			createAsManager := func(manager string, annotations map[string]string, spec v3.FelixConfigurationSpec) {
 				Expect(c.Create(ctx, &v3.FelixConfiguration{
 					ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: annotations},
 					Spec:       spec,
-				})).NotTo(HaveOccurred())
+				}, client.FieldOwner(manager))).NotTo(HaveOccurred())
+			}
+
+			createByUpdate := func(annotations map[string]string, spec v3.FelixConfigurationSpec) {
+				createAsManager("someone-else", annotations, spec)
 			}
 
 			It("should take over a field it recorded as its own", func() {
@@ -212,6 +216,21 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				_, err = w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
 				Expect(err).To(BeAssignableToTypeOf(&sharedconfig.ConflictingFieldsError{}))
 				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(true)))
+			})
+
+			It("should take over a field its own legacy manager still owns", func() {
+				createAsManager("operator", nil, v3.FelixConfigurationSpec{HealthPort: ptr.To(9098)})
+
+				fc, err := w.ApplyFelixConfiguration(ctx, declare(sharedconfig.ConflictDefer, sharedconfig.ConflictDefer))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(fc.Spec.HealthPort).To(Equal(ptr.To(9099)))
+
+				// Taking the field over moves it out of the legacy manager's field set.
+				for _, entry := range getFelixConfig().ManagedFields {
+					if entry.Manager == "operator" {
+						Expect(string(entry.FieldsV1.Raw)).NotTo(ContainSubstring("healthPort"))
+					}
+				}
 			})
 
 			It("should defer on a field it never recorded, leaving the value alone", func() {

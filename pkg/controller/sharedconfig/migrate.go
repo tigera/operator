@@ -24,25 +24,29 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// reclaimablePaths lists fields a plain update owns that hold the operator's own value.
+// legacyFieldManager is what the API server derives from the /usr/bin/operator user agent,
+// so it records the operator's pre-apply writes.
+const legacyFieldManager = "operator"
+
+// reclaimablePaths lists fields a plain update owns that the operator wrote itself.
 // An apply must force ownership across once.
 func reclaimablePaths(fc *v3.FelixConfiguration) (map[string]bool, error) {
-	updated, err := updateOwnedPaths(fc)
-	if err != nil || len(updated) == 0 {
-		return nil, err
+	reclaimable, others, err := updateOwnedPaths(fc)
+	if err != nil || len(others) == 0 {
+		return reclaimable, err
 	}
+
+	// Ownership moves on a plain update too, so fall back to the values the operator recorded.
 	lastWritten, err := lastWrittenValues(fc)
 	if err != nil || len(lastWritten) == 0 {
-		return nil, err
+		return reclaimable, err
 	}
 	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(fc)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read FelixConfiguration fields: %w", err)
 	}
-
-	reclaimable := map[string]bool{}
 	for path := range lastWritten {
-		if !updated[path] {
+		if !others[path] {
 			continue
 		}
 		changed, err := changedByOther(content, lastWritten, path)
@@ -56,20 +60,25 @@ func reclaimablePaths(fc *v3.FelixConfiguration) (map[string]bool, error) {
 	return reclaimable, nil
 }
 
-// updateOwnedPaths lists the fields owned through a plain update rather than an apply.
-func updateOwnedPaths(fc *v3.FelixConfiguration) (map[string]bool, error) {
-	owned := map[string]bool{}
+// updateOwnedPaths splits the fields owned through a plain update by whether the operator's own
+// legacy field manager holds them.
+func updateOwnedPaths(fc *v3.FelixConfiguration) (legacy, others map[string]bool, err error) {
+	legacy, others = map[string]bool{}, map[string]bool{}
 	for _, entry := range fc.ManagedFields {
 		if entry.Operation != metav1.ManagedFieldsOperationUpdate || entry.FieldsV1 == nil {
 			continue
 		}
 		fields := map[string]any{}
 		if err := json.Unmarshal(entry.FieldsV1.Raw, &fields); err != nil {
-			return nil, fmt.Errorf("unable to parse the fields managed by %q: %w", entry.Manager, err)
+			return nil, nil, fmt.Errorf("unable to parse the fields managed by %q: %w", entry.Manager, err)
 		}
-		collectFieldPaths(fields, "", owned)
+		out := others
+		if entry.Manager == legacyFieldManager {
+			out = legacy
+		}
+		collectFieldPaths(fields, "", out)
 	}
-	return owned, nil
+	return legacy, others, nil
 }
 
 // collectFieldPaths flattens a managed field set into paths of the "spec.field" form.

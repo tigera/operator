@@ -242,10 +242,17 @@ var _ = Describe("IPPool FV tests", func() {
 		// Query the Installation and verify the IP pool name has been defaulted.
 		instance := &operator.Installation{}
 		Eventually(func() error {
-			return c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
+			if err := c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance); err != nil {
+				return err
+			}
+			if instance.Status.Computed == nil {
+				return fmt.Errorf("Installation defaults have not been recorded yet")
+			}
+			return nil
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
-		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(BeEmpty())
+		Expect(instance.Status.Computed.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(instance.Status.Computed.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
 
 		// In order to modify IP pools, the operator needs the API server. We can assert the IP pool has not yet
 		// been controlled by the operator at this point.
@@ -339,11 +346,18 @@ var _ = Describe("IPPool FV tests", func() {
 		// Query the Installation and verify the IP pool name has been defaulted.
 		instance := &operator.Installation{}
 		Eventually(func() error {
-			return c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance)
+			if err := c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance); err != nil {
+				return err
+			}
+			if instance.Status.Computed == nil {
+				return fmt.Errorf("Installation defaults have not been recorded yet")
+			}
+			return nil
 		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
-		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
-		Expect(instance.Spec.CalicoNetwork.IPPools[0].NodeSelector).To(Equal("all()"))
+		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(BeEmpty())
+		Expect(instance.Status.Computed.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(instance.Status.Computed.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
+		Expect(instance.Status.Computed.CalicoNetwork.IPPools[0].NodeSelector).To(Equal("all()"))
 
 		// In order to modify IP pools, the operator needs the API server. We can assert the IP pool has not yet
 		// been controlled by the operator at this point.

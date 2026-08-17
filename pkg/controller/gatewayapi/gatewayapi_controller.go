@@ -59,10 +59,6 @@ import (
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
-const (
-	DefaultPolicySyncPrefix = "/var/run/nodeagent"
-)
-
 var log = logf.Log.WithName("controller_gatewayapi")
 
 // Add creates a new GatewayAPI Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -620,37 +616,11 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 	return resource, "", nil
 }
 
-// patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
+// patchFelixConfiguration sets the policy sync path the gateway data plane needs.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
-	_, err := sharedconfig.NewWriter(r.client, r.useV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
-		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
-		policySyncPrefixSetDesired := DefaultPolicySyncPrefix == policySyncPrefix
-
-		if !policySyncPrefixSetDesired && policySyncPrefix != "" {
-			return false, nil
-		}
-
-		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
-
-		log.Info(
-			"Patching FelixConfiguration: ",
-			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
-		)
-		return true, nil
-	})
-
+	writer := sharedconfig.NewWriter(r.client, r.useV3CRDs)
+	_, err := writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
 	return err
-}
-
-func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec) string {
-	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
-	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
-	existing := fcSpec.PolicySyncPathPrefix
-	if existing != "" {
-		return existing
-	}
-
-	return DefaultPolicySyncPrefix
 }
 
 // maintainFinalizer manages this controller's finalizer on the Installation resource.

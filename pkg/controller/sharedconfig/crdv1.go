@@ -76,7 +76,11 @@ func (w *crdV1Writer) ApplyFelixConfiguration(ctx context.Context, declare Decla
 	if err := mergeInto(merged, payload); err != nil {
 		return nil, err
 	}
-	if err := recordWrittenValues(merged, payload, declaration, deferred); err != nil {
+	removed, err := removeUndeclared(merged, current, declaration, payload)
+	if err != nil {
+		return nil, err
+	}
+	if err := recordWrittenValues(merged, payload, declaration, append(deferred, removed...)); err != nil {
 		return nil, err
 	}
 	if equality.Semantic.DeepEqual(current, merged) {
@@ -133,6 +137,66 @@ func resolveTrackedConflicts(current *v3.FelixConfiguration, d *FelixConfigurati
 		return nil, &ConflictingFieldsError{Paths: refused}
 	}
 	return deferred, nil
+}
+
+// removeUndeclared deletes governed fields the declaration left out, matching the way a sole
+// apply owner drops them.
+func removeUndeclared(merged, current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured) ([]string, error) {
+	currentContent, err := runtime.DefaultUnstructuredConverter.ToUnstructured(current)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read FelixConfiguration fields: %w", err)
+	}
+	lastWritten, err := lastWrittenValues(current)
+	if err != nil {
+		return nil, err
+	}
+
+	var remove, refused []string
+	for path := range d.Policies {
+		if pathSet(payload.Object, path) || !pathSet(currentContent, path) {
+			continue
+		}
+		if _, recorded := lastWritten[path]; !recorded {
+			// The operator has no record of writing this, so it belongs to someone else.
+			continue
+		}
+		changed, err := changedByOther(currentContent, lastWritten, path)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			switch d.Policies[path] {
+			case ConflictDefer:
+				continue
+			case ConflictOverride:
+			default:
+				refused = append(refused, path)
+				continue
+			}
+		}
+		remove = append(remove, path)
+	}
+
+	if len(refused) > 0 {
+		sort.Strings(refused)
+		return nil, &ConflictingFieldsError{Paths: refused}
+	}
+	return remove, deletePaths(merged, remove)
+}
+
+// deletePaths clears the named fields on fc.
+func deletePaths(fc *v3.FelixConfiguration, paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	content, err := runtime.DefaultUnstructuredConverter.ToUnstructured(fc)
+	if err != nil {
+		return fmt.Errorf("unable to read FelixConfiguration fields: %w", err)
+	}
+	for _, path := range paths {
+		removePath(content, path)
+	}
+	return runtime.DefaultUnstructuredConverter.FromUnstructured(content, fc)
 }
 
 func (w *crdV1Writer) persist(ctx context.Context, fc *v3.FelixConfiguration, patchFrom client.Patch) (*v3.FelixConfiguration, error) {

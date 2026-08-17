@@ -17,7 +17,6 @@ package istio
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -41,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/render/istio"
@@ -260,11 +258,13 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	_, err = sharedconfig.NewWriter(r.Client, r.useV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
-		return r.setIstioFelixConfiguration(ctx, instance, fc, false)
-	})
-	if err != nil {
+	writer := sharedconfig.NewWriter(r.Client, r.useV3CRDs)
+	if _, err = writer.ApplyFelixConfiguration(ctx, r.declareIstioFelixConfiguration(instance, false)); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
+		return reconcile.Result{}, err
+	}
+	if _, err = writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.Client)); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with the policy sync path", err, log)
 		return reconcile.Result{}, err
 	}
 
@@ -281,146 +281,45 @@ func updateDefaults(istio *operatorv1.Istio) {
 	}
 }
 
-func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
-	ambientChanged, err := r.configureIstioAmbientMode(fc, remove)
-	if err != nil {
-		return false, err
-	}
-	dscpChanged, err := r.configureIstioDSCPMark(instance, fc, remove)
-	if err != nil {
-		return false, err
-	}
-	policySyncChanged, err := r.configurePolicySyncPathPrefix(ctx, instance, fc, remove)
-	if err != nil {
-		return false, err
-	}
-	return ambientChanged || dscpChanged || policySyncChanged, nil
-}
+// istioFieldManager owns the FelixConfiguration fields the Istio integration sets.
+const istioFieldManager = "istio"
 
-func (r *ReconcileIstio) configureIstioAmbientMode(fc *v3.FelixConfiguration, remove bool) (bool, error) {
-	var annotationMode *string
-	if fc.Annotations[istio.IstioOperatorAnnotationMode] != "" {
-		value := fc.Annotations[istio.IstioOperatorAnnotationMode]
-		annotationMode = &value
-	}
-
-	// If the annotation does not match the spec value (ignoring both nil), it indicates a misconfiguration.
-	match := annotationMode == nil && fc.Spec.IstioAmbientMode == nil ||
-		annotationMode != nil && fc.Spec.IstioAmbientMode != nil && *annotationMode == string(*fc.Spec.IstioAmbientMode)
-
-	if !match {
-		return false, fmt.Errorf("felixconfig IstioAmbientMode modified by user")
-	}
-
-	if remove {
-		if annotationMode == nil && fc.Spec.IstioAmbientMode == nil {
-			return false, nil
+// declareIstioFelixConfiguration declares the Istio dataplane fields, or nothing while the
+// integration is going away.
+func (r *ReconcileIstio) declareIstioFelixConfiguration(instance *operatorv1.Istio, remove bool) sharedconfig.DeclareFelixConfiguration {
+	return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
+		d := &sharedconfig.FelixConfigurationDeclaration{
+			Manager: istioFieldManager,
+			Owned:   &v3.FelixConfiguration{},
+			// A user who changes either field by hand gets a degraded status, not an override.
+			Policies: map[string]sharedconfig.ConflictPolicy{
+				"spec.istioAmbientMode": sharedconfig.ConflictError,
+				"spec.istioDSCPMark":    sharedconfig.ConflictError,
+			},
 		}
-		delete(fc.Annotations, istio.IstioOperatorAnnotationMode)
-		fc.Spec.IstioAmbientMode = nil
-		return true, nil
-	}
-
-	istioModeDesired := v3.IstioAmbientModeEnabled
-	if fc.Spec.IstioAmbientMode != nil && *fc.Spec.IstioAmbientMode == istioModeDesired &&
-		annotationMode != nil && *annotationMode == string(istioModeDesired) {
-		return false, nil
-	}
-	fc.Spec.IstioAmbientMode = &istioModeDesired
-	if fc.Annotations == nil {
-		fc.Annotations = make(map[string]string)
-	}
-	fc.Annotations[istio.IstioOperatorAnnotationMode] = string(istioModeDesired)
-	return true, nil
-}
-
-func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
-	var annotationDSCP *numorstring.DSCP
-	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
-		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 6)
-		if err != nil {
-			return false, err
+		if remove {
+			return d, nil
 		}
-		dscp := numorstring.DSCPFromInt(uint8(value))
-		annotationDSCP = &dscp
-	}
 
-	// Return an error if it appears that FelixConfiguration has been modified out of band.
-	match := annotationDSCP == nil && fc.Spec.IstioDSCPMark == nil ||
-		annotationDSCP != nil && fc.Spec.IstioDSCPMark != nil && annotationDSCP.ToUint8() == fc.Spec.IstioDSCPMark.ToUint8()
-
-	if !match {
-		return false, fmt.Errorf("felixconfig IstioDSCPMark modified by user")
-	}
-
-	if remove || instance.Spec.DSCPMark == nil {
-		if annotationDSCP == nil && fc.Spec.IstioDSCPMark == nil {
-			return false, nil
+		mode := v3.IstioAmbientModeEnabled
+		d.Owned.Spec.IstioAmbientMode = &mode
+		if instance.Spec.DSCPMark != nil {
+			mark := *instance.Spec.DSCPMark
+			d.Owned.Spec.IstioDSCPMark = &mark
 		}
-		delete(fc.Annotations, istio.IstioOperatorAnnotationDSCP)
-		fc.Spec.IstioDSCPMark = nil
-		return true, nil
+		return d, nil
 	}
-
-	istioDSCPMarkDesired := *instance.Spec.DSCPMark
-	if fc.Spec.IstioDSCPMark != nil && annotationDSCP != nil &&
-		fc.Spec.IstioDSCPMark.ToUint8() == istioDSCPMarkDesired.ToUint8() &&
-		annotationDSCP.ToUint8() == istioDSCPMarkDesired.ToUint8() {
-		return false, nil
-	}
-	fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
-	if fc.Annotations == nil {
-		fc.Annotations = make(map[string]string)
-	}
-	fc.Annotations[istio.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
-	return true, nil
-}
-
-// configurePolicySyncPathPrefix reconciles FelixConfiguration.policySyncPathPrefix
-// for the Istio side. The L7 ambient waypoint pod's l7-collector sidecar
-// dials Felix's nodeagent socket, which Felix only opens when this field
-// is set. The applicationlayer controller writes this same field for the
-// Dikastes/sidecar/WAF flow; both controllers consult each other's state
-// (via utils.{ApplicationLayerRequiresPolicySync,IstioRequiresPolicySync})
-// so that deleting one CR does not strand the other.
-func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
-	var istioNeeds bool
-	if !remove {
-		// Mirror the renderer gate at pkg/render/istio/istio.go: it reads
-		// installationSpec.Variant (i.e. Installation.Spec.Variant), so the
-		// policy-sync field tracks the renderer's decision to ship the L7
-		// waypoint sidecar even before Status.Variant catches up.
-		installationSpec, err := utils.GetInstallationSpec(ctx, r.Client)
-		if err != nil && !errors.IsNotFound(err) {
-			return false, err
-		}
-		var variant operatorv1.ProductVariant
-		if installationSpec != nil {
-			variant = installationSpec.Variant
-		}
-		istioNeeds = utils.IstioRequiresPolicySync(instance, variant)
-	}
-
-	al, err := eutils.GetApplicationLayer(ctx, r.Client)
-	if err != nil {
-		return false, err
-	}
-	alNeeds := utils.ApplicationLayerRequiresPolicySync(al)
-
-	desired := utils.DesiredPolicySyncPathPrefix(fc.Spec.PolicySyncPathPrefix, alNeeds, istioNeeds)
-	if fc.Spec.PolicySyncPathPrefix == desired {
-		return false, nil
-	}
-	fc.Spec.PolicySyncPathPrefix = desired
-	return true, nil
 }
 
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !instance.DeletionTimestamp.IsZero() {
-		if _, err = sharedconfig.NewWriter(r.Client, r.useV3CRDs).UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
-			return r.setIstioFelixConfiguration(ctx, instance, fc, true)
-		}); err != nil {
+		writer := sharedconfig.NewWriter(r.Client, r.useV3CRDs)
+		if _, err = writer.ApplyFelixConfiguration(ctx, r.declareIstioFelixConfiguration(instance, true)); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
+			return
+		}
+		if _, err = writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.Client)); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
 			return
 		}

@@ -389,12 +389,8 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
 			Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
 			Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal(v3.IstioAmbientModeEnabled))
-			Expect(updatedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationMode))
-			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationMode]).To(Equal("Enabled"))
 			Expect(updatedFC.Spec.IstioDSCPMark).NotTo(BeNil())
 			Expect(updatedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
-			Expect(updatedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationDSCP))
-			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationDSCP]).To(Equal("23"))
 		})
 
 		It("should preserve existing DSCPMark value", func() {
@@ -432,12 +428,8 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, updatedFC)).NotTo(HaveOccurred())
 			Expect(updatedFC.Spec.IstioAmbientMode).NotTo(BeNil())
 			Expect(*updatedFC.Spec.IstioAmbientMode).To(Equal(v3.IstioAmbientModeEnabled))
-			Expect(updatedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationMode))
-			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationMode]).To(Equal("Enabled"))
 			Expect(updatedFC.Spec.IstioDSCPMark).NotTo(BeNil())
 			Expect(updatedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(10)))
-			Expect(updatedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationDSCP))
-			Expect(updatedFC.Annotations[istio.IstioOperatorAnnotationDSCP]).To(Equal("10"))
 		})
 	})
 
@@ -447,14 +439,8 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should detect user modification of IstioAmbientMode in FelixConfiguration", func() {
-			// Create FelixConfiguration with mismatched annotation and spec
 			fc := &v3.FelixConfiguration{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-					Annotations: map[string]string{
-						istio.IstioOperatorAnnotationMode: "Enabled",
-					},
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: v3.FelixConfigurationSpec{
 					IstioAmbientMode: ptr.To(v3.IstioAmbientMode("Disabled")),
 				},
@@ -470,41 +456,14 @@ var _ = Describe("Istio controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("felixconfig IstioAmbientMode modified by user"))
-		})
-
-		It("initializes nil Annotations when writing the DSCP mark (no nil-map panic)", func() {
-			// configureIstioAmbientMode only initializes fc.Annotations when it
-			// writes the mode annotation and can return without doing so, so
-			// configureIstioDSCPMark must guard the nil map itself before
-			// writing the DSCP annotation.
-			dscp := numorstring.DSCPFromInt(23)
-			instance := &operatorv1.Istio{
-				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec:       operatorv1.IstioSpec{DSCPMark: &dscp},
-			}
-			// FelixConfiguration with nil Annotations (zero value).
-			fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
-
-			r := &ReconcileIstio{}
-			changed, err := r.configureIstioDSCPMark(instance, fc, false)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(changed).To(BeTrue())
-			Expect(fc.Annotations).To(HaveKeyWithValue(istio.IstioOperatorAnnotationDSCP, "23"))
-			Expect(fc.Spec.IstioDSCPMark).NotTo(BeNil())
-			Expect(fc.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
+			Expect(err.Error()).To(ContainSubstring("FelixConfiguration fields modified outside the operator: spec.istioAmbientMode"))
 		})
 
 		It("should detect user modification of IstioDSCPMark in FelixConfiguration", func() {
 			// Create FelixConfiguration with mismatched annotation and spec
 			userModifiedDSCP := numorstring.DSCPFromInt(50)
 			fc := &v3.FelixConfiguration{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "default",
-					Annotations: map[string]string{
-						istio.IstioOperatorAnnotationDSCP: "23",
-					},
-				},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Spec: v3.FelixConfigurationSpec{
 					IstioDSCPMark: &userModifiedDSCP,
 				},
@@ -520,7 +479,7 @@ var _ = Describe("Istio controller tests", func() {
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
 			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("felixconfig IstioDSCPMark modified by user"))
+			Expect(err.Error()).To(ContainSubstring("FelixConfiguration fields modified outside the operator: spec.istioDSCPMark"))
 		})
 
 		Context("policySyncPathPrefix coordination", func() {
@@ -598,7 +557,7 @@ var _ = Describe("Istio controller tests", func() {
 				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
 			})
 
-			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer features are all disabled", func() {
+			It("clears policySyncPathPrefix on Istio deletion when ApplicationLayer features are all disabled", func() {
 				disabled := operatorv1.L7LogCollectionDisabled
 				al := &operatorv1.ApplicationLayer{
 					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
@@ -623,13 +582,11 @@ var _ = Describe("Istio controller tests", func() {
 
 				cleaned := &v3.FelixConfiguration{}
 				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
-				// Never clear a value we may not own: egressgateway and Gateway
-				// API share this default and never clear it, so Istio deletion
-				// preserves it rather than wiping it out from under them.
-				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+				// One field manager owns this for every consumer, so the last one going away clears it.
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(BeEmpty())
 			})
 
-			It("leaves policySyncPathPrefix set on Istio deletion when ApplicationLayer is absent", func() {
+			It("clears policySyncPathPrefix on Istio deletion when ApplicationLayer is absent", func() {
 				fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
 				Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
 
@@ -645,10 +602,8 @@ var _ = Describe("Istio controller tests", func() {
 
 				cleaned := &v3.FelixConfiguration{}
 				Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, cleaned)).NotTo(HaveOccurred())
-				// Never clear a value we may not own: egressgateway and Gateway
-				// API share this default and never clear it, so Istio deletion
-				// preserves it rather than wiping it out from under them.
-				Expect(cleaned.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+				// One field manager owns this for every consumer, so the last one going away clears it.
+				Expect(cleaned.Spec.PolicySyncPathPrefix).To(BeEmpty())
 			})
 		})
 
@@ -679,10 +634,6 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(*patchedFC.Spec.IstioAmbientMode).To(Equal(v3.IstioAmbientModeEnabled))
 			Expect(patchedFC.Spec.IstioDSCPMark).NotTo(BeNil())
 			Expect(patchedFC.Spec.IstioDSCPMark.ToUint8()).To(Equal(uint8(23)))
-			Expect(patchedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationMode))
-			Expect(patchedFC.Annotations[istio.IstioOperatorAnnotationMode]).To(Equal("Enabled"))
-			Expect(patchedFC.Annotations).To(HaveKey(istio.IstioOperatorAnnotationDSCP))
-			Expect(patchedFC.Annotations[istio.IstioOperatorAnnotationDSCP]).To(Equal("23"))
 
 			// Get the Istio CR and delete it
 			updatedIstio := &operatorv1.Istio{}
@@ -700,8 +651,6 @@ var _ = Describe("Istio controller tests", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, clearedFC)).NotTo(HaveOccurred())
 			Expect(clearedFC.Spec.IstioAmbientMode).To(BeNil())
 			Expect(clearedFC.Spec.IstioDSCPMark).To(BeNil())
-			Expect(clearedFC.Annotations).NotTo(HaveKey(istio.IstioOperatorAnnotationMode))
-			Expect(clearedFC.Annotations).NotTo(HaveKey(istio.IstioOperatorAnnotationDSCP))
 		})
 	})
 

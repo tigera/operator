@@ -100,4 +100,52 @@ var _ = Describe("crd.projectcalico.org/v1 writer", func() {
 		Expect(err).To(MatchError("user modified bpfEnabled"))
 		Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, &v3.FelixConfiguration{})).To(HaveOccurred())
 	})
+
+	Context("a declaration that stops declaring a field", func() {
+		declare := func(port *int) sharedconfig.DeclareFelixConfiguration {
+			return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
+				return &sharedconfig.FelixConfigurationDeclaration{
+					Manager: "test",
+					Owned:   &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{HealthPort: port}},
+					Policies: map[string]sharedconfig.ConflictPolicy{
+						"spec.healthPort": sharedconfig.ConflictDefer,
+					},
+				}, nil
+			}
+		}
+
+		It("should delete a field it wrote itself", func() {
+			_, err := w.ApplyFelixConfiguration(ctx, declare(ptr.To(9099)))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getFelixConfig().Spec.HealthPort).To(Equal(ptr.To(9099)))
+
+			_, err = w.ApplyFelixConfiguration(ctx, declare(nil))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getFelixConfig().Spec.HealthPort).To(BeNil())
+		})
+
+		It("should leave a value it never wrote", func() {
+			Expect(c.Create(ctx, &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       v3.FelixConfigurationSpec{HealthPort: ptr.To(9199)},
+			})).NotTo(HaveOccurred())
+
+			_, err := w.ApplyFelixConfiguration(ctx, declare(nil))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getFelixConfig().Spec.HealthPort).To(Equal(ptr.To(9199)))
+		})
+
+		It("should leave a value someone else changed", func() {
+			_, err := w.ApplyFelixConfiguration(ctx, declare(ptr.To(9099)))
+			Expect(err).NotTo(HaveOccurred())
+
+			fc := getFelixConfig()
+			fc.Spec.HealthPort = ptr.To(9199)
+			Expect(c.Update(ctx, fc)).NotTo(HaveOccurred())
+
+			_, err = w.ApplyFelixConfiguration(ctx, declare(nil))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(getFelixConfig().Spec.HealthPort).To(Equal(ptr.To(9199)))
+		})
+	})
 })

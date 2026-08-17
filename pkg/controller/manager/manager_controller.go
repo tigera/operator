@@ -765,7 +765,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ResourcePrefix:   ManagerGatewayResourcePrefix,
 		TLSSecretName:    ManagerGatewayTLSSecretName,
 		BackendNamespace: helper.InstallNamespace(),
-		Enterprise:       true,
+		Enterprise:       installationSpec.Variant.IsEnterprise(),
 	}
 	if r.opts.MultiTenant {
 		// Multi-tenant CIG is not supported: resource names and the cleanup

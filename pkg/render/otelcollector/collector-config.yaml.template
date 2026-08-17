@@ -57,12 +57,6 @@ exporters:
       {{.Name}}: ${env:{{.EnvName}}}
 {{- end}}
 {{- end}}
-{{- if .Plaintext}}
-    # http:// endpoint: no transport security. "insecure" here means no TLS at
-    # all, which is what the scheme asks for.
-    tls:
-      insecure: true
-{{- else}}
     tls:
 {{- if .CAFile}}
       # A pinned CA is the only thing trusted for this exporter. Keeping the
@@ -77,7 +71,6 @@ exporters:
 {{- if .CertFile}}
       cert_file: {{.CertFile}}
       key_file: {{.KeyFile}}
-{{- end}}
 {{- end}}
 {{- end}}
 

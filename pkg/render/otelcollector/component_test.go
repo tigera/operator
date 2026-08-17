@@ -500,14 +500,14 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(overridden).To(ContainSubstring("spike_limit_mib: 409"))
 		})
 
-		It("should use plaintext for http:// endpoints and TLS otherwise", func() {
+		It("should never render an exporter without transport security", func() {
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 					Exporters: []operatorv1.OpenTelemetryExporter{
-						{Name: "plain", Endpoint: "http://lgtm.otel-demo.svc:4317"},
-						{Name: "secure", Endpoint: "https://otlp.example.com:4317"},
+						{Name: "one", Endpoint: "https://otlp.example.com:4317"},
+						{Name: "two", Endpoint: "https://other.example.com:4318"},
 					},
 				},
 			}
@@ -518,12 +518,11 @@ var _ = Describe("OpenTelemetry rendering", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 			config := cm.Data["config.yaml"]
 
-			// Most in-cluster OTLP backends listen without TLS, so the scheme has to
-			// be able to say so. This is "no TLS", never "TLS without verification".
-			Expect(config).To(ContainSubstring("insecure: true"))
-			Expect(strings.Count(config, "insecure: true")).To(Equal(1))
-			Expect(config).To(ContainSubstring("include_system_ca_certs_pool: true"))
+			// http:// is rejected by the API, so there is no path that turns TLS off
+			// and none that keeps TLS while skipping verification.
+			Expect(config).NotTo(ContainSubstring("insecure: true"))
 			Expect(config).NotTo(ContainSubstring("insecure_skip_verify"))
+			Expect(strings.Count(config, "include_system_ca_certs_pool: true")).To(Equal(2))
 		})
 
 		It("should match in-cluster exporters by service rather than domain", func() {
@@ -532,7 +531,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 				DomainEgressAllowed: true,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{
 					Exporters: []operatorv1.OpenTelemetryExporter{
-						{Name: "incluster", Endpoint: "http://lgtm.otel-demo.svc.cluster.local:4317"},
+						{Name: "incluster", Endpoint: "https://lgtm.otel-demo.svc.cluster.local:4317"},
 					},
 				},
 			}

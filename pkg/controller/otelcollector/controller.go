@@ -23,7 +23,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -40,7 +39,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/common/validation"
-	otelvalidation "github.com/tigera/operator/pkg/common/validation/otelcollector"
+	otelvalidation "github.com/tigera/operator/pkg/common/validation/enterprise/otelcollector"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -190,20 +189,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	if logCollector.Spec.OpenTelemetry == nil {
-		// Nothing here is garbage-collected on its own — the resources are not
-		// owned by a CR that gets deleted — so switching the feature off has to
-		// remove them explicitly.
-		if err := r.removeCollector(ctx, logCollector, reqLogger); err != nil {
-			return reconcile.Result{}, err
-		}
-		r.status.OnCRNotFound()
-		return reconcile.Result{}, nil
-	}
-
-	r.status.OnCRFound()
-	defer r.status.SetMetaData(&logCollector.ObjectMeta)
-
 	installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -217,23 +202,24 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
-	if !utils.IsProjectCalicoV3Available(r.cli, r.opts, reqLogger) {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tigera API server to be ready", nil, reqLogger)
+	// Everything below renders one component, enabled or not: nothing the collector
+	// owns is garbage-collected on its own, so stopping export means rendering for
+	// removal rather than returning early. disabled carries which it is.
+	disabled := logCollector.Spec.OpenTelemetry == nil
+	if disabled {
+		if err := r.applyCollector(ctx, logCollector, disabledConfig(installationSpec), reqLogger); err != nil {
+			return reconcile.Result{}, err
+		}
+		r.status.OnCRNotFound()
 		return reconcile.Result{}, nil
 	}
 
-	if !r.tierWatchReady.IsReady() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
-		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-	}
+	r.status.OnCRFound()
+	defer r.status.SetMetaData(&logCollector.ObjectMeta)
 
-	if err := r.cli.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-		}
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying calico-system tier", err, reqLogger)
-		return reconcile.Result{}, err
+	if !utils.IsProjectCalicoV3Available(r.cli, r.opts, reqLogger) {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Calico API to be ready", nil, reqLogger)
+		return reconcile.Result{}, nil
 	}
 
 	if !r.licenseAPIReady.IsReady() {
@@ -250,30 +236,51 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying license", err, reqLogger)
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
-	if !utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature) {
-		// Definitive answer, so stop exporting. Losing the feature has to tear an
-		// already-running collector down, otherwise a cluster that once had the
-		// entitlement keeps forwarding after it lapses. Transient states above
-		// (API not ready, license unreadable) deliberately do not tear down —
-		// they requeue instead, so a blip cannot flap the collector.
-		if err := r.removeCollector(ctx, logCollector, reqLogger); err != nil {
-			return reconcile.Result{}, err
-		}
-		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support this feature", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
 
 	gracePeriod := utils.ParseGracePeriod(license.Status.GracePeriod)
 	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
+
+	// Both are definitive answers about entitlement, so stop exporting rather than
+	// leaving a collector forwarding after it lapses. Transient states above -- API
+	// not ready, license unreadable -- requeue instead, so a blip cannot flap it.
+	if !utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature) {
+		if err := r.applyCollector(ctx, logCollector, disabledConfig(installationSpec), reqLogger); err != nil {
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Feature is not active - License does not support OTEL", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+	if licenseStatus == utils.LicenseStatusExpired {
+		if err := r.applyCollector(ctx, logCollector, disabledConfig(installationSpec), reqLogger); err != nil {
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceValidationError,
+			"License is expired - OpenTelemetry collector forwarding is stopped. Contact Tigera support or email licensing@tigera.io", nil, reqLogger)
+		return reconcile.Result{}, nil
+	}
+
 	var graceRequeueAfter time.Duration
 	if licenseStatus == utils.LicenseStatusInGracePeriod {
 		reqLogger.Info("License has expired and is within the grace period. Please renew your license to avoid service disruption.")
 		graceRequeueAfter = time.Until(license.Status.Expiry.Add(gracePeriod))
 	}
 
+	if !r.tierWatchReady.IsReady() {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Tier watch to be established", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+
+	if err := r.cli.Get(ctx, client.ObjectKey{Name: networkpolicy.CalicoTierName}, &v3.Tier{}); err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for calico-system tier to be created, see the 'tiers' TigeraStatus for more information", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Error querying calico-system tier", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Reject specs the collector cannot start from, rather than rendering a config
-	// it will reject at boot. Without this the pod crash-loops while TigeraStatus
-	// sits on Progressing with nothing pointing at the cause.
+	// it will reject at boot.
 	if err := logCollector.Spec.OpenTelemetry.Validate(); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid OpenTelemetry configuration", err, reqLogger)
 		return reconcile.Result{}, nil
@@ -323,11 +330,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			extraCerts = append(extraCerts, prometheusCert)
 		}
 
-		// Named after the collector rather than using the default bundle name:
-		// calico-system's shared tigera-ca-bundle is rendered by the Installation
-		// controller with a different certificate set, and the component handler
-		// replaces ConfigMap data wholesale, so an unnamed bundle here would fight
-		// it. Same reason fluent-bit carries its own.
+		// Its own bundle, to avoid contamination with other services in this namespace.
 		trustedBundle = certificatemanagement.CreateNamedTrustedBundle(
 			otelcollector.OpenTelemetryCollectorName, certMgr.KeyPair(), false, extraCerts...)
 
@@ -363,8 +366,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		ExporterCAs:         exporterCAs,
 		ExporterClientCerts: exporterClientCerts,
 		ExporterAuthSecrets: exporterAuthSecrets,
-		// Naming an egress destination by domain requires this feature; without it
-		// the exporter rules can only constrain the port.
 		DomainEgressAllowed: utils.IsFeatureActive(license, common.EgressAccessControlFeature),
 	}
 
@@ -373,17 +374,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(receiverTLSSecret, true, true))
 	}
 
-	otelComponent, err := otelcollector.OpenTelemetryCollector(cfg)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering OpenTelemetry collector config", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	components := []render.Component{
-		otelComponent,
-	}
+	var extra []render.Component
 	if logCollector.Spec.OpenTelemetry.HasDataSources() {
-		components = append(components, rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
+		extra = append(extra, rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 			Namespace:       otelcollector.OpenTelemetryCollectorNamespace,
 			ServiceAccounts: []string{otelcollector.OpenTelemetryCollectorServiceAccountName},
 			KeyPairOptions:  keyPairOptions,
@@ -391,29 +384,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}))
 	}
 
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, logCollector)
-	if err = imageset.ApplyImageSet(ctx, r.cli, r.opts.Variant, components...); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
+	if err := r.applyCollector(ctx, logCollector, cfg, reqLogger, extra...); err != nil {
 		return reconcile.Result{}, err
-	}
-
-	for _, component := range components {
-		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	if licenseStatus == utils.LicenseStatusExpired {
-		// Actually stop forwarding rather than only saying so: previously the
-		// collector kept running and exporting after expiry, which contradicted
-		// this message. Mirrors fluent-bit, whose DaemonSet is removed on expiry.
-		if err := r.removeCollector(ctx, logCollector, reqLogger); err != nil {
-			return reconcile.Result{}, err
-		}
-		r.status.SetDegraded(operatorv1.ResourceValidationError,
-			"License is expired - OpenTelemetry collector forwarding is stopped. Contact Tigera support or email licensing@tigera.io", nil, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	r.status.ReadyToMonitor()
@@ -422,78 +394,43 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	return reconcile.Result{RequeueAfter: graceRequeueAfter}, nil
 }
 
-// collectorResourcesExist reports whether any of the collector's resources are
-// still around. It covers both scopes so a partially-removed collector is still
-// finished off rather than being read as "already gone".
-func (r *Reconciler) collectorResourcesExist(ctx context.Context) (bool, error) {
-	ns := otelcollector.OpenTelemetryCollectorNamespace
-	probes := []struct {
-		obj client.Object
-		key client.ObjectKey
-	}{
-		{&appsv1.StatefulSet{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorStatefulSetName, Namespace: ns}},
-		{&corev1.ConfigMap{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorConfigMapName, Namespace: ns}},
-		{&corev1.ServiceAccount{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorServiceAccountName, Namespace: ns}},
-		{&rbacv1.ClusterRole{}, client.ObjectKey{Name: otelcollector.OpenTelemetryCollectorName}},
-	}
-	for _, p := range probes {
-		err := r.cli.Get(ctx, p.key, p.obj)
-		if err == nil {
-			return true, nil
-		}
-		if !errors.IsNotFound(err) {
-			return false, err
-		}
-	}
-	return false, nil
-}
-
-// removeCollector deletes every resource the collector component owns. It is used
-// both when the feature is switched off and when the license expires.
-func (r *Reconciler) removeCollector(ctx context.Context, logCollector *operatorv1.LogCollector, reqLogger logr.Logger) error {
-	// Most clusters never enable this, and the disabled path runs on every
-	// reconcile, so skip unless something is actually there to remove. Probing
-	// only the StatefulSet would strand the rest: if it is deleted out of band,
-	// or an earlier teardown was interrupted, the RBAC, ConfigMap, Service and
-	// policy would never be collected.
-	present, err := r.collectorResourcesExist(ctx)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for an existing OpenTelemetry collector", err, reqLogger)
-		return err
-	}
-	if !present {
-		return nil
-	}
-
-	installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
-	if err != nil || installationSpec == nil {
-		// Without an Installation there is nothing to render from. Say so rather
-		// than dropping the cleanup silently; the next reconcile retries.
-		reqLogger.Info("Deferring OpenTelemetry collector cleanup until the Installation is available")
-		return nil
-	}
-	comp, err := otelcollector.OpenTelemetryCollector(&otelcollector.Configuration{
+// disabledConfig is the configuration that renders the collector for removal.
+func disabledConfig(installationSpec *operatorv1.InstallationSpec) *otelcollector.Configuration {
+	return &otelcollector.Configuration{
 		Installation:  installationSpec,
 		OpenTelemetry: &operatorv1.OpenTelemetrySpec{},
 		Disabled:      true,
-	})
+	}
+}
+
+// applyCollector renders and applies the component. The same call handles both
+// directions: cfg.Disabled decides whether the objects are created or deleted.
+func (r *Reconciler) applyCollector(ctx context.Context, logCollector *operatorv1.LogCollector, cfg *otelcollector.Configuration, reqLogger logr.Logger, extra ...render.Component) error {
+	comp, err := otelcollector.OpenTelemetryCollector(cfg)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering OpenTelemetry collector for removal", err, reqLogger)
+		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering OpenTelemetry collector config", err, reqLogger)
 		return err
 	}
-	ch := utils.NewComponentHandler(log, r.cli, r.scheme, logCollector)
-	if err := ch.CreateOrUpdateOrDelete(ctx, comp, r.status); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error removing OpenTelemetry collector resources", err, reqLogger)
+
+	components := append([]render.Component{comp}, extra...)
+	if err := imageset.ApplyImageSet(ctx, r.cli, r.opts.Variant, components...); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return err
+	}
+
+	ch := utils.NewComponentHandler(log, r.cli, r.scheme, logCollector)
+	for _, component := range components {
+		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
+			return err
+		}
 	}
 	return nil
 }
 
-// fetchExporterMaterial reads the CA, client keypair and header credentials each
-// exporter names, keyed for the render. The second return reports that the
-// reconcile has already been degraded and should stop; a missing or malformed
-// object is a user error we surface rather than rendering a path or environment
-// variable the collector cannot resolve.
+// fetchExporterMaterial reads the CA ConfigMap, client keypair Secret and header
+// credential Secrets each exporter names. The bool reports that the reconcile has
+// already been degraded and should stop.
 func (r *Reconciler) fetchExporterMaterial(
 	ctx context.Context, spec *operatorv1.OpenTelemetrySpec, reqLogger logr.Logger,
 ) (map[string]*corev1.ConfigMap, map[string]*corev1.Secret, map[string]*corev1.Secret, bool, error) {

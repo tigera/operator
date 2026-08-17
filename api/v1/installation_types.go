@@ -701,7 +701,7 @@ type CalicoNetworkSpec struct {
 	// IP pools in this list will be reconciled by the operator and should not be modified out-of-band.
 	// +optional
 	// +kubebuilder:validation:MaxItems=25
-	IPPools []IPPool `json:"ipPools,omitempty"`
+	IPPools []IPPool `json:"ipPools"`
 
 	// MTU specifies the maximum transmission unit to use on the pod network.
 	// If not specified, Calico will perform MTU auto-detection based on the cluster network.
@@ -1134,6 +1134,13 @@ type InstallationStatus struct {
 	// Computed is the final installation including overlaid resources.
 	// +optional
 	Computed *InstallationSpec `json:"computed,omitempty"`
+
+	// Defaults holds fields the operator supplied because the spec omitted them
+	// (schemaless, so schema defaults can't inflate).
+	// +optional
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Defaults *InstallationSpec `json:"defaults,omitempty"`
 
 	// CalicoVersion shows the current running version of calico.
 	// CalicoVersion along with Variant is needed to know the exact

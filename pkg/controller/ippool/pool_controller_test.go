@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -63,7 +64,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
-		c = fake.NewClientBuilder().WithScheme(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx, cancel = context.WithCancel(context.Background())
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -97,7 +98,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				Registry: "some.registry.org/",
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Set up expected mocks.
 		mockStatus.On("OnCRFound")
@@ -124,7 +125,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				},
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Set up expected mocks.
 		mockStatus.On("OnCRFound")
@@ -142,9 +143,10 @@ var _ = Describe("IP Pool controller tests", func() {
 		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Verify an IP pool was defaulted.
-		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
-		pool := installation.Spec.CalicoNetwork.IPPools[0]
+		// Verify an IP pool was defaulted onto the status, not the spec.
+		Expect(installation.Spec.CalicoNetwork).To(BeNil())
+		Expect(installation.Status.Defaults.CalicoNetwork.IPPools).To(HaveLen(1))
+		pool := installation.Status.Defaults.CalicoNetwork.IPPools[0]
 		Expect(pool.CIDR).To(Equal("192.168.0.0/16"))
 
 		// Expect the IP pool to be created in the API server as well.
@@ -170,7 +172,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				},
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Create an IP pool. This simulates a user creating an IP pool before the operator has a chance to.
 		ipPool := v3.IPPool{
@@ -196,7 +198,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 
 		// Should be no IP pools defaulted.
-		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(0))
+		Expect(installation.Status.Defaults).To(BeNil())
 
 		// No new IP pools should exist.
 		ipPools := v3.IPPoolList{}
@@ -228,7 +230,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				},
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Set up expected mocks.
 		mockStatus.On("OnCRFound")
@@ -278,7 +280,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				},
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Set up expected mocks.
 		mockStatus.On("OnCRFound")
@@ -295,7 +297,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		// when the API server is available.
 		Expect(c.Get(ctx, utils.DefaultInstanceKey, instance)).ShouldNot(HaveOccurred())
 		instance.Spec.CalicoNetwork.IPPools[0].NATOutgoing = "Enabled"
-		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
+		updateInstallation(ctx, c, instance)
 
 		// Expect a new SetDegraded call.
 		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Unable to modify IP pools while Calico API server is unavailable", nil, mock.Anything)
@@ -324,7 +326,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				},
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Set up expected mocks.
 		mockStatus.On("OnCRFound")
@@ -341,7 +343,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		// when the API server is available.
 		Expect(c.Get(ctx, utils.DefaultInstanceKey, instance)).ShouldNot(HaveOccurred())
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
-		Expect(c.Update(ctx, instance)).ShouldNot(HaveOccurred())
+		updateInstallation(ctx, c, instance)
 
 		// Assert SetDegraded is called as expected.
 		mockStatus.On("SetDegraded", operator.ResourceNotReady, "Unable to delete IP pools while Calico API server is unavailable", nil, mock.Anything)
@@ -384,7 +386,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				},
 			},
 		}
-		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+		createInstallation(ctx, c, instance)
 
 		// Simulate a pool that the API server already normalized to its canonical form and that is
 		// owned by the operator (as indicated by the managed-by label).
@@ -932,4 +934,17 @@ func fillPrerequisiteDefaults(i *operator.Installation) {
 	if i.Spec.CNI.IPAM.Type == "" {
 		i.Spec.CNI.IPAM.Type = operator.IPAMPluginCalico
 	}
+}
+
+// createInstallation creates the Installation with its effective config published on the status.
+func createInstallation(ctx context.Context, c client.Client, instance *operator.Installation) {
+	instance.Status.Computed = instance.Spec.DeepCopy()
+	ExpectWithOffset(1, c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+}
+
+// updateInstallation writes the spec and republishes it on the status, as the core controller does.
+func updateInstallation(ctx context.Context, c client.Client, instance *operator.Installation) {
+	ExpectWithOffset(1, c.Update(ctx, instance)).ShouldNot(HaveOccurred())
+	instance.Status.Computed = instance.Spec.DeepCopy()
+	ExpectWithOffset(1, c.Status().Update(ctx, instance)).ShouldNot(HaveOccurred())
 }

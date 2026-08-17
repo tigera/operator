@@ -42,8 +42,9 @@ type InstallationExtension interface {
 	// it changed fc. It runs before Felix defaulting persists.
 	DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error)
 
-	// ProductVersion is the version the operator writes to the Installation status.
-	ProductVersion() string
+	// ProductVersion is the version the operator writes to the Installation status
+	// for the variant the given spec installs.
+	ProductVersion(install *operatorv1.InstallationSpec) string
 
 	// Images overrides the images the rendered components resolve to.
 	Images() *imageoverride.Overrides
@@ -67,7 +68,7 @@ func (noopInstallation) DefaultFelixConfiguration(*operatorv1.InstallationSpec, 
 	return false, nil
 }
 
-func (noopInstallation) ProductVersion() string {
+func (noopInstallation) ProductVersion(*operatorv1.InstallationSpec) string {
 	return components.CalicoRelease
 }
 

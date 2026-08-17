@@ -780,9 +780,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Snapshot the user's spec before defaulting, so defaults can be told apart from it later.
+	declaredSpec := *instance.Spec.DeepCopy()
+
+	// Seed from recorded defaults, so changing a default doesn't change existing clusters.
+	if instance.Status.Defaults != nil {
+		instance.Spec = utils.OverrideInstallationSpec(*instance.Status.Defaults, instance.Spec)
+	}
+
 	// update Installation with defaults
 	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider, r.opts.Variant); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	recordedDefaults, err := suppliedDefaults(declaredSpec, instance.Spec)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to determine installation defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	reqLogger.V(2).Info("Loaded config", "installation", instance)
@@ -842,21 +856,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
-	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
-	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
-	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
 	if err = r.updateCRDs(ctx, r.opts.Variant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
-	// be stored in the 'overlay' resource.
-	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
+	// Persist metadata and migrated config, but not defaults. Writing defaults
+	// steals spec field ownership from whoever manages the CR.
+	persisted := instance.DeepCopy()
+	persisted.Spec = declaredSpec
+	if err := r.client.Patch(ctx, persisted, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+	instance.ObjectMeta = persisted.ObjectMeta
 
 	// Update Installation with 'overlay'
 	overlay := operatorv1.Installation{}
@@ -894,8 +906,16 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// does not get to that point.
 	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
 		instance.Status = operatorv1.InstallationStatus{}
-		if err := r.client.Status().Update(ctx, instance); err != nil {
+		if err := r.writeStatus(ctx, instance); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write default status", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	if !reflect.DeepEqual(instance.Status.Defaults, recordedDefaults) {
+		instance.Status.Defaults = recordedDefaults
+		if err := r.writeStatus(ctx, instance); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation defaults", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
@@ -1551,12 +1571,23 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		instance.Status.ImageSet = imageSet.Name
 	}
 	instance.Status.Computed = &instance.Spec
-	if err = r.client.Status().Update(ctx, instance); err != nil {
+	if err = r.writeStatus(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	reqLogger.V(1).Info("Finished reconciling Installation")
 	return reconcile.Result{}, nil
+}
+
+// writeStatus updates the status without letting the response overwrite the defaulted spec.
+func (r *ReconcileInstallation) writeStatus(ctx context.Context, instance *operatorv1.Installation) error {
+	written := instance.DeepCopy()
+	if err := r.client.Status().Update(ctx, written); err != nil {
+		return err
+	}
+	instance.ObjectMeta = written.ObjectMeta
+	instance.Status = written.Status
+	return nil
 }
 
 func readMTUFile() (int, error) {

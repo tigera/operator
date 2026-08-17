@@ -2195,7 +2195,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should set default spec.Azure if provider is AKS", func() {
+		It("should record a default Azure config if provider is AKS", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderAKS
 
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -2211,11 +2211,13 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(instance.Spec.Azure).NotTo(BeNil())
-			Expect(instance.Spec.Azure).To(Equal(azure))
+			Expect(instance.Spec.Azure).To(BeNil())
+			Expect(instance.Status.Defaults).NotTo(BeNil())
+			Expect(instance.Status.Defaults.Azure).To(Equal(azure))
+			Expect(instance.Status.Computed.Azure).To(Equal(azure))
 		})
 
-		It("should not set default spec.Azure if provider is not AKS", func() {
+		It("should not record a default Azure config if provider is not AKS", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderEKS
 
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -2228,6 +2230,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Spec.Azure).To(BeNil())
+			Expect(instance.Status.Defaults.Azure).To(BeNil())
 		})
 	})
 

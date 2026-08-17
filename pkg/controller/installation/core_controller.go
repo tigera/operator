@@ -60,6 +60,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/active"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/ippool"
@@ -1092,7 +1093,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	calicoVersion := r.ext.ProductVersion()
+	calicoVersion := components.CalicoRelease
+	if instance.Spec.Variant.IsEnterprise() {
+		calicoVersion = r.ext.ProductVersion()
+	}
 
 	ci := controller.Inputs{
 		RenderInputs: render.Inputs{

@@ -134,8 +134,6 @@ func add(mgr manager.Manager, c ctrlruntime.Controller) error {
 		rlogcollector.S3FluentBitSecretName, rlogcollector.EksLogForwarderSecret,
 		rlogcollector.SplunkFluentBitTokenSecretName, monitor.PrometheusClientTLSSecretName,
 		rlogcollector.FluentBitTLSSecretName, render.TigeraLinseedSecret, render.VoltronLinseedPublicCert, rlogcollector.EKSLogForwarderTLSSecretName,
-		// The collector's serving certificate goes into fluent-bit's trusted
-		// bundle, so creating or rotating it has to rebuild that bundle.
 		otelcollector.OpenTelemetryCollectorServerTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -478,16 +476,10 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// Fluent Bit needs to mount system certificates in the case where Splunk, Syslog or AWS are used.
-	// The bundle carries fluent-bit's own name: calico-system's shared tigera-ca-bundle is rendered by
-	// the core Installation controller with a different certificate set, and the component handler
-	// replaces ConfigMap data wholesale — an unnamed bundle here would fight it, and additions like
-	// the syslog user CA would be lost to whichever controller wrote last.
-	// The collector's serving certificate has to be trusted for the OTLP output to
-	// verify it. The operator CA covers an operator-minted cert, but a
-	// user-supplied otel-collector-tls is honoured as-is, and fluent-bit would then
-	// reject every connection with an unknown-authority error while both statuses
-	// still reported Available.
+	// FluentBit needs system certificates to talk to external tools like Splunk, Syslog, or AWS. We give
+	// it its own trusted bundle as a result to avoid contamination with other services in this namespace.
+	//
+	// We must also trust the OTEL collector's server certificate, if enabled.
 	extraCerts := []certificatemanagement.CertificateInterface{prometheusCertificate, linseedCertificate}
 	if instance.Spec.OpenTelemetry.HasLogs() {
 		otelCertificate, err := certificateManager.GetCertificate(r.client, otelcollector.OpenTelemetryCollectorServerTLSSecretName, common.OperatorNamespace())
@@ -673,30 +665,26 @@ func (r *ReconcileLogCollector) Reconcile(ctx context.Context, request reconcile
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	fluentBitCfg := &rlogcollector.FluentBitConfiguration{
-		LogCollector:           instance,
-		S3Credential:           s3Credential,
-		SplkCredential:         splunkCredential,
-		Filters:                filters,
-		EKSConfig:              eksConfig,
-		PullSecrets:            pullSecrets,
-		Installation:           installationSpec,
-		ClusterDomain:          r.opts.ClusterDomain,
-		FluentBitKeyPair:       fluentBitKeyPair,
-		TrustedBundle:          trustedBundle,
-		ManagedCluster:         managedCluster,
-		UseSyslogCertificate:   useSyslogCertificate,
-		Tenant:                 tenant,
-		ExternalElastic:        r.opts.ElasticExternal,
-		Cloud:                  r.opts.Cloud,
-		EKSLogForwarderKeyPair: eksLogForwarderKeyPair,
-		NonClusterHost:         nonclusterhost,
-		LicenseExpired:         licenseExpired,
-		// Same predicate the otel controller deploys on. Pointing fluent-bit at a
-		// collector that is never rendered — unlicensed, or an invalid spec — just
-		// fails every chunk and fills the storage buffer.
-		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry.Deployable(
-			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)),
-		OpenTelemetryLogTypes: otelLogTypes(instance),
+		LogCollector:                  instance,
+		S3Credential:                  s3Credential,
+		SplkCredential:                splunkCredential,
+		Filters:                       filters,
+		EKSConfig:                     eksConfig,
+		PullSecrets:                   pullSecrets,
+		Installation:                  installationSpec,
+		ClusterDomain:                 r.opts.ClusterDomain,
+		FluentBitKeyPair:              fluentBitKeyPair,
+		TrustedBundle:                 trustedBundle,
+		ManagedCluster:                managedCluster,
+		UseSyslogCertificate:          useSyslogCertificate,
+		Tenant:                        tenant,
+		ExternalElastic:               r.opts.ElasticExternal,
+		Cloud:                         r.opts.Cloud,
+		EKSLogForwarderKeyPair:        eksLogForwarderKeyPair,
+		NonClusterHost:                nonclusterhost,
+		LicenseExpired:                licenseExpired,
+		OpenTelemetryCollectorEnabled: instance.Spec.OpenTelemetry.Deployable(utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature)),
+		OpenTelemetryLogTypes:         otelLogTypes(instance),
 	}
 	// Render the fluent-bit component for Linux. The same configuration drives
 	// the shared and Windows components below; each applies its OS-specific

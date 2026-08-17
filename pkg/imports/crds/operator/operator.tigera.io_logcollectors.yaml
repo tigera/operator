@@ -1048,8 +1048,10 @@ spec:
                                 x-kubernetes-list-type: map
                             type: object
                           endpoint:
-                            description: Endpoint is the OTLP endpoint URL.
-                            pattern: ^(http|https)://.+$
+                            description: |-
+                              Endpoint is the OTLP endpoint URL. Must be https: telemetry and its
+                              credentials are never sent in the clear.
+                            pattern: ^[Hh][Tt][Tt][Pp][Ss]://.+$
                             type: string
                           name:
                             description:
@@ -1069,9 +1071,8 @@ spec:
                             type: string
                           tls:
                             description: |-
-                              TLS configures transport security for this exporter. When omitted, an https
-                              endpoint is verified against the system roots and an http endpoint is sent
-                              in the clear.
+                              TLS configures transport security for this exporter. When omitted, the
+                              endpoint is verified against the system roots.
                             properties:
                               caConfigMapName:
                                 description: |-

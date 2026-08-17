@@ -305,8 +305,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 	if logCollector != nil {
-		openTelemetryEnabled = logCollector.Spec.OpenTelemetry.Deployable(
-			utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature))
+		openTelemetryEnabled = logCollector.Spec.OpenTelemetry.Deployable(utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature))
 	}
 	if openTelemetryEnabled {
 		// A valid, licensed spec is not enough: the otel controller stops short of

@@ -355,18 +355,12 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 					{Name: "backend", Endpoint: "https://other.example.com:4317"},
 				},
 			}),
-			Entry("a client certificate on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
+			// The CRD Pattern rejects this at the API server; Validate is the backstop
+			// for a stale CRD, where the cost is exporting in the clear.
+			Entry("an http:// endpoint, which would send telemetry unencrypted", &operatorv1.OpenTelemetrySpec{
 				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
 				Exporters: []operatorv1.OpenTelemetryExporter{
-					{Name: "backend", Endpoint: "http://otlp.example.com:4318",
-						TLS: &operatorv1.OpenTelemetryExporterTLS{ClientCertSecretName: "certs"}},
-				},
-			}),
-			Entry("a CA on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
-				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-				Exporters: []operatorv1.OpenTelemetryExporter{
-					{Name: "backend", Endpoint: "http://otlp.example.com:4318",
-						TLS: &operatorv1.OpenTelemetryExporterTLS{CAConfigMapName: "ca"}},
+					{Name: "backend", Endpoint: "http://otlp.example.com:4318"},
 				},
 			}),
 			Entry("a header with no secret key", &operatorv1.OpenTelemetrySpec{
@@ -380,23 +374,6 @@ var _ = Describe("OpenTelemetry controller tests", func() {
 							}},
 						}},
 				},
-			}),
-			Entry("auth headers on a plaintext http:// endpoint", &operatorv1.OpenTelemetrySpec{
-				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},
-				Exporters: []operatorv1.OpenTelemetryExporter{{
-					Name: "backend", Endpoint: "http://otlp.example.com:4318",
-					Auth: &operatorv1.OpenTelemetryExporterAuth{
-						Headers: []operatorv1.OpenTelemetryExporterHeader{{
-							Name: "Authorization",
-							ValueFrom: operatorv1.OpenTelemetryHeaderValueSource{
-								SecretKeyRef: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{Name: "creds"},
-									Key:                  "token",
-								},
-							},
-						}},
-					},
-				}},
 			}),
 			Entry("two headers that collide once encoded for the environment", &operatorv1.OpenTelemetrySpec{
 				Logs: &operatorv1.OpenTelemetryLogs{Types: []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog}},

@@ -181,8 +181,8 @@ func (c *component) SupportedOSType() rmeta.OSType {
 
 func (c *component) Objects() ([]client.Object, []client.Object) {
 	if c.cfg.Disabled {
-		// Nothing is owned by a CR we can rely on being deleted, so switching the
-		// feature off has to explicitly tear its resources down.
+		// Objects are owned by a sub-struct of the LogCollector CR rather than the CR
+		// as a whole, so switching the feature off has to tear them down explicitly.
 		return nil, c.ownedObjects()
 	}
 
@@ -459,11 +459,6 @@ type exporterEntry struct {
 	// Headers maps a header name to the environment variable holding its value.
 	// The value itself never reaches the rendered config.
 	Headers []exporterHeader
-	// Plaintext is set for http:// endpoints. OTLP backends are commonly exposed
-	// without TLS in-cluster, and the scheme is how the user asks for that —
-	// mirroring the Splunk output, where a plain-http endpoint does no TLS. There
-	// is deliberately no field for "TLS on, verification off".
-	Plaintext bool
 }
 
 type exporterHeader struct {
@@ -487,10 +482,9 @@ func (c *component) collectorConfig() (string, error) {
 			prefix = exporterPrefixGRPC
 		}
 		entry := exporterEntry{
-			Prefix:    prefix,
-			Name:      exp.Name,
-			Endpoint:  exp.Endpoint,
-			Plaintext: exp.Plaintext(),
+			Prefix:   prefix,
+			Name:     exp.Name,
+			Endpoint: exp.Endpoint,
 		}
 		// Each exporter points at its own CA and client keypair inside the
 		// aggregated mounts, so backends needing different trust or a different

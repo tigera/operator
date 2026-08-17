@@ -168,11 +168,7 @@ type Config struct {
 	KubeControllerPort            int
 	FelixPrometheusMetricsEnabled bool
 	LicenseExpired                bool
-	// OpenTelemetryEnabled reports whether the OTel Collector is configured. Its
-	// ServiceMonitor is created and removed with the collector; without this the
-	// monitor render cannot tell, and would leave one behind selecting a Service
-	// that no longer exists.
-	OpenTelemetryEnabled bool
+	OpenTelemetryEnabled          bool
 
 	// Operator metrics fields.
 	OperatorMetricsEnabled bool
@@ -295,7 +291,6 @@ func (mc *monitorComponent) Objects() ([]client.Object, []client.Object) {
 		toCreate = append(toCreate, serviceMonitors...)
 	}
 
-	// Tracks the collector's own lifecycle rather than the license's.
 	if mc.cfg.OpenTelemetryEnabled && !mc.cfg.LicenseExpired {
 		toCreate = append(toCreate, mc.serviceMonitorOpenTelemetryCollector())
 	} else {

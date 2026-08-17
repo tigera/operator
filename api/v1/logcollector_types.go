@@ -341,24 +341,15 @@ func (s *OpenTelemetrySpec) Validate() error {
 			return fmt.Errorf("exporter names must be unique in spec.openTelemetry.exporters: %q is duplicated", exp.Name)
 		}
 		seen[exp.Name] = struct{}{}
-		plaintext := exp.Plaintext()
-		// TLS material on a plaintext endpoint is silently ignored by the collector,
-		// so reject it rather than letting the user believe it took effect.
-		if plaintext && exp.TLS != nil {
-			if exp.TLS.ClientCertSecretName != "" {
-				return fmt.Errorf("exporter %q sets tls.clientCertSecretName on an http:// endpoint; the client cert is only sent over TLS", exp.Name)
-			}
-			if exp.TLS.CAConfigMapName != "" {
-				return fmt.Errorf("exporter %q sets tls.caConfigMapName on an http:// endpoint; there is no server certificate to verify", exp.Name)
-			}
+		// The endpoint Pattern already rejects anything but https at the API server;
+		// this catches a stale CRD, where the alternative is exporting telemetry and
+		// its credentials in the clear.
+		if !strings.HasPrefix(strings.ToLower(exp.Endpoint), "https://") {
+			return fmt.Errorf("exporter %q endpoint must use https://, got %q", exp.Name, exp.Endpoint)
 		}
 		for _, h := range exp.AuthHeaders() {
 			if h.ValueFrom.SecretKeyRef == nil || h.ValueFrom.SecretKeyRef.Name == "" || h.ValueFrom.SecretKeyRef.Key == "" {
 				return fmt.Errorf("exporter %q header %q must set valueFrom.secretKeyRef.name and .key", exp.Name, h.Name)
-			}
-			// An http:// endpoint puts the credential on the wire in the clear.
-			if plaintext {
-				return fmt.Errorf("exporter %q sets auth.headers on an http:// endpoint; the credential would be sent unencrypted", exp.Name)
 			}
 			env := HeaderEnvName(exp.Name, h.Name)
 			if prev, dup := envNames[env]; dup {
@@ -434,9 +425,10 @@ type OpenTelemetryExporter struct {
 	// +kubebuilder:validation:MaxLength=63
 	Name string `json:"name"`
 
-	// Endpoint is the OTLP endpoint URL.
+	// Endpoint is the OTLP endpoint URL. Must be https: telemetry and its
+	// credentials are never sent in the clear.
 	// +required
-	// +kubebuilder:validation:Pattern=`^(http|https)://.+$`
+	// +kubebuilder:validation:Pattern=`^[Hh][Tt][Tt][Pp][Ss]://.+$`
 	Endpoint string `json:"endpoint"`
 
 	// Protocol specifies the OTLP transport protocol. Default: grpc.
@@ -444,9 +436,8 @@ type OpenTelemetryExporter struct {
 	// +kubebuilder:default=grpc
 	Protocol OpenTelemetryExporterProtocol `json:"protocol,omitempty"`
 
-	// TLS configures transport security for this exporter. When omitted, an https
-	// endpoint is verified against the system roots and an http endpoint is sent
-	// in the clear.
+	// TLS configures transport security for this exporter. When omitted, the
+	// endpoint is verified against the system roots.
 	// +optional
 	TLS *OpenTelemetryExporterTLS `json:"tls,omitempty"`
 
@@ -498,13 +489,6 @@ type OpenTelemetryHeaderValueSource struct {
 	// SecretKeyRef selects a key of a Secret in the tigera-operator namespace.
 	// +required
 	SecretKeyRef *corev1.SecretKeySelector `json:"secretKeyRef"`
-}
-
-// Plaintext reports whether this exporter's endpoint carries no transport
-// security. URL schemes are case-insensitive, so HTTP:// is the same endpoint
-// as http:// and must not be treated as encrypted.
-func (e OpenTelemetryExporter) Plaintext() bool {
-	return strings.HasPrefix(strings.ToLower(e.Endpoint), "http://")
 }
 
 // CAConfigMap returns the user-supplied CA ConfigMap for this exporter, if any.

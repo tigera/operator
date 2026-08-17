@@ -73,7 +73,7 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				"metadata":   map[string]any{"name": "default"},
 				"spec":       map[string]any{"healthPort": healthPort},
 			}}
-			Expect(c.Patch(ctx, other, client.Apply, client.FieldOwner(manager), client.ForceOwnership)).NotTo(HaveOccurred())
+			Expect(c.Apply(ctx, client.ApplyConfigurationFromUnstructured(other), client.FieldOwner(manager), client.ForceOwnership)).NotTo(HaveOccurred())
 		}
 
 		BeforeEach(func() {
@@ -211,7 +211,7 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 					"metadata":   map[string]any{"name": "default"},
 					"spec":       map[string]any{"bpfEnabled": true},
 				}}
-				Expect(c.Patch(ctx, other, client.Apply, client.FieldOwner("kubectl"), client.ForceOwnership)).NotTo(HaveOccurred())
+				Expect(c.Apply(ctx, client.ApplyConfigurationFromUnstructured(other), client.FieldOwner("kubectl"), client.ForceOwnership)).NotTo(HaveOccurred())
 
 				_, err = w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
 				Expect(err).To(BeAssignableToTypeOf(&sharedconfig.ConflictingFieldsError{}))
@@ -228,7 +228,7 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				// Taking the field over moves it out of the legacy manager's field set.
 				for _, entry := range getFelixConfig().ManagedFields {
 					if entry.Manager == "operator" {
-						Expect(string(entry.FieldsV1.Raw)).NotTo(ContainSubstring("healthPort"))
+						Expect(entry.FieldsV1.GetRawString()).NotTo(ContainSubstring("healthPort"))
 					}
 				}
 			})

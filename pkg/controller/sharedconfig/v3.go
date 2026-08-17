@@ -117,7 +117,7 @@ func (w *v3Writer) resolveConflicts(applyErr error, current *v3.FelixConfigurati
 }
 
 func (w *v3Writer) apply(ctx context.Context, payload *unstructured.Unstructured, manager string, force bool) (*v3.FelixConfiguration, error) {
-	opts := []client.PatchOption{client.FieldOwner(fieldManagerPrefix + manager)}
+	opts := []client.ApplyOption{client.FieldOwner(fieldManagerPrefix + manager)}
 	if force {
 		opts = append(opts, client.ForceOwnership)
 	}
@@ -129,7 +129,7 @@ func (w *v3Writer) apply(ctx context.Context, payload *unstructured.Unstructured
 
 	applied := payload.DeepCopy()
 	applied.SetGroupVersionKind(gvk)
-	if err := w.client.Patch(ctx, applied, client.Apply, opts...); err != nil {
+	if err := w.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(applied), opts...); err != nil {
 		return nil, err
 	}
 

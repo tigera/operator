@@ -69,7 +69,7 @@ func updateOwnedPaths(fc *v3.FelixConfiguration) (legacy, others map[string]bool
 			continue
 		}
 		fields := map[string]any{}
-		if err := json.Unmarshal(entry.FieldsV1.Raw, &fields); err != nil {
+		if err := json.Unmarshal(entry.FieldsV1.GetRawBytes(), &fields); err != nil {
 			return nil, nil, fmt.Errorf("unable to parse the fields managed by %q: %w", entry.Manager, err)
 		}
 		out := others

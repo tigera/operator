@@ -346,7 +346,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
 			TLSKeyPair:                   gatewayTLSKeyPair,
 			ResourcePrefix:               whisker.GatewayResourcePrefix,
-			Enterprise:                   false,
+			Enterprise:                   installationSpec.Variant.IsEnterprise(),
 			OpenShift:                    r.provider.IsOpenShift(),
 			// Whisker streams flow logs as server-sent events; Envoy
 			// Gateway's default 15s route timeout would drop the stream.

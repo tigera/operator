@@ -778,7 +778,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, nil
 		}
 	} else if instance.Spec.IngressGateway != nil {
-		gwComp, gwKeyPair, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
+		gwComp, gwKeyPair, result, err := r.resolveGateway(ctx, instance, installationSpec, authenticationCR, certificateManager, helper, logc)
 		if err != nil {
 			return result, err
 		}
@@ -965,6 +965,7 @@ const (
 func (r *ReconcileManager) resolveGateway(
 	ctx context.Context,
 	instance *operatorv1.Manager,
+	installationSpec *operatorv1.InstallationSpec,
 	authenticationCR *operatorv1.Authentication,
 	certManager certificatemanager.CertificateManager,
 	helper utils.NamespaceHelper,
@@ -1038,7 +1039,7 @@ func (r *ReconcileManager) resolveGateway(
 		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
 		TLSKeyPair:                   gwTLSKeyPair,
 		ResourcePrefix:               ManagerGatewayResourcePrefix,
-		Enterprise:                   true,
+		Enterprise:                   installationSpec.Variant.IsEnterprise(),
 		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 	}
 

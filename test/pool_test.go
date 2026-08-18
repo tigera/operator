@@ -245,11 +245,15 @@ var _ = Describe("IPPool FV tests", func() {
 			if err := c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance); err != nil {
 				return err
 			}
-			if instance.Status.Computed == nil {
+			if instance.Status.Computed == nil || instance.Status.Computed.CalicoNetwork == nil {
 				return fmt.Errorf("Installation defaults have not been recorded yet")
 			}
+			pools := instance.Status.Computed.CalicoNetwork.IPPools
+			if len(pools) != 1 || pools[0].Name == "" {
+				return fmt.Errorf("IP pool defaults have not been recorded yet: %+v", pools)
+			}
 			return nil
-		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+		}, 30*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
 		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(BeEmpty())
 		Expect(instance.Status.Computed.CalicoNetwork.IPPools).To(HaveLen(1))
 		Expect(instance.Status.Computed.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
@@ -349,11 +353,15 @@ var _ = Describe("IPPool FV tests", func() {
 			if err := c.Get(context.Background(), types.NamespacedName{Name: "default"}, instance); err != nil {
 				return err
 			}
-			if instance.Status.Computed == nil {
+			if instance.Status.Computed == nil || instance.Status.Computed.CalicoNetwork == nil {
 				return fmt.Errorf("Installation defaults have not been recorded yet")
 			}
+			pools := instance.Status.Computed.CalicoNetwork.IPPools
+			if len(pools) != 1 || pools[0].Name == "" {
+				return fmt.Errorf("IP pool defaults have not been recorded yet: %+v", pools)
+			}
 			return nil
-		}, 5*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
+		}, 30*time.Second, 1*time.Second).ShouldNot(HaveOccurred())
 		Expect(instance.Spec.CalicoNetwork.IPPools[0].Name).To(BeEmpty())
 		Expect(instance.Status.Computed.CalicoNetwork.IPPools).To(HaveLen(1))
 		Expect(instance.Status.Computed.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))

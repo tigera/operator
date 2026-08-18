@@ -1606,6 +1606,22 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 		},
 	}...)
 
+	// Ungated: a rule rendered only while a feature is on could never turn it on.
+	rules = append(rules,
+		// create cannot be name-scoped, so this admits any ConfigMap in the namespace.
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+		},
+	)
+
 	// ui-apis writes these impersonating the caller, so the apiserver enforces escalation
 	// against the user's own permissions.
 	if c.data.rbacManagementEnabled {

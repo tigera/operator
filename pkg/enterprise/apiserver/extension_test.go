@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -436,7 +437,7 @@ var _ = Describe("API server enterprise modifier", func() {
 			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups:     []string{""},
 				Resources:     []string{"configmaps"},
-				ResourceNames: []string{rbacmanagement.ConfigMapName},
+				ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
 				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 			}))
 		},

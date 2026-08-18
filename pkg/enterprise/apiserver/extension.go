@@ -55,6 +55,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -1608,7 +1609,7 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 
 	// Ungated: a rule rendered only while a feature is on could never turn it on.
 	rules = append(rules,
-		// create cannot be name-scoped, so this admits any ConfigMap in the namespace.
+		// create cannot be name-scoped, so this admits any ConfigMap in any namespace.
 		rbacv1.PolicyRule{
 			APIGroups: []string{""},
 			Resources: []string{"configmaps"},
@@ -1617,7 +1618,7 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 		rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 		},
 	)

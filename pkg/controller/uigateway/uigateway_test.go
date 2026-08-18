@@ -253,7 +253,12 @@ var _ = Describe("Cleanup helpers", func() {
 
 			gateways, backends := deletionNamespaces(components)
 			Expect(gateways).To(ConsistOf("ns-a", backendNS))
-			Expect(backends).To(ConsistOf(backendNS, backendNS))
+			// The Backend lives in the backend namespace, so only that
+			// namespace's component deletes it. If ns-a's component deleted it
+			// too, it would be reaching into a namespace whose grant it may
+			// already have dropped, and the delete would 403 with nothing left
+			// to restore the grant.
+			Expect(backends).To(ConsistOf(backendNS))
 		})
 
 		It("deletes nothing when no labeled Gateway exists", func() {

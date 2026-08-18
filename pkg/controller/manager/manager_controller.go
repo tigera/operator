@@ -764,7 +764,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		ResourcePrefix:   ManagerGatewayResourcePrefix,
 		TLSSecretName:    ManagerGatewayTLSSecretName,
 		BackendNamespace: helper.InstallNamespace(),
-		Enterprise:       true,
+		Enterprise:       installationSpec.Variant.IsEnterprise(),
 	}
 	if r.opts.MultiTenant {
 		// Multi-tenant CIG is not supported: resource names and the cleanup
@@ -975,7 +975,7 @@ func (r *ReconcileManager) resolveGateway(
 	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; gateway resources will not be rendered", err, logc)
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway", err, logc)
 			return nil, nil, reconcile.Result{}, err
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
@@ -1019,6 +1019,12 @@ func (r *ReconcileManager) resolveGateway(
 	if err != nil {
 		r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, logc)
 		return nil, nil, reconcile.Result{}, err
+	}
+	if msg := uigateway.UnsupportedCertificateManagement(gwTLSKeyPair); msg != "" {
+		// Render nothing: the key pair carries no private key, so writing it
+		// would leave Envoy with a certificate it cannot serve.
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, nil, logc)
+		return nil, nil, reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 	}
 
 	gwCfg := &rgateway.Configuration{

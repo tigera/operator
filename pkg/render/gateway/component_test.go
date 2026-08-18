@@ -15,6 +15,8 @@
 package gateway_test
 
 import (
+	"fmt"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -166,8 +168,8 @@ var _ = Describe("Gateway component render", func() {
 					if _, ok := obj.(*corev1.ServiceAccount); ok {
 						Fail("ServiceAccount should not be rendered when Enterprise is false")
 					}
-					if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-ingressgateway-access" {
-						Fail("only the gateway access RoleBinding should be rendered when Enterprise is false")
+					if rb, ok := obj.(*rbacv1.RoleBinding); ok && !isAccessBinding(prefix, rb.Name) {
+						Fail("only the access RoleBindings should be rendered when Enterprise is false")
 					}
 				}
 				np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -193,23 +195,40 @@ var _ = Describe("Gateway component render", func() {
 			Expect(string(rg.Spec.From[0].Namespace)).To(Equal("custom-gateway-ns"))
 		})
 
-		It("grants itself write access in both namespaces it writes to", func() {
-			accessName := prefix + "-ingressgateway-access"
-			for _, ns := range []string{"custom-gateway-ns", bkNS} {
-				role := findObject[*rbacv1.Role](toCreate, accessName, ns)
-				Expect(role).NotTo(BeNil(), "expected a access Role in %s", ns)
-				Expect(role.Rules).To(HaveLen(2))
-				Expect(role.Rules[0].Resources).To(ConsistOf("gateways", "httproutes", "referencegrants"))
-				Expect(role.Rules[0].Verbs).To(ConsistOf("create", "update", "delete"))
-				Expect(role.Rules[1].Resources).To(ConsistOf("backends"))
-				Expect(findObject[*rbacv1.RoleBinding](toCreate, accessName, ns)).NotTo(BeNil(),
-					"expected a access RoleBinding in %s", ns)
-			}
-			for _, obj := range toCreate {
-				if r, ok := obj.(*rbacv1.Role); ok {
-					Expect(r.Name).To(Equal(accessName), "the access Role is the only Role this component renders")
-				}
-			}
+		It("grants each namespace only the kinds it holds", func() {
+			gwAccess := prefix + "-ingressgateway-access"
+			bkAccess := prefix + "-ingressgateway-backend-access"
+
+			// The gateway namespace holds the Gateway and HTTPRoute, and must
+			// not be able to write the Backend or ReferenceGrant.
+			gwRole := findObject[*rbacv1.Role](toCreate, gwAccess, "custom-gateway-ns")
+			Expect(gwRole).NotTo(BeNil(), "expected the gateway access Role in the gateway namespace")
+			Expect(gwRole.Rules).To(HaveLen(1))
+			Expect(gwRole.Rules[0].Resources).To(ConsistOf("gateways", "httproutes"))
+			Expect(gwRole.Rules[0].Verbs).To(ConsistOf("create", "update", "delete"))
+			Expect(findObject[*rbacv1.RoleBinding](toCreate, gwAccess, "custom-gateway-ns")).NotTo(BeNil())
+
+			// The backend namespace holds the Backend and ReferenceGrant, and
+			// must not be able to write Gateways or HTTPRoutes.
+			bkRole := findObject[*rbacv1.Role](toCreate, bkAccess, bkNS)
+			Expect(bkRole).NotTo(BeNil(), "expected the backend access Role in the backend namespace")
+			Expect(bkRole.Rules).To(HaveLen(2))
+			Expect(bkRole.Rules[0].Resources).To(ConsistOf("referencegrants"))
+			Expect(bkRole.Rules[1].Resources).To(ConsistOf("backends"))
+			Expect(findObject[*rbacv1.RoleBinding](toCreate, bkAccess, bkNS)).NotTo(BeNil())
+
+			// Neither grant leaks into the other namespace.
+			Expect(findObject[*rbacv1.Role](toCreate, gwAccess, bkNS)).To(BeNil(),
+				"the gateway grant has no business in the backend namespace")
+			Expect(findObject[*rbacv1.Role](toCreate, bkAccess, "custom-gateway-ns")).To(BeNil(),
+				"the backend grant has no business in the gateway namespace")
+		})
+
+		It("removes the pre-split Role left in the backend namespace", func() {
+			// One Role named for the gateway used to cover both namespaces.
+			gone := findObject[*rbacv1.Role](toDelete, prefix+"-ingressgateway-access", bkNS)
+			Expect(gone).NotTo(BeNil(), "the leftover combined Role should be deleted on upgrade")
+			Expect(findObject[*rbacv1.RoleBinding](toDelete, prefix+"-ingressgateway-access", bkNS)).NotTo(BeNil())
 		})
 
 		It("leaves SA, RoleBinding, and NetworkPolicy to the GatewayAPI controller even when Enterprise is true", func() {
@@ -218,8 +237,8 @@ var _ = Describe("Gateway component render", func() {
 				case *corev1.ServiceAccount:
 					Fail("ServiceAccount should not be rendered for a custom gateway namespace")
 				case *rbacv1.RoleBinding:
-					Expect(o.Name).To(Equal(prefix+"-ingressgateway-access"),
-						"only the gateway access RoleBinding belongs to this component in a custom namespace")
+					Expect(o.Name).To(BeElementOf(prefix+"-ingressgateway-access", prefix+"-ingressgateway-backend-access"),
+						"only the two access RoleBindings belong to this component in a custom namespace")
 				case *v3.NetworkPolicy:
 					Fail("NetworkPolicy should not be rendered for a custom gateway namespace")
 				}
@@ -370,7 +389,7 @@ var _ = Describe("Gateway deletion component", func() {
 	BeforeEach(func() {
 		delCfg = &gateway.DeletionConfiguration{
 			ResourcePrefix:   prefix,
-			GatewayNamespace: gwNS,
+			StaleNamespace:   gwNS,
 			BackendNamespace: bkNS,
 			TLSSecretName:    tlsSecret,
 			Enterprise:       true,
@@ -422,12 +441,12 @@ var _ = Describe("Gateway deletion component", func() {
 			))
 		})
 
-		It("does not include cross-namespace resources", func() {
-			for _, obj := range toDelete {
-				if _, ok := obj.(*gapi.ReferenceGrant); ok {
-					Fail("ReferenceGrant should not appear when namespaces match")
-				}
-			}
+		It("deletes the backend namespace's own resources, since this component owns it", func() {
+			// A default install never rendered a ReferenceGrant, but a custom-namespace
+			// install did, and from here the two are indistinguishable — so the delete
+			// is emitted either way and tolerated as NotFound.
+			Expect(findObject[*envoyapi.Backend](toDelete, prefix+"-backend", bkNS)).NotTo(BeNil())
+			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 		})
 
 		It("includes Enterprise resources", func() {
@@ -448,8 +467,8 @@ var _ = Describe("Gateway deletion component", func() {
 				if _, ok := obj.(*corev1.ServiceAccount); ok {
 					Fail("ServiceAccount should not appear when Enterprise is false")
 				}
-				if rb, ok := obj.(*rbacv1.RoleBinding); ok && rb.Name != prefix+"-ingressgateway-access" {
-					Fail("only the gateway access RoleBinding should appear when Enterprise is false")
+				if rb, ok := obj.(*rbacv1.RoleBinding); ok && !isAccessBinding(prefix, rb.Name) {
+					Fail("only the access RoleBindings should appear when Enterprise is false")
 				}
 			}
 			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -459,12 +478,24 @@ var _ = Describe("Gateway deletion component", func() {
 
 	Context("cross-namespace", func() {
 		BeforeEach(func() {
-			delCfg.GatewayNamespace = "custom-gateway-ns"
+			delCfg.StaleNamespace = "custom-gateway-ns"
 		})
 
-		It("includes ReferenceGrant in the backend namespace", func() {
-			rg := findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)
-			Expect(rg).NotTo(BeNil())
+		It("never reaches into the backend namespace", func() {
+			// This component gives up its own grant when it finishes, so anything
+			// it deleted in another namespace could 403 for the component that
+			// owns that namespace — and nothing recreates grants after teardown.
+			for _, obj := range toDelete {
+				if obj.GetNamespace() == bkNS {
+					Fail(fmt.Sprintf("cleanup for %s must not delete %T in the backend namespace",
+						delCfg.StaleNamespace, obj))
+				}
+			}
+		})
+
+		It("leaves the Backend and ReferenceGrant to the backend namespace's own component", func() {
+			Expect(findObject[*envoyapi.Backend](toDelete, prefix+"-backend", bkNS)).To(BeNil())
+			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
 		It("does not delete GatewayAPI-controller-owned resources even when Enterprise is true", func() {
@@ -484,7 +515,7 @@ var _ = Describe("Gateway deletion component", func() {
 
 	Context("namespace move cleanup", func() {
 		BeforeEach(func() {
-			delCfg.GatewayNamespace = "old-ns"
+			delCfg.StaleNamespace = "old-ns"
 			delCfg.MoveTargetNamespace = "new-ns"
 		})
 
@@ -506,13 +537,36 @@ var _ = Describe("Gateway deletion component", func() {
 			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
-		It("keeps the backend namespace's access grant, and drops the old namespace's", func() {
-			accessName := prefix + "-ingressgateway-access"
-			Expect(findObject[*rbacv1.Role](toDelete, accessName, "old-ns")).NotTo(BeNil(),
-				"the old namespace is no longer written to, so its grant goes")
-			Expect(findObject[*rbacv1.Role](toDelete, accessName, bkNS)).To(BeNil(),
-				"the backend namespace keeps its resources on a move, so it keeps the grant that writes them")
-			Expect(findObject[*rbacv1.RoleBinding](toDelete, accessName, bkNS)).To(BeNil())
+		It("keeps the backend grant, and drops the old namespace's gateway grant", func() {
+			gwAccess := prefix + "-ingressgateway-access"
+			bkAccess := prefix + "-ingressgateway-backend-access"
+
+			Expect(findObject[*rbacv1.Role](toDelete, gwAccess, "old-ns")).NotTo(BeNil(),
+				"the old namespace is no longer written to, so its gateway grant goes")
+			Expect(findObject[*rbacv1.RoleBinding](toDelete, gwAccess, "old-ns")).NotTo(BeNil())
+
+			Expect(findObject[*rbacv1.Role](toDelete, bkAccess, bkNS)).To(BeNil(),
+				"the Backend and ReferenceGrant stay on a move, so the grant that writes them stays too")
+			Expect(findObject[*rbacv1.RoleBinding](toDelete, bkAccess, bkNS)).To(BeNil())
+		})
+
+		Context("moving out of the backend namespace", func() {
+			BeforeEach(func() {
+				// Whisker's default: gateway and backend share a namespace, and
+				// the gateway is the thing leaving.
+				delCfg.StaleNamespace = bkNS
+				delCfg.MoveTargetNamespace = "new-ns"
+			})
+
+			It("keeps the backend grant even though the namespace is the one being cleaned", func() {
+				Expect(findObject[*rbacv1.Role](toDelete, prefix+"-ingressgateway-backend-access", bkNS)).To(BeNil(),
+					"the Backend is still here, so its grant must survive the move")
+				Expect(findObject[*rbacv1.RoleBinding](toDelete, prefix+"-ingressgateway-backend-access", bkNS)).To(BeNil())
+			})
+
+			It("still drops the gateway grant, which has nothing left to write here", func() {
+				Expect(findObject[*rbacv1.Role](toDelete, prefix+"-ingressgateway-access", bkNS)).NotTo(BeNil())
+			})
 		})
 
 		Context("moving into the backend namespace", func() {
@@ -524,7 +578,7 @@ var _ = Describe("Gateway deletion component", func() {
 				Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 			})
 
-			It("still keeps the backend namespace's access grant", func() {
+			It("still keeps the backend grant", func() {
 				// The new render writes the Backend there, so the grant stays
 				// even though this pass deletes the ReferenceGrant.
 				accessName := prefix + "-ingressgateway-access"
@@ -535,7 +589,7 @@ var _ = Describe("Gateway deletion component", func() {
 
 		Context("moving out of the backend namespace", func() {
 			BeforeEach(func() {
-				delCfg.GatewayNamespace = bkNS
+				delCfg.StaleNamespace = bkNS
 				delCfg.MoveTargetNamespace = "new-ns"
 			})
 
@@ -582,4 +636,10 @@ func objectNames(objs []client.Object) []string {
 		names[i] = obj.GetName()
 	}
 	return names
+}
+
+// isAccessBinding reports whether name is one of the two grants this component
+// renders for itself, rather than a RoleBinding belonging to something else.
+func isAccessBinding(prefix, name string) bool {
+	return name == prefix+"-ingressgateway-access" || name == prefix+"-ingressgateway-backend-access"
 }

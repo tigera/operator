@@ -239,11 +239,11 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			},
 		)
 
-		// TODO: Calico policy can't match "any node" as a source. Such a selector would
-		// let us drop the fallback allow.
+		// TODO: Calico policy can't match "any node" or "any tunnel IP" as a source. Such
+		// a selector would let us allow nodes explicitly and drop the fallback allow.
 		ingressRules := []v3.Rule{
-			// The apiserver source IP usually survives to the webhook pod and matches the
-			// kubernetes Service endpoints.
+			// The apiserver source IP usually survives unmodified to the webhook pod, where it
+			// matches the endpoints of the default/kubernetes Service.
 			{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
@@ -252,8 +252,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Ports: networkpolicy.Ports(uint16(containerPort)),
 				},
 			},
-			// AKS and GKE route the apiserver through konnectivity agents, so the admission
-			// call arrives with a pod source IP.
+			// AKS and GKE route the apiserver through konnectivity agents, so the admission call
+			// arrives with a pod source IP and would otherwise hit the deny below.
 			{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
@@ -262,8 +262,9 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Ports: networkpolicy.Ports(uint16(containerPort)),
 				},
 			},
-			// Only pods carry projectcalico.org/orchestrator, so a user-created NetworkSet
-			// cannot match this deny.
+			// Only workload endpoints carry projectcalico.org/orchestrator, so a user-created
+			// NetworkSet can't match this deny. Traffic SNAT'd to a node tunnel address comes
+			// from the node, not a pod, and falls through.
 			{
 				Action: v3.Deny,
 				Source: v3.EntityRule{
@@ -271,8 +272,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					Selector:          "has(projectcalico.org/orchestrator)",
 				},
 			},
-			// Catches node-sourced traffic, including a hostnet apiserver SNAT'd to a tunnel
-			// address, plus cluster-external sources.
+			// Catches node-sourced traffic, including a hostnet apiserver SNAT'd through an IPIP
+			// or VXLAN overlay, plus cluster-external sources routed to the pod.
 			{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,

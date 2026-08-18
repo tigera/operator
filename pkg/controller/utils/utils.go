@@ -505,28 +505,28 @@ func GetInstallationStatus(ctx context.Context, client client.Client) (*operator
 	return &instance.Status, nil
 }
 
-// GetInstallationSpec returns the current installation, accounting for overlays. Controllers take
-// the variant from their ControllerOptions instead, so that the whole process agrees on one value.
-func GetInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
+// ComputedInstallationResource names what a caller is waiting for when the core controller has
+// not published the effective config yet.
+var ComputedInstallationResource = schema.GroupResource{
+	Group:    operatorv1.GroupVersion.Group,
+	Resource: "installations.status.computed",
+}
+
+// GetComputedInstallationSpec returns the effective config the core controller publishes on the
+// status, which already has defaults and the overlay applied.
+func GetComputedInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
 		return nil, err
 	}
 
-	spec := instance.Spec
-
-	// update Installation with 'overlay'
-	overlay := operatorv1.Installation{}
-	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
-		if !errors.IsNotFound(err) {
-			return nil, err
-		}
-	} else {
-		spec = OverrideInstallationSpec(spec, overlay.Spec)
+	if instance.Status.Computed == nil {
+		// NotFound, so callers wait the same way they do for a missing Installation.
+		return nil, errors.NewNotFound(ComputedInstallationResource, DefaultInstanceKey.Name)
 	}
 
-	return &spec, nil
+	return instance.Status.Computed.DeepCopy(), nil
 }
 
 // GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.

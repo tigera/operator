@@ -19024,6 +19024,11 @@ spec:
                       - type
                     type: object
                   type: array
+                defaults:
+                  description: |-
+                    Defaults holds fields the operator supplied because the spec omitted them
+                    (schemaless, so schema defaults can't inflate).
+                  x-kubernetes-preserve-unknown-fields: true
                 imageSet:
                   description: |-
                     ImageSet is the name of the ImageSet being used, if there is an ImageSet

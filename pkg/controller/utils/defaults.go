@@ -18,12 +18,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// SuppliedDefaults returns the fields present in defaulted but absent from declared.
-func SuppliedDefaults(declared, defaulted operatorv1.InstallationSpec) (*operatorv1.InstallationSpec, error) {
+// MergeRecordedDefaults merges the defaults absent from declared over the recorded ones. Owned
+// holds the dotted JSON paths the caller defaults.
+func MergeRecordedDefaults(recorded *operatorv1.InstallationSpec, declared, defaulted operatorv1.InstallationSpec, owned ...string) (*operatorv1.InstallationSpec, error) {
 	declaredContent, err := specToMap(declared)
 	if err != nil {
 		return nil, err
@@ -33,13 +35,30 @@ func SuppliedDefaults(declared, defaulted operatorv1.InstallationSpec) (*operato
 	if err != nil {
 		return nil, err
 	}
-
 	added := addedKeys(declaredContent, defaultedContent)
-	if len(added) == 0 {
+
+	content := added
+	if len(owned) > 0 {
+		content = map[string]any{}
+		if recorded != nil {
+			if content, err = specToMap(*recorded); err != nil {
+				return nil, err
+			}
+		}
+		for _, path := range owned {
+			deletePath(content, path)
+			if value, present := lookupPath(added, path); present {
+				setPath(content, path, value)
+			}
+		}
+		pruneEmptyObjects(content)
+	}
+
+	if len(content) == 0 {
 		return nil, nil
 	}
 
-	raw, err := json.Marshal(added)
+	raw, err := json.Marshal(content)
 	if err != nil {
 		return nil, fmt.Errorf("marshal supplied defaults: %w", err)
 	}
@@ -49,6 +68,58 @@ func SuppliedDefaults(declared, defaulted operatorv1.InstallationSpec) (*operato
 		return nil, fmt.Errorf("unmarshal supplied defaults: %w", err)
 	}
 	return defaults, nil
+}
+
+func lookupPath(content map[string]any, path string) (any, bool) {
+	keys := strings.Split(path, ".")
+	for _, key := range keys[:len(keys)-1] {
+		nested, isObject := content[key].(map[string]any)
+		if !isObject {
+			return nil, false
+		}
+		content = nested
+	}
+	value, present := content[keys[len(keys)-1]]
+	return value, present
+}
+
+func setPath(content map[string]any, path string, value any) {
+	keys := strings.Split(path, ".")
+	for _, key := range keys[:len(keys)-1] {
+		nested, isObject := content[key].(map[string]any)
+		if !isObject {
+			nested = map[string]any{}
+			content[key] = nested
+		}
+		content = nested
+	}
+	content[keys[len(keys)-1]] = value
+}
+
+func deletePath(content map[string]any, path string) {
+	keys := strings.Split(path, ".")
+	for _, key := range keys[:len(keys)-1] {
+		nested, isObject := content[key].(map[string]any)
+		if !isObject {
+			return
+		}
+		content = nested
+	}
+	delete(content, keys[len(keys)-1])
+}
+
+// pruneEmptyObjects drops objects left empty by a deleted path, so they don't record as defaults.
+func pruneEmptyObjects(content map[string]any) {
+	for key, value := range content {
+		object, isObject := value.(map[string]any)
+		if !isObject {
+			continue
+		}
+		pruneEmptyObjects(object)
+		if len(object) == 0 {
+			delete(content, key)
+		}
+	}
 }
 
 // LayerPoolDefaults fills fields left unset on a declared IP pool from the recorded

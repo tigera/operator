@@ -505,9 +505,16 @@ func GetInstallationStatus(ctx context.Context, client client.Client) (*operator
 	return &instance.Status, nil
 }
 
-// GetInstallationSpec returns the effective config the core controller publishes
-// on the status, which already has defaults and the overlay applied.
-func GetInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
+// ComputedInstallationResource names what a caller is waiting for when the core controller has
+// not published the effective config yet.
+var ComputedInstallationResource = schema.GroupResource{
+	Group:    operatorv1.GroupVersion.Group,
+	Resource: "installations.status.computed",
+}
+
+// GetComputedInstallationSpec returns the effective config the core controller publishes on the
+// status, which already has defaults and the overlay applied.
+func GetComputedInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
@@ -515,11 +522,8 @@ func GetInstallationSpec(ctx context.Context, client client.Client) (*operatorv1
 	}
 
 	if instance.Status.Computed == nil {
-		// Callers treat this like a missing Installation and wait.
-		return nil, errors.NewNotFound(schema.GroupResource{
-			Group:    operatorv1.GroupVersion.Group,
-			Resource: "installations",
-		}, DefaultInstanceKey.Name)
+		// NotFound, so callers wait the same way they do for a missing Installation.
+		return nil, errors.NewNotFound(ComputedInstallationResource, DefaultInstanceKey.Name)
 	}
 
 	return instance.Status.Computed.DeepCopy(), nil

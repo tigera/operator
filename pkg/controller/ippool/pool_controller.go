@@ -19,7 +19,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
-	"slices"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -145,28 +144,10 @@ func hasOwnerLabel(pool *v3.IPPool) bool {
 }
 
 // recordDefaults adds the pool defaults to the Installation status, leaving the spec untouched.
-func (r *Reconciler) recordDefaults(ctx context.Context, installation *operatorv1.Installation, declared operatorv1.InstallationSpec) error {
-	added, err := utils.SuppliedDefaults(declared, installation.Spec)
+func (r *Reconciler) recordDefaults(ctx context.Context, installation *operatorv1.Installation, declared, computed operatorv1.InstallationSpec) error {
+	recorded, err := utils.MergeRecordedDefaults(installation.Status.Defaults, declared, computed, poolDefaultsPath)
 	if err != nil {
 		return err
-	}
-
-	defaults := &operatorv1.InstallationSpec{}
-	if installation.Status.Defaults != nil {
-		defaults = installation.Status.Defaults.DeepCopy()
-	}
-
-	// This controller owns only the pool defaults, so it replaces those and leaves the rest.
-	if defaults.CalicoNetwork != nil {
-		defaults.CalicoNetwork.IPPools = nil
-	}
-	if added != nil {
-		*defaults = utils.OverrideInstallationSpec(*defaults, *added)
-	}
-
-	var recorded *operatorv1.InstallationSpec
-	if !reflect.DeepEqual(defaults, &operatorv1.InstallationSpec{}) {
-		recorded = defaults
 	}
 	if reflect.DeepEqual(installation.Status.Defaults, recorded) {
 		return nil
@@ -212,21 +193,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	// This controller relies on the core Installation controller to perform initial defaulting before it can continue.
-	// The core installation controller adds a specific finalizer as part of performing defaulting,
-	// so wait for that before we continue.
-	readyToGo := slices.Contains(installation.GetFinalizers(), render.OperatorCompleteFinalizer)
-	if !readyToGo || installation.Status.Computed == nil {
+	// The core controller signals that initial defaulting is done by publishing the computed spec.
+	if installation.Status.Computed == nil {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
 
-	// Recorded defaults are diffed against the raw spec; everything else works from the
-	// effective config.
-	declaredSpec := *installation.Spec.DeepCopy()
-	installation.Spec = *installation.Status.Computed.DeepCopy()
+	// Everything below works from the computed config, except the recorded defaults, which are
+	// diffed against what the user declared.
+	declared := *installation.Spec.DeepCopy()
+	computed := installation.Status.Computed.DeepCopy()
 
-	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
+	if computed.CNI == nil || computed.CNI.Type == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -245,19 +223,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
-	if err = fillDefaults(ctx, r.client, installation, currentPools); err != nil {
+	if err = fillDefaults(ctx, r.client, computed, currentPools); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if err = ValidatePools(installation); err != nil {
+	if err = ValidatePools(computed); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "error validating IP pool configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if err := r.recordDefaults(ctx, installation, declaredSpec); err != nil {
+	if err := r.recordDefaults(ctx, installation, declared, *computed); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	reqLogger.V(1).Info("Reconciling IP pools for installation", "installation", installation.Spec)
+	reqLogger.V(1).Info("Reconciling IP pools for installation", "installation", computed)
 
 	// Get the APIServer. If healthy, we'll use the projectcalico.org/v3 API for managing pools.
 	// Otherwise, we'll use the internal v1 API for bootstrapping the cluster until the API server is available.
@@ -294,7 +272,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// Compare this pool to the pools in the Installation object and there is a match, consider it ours.
 			// Without this logic, this controller would consider these pools as not owned by itself, resulting in errors
 			// when it attempts to create overlappin IP pools.
-			for _, cnp := range installation.Spec.CalicoNetwork.IPPools {
+			for _, cnp := range computed.CalicoNetwork.IPPools {
 				v1p := operatorv1.IPPool{}
 				FromProjectCalico(&v1p, p)
 				reqLogger.V(1).Info("Comparing IP pool", "clusterPool", p, "installationPool", cnp)
@@ -330,7 +308,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// We will install pools at start-of-day using the CRD API, but otherwise
 	// we require the v3 API to be running. This is so that we properly leverage the v3 API's validation.
 	toCreateOrUpdate := []client.Object{}
-	for _, p := range installation.Spec.CalicoNetwork.IPPools {
+	for _, p := range computed.CalicoNetwork.IPPools {
 		// We need to check if updates are required, but the installation uses the operator API format and the queried
 		// pools are in projectcalico.org/v3 format. Compare the pools using the projectcalico.org/v3 format.
 		v1res, err := ToProjectCalico(p)
@@ -387,7 +365,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	for cidr, v1res := range ourPools {
 		reqLogger.WithValues("cidr", cidr).V(1).Info("Checking if pool is still valid")
 		found := false
-		for _, p := range installation.Spec.CalicoNetwork.IPPools {
+		for _, p := range computed.CalicoNetwork.IPPools {
 			// cidr is a normalized map key; normalize the Installation CIDR before comparing so that a
 			// non-canonical CIDR in the Installation still matches the canonical CIDR stored on the pool.
 			if normalizeCIDR(p.CIDR) == cidr {
@@ -399,7 +377,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			// This pool needs to be deleted. We only ever send deletes via the API server,
 			// since deletion requires rather complex logic. If the API server isn't available,
 			// we won't delete the pool and will mark the controller as degraded.
-			reqLogger.WithValues("cidr", cidr, "valid", installation.Spec.CalicoNetwork.IPPools).Info("Pool needs to be deleted")
+			reqLogger.WithValues("cidr", cidr, "valid", computed.CalicoNetwork.IPPools).Info("Pool needs to be deleted")
 			if apiAvailable {
 				// v3 API is available - send a delete request.
 				v3res, err := v1ToV3(&v1res)

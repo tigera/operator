@@ -20,12 +20,14 @@ import (
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
@@ -60,8 +62,15 @@ type Configuration struct {
 	// "calico-manager-gateway", "calico-manager-route", etc.
 	ResourcePrefix string
 
-	// Enterprise controls whether the proxy SA, RoleBinding, and NetworkPolicy
-	// are rendered. They are only rendered when the Gateway is placed in the
+	// RouteRequestTimeout, when set, becomes the HTTPRoute rule's request
+	// timeout. Whisker sets "0s" to disable Envoy Gateway's 15-second
+	// default — its flow-log stream is server-sent events and must stay
+	// open. Nil keeps the Envoy Gateway default.
+	RouteRequestTimeout *string
+
+	// Enterprise controls whether the WAF filter's ServiceAccount and
+	// RoleBinding are rendered. The proxy NetworkPolicy is rendered on both
+	// variants. All three are only rendered when the Gateway is placed in the
 	// backend (install) namespace: the GatewayAPI controller skips
 	// calico-system (lifecycle guard), so this component fills that gap. For
 	// custom gateway namespaces the GatewayAPI controller creates the
@@ -96,7 +105,23 @@ func (c *gatewayComponent) Ready() bool {
 func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
 	var objs []client.Object
 
+	// Both grants come first because they carry the write permissions the
+	// resources below need. The first reconcile may still be denied while the
+	// authorizer catches up; the requeue will retry, as with the TLS Secret
+	// below. They are rendered unconditionally: when the gateway and backend
+	// namespaces coincide both land in the same namespace, which keeps each
+	// grant tied to one purpose and one lifetime.
+	gwRole, gwBinding := c.gatewayAccess()
+	bkRole, bkBinding := c.backendAccess()
+	objs = append(objs, gwRole, gwBinding, bkRole, bkBinding)
+
+	// Render the Gateway before the other gateway resources. It carries the
+	// cleanup label, so even if a later resource fails to render, cleanup can
+	// still discover the gateway resources.
+	objs = append(objs, c.gateway())
+
 	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
+		// Allow the HTTPRoute to reference the backend across namespaces.
 		objs = append(objs, c.referenceGrant())
 	}
 
@@ -105,27 +130,109 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 	// GatewayAPI controller creates once it sees the Gateway there, so the
 	// secret create fails on the first reconcile and succeeds on the retry.
 	objs = append(objs,
-		c.gateway(),
 		c.backend(),
 		c.httpRoute(),
 		c.tlsSecret(),
 	)
 
-	if c.cfg.Enterprise && c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
-		// calico-system has an operator-managed default-deny, and the
-		// GatewayAPI controller skips it (lifecycle guard), so the proxy SA,
-		// RoleBinding, and NetworkPolicy are rendered here. In a custom
-		// namespace the GatewayAPI controller creates the SA and RoleBinding,
-		// and no NetworkPolicy is rendered — the same treatment user-brought
-		// Gateways get.
-		objs = append(objs,
-			rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
-			rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
-			c.proxyNetworkPolicy(),
-		)
+	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
+		// calico-system has an operator-managed default-deny on both variants,
+		// and the GatewayAPI controller skips it (lifecycle guard), so the
+		// proxy NetworkPolicy is rendered here. In a custom namespace no
+		// NetworkPolicy is rendered — the same treatment user-brought Gateways
+		// get.
+		objs = append(objs, c.proxyNetworkPolicy())
+		if c.cfg.Enterprise {
+			// The WAF HTTP filter's ServiceAccount and the RoleBinding giving
+			// it Gateway API reads. The proxy pod runs as that account on
+			// Enterprise. In a custom namespace the GatewayAPI controller
+			// creates them instead.
+			objs = append(objs,
+				rgatewayapi.GatewayNamespaceServiceAccount(c.cfg.GatewayNamespace),
+				rgatewayapi.GatewayNamespaceRoleBinding(c.cfg.GatewayNamespace),
+			)
+		}
 	}
 
-	return objs, nil
+	// Before the grants were split by purpose, one Role named for the gateway
+	// covered both namespaces. Where the namespaces differ that object is no
+	// longer rendered in the backend namespace, so remove the leftover; it
+	// carried write verbs on kinds that namespace never holds. Can go once no
+	// supported upgrade path starts before the split.
+	var objsToRemove []client.Object
+	if c.cfg.GatewayNamespace != c.cfg.BackendNamespace {
+		legacyRole, legacyBinding := c.access(c.cfg.ResourcePrefix+gatewayAccessSuffix, c.cfg.BackendNamespace, nil)
+		objsToRemove = append(objsToRemove, legacyBinding, legacyRole)
+	}
+
+	return objs, objsToRemove
+}
+
+// The Gateway and HTTPRoute live in the gateway namespace, the Backend and
+// ReferenceGrant beside the backing Service.
+const (
+	gatewayAccessSuffix = "-ingressgateway-access"
+	backendAccessSuffix = "-ingressgateway-backend-access"
+)
+
+// gatewayAccess grants the writes needed in the gateway namespace; the
+// cluster-wide ClusterRole keeps the reads.
+func (c *gatewayComponent) gatewayAccess() (*rbacv1.Role, *rbacv1.RoleBinding) {
+	return c.access(c.cfg.ResourcePrefix+gatewayAccessSuffix, c.cfg.GatewayNamespace, []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{gapi.GroupName},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"create", "update", "delete"},
+		},
+	})
+}
+
+// backendAccess grants the writes needed where the backing Service lives.
+func (c *gatewayComponent) backendAccess() (*rbacv1.Role, *rbacv1.RoleBinding) {
+	return c.access(c.cfg.ResourcePrefix+backendAccessSuffix, c.cfg.BackendNamespace, []rbacv1.PolicyRule{
+		{
+			APIGroups: []string{gapi.GroupName},
+			Resources: []string{"referencegrants"},
+			Verbs:     []string{"create", "update", "delete"},
+		},
+		{
+			APIGroups: []string{EnvoyGatewayGroup},
+			Resources: []string{"backends"},
+			Verbs:     []string{"create", "update", "delete"},
+		},
+	})
+}
+
+// access builds a Role with rules and a RoleBinding tying it to the operator's
+// own ServiceAccount, the identity that renders the gateway resources.
+func (c *gatewayComponent) access(name, namespace string, rules []rbacv1.PolicyRule) (*rbacv1.Role, *rbacv1.RoleBinding) {
+	meta := func() metav1.ObjectMeta {
+		return metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
+		}
+	}
+	return &rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: meta(),
+			Rules:      rules,
+		}, &rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: meta(),
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     name,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      common.OperatorServiceAccount(),
+					Namespace: common.OperatorNamespace(),
+				},
+			},
+		}
 }
 
 func (c *gatewayComponent) tlsSecret() *corev1.Secret {
@@ -182,6 +289,11 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 	backendNS := gapi.Namespace(c.cfg.BackendNamespace)
 	group := gapi.Group(EnvoyGatewayGroup)
 
+	var timeouts *gapi.HTTPRouteTimeouts
+	if c.cfg.RouteRequestTimeout != nil {
+		timeouts = &gapi.HTTPRouteTimeouts{Request: ptr.To(gapi.Duration(*c.cfg.RouteRequestTimeout))}
+	}
+
 	return &gapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -199,6 +311,7 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 			},
 			Rules: []gapi.HTTPRouteRule{
 				{
+					Timeouts: timeouts,
 					BackendRefs: []gapi.HTTPBackendRef{
 						{
 							BackendRef: gapi.BackendRef{
@@ -343,18 +456,17 @@ func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
 // DeletionConfiguration is the minimal config needed to identify gateway
 // resources for cleanup. No TLS keypair, hostname, or class is required.
 type DeletionConfiguration struct {
-	ResourcePrefix   string
-	GatewayNamespace string
+	ResourcePrefix string
+	// StaleNamespace is the namespace being cleaned up.
+	StaleNamespace   string
 	BackendNamespace string
 	TLSSecretName    string
 	Enterprise       bool
 
-	// MoveTargetNamespace, when set, marks this as cleanup after the gateway
-	// moved to that namespace while spec.ingressGateway stayed configured. The
-	// Backend is kept — it lives in the backend namespace and the new render
-	// still routes to it. The ReferenceGrant is deleted only when the target
-	// is the backend namespace, where the render no longer emits it; for any
-	// other target the render updates it in place.
+	// MoveTargetNamespace is the namespace to which the Gateway has moved.
+	// The Backend is retained because the new render continues to route to it.
+	// The ReferenceGrant is also retained unless the target is the Backend
+	// namespace, in which case the new render no longer requires it.
 	MoveTargetNamespace string
 }
 
@@ -374,7 +486,7 @@ func (c *gatewayDeletionComponent) SupportedOSType() rmeta.OSType              {
 func (c *gatewayDeletionComponent) Ready() bool                                { return true }
 
 func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []client.Object) {
-	gwNS := c.cfg.GatewayNamespace
+	staleNS := c.cfg.StaleNamespace
 	bkNS := c.cfg.BackendNamespace
 	prefix := c.cfg.ResourcePrefix
 
@@ -383,19 +495,20 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 	objs := []client.Object{
 		&corev1.Secret{
 			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: c.cfg.TLSSecretName, Namespace: gwNS},
-		},
-		&gapi.Gateway{
-			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: gwNS},
+			ObjectMeta: metav1.ObjectMeta{Name: c.cfg.TLSSecretName, Namespace: staleNS},
 		},
 		&gapi.HTTPRoute{
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: gwNS},
+			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: staleNS},
 		},
 	}
 
-	if !move {
+	// The Backend and ReferenceGrant live in the backend namespace, so only the
+	// component cleaning that namespace deletes them. A component for another
+	// namespace has no write access there once its own grant is gone, and
+	// teardown always includes the backend namespace, so they are still removed
+	// exactly once.
+	if staleNS == bkNS && !move {
 		objs = append(objs,
 			&envoyapi.Backend{
 				TypeMeta:   metav1.TypeMeta{Kind: BackendKind, APIVersion: "gateway.envoyproxy.io/v1alpha1"},
@@ -404,7 +517,9 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 		)
 	}
 
-	if gwNS != bkNS && (!move || c.cfg.MoveTargetNamespace == bkNS) {
+	// A move into the backend namespace is the exception: the new render emits
+	// no ReferenceGrant, so this cleanup is the only chance to remove it.
+	if (staleNS == bkNS && !move) || c.cfg.MoveTargetNamespace == bkNS {
 		objs = append(objs,
 			&gapi.ReferenceGrant{
 				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1"},
@@ -413,24 +528,61 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 		)
 	}
 
-	if c.cfg.Enterprise && gwNS == bkNS {
+	if staleNS == bkNS {
 		// Mirrors the main path: these are only rendered when the Gateway is
 		// in the backend namespace. In a custom namespace the SA and
 		// RoleBinding belong to the GatewayAPI controller's per-namespace
 		// lifecycle — deleting them here could break other Gateways in that
 		// namespace.
 		objs = append(objs,
-			rgatewayapi.GatewayNamespaceServiceAccount(gwNS),
-			rgatewayapi.GatewayNamespaceRoleBinding(gwNS),
 			&v3.NetworkPolicy{
 				TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      networkpolicy.CalicoComponentPolicyPrefix + prefix + "-gateway-proxy",
-					Namespace: gwNS,
+					Namespace: staleNS,
 				},
 			},
 		)
+		if c.cfg.Enterprise {
+			objs = append(objs,
+				rgatewayapi.GatewayNamespaceServiceAccount(staleNS),
+				rgatewayapi.GatewayNamespaceRoleBinding(staleNS),
+			)
+		}
+	}
+
+	// The Gateway goes after the resources found through it, mirroring the render.
+	// If an earlier delete fails, it stays and the next reconcile still finds the
+	// leftovers by its label.
+	objs = append(objs, &gapi.Gateway{
+		TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: staleNS},
+	})
+
+	// Each grant goes last, after the resources it permits deleting, and in the
+	// reverse of the render order. The gateway grant belongs to this namespace
+	// and always goes with it. The backend grant belongs to the namespace
+	// holding the Backend, so it is dropped only on teardown, and only by the
+	// component for that namespace — never by a component that would leave a
+	// later one unable to delete there.
+	objs = append(objs, c.roleBinding(staleNS, gatewayAccessSuffix), c.role(staleNS, gatewayAccessSuffix))
+	if staleNS == bkNS && !move {
+		objs = append(objs, c.roleBinding(bkNS, backendAccessSuffix), c.role(bkNS, backendAccessSuffix))
 	}
 
 	return nil, objs
+}
+
+func (c *gatewayDeletionComponent) role(namespace, suffix string) *rbacv1.Role {
+	return &rbacv1.Role{
+		TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + suffix, Namespace: namespace},
+	}
+}
+
+func (c *gatewayDeletionComponent) roleBinding(namespace, suffix string) *rbacv1.RoleBinding {
+	return &rbacv1.RoleBinding{
+		TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{Name: c.cfg.ResourcePrefix + suffix, Namespace: namespace},
+	}
 }

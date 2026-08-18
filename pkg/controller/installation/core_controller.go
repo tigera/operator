@@ -797,6 +797,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Seed from recorded defaults, so changing a default doesn't change existing clusters.
 	if instance.Status.Defaults != nil {
 		instance.Spec = utils.OverrideInstallationSpec(*instance.Status.Defaults, instance.Spec)
+
+		// Pool lists merge whole, so layer the per-pool defaults back under the declared pools.
+		if err := utils.LayerPoolDefaults(&instance.Spec, instance.Status.Defaults); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to apply recorded installation defaults", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	// update Installation with defaults

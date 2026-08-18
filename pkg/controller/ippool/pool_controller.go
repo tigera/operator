@@ -221,7 +221,9 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	// Work from the effective config the core controller publishes, not the raw spec.
+	// Recorded defaults are diffed against the raw spec; everything else works from the
+	// effective config.
+	declaredSpec := *installation.Spec.DeepCopy()
 	installation.Spec = *installation.Status.Computed.DeepCopy()
 
 	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
@@ -243,7 +245,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
-	declaredSpec := *installation.Spec.DeepCopy()
 	if err = fillDefaults(ctx, r.client, installation, currentPools); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
 		return reconcile.Result{}, err

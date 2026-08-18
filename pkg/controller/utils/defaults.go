@@ -51,6 +51,45 @@ func SuppliedDefaults(declared, defaulted operatorv1.InstallationSpec) (*operato
 	return defaults, nil
 }
 
+// LayerPoolDefaults fills fields left unset on a declared IP pool from the recorded
+// default with the same CIDR.
+func LayerPoolDefaults(spec, defaults *operatorv1.InstallationSpec) error {
+	if spec == nil || defaults == nil || spec.CalicoNetwork == nil || defaults.CalicoNetwork == nil {
+		return nil
+	}
+
+	recorded := map[string]operatorv1.IPPool{}
+	for _, pool := range defaults.CalicoNetwork.IPPools {
+		recorded[pool.CIDR] = pool
+	}
+
+	for i := range spec.CalicoNetwork.IPPools {
+		declared := spec.CalicoNetwork.IPPools[i]
+		base, ok := recorded[declared.CIDR]
+		if !ok {
+			continue
+		}
+		merged, err := layerPool(base, declared)
+		if err != nil {
+			return err
+		}
+		spec.CalicoNetwork.IPPools[i] = merged
+	}
+	return nil
+}
+
+// layerPool decodes the declared pool over the default, so only fields the user set win.
+func layerPool(base, declared operatorv1.IPPool) (operatorv1.IPPool, error) {
+	raw, err := json.Marshal(declared)
+	if err != nil {
+		return base, fmt.Errorf("marshal declared IP pool: %w", err)
+	}
+	if err := json.Unmarshal(raw, &base); err != nil {
+		return base, fmt.Errorf("unmarshal declared IP pool: %w", err)
+	}
+	return base, nil
+}
+
 // addedKeys walks two decoded specs and keeps only what defaulted added on top of declared.
 func addedKeys(declared, defaulted map[string]any) map[string]any {
 	added := map[string]any{}

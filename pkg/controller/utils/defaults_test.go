@@ -20,6 +20,7 @@ import (
 	operator "github.com/tigera/operator/api/v1"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 )
 
 var _ = Describe("Installation defaults recording", func() {
@@ -113,5 +114,52 @@ var _ = Describe("Installation defaults recording", func() {
 		defaults, err := SuppliedDefaults(declared, seeded)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
+	})
+
+	It("should layer per-pool defaults under a declared pool", func() {
+		recorded := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{
+					Name:          "default-ipv4-ippool",
+					CIDR:          "192.168.0.0/24",
+					Encapsulation: operator.EncapsulationVXLAN,
+					NodeSelector:  "all()",
+					BlockSize:     ptr.To[int32](26),
+				}},
+			},
+		}
+		declared := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{
+					CIDR:          "192.168.0.0/24",
+					Encapsulation: operator.EncapsulationIPIP,
+				}},
+			},
+		}
+
+		seeded := OverrideInstallationSpec(recorded, declared)
+		Expect(LayerPoolDefaults(&seeded, &recorded)).NotTo(HaveOccurred())
+
+		pool := seeded.CalicoNetwork.IPPools[0]
+		Expect(pool.Name).To(Equal("default-ipv4-ippool"))
+		Expect(pool.NodeSelector).To(Equal("all()"))
+		Expect(pool.BlockSize).To(Equal(ptr.To[int32](26)))
+		Expect(pool.Encapsulation).To(Equal(operator.EncapsulationIPIP))
+	})
+
+	It("should leave a declared pool alone when no default matches its CIDR", func() {
+		recorded := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{Name: "default-ipv4-ippool", CIDR: "192.168.0.0/24"}},
+			},
+		}
+		seeded := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{CIDR: "10.0.0.0/16"}},
+			},
+		}
+
+		Expect(LayerPoolDefaults(&seeded, &recorded)).NotTo(HaveOccurred())
+		Expect(seeded.CalicoNetwork.IPPools[0].Name).To(BeEmpty())
 	})
 })

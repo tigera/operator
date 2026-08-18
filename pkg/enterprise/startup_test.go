@@ -60,6 +60,7 @@ var _ = Describe("VerifyAPIsExist", func() {
 		cs := fake.NewSimpleClientset()
 		cs.Resources = []*metav1.APIResourceList{enterpriseAPIs}
 
+		//nolint:staticcheck // SA1019: the deprecated spelling is what this covers
 		Expect(enterprise.VerifyAPIsExist(operatorv1.TigeraSecureEnterprise, cs)).To(Succeed())
 	})
 

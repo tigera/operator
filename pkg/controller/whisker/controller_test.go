@@ -290,6 +290,37 @@ var _ = Describe("whisker controller tests", func() {
 			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady, mock.Anything, mock.Anything, mock.Anything)
 		})
 
+		It("degrades and renders no gateway when certificateManagement is enabled", func() {
+			// Under certificateManagement the operator cannot mint the listener
+			// key pair, and the placeholder it gets back carries no private key.
+			// Rendering it would give Envoy a certificate it cannot serve, so the
+			// reconcile must stop and report the combination as unsupported.
+			var degradedMsg string
+			mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { degradedMsg = args.String(1) }).Return()
+			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
+			installation.Spec.CertificateManagement = certificateManagement
+			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+
+			createGatewayAPI()
+			setIngressGateway(nil)
+
+			result, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred(), "the user must act, so this is not a retryable error")
+			Expect(result.RequeueAfter).NotTo(BeZero(), "reconcile should requeue so a user-supplied secret is picked up")
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred(),
+				"no gateway should be rendered without a usable listener certificate")
+
+			secret := &corev1.Secret{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.GatewayTLSSecretName, Namespace: whisker.WhiskerNamespace}, secret)).To(HaveOccurred(),
+				"a keyless TLS secret must not be written")
+
+			Expect(degradedMsg).To(ContainSubstring("spec.ingressGateway is not supported"))
+			Expect(degradedMsg).To(ContainSubstring("certificateManagement"))
+		})
+
 		It("renders no gateway and tears down leftovers on a non-Calico variant", func() {
 			// Whisker's own Deployment is deleted on other variants.
 			mockStatus.On("RemoveDeployments", mock.Anything).Return()

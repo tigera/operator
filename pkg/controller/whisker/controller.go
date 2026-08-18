@@ -291,16 +291,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		cfg.ClusterID = clusterInfo.Spec.ClusterGUID
 	}
 
-	// Resolve gateway components. Cleanup is label-driven: every Gateway
-	// carrying this component's label outside the desired namespace (or in
-	// any namespace, when spec.ingressGateway is nil) marks leftover
-	// resources to tear down.
 	gwHelper := &uigateway.Config{
 		Client:           r.cli,
 		ResourcePrefix:   whisker.GatewayResourcePrefix,
 		TLSSecretName:    whisker.GatewayTLSSecretName,
 		BackendNamespace: whisker.WhiskerNamespace,
-		Enterprise:       false,
+		// false on Calico, where the gateway is rendered; the WAF ServiceAccount
+		// is Enterprise-only and Whisker's gateway never creates it.
+		Enterprise: installationSpec.Variant.IsEnterprise(),
 	}
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
@@ -312,7 +310,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.cli)
 		if err != nil {
 			if kerrors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; gateway resources will not be rendered", err, reqLogger)
+				r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway", err, reqLogger)
 				return reconcile.Result{}, err
 			}
 			r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, reqLogger)
@@ -337,6 +335,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if err != nil {
 			r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+		if msg := uigateway.UnsupportedCertificateManagement(gatewayTLSKeyPair); msg != "" {
+			// Render nothing: the key pair carries no private key, so writing it
+			// would leave Envoy with a certificate it cannot serve.
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 
 		strays, err := gwHelper.MoveCleanup(ctx, gwNS)

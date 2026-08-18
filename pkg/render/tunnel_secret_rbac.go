@@ -17,28 +17,38 @@ package render
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TunnelSecretName returns the name of the tunnel CA secret based on the ManagementCluster spec.
-// If the ManagementCluster has a custom TLS secret name configured, that is returned; otherwise
-// the default VoltronTunnelSecretName is used.
-func TunnelSecretName(mc *operatorv1.ManagementCluster) string {
-	if mc != nil && mc.Spec.TLS != nil && mc.Spec.TLS.SecretName != "" {
-		return mc.Spec.TLS.SecretName
+// ManagementCluster is the management-cluster setup the renderers need. A nil value
+// means the cluster does not manage others.
+type ManagementCluster struct {
+	// Address is the tunnel endpoint managed clusters dial.
+	Address string
+
+	// TunnelSecretName is the tunnel CA secret, already defaulted.
+	TunnelSecretName string
+}
+
+// NewManagementCluster defaults the tunnel CA secret when the caller has no override.
+func NewManagementCluster(address, tunnelSecretName string) *ManagementCluster {
+	if tunnelSecretName == "" {
+		tunnelSecretName = VoltronTunnelSecretName
 	}
-	return VoltronTunnelSecretName
+	return &ManagementCluster{Address: address, TunnelSecretName: tunnelSecretName}
 }
 
 // TunnelSecretRBAC returns RBAC objects granting get access to the tunnel CA secret.
 // For multi-tenant management clusters, this returns a ClusterRole/ClusterRoleBinding so the
 // service account can read per-tenant secrets across namespaces. For single-tenant clusters,
 // this returns a namespace-scoped Role/RoleBinding in calico-system.
-func TunnelSecretRBAC(rbacName string, serviceAccountName string, mc *operatorv1.ManagementCluster, multiTenant bool) []client.Object {
-	secretName := TunnelSecretName(mc)
+func TunnelSecretRBAC(rbacName string, serviceAccountName string, mc *ManagementCluster, multiTenant bool) []client.Object {
+	secretName := VoltronTunnelSecretName
+	if mc != nil {
+		secretName = mc.TunnelSecretName
+	}
 	rules := []rbacv1.PolicyRule{
 		{
 			APIGroups:     []string{""},

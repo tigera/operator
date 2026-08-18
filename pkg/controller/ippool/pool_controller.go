@@ -144,6 +144,44 @@ func hasOwnerLabel(pool *v3.IPPool) bool {
 	return false
 }
 
+// recordDefaults adds the pool defaults to the Installation status, leaving the spec untouched.
+func (r *Reconciler) recordDefaults(ctx context.Context, installation *operatorv1.Installation, declared operatorv1.InstallationSpec) error {
+	added, err := utils.SuppliedDefaults(declared, installation.Spec)
+	if err != nil {
+		return err
+	}
+
+	defaults := &operatorv1.InstallationSpec{}
+	if installation.Status.Defaults != nil {
+		defaults = installation.Status.Defaults.DeepCopy()
+	}
+
+	// This controller owns only the pool defaults, so it replaces those and leaves the rest.
+	if defaults.CalicoNetwork != nil {
+		defaults.CalicoNetwork.IPPools = nil
+	}
+	if added != nil {
+		*defaults = utils.OverrideInstallationSpec(*defaults, *added)
+	}
+
+	var recorded *operatorv1.InstallationSpec
+	if !reflect.DeepEqual(defaults, &operatorv1.InstallationSpec{}) {
+		recorded = defaults
+	}
+	if reflect.DeepEqual(installation.Status.Defaults, recorded) {
+		return nil
+	}
+
+	// Write a copy, so the response can't replace the effective spec we're working from.
+	written := installation.DeepCopy()
+	written.Status.Defaults = recorded
+	if err := r.client.Status().Update(ctx, written); err != nil {
+		return err
+	}
+	installation.Status = written.Status
+	return nil
+}
+
 // Reconcile reconciles IP pools in the cluster.
 //
 // - Query desired IP pools (from Installation)
@@ -178,10 +216,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// The core installation controller adds a specific finalizer as part of performing defaulting,
 	// so wait for that before we continue.
 	readyToGo := slices.Contains(installation.GetFinalizers(), render.OperatorCompleteFinalizer)
-	if !readyToGo {
+	if !readyToGo || installation.Status.Computed == nil {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation defaulting to occur", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
+
+	// Recorded defaults are diffed against the raw spec; everything else works from the
+	// effective config.
+	declaredSpec := *installation.Spec.DeepCopy()
+	installation.Spec = *installation.Status.Computed.DeepCopy()
+
 	if installation.Spec.CNI == nil || installation.Spec.CNI.Type == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -201,8 +245,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
-	// Write default IP pool configuration back to the Installation object using patch.
-	preDefaultPatchFrom := client.MergeFrom(installation.DeepCopy())
 	if err = fillDefaults(ctx, r.client, installation, currentPools); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
 		return reconcile.Result{}, err
@@ -211,7 +253,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "error validating IP pool configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	if err := r.client.Patch(ctx, installation, preDefaultPatchFrom); err != nil {
+	if err := r.recordDefaults(ctx, installation, declaredSpec); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}

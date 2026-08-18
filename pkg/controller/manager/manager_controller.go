@@ -496,8 +496,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
+	// Voltron has to validate a public OIDC issuer for the Tigera OIDC type, so that configuration also
+	// needs the system root certificates in its trusted bundle. Either way this stays a bundle named
+	// for this component: the default-named tigera-ca-bundle belongs to the core controller, which
+	// renders it into the same namespace with a different set of certificates, and two controllers
+	// writing one ConfigMap with different contents overwrite each other on every reconcile.
+	includeSystemRoots := authenticationCR != nil && authenticationCR.Spec.OIDC != nil &&
+		authenticationCR.Spec.OIDC.Type == operatorv1.OIDCTypeTigera
+
 	bundleMaker, err := certificateManager.CreateNamedTrustedBundleFromSecrets(TrustedBundlePrefix, r.client,
-		helper.TruthNamespace(), false, trustedSecretNames...)
+		helper.TruthNamespace(), includeSystemRoots, trustedSecretNames...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating trusted bundle for manager", err, logc)
 	}
@@ -512,7 +520,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			logc,
 			helper,
 			tenant,
-			authenticationCR,
 			certificateManager,
 			bundleMaker,
 			trustedSecretNames,

@@ -702,6 +702,12 @@ var _ = Describe("Testing core-controller installation", func() {
 				instance.Spec.Variant = operator.Calico
 				Expect(c.Update(ctx, instance)).NotTo(HaveOccurred())
 
+				// Changing the variant restarts the operator, which comes back up with the
+				// extensions for the new variant. Swap them in to stand in for that restart.
+				r.ext = calicoExtensions.Installation()
+				r.opts.Extensions = calicoExtensions
+				r.opts.Variant = operator.Calico
+
 				_, err = r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
 				Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).NotTo(HaveOccurred())

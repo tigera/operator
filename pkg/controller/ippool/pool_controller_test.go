@@ -98,7 +98,7 @@ var _ = Describe("IP Pool controller tests", func() {
 				Registry: "some.registry.org/",
 			},
 		}
-		createInstallation(ctx, c, instance)
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
 
 		// Set up expected mocks.
 		mockStatus.On("OnCRFound")
@@ -472,9 +472,9 @@ var _ = DescribeTable("Test OpenShift IP pool defaulting",
 
 		// Run the test.
 		if expectSuccess {
-			Expect(fillDefaults(ctx, cli, i, currentPools)).To(BeNil())
+			Expect(fillDefaults(ctx, cli, &i.Spec, currentPools)).To(BeNil())
 		} else {
-			Expect(fillDefaults(ctx, cli, i, currentPools)).NotTo(BeNil())
+			Expect(fillDefaults(ctx, cli, &i.Spec, currentPools)).NotTo(BeNil())
 			return
 		}
 
@@ -686,10 +686,10 @@ var _ = Describe("fillDefaults()", func() {
 		// Fill defaults to make sure we pass other validation. Then remove the Encapsulation.
 		// Fill in prerequisite defaults.
 		fillPrerequisiteDefaults(instance)
-		Expect(fillDefaults(ctx, cli, instance, currentPools)).ToNot(HaveOccurred())
+		Expect(fillDefaults(ctx, cli, &instance.Spec, currentPools)).ToNot(HaveOccurred())
 		instance.Spec.CalicoNetwork.IPPools[0].Encapsulation = ""
 
-		err := ValidatePools(instance)
+		err := ValidatePools(&instance.Spec)
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("is invalid for ipPool.encapsulation, should be one of"))
 	})
@@ -713,7 +713,7 @@ var _ = Describe("fillDefaults()", func() {
 			fillPrerequisiteDefaults(i)
 
 			// Run the defaulting function under test.
-			Expect(fillDefaults(ctx, cli, i, currentPools)).ToNot(HaveOccurred())
+			Expect(fillDefaults(ctx, cli, &i.Spec, currentPools)).ToNot(HaveOccurred())
 
 			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
 				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork.IPPools)
@@ -728,7 +728,7 @@ var _ = Describe("fillDefaults()", func() {
 			}
 
 			// Assert the resulting Installation is valid.
-			Expect(ValidatePools(i)).NotTo(HaveOccurred())
+			Expect(ValidatePools(&i.Spec)).NotTo(HaveOccurred())
 		},
 
 		Entry("Empty config defaults IPPool", &operator.Installation{}, nil, nil),
@@ -805,7 +805,7 @@ var _ = Describe("fillDefaults()", func() {
 			},
 		}
 
-		err := fillDefaults(ctx, cli, instance, currentPools)
+		err := fillDefaults(ctx, cli, &instance.Spec, currentPools)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
 
@@ -818,7 +818,7 @@ var _ = Describe("fillDefaults()", func() {
 		Expect(v6pool.BlockSize).NotTo(BeNil())
 		Expect(*v6pool.BlockSize).To(Equal(int32(122)))
 
-		Expect(ValidatePools(instance)).NotTo(HaveOccurred())
+		Expect(ValidatePools(&instance.Spec)).NotTo(HaveOccurred())
 	})
 
 	// Tests for Calico Networking on EKS should go in this context.
@@ -838,11 +838,11 @@ var _ = Describe("fillDefaults()", func() {
 		})
 
 		It("should default properly", func() {
-			err := fillDefaults(ctx, cli, instance, currentPools)
+			err := fillDefaults(ctx, cli, &instance.Spec, currentPools)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(instance.Spec.CalicoNetwork.IPPools[0].Encapsulation).To(Equal(operator.EncapsulationVXLAN))
 			Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
-			Expect(ValidatePools(instance)).NotTo(HaveOccurred())
+			Expect(ValidatePools(&instance.Spec)).NotTo(HaveOccurred())
 		})
 	})
 })
@@ -876,12 +876,12 @@ var _ = Describe("validate()", func() {
 				NodeSelector:  "all()",
 			},
 		}
-		err := ValidatePools(instance)
+		err := ValidatePools(&instance.Spec)
 		Expect(err).To(HaveOccurred())
 
 		// Try with a valid block size
 		instance.Spec.CalicoNetwork.IPPools[0].CIDR = "192.168.0.0/26"
-		err = ValidatePools(instance)
+		err = ValidatePools(&instance.Spec)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -902,15 +902,15 @@ var _ = Describe("validate()", func() {
 				NodeSelector:  "all()",
 			},
 		}
-		err := ValidatePools(instance)
+		err := ValidatePools(&instance.Spec)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Try with out-of-bounds sizes now.
 		instance.Spec.CalicoNetwork.IPPools[0].BlockSize = &blockSizeTooBig
-		err = ValidatePools(instance)
+		err = ValidatePools(&instance.Spec)
 		Expect(err).To(HaveOccurred())
 		instance.Spec.CalicoNetwork.IPPools[0].BlockSize = &blockSizeTooSmall
-		err = ValidatePools(instance)
+		err = ValidatePools(&instance.Spec)
 		Expect(err).To(HaveOccurred())
 	})
 })

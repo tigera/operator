@@ -811,7 +811,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	recordedDefaults, err := utils.SuppliedDefaults(declaredSpec, instance.Spec)
+	recordedDefaults, err := utils.MergeRecordedDefaults(nil, declaredSpec, instance.Spec)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to determine installation defaults", err, reqLogger)
 		return reconcile.Result{}, err
@@ -877,8 +877,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Persist metadata and migrated config, but not defaults. Writing defaults
-	// steals spec field ownership from whoever manages the CR.
+	// Write finalizers and migrated manifest config, never defaults, which would steal
+	// spec ownership from whoever manages the CR.
 	persisted := instance.DeepCopy()
 	persisted.Spec = declaredSpec
 	if err := r.client.Patch(ctx, persisted, preDefaultPatchFrom); err != nil {

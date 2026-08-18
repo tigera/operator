@@ -27,7 +27,7 @@ var _ = Describe("Installation defaults recording", func() {
 	It("should return nothing when defaulting added nothing", func() {
 		spec := operator.InstallationSpec{Variant: operator.Calico}
 
-		defaults, err := SuppliedDefaults(spec, spec)
+		defaults, err := MergeRecordedDefaults(nil, spec, spec)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
 	})
@@ -39,7 +39,7 @@ var _ = Describe("Installation defaults recording", func() {
 		defaulted.KubernetesProvider = operator.ProviderEKS
 		defaulted.CalicoLibHostPath = "/var/lib/calico"
 
-		defaults, err := SuppliedDefaults(declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(Equal(&operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
@@ -56,7 +56,7 @@ var _ = Describe("Installation defaults recording", func() {
 		defaulted := declared
 		defaulted.CalicoLibHostPath = "/var/lib/calico"
 
-		defaults, err := SuppliedDefaults(declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.KubernetesProvider).To(BeEmpty())
 		Expect(defaults.CalicoLibHostPath).To(Equal("/var/lib/calico"))
@@ -76,7 +76,7 @@ var _ = Describe("Installation defaults recording", func() {
 			},
 		}
 
-		defaults, err := SuppliedDefaults(declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.CalicoNetwork).NotTo(BeNil())
 		Expect(defaults.CalicoNetwork.MTU).To(BeNil())
@@ -89,7 +89,7 @@ var _ = Describe("Installation defaults recording", func() {
 			ImagePullSecrets: []v1.LocalObjectReference{{Name: "pull-secret"}},
 		}
 
-		defaults, err := SuppliedDefaults(declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.ImagePullSecrets).To(HaveLen(1))
 		Expect(defaults.ImagePullSecrets[0].Name).To(Equal("pull-secret"))
@@ -111,7 +111,7 @@ var _ = Describe("Installation defaults recording", func() {
 		seeded := OverrideInstallationSpec(recorded, declared)
 		Expect(seeded.KubernetesProvider).To(Equal(operator.ProviderGKE))
 
-		defaults, err := SuppliedDefaults(declared, seeded)
+		defaults, err := MergeRecordedDefaults(nil, declared, seeded)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
 	})

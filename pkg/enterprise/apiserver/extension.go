@@ -54,6 +54,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -1606,8 +1607,8 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 		},
 	}...)
 
-	// Write access to the switch, so a network admin can enable the feature without
-	// cluster-admin. Not gated: a rule rendered only while the feature is on could never
+	// Write access to the switches, so a network admin can enable the features without
+	// cluster-admin. Not gated: a rule rendered only while a feature is on could never
 	// be used to turn it on. create cannot be restricted by resource name, so it admits
 	// creating any ConfigMap in the namespace.
 	rules = append(rules,
@@ -1619,7 +1620,7 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 		rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
 		},
 	)

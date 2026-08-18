@@ -44,15 +44,14 @@ const (
 // modifyWebhooks layers audit logging, the mutating webhooks, the extra RBAC, and
 // management-cluster support onto the rendered objects.
 func modifyWebhooks(cfg *webhooks.Configuration, managementCluster *operatorv1.ManagementCluster, multiTenant bool, create, del []client.Object) ([]client.Object, []client.Object) {
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, webhooks.WebhooksName); ok {
-		enableAuditLogging(dep, cfg.Installation)
-	}
-	if vwc, ok := extensions.FindObject[*admregv1.ValidatingWebhookConfiguration](create, webhookConfigName); ok {
-		vwc.Webhooks = append(vwc.Webhooks, auditLoggingWebhook(cfg))
-	}
-	if cr, ok := extensions.FindObject[*rbacv1.ClusterRole](create, webhooks.WebhooksName); ok {
-		cr.Rules = append(cr.Rules, enterpriseRules()...)
-	}
+	dep := extensions.MustFindObject[*appsv1.Deployment](create, webhooks.WebhooksName)
+	enableAuditLogging(dep, cfg.Installation)
+
+	vwc := extensions.MustFindObject[*admregv1.ValidatingWebhookConfiguration](create, webhookConfigName)
+	vwc.Webhooks = append(vwc.Webhooks, auditLoggingWebhook(cfg))
+
+	cr := extensions.MustFindObject[*rbacv1.ClusterRole](create, webhooks.WebhooksName)
+	cr.Rules = append(cr.Rules, enterpriseRules()...)
 
 	mwc := mutatingWebhookConfiguration(cfg)
 	if managementCluster == nil {
@@ -60,10 +59,8 @@ func modifyWebhooks(cfg *webhooks.Configuration, managementCluster *operatorv1.M
 		return append(create, mwc), append(del, tunnelSecretRBACMeta()...)
 	}
 
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, webhooks.WebhooksName); ok {
-		ctr := render.MustContainer(&dep.Spec.Template.Spec, webhooks.WebhooksName)
-		ctr.Args = append(ctr.Args, managedClusterArgs(managementCluster, multiTenant)...)
-	}
+	ctr := render.MustContainer(&dep.Spec.Template.Spec, webhooks.WebhooksName)
+	ctr.Args = append(ctr.Args, managedClusterArgs(managementCluster, multiTenant)...)
 	mwc.Webhooks = append(mwc.Webhooks, managedClusterWebhook(cfg))
 	create = append(create, mwc)
 	create = append(create, render.TunnelSecretRBAC(webhooks.WebhooksSecretsRBACName, webhooks.WebhooksName, managementCluster, multiTenant)...)

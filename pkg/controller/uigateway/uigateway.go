@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
 	rgateway "github.com/tigera/operator/pkg/render/gateway"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // Config identifies one UI component's gateway resources.
@@ -101,7 +102,7 @@ func (c *Config) MoveCleanup(ctx context.Context, desiredNS string) ([]render.Co
 		}
 		components = append(components, rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
 			ResourcePrefix:      c.ResourcePrefix,
-			GatewayNamespace:    ns,
+			StaleNamespace:      ns,
 			BackendNamespace:    c.BackendNamespace,
 			TLSSecretName:       c.TLSSecretName,
 			Enterprise:          c.Enterprise,
@@ -116,10 +117,7 @@ func (c *Config) MoveCleanup(ctx context.Context, desiredNS string) ([]render.Co
 //
 // If no labeled Gateway exists, nothing is returned. The Gateway is rendered
 // before any other gateway resources, so those resources cannot exist without
-// a corresponding Gateway. This also avoids touching kinds the cluster may not
-// serve: Backend is an Envoy Gateway resource, which may be unavailable when
-// the Gateway API CRDs were installed independently. Attempting to delete an
-// unserved kind would fail the reconcile.
+// a corresponding Gateway.
 func (c *Config) Teardown(ctx context.Context) ([]render.Component, error) {
 	namespaces, err := c.Namespaces(ctx)
 	if err != nil {
@@ -135,13 +133,26 @@ func (c *Config) Teardown(ctx context.Context) ([]render.Component, error) {
 	for _, ns := range namespaces {
 		components = append(components, rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
 			ResourcePrefix:   c.ResourcePrefix,
-			GatewayNamespace: ns,
+			StaleNamespace:   ns,
 			BackendNamespace: c.BackendNamespace,
 			TLSSecretName:    c.TLSSecretName,
 			Enterprise:       c.Enterprise,
 		}))
 	}
 	return components, nil
+}
+
+// UnsupportedCertificateManagement reports whether the gateway can be rendered
+// at all. Under certificateManagement the operator does not mint key pairs: a
+// pod's key is generated in the pod and written as files, which a Gateway
+// listener cannot consume — Envoy Gateway reads the key out of a Secret. The
+// key pair handed back here is a placeholder with no private key, so rendering
+// it would give Envoy a listener certificate it cannot serve.
+func UnsupportedCertificateManagement(keyPair certificatemanagement.KeyPairInterface) string {
+	if keyPair == nil || !keyPair.UseCertificateManagement() {
+		return ""
+	}
+	return "spec.ingressGateway is not supported when certificateManagement is enabled"
 }
 
 // UnhealthyReason reads the Gateway and HTTPRoute status conditions and

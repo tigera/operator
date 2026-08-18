@@ -52,6 +52,7 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	rmetatest "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
@@ -251,12 +252,59 @@ var _ = Describe("Manager controller tests", func() {
 			r.tierWatchReady.MarkAsReady()
 		})
 
+		It("should degrade and render no gateway when certificateManagement is enabled", func() {
+			// The operator cannot mint the listener key pair under
+			// certificateManagement, and the placeholder it gets back has no
+			// private key. Writing it would leave Envoy with a certificate it
+			// cannot serve, so stop and report the combination as unsupported.
+			Expect(c.Create(ctx, &operatorv1.GatewayAPI{
+				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
+				Spec: operatorv1.GatewayAPISpec{
+					GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}},
+				},
+			})).NotTo(HaveOccurred())
+
+			ca, err := tigeratls.MakeCA(rmetatest.DefaultOperatorCASignerName())
+			Expect(err).NotTo(HaveOccurred())
+			caPEM, _, _ := ca.Config.GetPEMBytes()
+
+			install := &operatorv1.Installation{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, install)).NotTo(HaveOccurred())
+			install.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: caPEM}
+			Expect(c.Update(ctx, install)).NotTo(HaveOccurred())
+
+			Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, cr)).NotTo(HaveOccurred())
+			cr.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}
+			Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
+
+			var degradedMsg string
+			mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { degradedMsg = args.String(1) }).Return()
+
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred(), "the user must act, so this is not a retryable error") //nolint:staticcheck
+			Expect(result.RequeueAfter).NotTo(BeZero(), "reconcile should requeue so a user-supplied secret is picked up")
+
+			gw := &gatewayapiv1.Gateway{
+				TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      ManagerGatewayResourcePrefix + "-gateway",
+					Namespace: common.CalicoNamespace,
+				},
+			}
+			Expect(kerror.IsNotFound(test.GetResource(c, gw))).To(BeTrue(),
+				"no gateway should be rendered without a usable listener certificate")
+
+			Expect(degradedMsg).To(ContainSubstring("spec.ingressGateway is not supported"))
+			Expect(degradedMsg).To(ContainSubstring("certificateManagement"))
+		})
+
 		It("should degrade when spec.ingressGateway is set but the GatewayAPI CR is missing", func() {
 			Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, cr)).NotTo(HaveOccurred())
 			cr.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}
 			Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
 
-			degradedMsg := "GatewayAPI CR not found; gateway resources will not be rendered"
+			degradedMsg := "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway"
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything).Return()
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})

@@ -420,6 +420,9 @@ func (c *fluentBitComponent) linseedHTTPOutput(tag, certPath, keyPath, storageLi
 		"tls.crt_file":        certPath,
 		"tls.key_file":        keyPath,
 		"bearer_token_file":   c.path(render.GetLinseedTokenPath(c.cfg.ManagedCluster)),
+		// Compress batches on the wire; Linseed inflates zstd and gzip
+		// request bodies transparently.
+		"compress": "zstd",
 		// Retry failed chunks until they send instead of dropping them after
 		// the default single retry; the filesystem storage bounds what can
 		// accumulate during a Linseed outage.

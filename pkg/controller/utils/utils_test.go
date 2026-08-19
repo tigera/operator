@@ -39,6 +39,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
@@ -543,5 +544,115 @@ var _ = Describe("WaitToAddResourceWatch with custom predicates", func() {
 
 		Expect(flag.IsReady()).To(BeTrue())
 		ctrl.AssertNumberOfCalls(GinkgoT(), "WatchObject", 2)
+	})
+})
+
+var _ = Describe("MaintainInstallationFinalizer", func() {
+	const otherFinalizer = "example.com/another-controller"
+
+	var (
+		ctx     context.Context
+		scheme  *runtime.Scheme
+		patches int
+	)
+
+	countPatches := func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+		if _, ok := obj.(*opv1.Installation); ok {
+			patches++
+		}
+		return c.Patch(ctx, obj, patch, opts...)
+	}
+
+	installWith := func(finalizers ...string) *opv1.Installation {
+		return &opv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default", Finalizers: finalizers},
+		}
+	}
+
+	newClient := func(install *opv1.Installation, funcs interceptor.Funcs) client.Client {
+		funcs.Patch = countPatches
+		return ctrlrfake.DefaultFakeClientBuilder(scheme).
+			WithObjects(install).
+			WithInterceptorFuncs(funcs).
+			Build()
+	}
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		scheme = runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme, false)).ShouldNot(HaveOccurred())
+		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
+		patches = 0
+	})
+
+	It("does not write the Installation when the finalizer is already present", func() {
+		c := newClient(installWith(render.WhiskerFinalizer), interceptor.Funcs{})
+
+		set, err := MaintainInstallationFinalizer(ctx, c, &apps.Deployment{}, render.WhiskerFinalizer)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(BeTrue())
+		Expect(patches).To(BeZero())
+	})
+
+	It("does not fail when another writer updates the Installation and no finalizer changed", func() {
+		bumped := false
+		// Stand in for a second controller writing the Installation between our read and our write.
+		funcs := interceptor.Funcs{
+			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+				if err := c.Get(ctx, key, obj, opts...); err != nil {
+					return err
+				}
+				if _, ok := obj.(*opv1.Installation); !ok || bumped {
+					return nil
+				}
+				bumped = true
+				other := &opv1.Installation{}
+				Expect(c.Get(ctx, key, other)).ShouldNot(HaveOccurred())
+				other.Labels = map[string]string{"written-by": "someone-else"}
+				return c.Update(ctx, other)
+			},
+		}
+		c := newClient(installWith(render.WhiskerFinalizer), funcs)
+
+		set, err := MaintainInstallationFinalizer(ctx, c, &apps.Deployment{}, render.WhiskerFinalizer)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(BeTrue())
+		Expect(patches).To(BeZero())
+	})
+
+	It("adds the finalizer when it is missing, keeping the ones it does not own", func() {
+		c := newClient(installWith(otherFinalizer), interceptor.Funcs{})
+
+		set, err := MaintainInstallationFinalizer(ctx, c, &apps.Deployment{}, render.WhiskerFinalizer)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(BeTrue())
+		Expect(patches).To(Equal(1))
+
+		updated := &opv1.Installation{}
+		Expect(c.Get(ctx, DefaultInstanceKey, updated)).ShouldNot(HaveOccurred())
+		Expect(updated.GetFinalizers()).To(ConsistOf(otherFinalizer, render.WhiskerFinalizer))
+	})
+
+	It("removes the finalizer once the main resource is gone", func() {
+		c := newClient(installWith(otherFinalizer, render.WhiskerFinalizer), interceptor.Funcs{})
+
+		set, err := MaintainInstallationFinalizer(ctx, c, nil, render.WhiskerFinalizer)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(BeFalse())
+		Expect(patches).To(Equal(1))
+
+		updated := &opv1.Installation{}
+		Expect(c.Get(ctx, DefaultInstanceKey, updated)).ShouldNot(HaveOccurred())
+		Expect(updated.GetFinalizers()).To(ConsistOf(otherFinalizer))
+	})
+
+	It("does not write the Installation when the finalizer is already absent", func() {
+		c := newClient(installWith(otherFinalizer), interceptor.Funcs{})
+
+		set, err := MaintainInstallationFinalizer(ctx, c, nil, render.WhiskerFinalizer)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(set).To(BeFalse())
+		Expect(patches).To(BeZero())
 	})
 })

@@ -923,7 +923,14 @@ func MaintainInstallationFinalizer(
 
 	// Determine the correct finalizers to apply to the Installation.
 	if mainResource != nil {
-		// Add a finalizer indicating that the mainResource is still available.
+		// Add a finalizer indicating that the mainResource is still available. We can skip this if the
+		// finalizer is already present: the optimistic lock above makes an otherwise empty patch fail
+		// whenever another writer has touched the Installation, degrading the controller over a write
+		// that had nothing to change.
+		if stringsutil.StringInSlice(finalizer, installation.GetFinalizers()) {
+			log.V(2).Info("Finalizer already present, skipping update", "finalizer", finalizer)
+			return true, nil
+		}
 		SetInstallationFinalizer(installation, finalizer)
 		finalizerSet = true
 	} else {

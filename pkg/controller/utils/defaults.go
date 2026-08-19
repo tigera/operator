@@ -23,8 +23,14 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// MergeRecordedDefaults merges the defaults absent from declared over the recorded ones. Owned
-// holds the dotted JSON paths the caller defaults.
+// MergeRecordedDefaults returns what to store in status.Defaults: whatever defaulted adds on top
+// of declared. A caller that defaults only some paths names them in owned, and the rest of
+// recorded carries through.
+//
+//	recorded - the defaults already in status.Defaults, or nil for a caller that owns them all.
+//	declared - the spec as the user wrote it.
+//	defaulted - that same spec with this caller's defaults applied.
+//	owned - dotted JSON paths this caller defaults, e.g. "calicoNetwork.ipPools".
 func MergeRecordedDefaults(recorded *operatorv1.InstallationSpec, declared, defaulted operatorv1.InstallationSpec, owned ...string) (*operatorv1.InstallationSpec, error) {
 	declaredContent, err := specToMap(declared)
 	if err != nil {

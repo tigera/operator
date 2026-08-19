@@ -400,24 +400,35 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	while ! KUBECONFIG=$(KIND_KUBECONFIG) $(BINDIR)/kubectl get serviceaccount default; do echo "Waiting for default serviceaccount to be created..."; sleep 2; done
 
 FV_IMAGE_REGISTRY := docker.io
+# The tag the operator renders into the Calico manifests. It must match the component
+# versions in config/calico_versions.yml, otherwise the images loaded onto the kind
+# cluster below are not the ones the FVs end up asking for.
 VERSION_TAG := release-v3.33
+# The tag the images are actually pulled from, retagged to $(VERSION_TAG) before being
+# loaded onto the kind cluster. The release-vX.YY branch tags are not published for all
+# of these images - calico/calico only ever carries master and vX.YY.Z-0.dev-* tags - so
+# this pins a build of the release-v3.33 branch. Bump it to pick up newer Calico code.
+FV_PULL_TAG ?= v3.33.0-0.dev-1463-gf2264a2c5b92
 CALICO_IMAGE := calico/calico
 NODE_IMAGE := calico/node
 WHISKER_IMAGE := calico/whisker
 
 .PHONY: calico-calico.tar
 calico-calico.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(FV_PULL_TAG)
+	docker tag $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(FV_PULL_TAG) $(CALICO_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(CALICO_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-node.tar
 calico-node.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(FV_PULL_TAG)
+	docker tag $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(FV_PULL_TAG) $(NODE_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-whisker.tar
 calico-whisker.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(VERSION_TAG)
+	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(FV_PULL_TAG)
+	docker tag $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(FV_PULL_TAG) $(WHISKER_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(WHISKER_IMAGE):$(VERSION_TAG)
 
 IMAGE_TARS := calico-calico.tar \

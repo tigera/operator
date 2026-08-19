@@ -37,6 +37,11 @@ import (
 // modifiers apply.
 var testExtensions = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{})
 
+// calicoExtensions is what the same wiring produces for Calico. The variant is resolved
+// once at startup, so a reconciler only sees these after the operator restarts into
+// Calico; tests that cover a variant change swap them in to stand in for that restart.
+var calicoExtensions = enterprise.New(operatorv1.Calico, eoptions.Options{})
+
 func TestInstallation(t *testing.T) {
 	// Disable WatchListClient for tests. In client-go v0.35+, this feature defaults to true and
 	// causes informers to wait for bookmark events that fake clients never send, leading to timeouts.

@@ -189,6 +189,7 @@
     "outputs": [
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -207,6 +208,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -225,6 +227,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -243,6 +246,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -261,6 +265,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -279,6 +284,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -297,6 +303,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -315,6 +322,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -333,6 +341,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,
@@ -351,6 +360,7 @@
       },
       {
         "bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token",
+        "compress": "zstd",
         "format": "json_lines",
         "host": "tigera-linseed.tigera-elasticsearch.svc",
         "json_date_key": false,

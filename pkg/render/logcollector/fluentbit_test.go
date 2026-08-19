@@ -217,6 +217,8 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(fluentBitConf).To(ContainSubstring(`"format": "json_lines"`))
 		Expect(fluentBitConf).To(ContainSubstring(`"json_date_key": false`))
 		Expect(fluentBitConf).To(ContainSubstring(`"bearer_token_file": "/var/run/secrets/kubernetes.io/serviceaccount/token"`))
+		// Batches ship compressed; Linseed inflates zstd request bodies.
+		Expect(fluentBitConf).To(ContainSubstring(`"compress": "zstd"`))
 		// Per-tag filesystem retry caps: flows is the dominant volume and
 		// keeps the budget the single shared output used to have.
 		Expect(fluentBitConf).To(ContainSubstring(`"storage.total_limit_size": "500M"`))

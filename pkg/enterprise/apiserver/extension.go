@@ -807,23 +807,19 @@ func (c *apiServer) auditVolumes() []corev1.Volume {
 }
 
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, managementCluster(c.data.managementCluster), true)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, tunnelSecretName(c.data.managementCluster), true)
 }
 
 func (c *apiServer) secretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, managementCluster(c.data.managementCluster), false)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, tunnelSecretName(c.data.managementCluster), false)
 }
 
-// managementCluster converts the CR to the setup the renderers take.
-func managementCluster(mc *operatorv1.ManagementCluster) *render.ManagementCluster {
-	if mc == nil {
-		return nil
+// tunnelSecretName is the configured tunnel CA secret, or the default when none is set.
+func tunnelSecretName(mc *operatorv1.ManagementCluster) string {
+	if mc != nil && mc.Spec.TLS != nil && mc.Spec.TLS.SecretName != "" {
+		return mc.Spec.TLS.SecretName
 	}
-	var tunnelSecretName string
-	if mc.Spec.TLS != nil {
-		tunnelSecretName = mc.Spec.TLS.SecretName
-	}
-	return render.NewManagementCluster(mc.Spec.Address, tunnelSecretName)
+	return render.VoltronTunnelSecretName
 }
 
 // linseedAccessClusterRole is a minimal, least-privilege ClusterRole granting the calico-apiserver

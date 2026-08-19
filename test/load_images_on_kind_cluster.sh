@@ -15,5 +15,5 @@ KIND_NODES="${KIND_CLUSTER_NAME}-control-plane ${KIND_CLUSTER_NAME}-worker ${KIN
 
 for NODE in ${KIND_NODES}
 do
-  load_image ${NODE} ${@:2}
+  load_image ${NODE} "$@"
 done

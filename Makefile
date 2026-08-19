@@ -401,28 +401,45 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 FV_IMAGE_REGISTRY := docker.io
 VERSION_TAG := release-v3.33
+# Calico publishes hashrelease image tags rather than branch-named ones, so the
+# FVs pull a hashrelease build of the release-v3.33 branch.
+FV_PULL_TAG := v3.33.0-0.dev-1463-gf2264a2c5b92
+# Must match components.CalicoRegistry, since the tars are preloaded under the
+# reference the operator renders and the pods pull IfNotPresent.
+FV_CALICO_REGISTRY := quay.io
 CALICO_IMAGE := calico/calico
 NODE_IMAGE := calico/node
 WHISKER_IMAGE := calico/whisker
+CNI_PLUGINS_IMAGE := calico/third-party-cni-plugins
+
+# $(call fv_image_tar,<image>,<tar>): pull the hashrelease build of <image>,
+# retag it to the reference the operator renders, and save it to <tar>.
+define fv_image_tar
+	docker pull $(FV_IMAGE_REGISTRY)/$(1):$(FV_PULL_TAG)
+	docker tag $(FV_IMAGE_REGISTRY)/$(1):$(FV_PULL_TAG) $(FV_CALICO_REGISTRY)/$(1):$(VERSION_TAG)
+	docker save --output $(2) $(FV_CALICO_REGISTRY)/$(1):$(VERSION_TAG)
+endef
 
 .PHONY: calico-calico.tar
 calico-calico.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(CALICO_IMAGE):$(VERSION_TAG)
+	$(call fv_image_tar,$(CALICO_IMAGE),$@)
 
 .PHONY: calico-node.tar
 calico-node.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
+	$(call fv_image_tar,$(NODE_IMAGE),$@)
 
 .PHONY: calico-whisker.tar
 calico-whisker.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(WHISKER_IMAGE):$(VERSION_TAG)
+	$(call fv_image_tar,$(WHISKER_IMAGE),$@)
+
+.PHONY: calico-third-party-cni-plugins.tar
+calico-third-party-cni-plugins.tar:
+	$(call fv_image_tar,$(CNI_PLUGINS_IMAGE),$@)
 
 IMAGE_TARS := calico-calico.tar \
 	calico-node.tar \
-	calico-whisker.tar
+	calico-whisker.tar \
+	calico-third-party-cni-plugins.tar
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.

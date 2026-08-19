@@ -47,6 +47,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -56,10 +57,6 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
-)
-
-const (
-	DefaultPolicySyncPrefix = "/var/run/nodeagent"
 )
 
 var log = logf.Log.WithName("controller_gatewayapi")
@@ -76,6 +73,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
 		clusterDomain:       opts.ClusterDomain,
+		useV3CRDs:           opts.UseV3CRDs,
 		variant:             opts.Variant,
 		multiTenant:         opts.MultiTenant,
 		newComponentHandler: utils.NewComponentHandler,
@@ -180,6 +178,7 @@ type ReconcileGatewayAPI struct {
 	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
 	clusterDomain       string
+	useV3CRDs           bool
 	variant             operatorv1.ProductVariant
 	multiTenant         bool
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
@@ -617,37 +616,11 @@ func GetGatewayAPI(ctx context.Context, client client.Client) (*operatorv1.Gatew
 	return resource, "", nil
 }
 
-// patchFelixConfiguration patches the FelixConfiguration resource with the desired policy sync path prefix.
+// patchFelixConfiguration sets the policy sync path the gateway data plane needs.
 func (r *ReconcileGatewayAPI) patchFelixConfiguration(ctx context.Context) error {
-	_, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec)
-		policySyncPrefixSetDesired := DefaultPolicySyncPrefix == policySyncPrefix
-
-		if !policySyncPrefixSetDesired && policySyncPrefix != "" {
-			return false, nil
-		}
-
-		fc.Spec.PolicySyncPathPrefix = DefaultPolicySyncPrefix
-
-		log.Info(
-			"Patching FelixConfiguration: ",
-			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
-		)
-		return true, nil
-	})
-
+	writer := sharedconfig.NewWriter(r.client, r.useV3CRDs)
+	_, err := writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
 	return err
-}
-
-func (r *ReconcileGatewayAPI) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec) string {
-	// Respect existing policySyncPathPrefix if it's already set (e.g. EGW)
-	// This will cause policySyncPathPrefix value to remain when ApplicationLayer is disabled.
-	existing := fcSpec.PolicySyncPathPrefix
-	if existing != "" {
-		return existing
-	}
-
-	return DefaultPolicySyncPrefix
 }
 
 // maintainFinalizer manages this controller's finalizer on the Installation resource.

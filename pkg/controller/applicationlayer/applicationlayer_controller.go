@@ -24,6 +24,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -80,6 +81,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseA
 		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "applicationlayer", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
+		useV3CRDs:       opts.UseV3CRDs,
 		variant:         opts.Variant,
 		licenseAPIReady: licenseAPIReady,
 	}
@@ -166,6 +168,7 @@ type ReconcileApplicationLayer struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
+	useV3CRDs       bool
 	variant         operatorv1.ProductVariant
 	licenseAPIReady *utils.ReadyFlag
 }
@@ -486,11 +489,6 @@ func (r *ReconcileApplicationLayer) isSidecarInjectionEnabled(applicationLayerSp
 		*applicationLayerSpec.SidecarInjection == operatorv1.SidecarEnabled
 }
 
-func (r *ReconcileApplicationLayer) getPolicySyncPathPrefix(fcSpec *v3.FelixConfigurationSpec, al *operatorv1.ApplicationLayer, istioNeeds bool) string {
-	alNeeds := utils.ApplicationLayerRequiresPolicySync(al)
-	return utils.DesiredPolicySyncPathPrefix(fcSpec.PolicySyncPathPrefix, alNeeds, istioNeeds)
-}
-
 func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLayer) (bool, string) {
 	if al == nil {
 		return false, "Disabled"
@@ -507,75 +505,56 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 	return true, "Disabled"
 }
 
-// patchFelixConfiguration takes all application layer specs as arguments and patches felix config.
-// If at least one of the specs requires TPROXYMode as "Enabled" it'll be patched as "Enabled" otherwise it is "Disabled".
-// gatewayWAFEnabled reflects the GatewayAPI WAF data-plane extension (design-25): its audit events flow through
-// Felix's WAF event log, so it shares the WAFEventLogsFileEnabled toggle with the ApplicationLayer WAF.
+// applicationLayerFieldManager owns the FelixConfiguration fields the application layer sets.
+const applicationLayerFieldManager = "application-layer"
+
+// declareWAFEventLogsFile declares the WAF event log toggle, driven by the ApplicationLayer WAF
+// and the gateway data plane.
+func declareWAFEventLogsFile(al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) sharedconfig.DeclareFelixConfiguration {
+	return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
+		enabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
+		return &sharedconfig.FelixConfigurationDeclaration{
+			Manager: applicationLayerFieldManager,
+			Owned: &v3.FelixConfiguration{
+				Spec: v3.FelixConfigurationSpec{WAFEventLogsFileEnabled: &enabled},
+			},
+			Policies: map[string]sharedconfig.ConflictPolicy{
+				"spec.wafEventLogsFileEnabled": sharedconfig.ConflictOverride,
+			},
+		}, nil
+	}
+}
+
+// patchFelixConfiguration writes the fields the application layer drives. TPROXYMode stays on the
+// update path for the upgrade workaround below.
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) error {
-	// Fetch the Istio CR and Installation variant so DesiredPolicySyncPathPrefix
-	// can see whether the istio side still needs the field. Both reads tolerate
-	// NotFound — the istio side has no claim if either is absent.
-	istioCR, err := utils.GetIstio(ctx, r.client)
-	if err != nil {
+	writer := sharedconfig.NewWriter(r.client, r.useV3CRDs)
+
+	if _, err := writer.ApplyFelixConfiguration(ctx, declareWAFEventLogsFile(al, gatewayWAFEnabled)); err != nil {
 		return err
 	}
-	istioNeeds := utils.IstioRequiresPolicySync(istioCR, r.variant)
+	if _, err := writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client)); err != nil {
+		return err
+	}
 
-	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		wafEventLogsFileEnabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
-
-		var tproxyMode string
-		if ok, v := r.getTProxyMode(al); ok {
-			tproxyMode = v
-		} else {
-			if fc.Spec.TPROXYMode == "" {
-				// Workaround: we'd like to always force the value to be the correct one, matching the operator's
-				// configuration.  However, during an upgrade from a version that predates the TPROXYMode option,
-				// Felix hits a bug and gets confused by the new config parameter, which in turn triggers a restart.
-				// Work around that by relying on Disabled being the default value for the field instead.
-				//
-				// The felix bug was fixed in v3.16, v3.15.1 and v3.14.4; it should be safe to set new config fields
-				// once we know we're only upgrading from those versions and above.
-				//
-				// WAFEventLogsFileEnabled is an independent field: still enable it when a WAF producer
-				// (ApplicationLayer or the gateway data plane) requires it, without touching TPROXYMode.
-				if wafEventLogsFileEnabled && (fc.Spec.WAFEventLogsFileEnabled == nil || !*fc.Spec.WAFEventLogsFileEnabled) {
-					fc.Spec.WAFEventLogsFileEnabled = &wafEventLogsFileEnabled
-					log.Info("Patching FelixConfiguration: ", "wafEventLogsFileEnabled", wafEventLogsFileEnabled)
-					return true, nil
-				}
-				return false, nil
-			}
-
-			// If the mode is already set, fall through to the normal logic, it's safe to force-set the field now.
-			// This also avoids churning the config if a previous version of the operator set it to Disabled already,
-			// we avoid setting it back to nil.
+	_, err := writer.UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
+		ok, tproxyMode := r.getTProxyMode(al)
+		if !ok && fc.Spec.TPROXYMode == "" {
+			// Setting this during an upgrade from before the field existed makes Felix restart,
+			// so rely on the default.
+			return false, nil
+		}
+		if !ok {
 			tproxyMode = "Disabled"
 		}
 
-		policySyncPrefix := r.getPolicySyncPathPrefix(&fc.Spec, al, istioNeeds)
-		policySyncPrefixSetDesired := fc.Spec.PolicySyncPathPrefix == policySyncPrefix
-		tproxyModeSetDesired := fc.Spec.TPROXYMode != "" && fc.Spec.TPROXYMode == string(tproxyMode)
-		wafEventLogsFileEnabledDesired := fc.Spec.WAFEventLogsFileEnabled != nil && *fc.Spec.WAFEventLogsFileEnabled == wafEventLogsFileEnabled
-
-		// If tproxy mode is already set to desired state return false to indicate patch not needed.
-		if policySyncPrefixSetDesired && tproxyModeSetDesired && wafEventLogsFileEnabledDesired {
+		if fc.Spec.TPROXYMode == tproxyMode {
 			return false, nil
 		}
-
-		fc.Spec.TPROXYMode = string(tproxyMode)
-		fc.Spec.PolicySyncPathPrefix = policySyncPrefix
-		fc.Spec.WAFEventLogsFileEnabled = &wafEventLogsFileEnabled
-
-		log.Info(
-			"Patching FelixConfiguration: ",
-			"policySyncPathPrefix", fc.Spec.PolicySyncPathPrefix,
-			"tproxyMode", string(tproxyMode),
-			"wafEventLogsFileEnabled", wafEventLogsFileEnabled,
-		)
+		fc.Spec.TPROXYMode = tproxyMode
+		log.Info("Patching FelixConfiguration: ", "tproxyMode", tproxyMode)
 		return true, nil
 	})
-
 	return err
 }
 

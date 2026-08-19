@@ -674,7 +674,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		actualFelixConfig := &v3.FelixConfiguration{}
 		err = c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal(DefaultPolicySyncPrefix))
+		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal(utils.DefaultPolicySyncPrefix))
 	})
 
 	It("Check felix configuration patching is set if it's not set", func() {
@@ -704,7 +704,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		actualFelixConfig := &v3.FelixConfiguration{}
 		err = c.Get(ctx, client.ObjectKey{Name: "default"}, actualFelixConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).ToNot(Equal(DefaultPolicySyncPrefix))
+		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).ToNot(Equal(utils.DefaultPolicySyncPrefix))
 		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal("/dev/null"))
 	})
 

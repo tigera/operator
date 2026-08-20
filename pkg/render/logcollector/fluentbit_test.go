@@ -277,6 +277,22 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
+	It("should honor IngestionCompression on the Linseed outputs", func() {
+		gzip := operatorv1.IngestionCompressionGzip
+		cfg.LogCollector.Spec.IngestionCompression = &gzip
+		resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
+		cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		Expect(cm.Data["fluent-bit.yaml"]).To(ContainSubstring(`"compress": "gzip"`))
+		Expect(cm.Data["fluent-bit.yaml"]).NotTo(ContainSubstring(`"compress": "zstd"`))
+
+		// None omits the option entirely so out_http posts plain NDJSON.
+		none := operatorv1.IngestionCompressionNone
+		cfg.LogCollector.Spec.IngestionCompression = &none
+		resources, _ = renderAll(cfg, rmeta.OSTypeLinux)
+		cm = rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+		Expect(cm.Data["fluent-bit.yaml"]).NotTo(ContainSubstring(`"compress":`))
+	})
+
 	It("should render one opentelemetry output per selected OpenTelemetry log type", func() {
 		cfg.OpenTelemetryCollectorEnabled = true
 		cfg.OpenTelemetryLogTypes = []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog, operatorv1.OpenTelemetryAuditLog}

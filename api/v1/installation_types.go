@@ -1131,8 +1131,11 @@ type InstallationStatus struct {
 	// +optional
 	ImageSet string `json:"imageSet,omitempty"`
 
-	// Computed is the final installation including overlaid resources.
+	// Computed is the final installation including overlaid resources
+	// (schemaless, so schema defaults can't inflate).
 	// +optional
+	// +kubebuilder:validation:Schemaless
+	// +kubebuilder:pruning:PreserveUnknownFields
 	Computed *InstallationSpec `json:"computed,omitempty"`
 
 	// Defaults holds fields the operator supplied because the spec omitted them

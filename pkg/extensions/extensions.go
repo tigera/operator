@@ -23,6 +23,7 @@ type Set struct {
 	ClusterConnection ClusterConnectionExtension
 	Tiers             TiersExtension
 	CSR               CSRExtension
+	Istio             IstioExtension
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -77,4 +78,11 @@ func (e Extensions) CSR() CSRExtension {
 		return noopCSR{}
 	}
 	return e.set.CSR
+}
+
+func (e Extensions) Istio() IstioExtension {
+	if e.set.Istio == nil {
+		return noopIstio{}
+	}
+	return e.set.Istio
 }

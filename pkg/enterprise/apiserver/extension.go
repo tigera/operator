@@ -393,13 +393,10 @@ func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, creat
 	// those objects back out of the delete list.
 	create, del = c.ensureDeployment(create, del)
 
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
-		c.layerDeployment(dep)
-	}
-	if svc, ok := extensions.FindObject[*corev1.Service](create, render.APIServerServiceName); ok {
-		c.addServicePorts(svc)
-	}
-	// Enterprise serves staged policies through the tiered-policy passthrough role.
+	c.layerDeployment(extensions.MustFindObject[*appsv1.Deployment](create, render.APIServerName))
+	c.addServicePorts(extensions.MustFindObject[*corev1.Service](create, render.APIServerServiceName))
+	// Enterprise serves staged policies through the tiered-policy passthrough role, which
+	// the base only creates when running an aggregation API server.
 	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, render.TieredPolicyPassthruClusterRoleName); ok {
 		for i := range role.Rules {
 			if slices.Contains(role.Rules[i].Resources, "networkpolicies") {
@@ -473,10 +470,8 @@ func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, creat
 	// Re-apply deployment overrides so the modifier-added query server container picks up
 	// any per-container overrides. The override appliers use replace/merge semantics, so
 	// re-running over the render-applied containers is idempotent.
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
-		if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
-			rcomp.ApplyDeploymentOverrides(dep, overrides)
-		}
+	if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(extensions.MustFindObject[*appsv1.Deployment](create, render.APIServerName), overrides)
 	}
 
 	return create, del
@@ -807,11 +802,19 @@ func (c *apiServer) auditVolumes() []corev1.Volume {
 }
 
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, true)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, tunnelSecretName(c.data.managementCluster), true)
 }
 
 func (c *apiServer) secretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, false)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, tunnelSecretName(c.data.managementCluster), false)
+}
+
+// tunnelSecretName is the configured tunnel CA secret, or the default when none is set.
+func tunnelSecretName(mc *operatorv1.ManagementCluster) string {
+	if mc != nil && mc.Spec.TLS != nil && mc.Spec.TLS.SecretName != "" {
+		return mc.Spec.TLS.SecretName
+	}
+	return render.VoltronTunnelSecretName
 }
 
 // linseedAccessClusterRole is a minimal, least-privilege ClusterRole granting the calico-apiserver

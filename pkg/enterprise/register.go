@@ -20,6 +20,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/csr"
 	"github.com/tigera/operator/pkg/enterprise/installation"
+	"github.com/tigera/operator/pkg/enterprise/istio"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/enterprise/tiers"
 	"github.com/tigera/operator/pkg/enterprise/windows"
@@ -40,6 +41,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 			ClusterConnection: clusterconnection.New(variant),
 			Tiers:             tiers.New(o),
 			CSR:               csr.New(),
+			Istio:             istio.New(),
 		})
 	}
 

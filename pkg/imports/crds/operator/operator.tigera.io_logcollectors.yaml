@@ -958,6 +958,19 @@ spec:
                           type: object
                       type: object
                   type: object
+                ingestionCompression:
+                  default: Zstd
+                  description: |-
+                    IngestionCompression selects the compression applied to log batches in
+                    transit to Linseed, the log ingestion endpoint. It does not affect the
+                    zstd compression of the rotated log files on each node's disk, and it
+                    does not apply to the additional stores or OpenTelemetry exporters.
+                    Default: Zstd
+                  enum:
+                    - None
+                    - Gzip
+                    - Zstd
+                  type: string
                 multiTenantManagementClusterNamespace:
                   description: |-
                     If running as a multi-tenant management cluster, the namespace in which

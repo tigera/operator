@@ -87,3 +87,16 @@ const (
 	NetworkPolicyManagementEnabled  NetworkPolicyManagement = "Enabled"
 	NetworkPolicyManagementDisabled NetworkPolicyManagement = "Disabled"
 )
+
+// IngestionCompressionOption specifies the compression applied to log
+// batches in transit to the log ingestion endpoint.
+//
+// One of: None, Gzip, Zstd
+// +kubebuilder:validation:Enum=None;Gzip;Zstd
+type IngestionCompressionOption string
+
+const (
+	IngestionCompressionNone IngestionCompressionOption = "None"
+	IngestionCompressionGzip IngestionCompressionOption = "Gzip"
+	IngestionCompressionZstd IngestionCompressionOption = "Zstd"
+)

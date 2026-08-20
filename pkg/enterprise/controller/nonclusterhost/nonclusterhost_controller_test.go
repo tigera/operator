@@ -110,6 +110,21 @@ var _ = Describe("NonClusterHost controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("should leave IngestionCompression as the user set it", func() {
+			// The CRD default fills an unset field on every read, so the
+			// reconciler never writes it; an explicit value is left alone.
+			none := operatorv1.IngestionCompressionNone
+			nonclusterhost.Spec.IngestionCompression = &none
+			Expect(cli.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			nch := &operatorv1.NonClusterHost{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, nch)).NotTo(HaveOccurred())
+			Expect(*nch.Spec.IngestionCompression).To(Equal(operatorv1.IngestionCompressionNone))
+		})
+
 		It("should set degraded status if endpoint is invalid", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Invalid endpoint", mock.Anything, mock.Anything).Return()
 

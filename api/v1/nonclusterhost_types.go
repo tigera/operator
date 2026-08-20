@@ -27,6 +27,15 @@ type NonClusterHostSpec struct {
 
 	// Location of the Typha endpoint for non-cluster host Felix and Typha communication. For example: 5.6.7.8:5473
 	TyphaEndpoint string `json:"typhaEndpoint,omitempty"`
+
+	// IngestionCompression selects the compression applied to log batches in
+	// transit from non-cluster hosts to the log ingestion endpoint. Hosts
+	// read this field live. On a cluster whose CRD predates the field, hosts
+	// fall back to gzip, which every release's ingestion listener inflates.
+	// Default: Zstd
+	// +optional
+	// +kubebuilder:default=Zstd
+	IngestionCompression *IngestionCompressionOption `json:"ingestionCompression,omitempty"`
 }
 
 // +kubebuilder:object:root=true

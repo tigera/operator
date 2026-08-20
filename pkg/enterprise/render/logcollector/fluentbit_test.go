@@ -277,6 +277,54 @@ var _ = Describe("Tigera Secure Fluent Bit rendering tests", func() {
 		Expect(ms.Spec.ClusterIP).To(Equal("None"), "metrics service should be headless to prevent kube-proxy from rendering too many iptables rules")
 	})
 
+	It("should honor IngestionCompression on every Linseed output and nothing else", func() {
+		// compressByOutput renders the config and collects the compress value
+		// of every Linseed (http) output; the other outputs must carry none.
+		compressByOutput := func() (linseed []interface{}, others int) {
+			resources, _ := renderAll(cfg, rmeta.OSTypeLinux)
+			cm := rtest.GetResource(resources, logcollector.FluentBitConfConfigMapName, render.LogCollectorNamespace, "", "v1", "ConfigMap").(*corev1.ConfigMap)
+			var conf struct {
+				Pipeline struct {
+					Outputs []map[string]interface{} `json:"outputs"`
+				} `json:"pipeline"`
+			}
+			Expect(json.Unmarshal([]byte(cm.Data["fluent-bit.yaml"]), &conf)).NotTo(HaveOccurred())
+			for _, out := range conf.Pipeline.Outputs {
+				if out["name"] == "http" {
+					linseed = append(linseed, out["compress"])
+					continue
+				}
+				Expect(out).NotTo(HaveKey("compress"), "non-Linseed output %v must not be compressed", out["name"])
+				others++
+			}
+			return linseed, others
+		}
+
+		// S3 gives the config a non-Linseed output to check.
+		cfg.LogCollector.Spec.AdditionalStores = &operatorv1.AdditionalLogStoreSpec{
+			S3: &operatorv1.S3StoreSpec{Region: "us-west-2", BucketName: "bucket", BucketPath: "path"},
+		}
+		cfg.S3Credential = &logcollector.S3Credential{KeyId: []byte("id"), KeySecret: []byte("secret")}
+
+		gzip := operatorv1.IngestionCompressionGzip
+		cfg.LogCollector.Spec.IngestionCompression = &gzip
+		linseed, others := compressByOutput()
+		Expect(linseed).NotTo(BeEmpty())
+		Expect(others).NotTo(BeZero())
+		Expect(linseed).To(HaveEach("gzip"))
+
+		// None omits the option entirely so out_http posts plain NDJSON.
+		none := operatorv1.IngestionCompressionNone
+		cfg.LogCollector.Spec.IngestionCompression = &none
+		linseed, _ = compressByOutput()
+		Expect(linseed).To(HaveEach(BeNil()))
+
+		// Unset renders the default.
+		cfg.LogCollector.Spec.IngestionCompression = nil
+		linseed, _ = compressByOutput()
+		Expect(linseed).To(HaveEach("zstd"))
+	})
+
 	It("should render one opentelemetry output per selected OpenTelemetry log type", func() {
 		cfg.OpenTelemetryCollectorEnabled = true
 		cfg.OpenTelemetryLogTypes = []operatorv1.OpenTelemetryLogType{operatorv1.OpenTelemetryFlowLog, operatorv1.OpenTelemetryAuditLog}

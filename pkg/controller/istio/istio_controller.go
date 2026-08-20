@@ -115,11 +115,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *ReconcileIstio {
 	r := &ReconcileIstio{
-		Client:    mgr.GetClient(),
-		scheme:    mgr.GetScheme(),
-		status:    status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
-		provider:  opts.DetectedProvider,
-		useV3CRDs: opts.UseV3CRDs,
+		Client: mgr.GetClient(),
+		scheme: mgr.GetScheme(),
+		status: status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
+		opts:   opts,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -129,10 +128,9 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *Reconci
 // ReconcileIstio reconciles a Istio object
 type ReconcileIstio struct {
 	client.Client
-	scheme    *runtime.Scheme
-	status    status.StatusManager
-	provider  operatorv1.Provider
-	useV3CRDs bool
+	scheme *runtime.Scheme
+	status status.StatusManager
+	opts   options.ControllerOptions
 }
 
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -258,7 +256,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	writer := sharedconfig.NewWriter(r.Client, r.useV3CRDs)
+	writer := sharedconfig.NewWriter(r.Client, r.opts.UseV3CRDs)
 	if _, err = writer.ApplyFelixConfiguration(ctx, r.declareIstioFelixConfiguration(instance, false)); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error patching felix configuration with Istio settings", err, log)
 		return reconcile.Result{}, err
@@ -314,7 +312,7 @@ func (r *ReconcileIstio) declareIstioFelixConfiguration(instance *operatorv1.Ist
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {
 	// Executing clean up on finalizing
 	if !instance.DeletionTimestamp.IsZero() {
-		writer := sharedconfig.NewWriter(r.Client, r.useV3CRDs)
+		writer := sharedconfig.NewWriter(r.Client, r.opts.UseV3CRDs)
 		if _, err = writer.ApplyFelixConfiguration(ctx, r.declareIstioFelixConfiguration(instance, true)); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error cleaning up felix configuration", err, reqLogger)
 			return

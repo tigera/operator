@@ -101,15 +101,24 @@ const (
 
 // ManagementClusterConnection configuration constants
 const (
-	ManagerName              = "calico-manager"
-	UIAPIsName               = "calico-ui-apis"
-	VoltronName              = "calico-voltron"
-	VoltronTunnelSecretName  = "calico-management-cluster-connection"
-	defaultVoltronPort       = "9443"
-	defaultTunnelVoltronPort = "9449"
-	DashboardAPIPort         = "8444"
-	DashboardAPIHealthPort   = "8090"
-	DashboardAPIName         = "calico-dashboard-api"
+	ManagerName = "calico-manager"
+	UIAPIsName  = "calico-ui-apis"
+
+	// Whisker-backend Service coordinates, mirroring pkg/render/whisker —
+	// importing that package here would create an import cycle (it imports
+	// render).
+	WhiskerNamespace          = "calico-system"
+	WhiskerDeploymentName     = "whisker"
+	WhiskerBackendServiceName = "whisker-backend"
+	WhiskerBackendServicePort = 8443
+	WhiskerBackendTargetPort  = 3002
+	VoltronName               = "calico-voltron"
+	VoltronTunnelSecretName   = "calico-management-cluster-connection"
+	defaultVoltronPort        = "9443"
+	defaultTunnelVoltronPort  = "9449"
+	DashboardAPIPort          = "8444"
+	DashboardAPIHealthPort    = "8090"
+	DashboardAPIName          = "calico-dashboard-api"
 
 	// VoltronAdditionalTunnelSecretName is the name of an optional, pre-provisioned secret
 	// in the truth namespace that holds an additional CA used by Voltron for tunnel server
@@ -213,6 +222,11 @@ type ManagerConfiguration struct {
 	Manager        *operatorv1.Manager
 	Authentication *operatorv1.Authentication
 	KibanaEnabled  bool
+
+	// WhiskerEnabled reports whether a Whisker CR exists, so the manager serves
+	// the flow logs UI module and Voltron proxies /whisker-backend to the
+	// whisker-backend Service.
+	WhiskerEnabled bool
 
 	// RBACManagementEnabled reports whether to render the RBAC management UI access.
 	// The controller has already applied the variant, the admin's gate and tenancy.
@@ -510,6 +524,7 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
 		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(c.cfg.KibanaEnabled)},
+		{Name: "SUPPORTS_FLOW_LOGS", Value: strconv.FormatBool(c.cfg.WhiskerEnabled)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
@@ -604,6 +619,17 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: strconv.FormatBool(c.cfg.NonClusterHost != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
+	}
+
+	if c.cfg.WhiskerEnabled {
+		env = append(env,
+			corev1.EnvVar{
+				Name: "VOLTRON_WHISKER_BACKEND_ENDPOINT",
+				Value: fmt.Sprintf("https://%s.%s.svc.%s:%d",
+					WhiskerBackendServiceName, WhiskerNamespace, c.cfg.ClusterDomain, WhiskerBackendServicePort),
+			},
+			corev1.EnvVar{Name: "VOLTRON_WHISKER_BACKEND_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		)
 	}
 
 	if c.cfg.VoltronRouteConfig != nil {
@@ -1361,6 +1387,16 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 					Name:      FluentBitInputService,
 				},
 			},
+		})
+	}
+
+	if c.cfg.WhiskerEnabled {
+		// Voltron proxies the manager UI's /whisker-backend requests to the
+		// whisker-backend Service.
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: networkpolicy.CreateEntityRule(WhiskerNamespace, WhiskerDeploymentName, WhiskerBackendTargetPort),
 		})
 	}
 

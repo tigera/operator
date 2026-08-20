@@ -156,6 +156,9 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.NonClusterHost{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
+	if err = c.WatchObject(&operatorv1.Whisker{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
+	}
 	if err = c.WatchObject(&operatorv1.Authentication{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch resource: %w", err)
 	}
@@ -700,6 +703,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
 		return reconcile.Result{}, err
 	}
+
+	// The flow logs UI module and its Voltron route follow the Whisker CR.
+	whiskerCR, err := utils.GetIfExists[operatorv1.Whisker](ctx, utils.DefaultInstanceKey, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query Whisker resource", err, logc)
+		return reconcile.Result{}, err
+	}
 	if nonclusterhost != nil {
 		if _, _, _, err := url.ParseEndpoint(nonclusterhost.Spec.Endpoint); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read parse endpoint from NonClusterHost resource", err, logc)
@@ -766,6 +776,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Manager:                    instance,
 		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
+		WhiskerEnabled:             whiskerCR != nil,
 		RBACManagementEnabled:      rbacManagementEnabled,
 		CACertCommonName:           certificateManager.CACertCommonName(),
 		Cloud:                      r.opts.Cloud,

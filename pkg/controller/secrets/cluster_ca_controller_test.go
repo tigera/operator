@@ -87,7 +87,8 @@ var _ = Describe("ClusterCA controller", func() {
 				Variant: operatorv1.Calico,
 			},
 		}
-		install.Status.Computed = &install.Spec
+		install.Status.Computed = install.Spec.DeepCopy()
+		install.Spec.Variant = ""
 		Expect(cli.Create(ctx, &install)).ShouldNot(HaveOccurred())
 
 		var err error

@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 	"encoding/json"
+	goerrors "errors"
 	"fmt"
 	"os"
 	"strings"
@@ -510,6 +511,29 @@ func GetInstallationStatus(ctx context.Context, client client.Client) (*operator
 var ComputedInstallationResource = schema.GroupResource{
 	Group:    operatorv1.GroupVersion.Group,
 	Resource: "installations.status.computed",
+}
+
+// GetOverlayInstallationSpec returns the 'overlay' Installation's spec, or nil when there is none.
+func GetOverlayInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
+	overlay := &operatorv1.Installation{}
+	if err := client.Get(ctx, OverlayInstanceKey, overlay); err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return overlay.Spec.DeepCopy(), nil
+}
+
+// IsComputedInstallationNotReady reports whether err says the Installation exists but the core
+// controller has not published status.computed yet.
+func IsComputedInstallationNotReady(err error) bool {
+	var statusErr *errors.StatusError
+	if !goerrors.As(err, &statusErr) || statusErr.ErrStatus.Details == nil {
+		return false
+	}
+	return statusErr.ErrStatus.Details.Group == ComputedInstallationResource.Group &&
+		statusErr.ErrStatus.Details.Kind == ComputedInstallationResource.Resource
 }
 
 // GetComputedInstallationSpec returns the effective config the core controller publishes on the

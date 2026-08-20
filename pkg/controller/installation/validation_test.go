@@ -245,9 +245,31 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	It("should allow specVersion with Calico CNI", func() {
+		pinned := operator.CNISpecVersion100
+		instance.Spec.CNI.SpecVersion = &pinned
+		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
+	})
+
+	It("should reject specVersion when the CNI plugin is not Calico", func() {
+		pinned := operator.CNISpecVersion100
+		bgp := operator.BGPDisabled
+		dis := operator.HostPortsDisabled
+		instance.Spec.CalicoNetwork.BGP = &bgp
+		instance.Spec.CalicoNetwork.HostPorts = &dis
+		instance.Spec.CNI.Type = operator.PluginAmazonVPC
+		instance.Spec.CNI.IPAM.Type = operator.IPAMPluginAmazonVPC
+		instance.Spec.CNI.SpecVersion = &pinned
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("spec.cni.specVersion is only valid"))
+	})
+
 	It("should prevent IPIP with BGP disabled in BIRD cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := operator.ClusterRoutingModeBIRD
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/24",
@@ -263,6 +285,8 @@ var _ = Describe("Installation validation tests", func() {
 	It("should prevent IPIP cross-subnet with BGP disabled in BIRD cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := operator.ClusterRoutingModeBIRD
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/24",
@@ -278,6 +302,8 @@ var _ = Describe("Installation validation tests", func() {
 	It("should prevent no-encap with BGP disabled in BIRD cluster routing mode", func() {
 		disabled := operator.BGPDisabled
 		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := operator.ClusterRoutingModeBIRD
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
 		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
 			{
 				CIDR:          "192.168.0.0/24",
@@ -341,6 +367,94 @@ var _ = Describe("Installation validation tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
+	// FelixIPIPOnly splits the two: Felix takes the IPIP pools, so they no longer need BGP, but
+	// BIRD keeps the unencapsulated ones, so those still do.
+	It("should allow IPIP with BGP disabled in FelixIPIPOnly cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := operator.ClusterRoutingModeFelixIPIPOnly
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIP,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should allow IPIP cross-subnet with BGP disabled in FelixIPIPOnly cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := operator.ClusterRoutingModeFelixIPIPOnly
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIPCrossSubnet,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should prevent no-encap with BGP disabled in FelixIPIPOnly cluster routing mode", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		clusterRoutingMode := operator.ClusterRoutingModeFelixIPIPOnly
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = &clusterRoutingMode
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
+	// An unset clusterRoutingMode means Calico's own defaults, which since v3.33 are the same
+	// split as FelixIPIPOnly: Felix owns the IPIP cluster routes, BIRD keeps the unencapsulated
+	// ones.  So the two cases below must match the FelixIPIPOnly ones above.
+	It("should allow IPIP with BGP disabled when the cluster routing mode is unset", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = nil
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationIPIP,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should prevent no-encap with BGP disabled when the cluster routing mode is unset", func() {
+		disabled := operator.BGPDisabled
+		instance.Spec.CalicoNetwork.BGP = &disabled
+		instance.Spec.CalicoNetwork.ClusterRoutingMode = nil
+		instance.Spec.CalicoNetwork.IPPools = []operator.IPPool{
+			{
+				CIDR:          "192.168.0.0/24",
+				Encapsulation: operator.EncapsulationNone,
+				NATOutgoing:   operator.NATOutgoingEnabled,
+				NodeSelector:  "all()",
+			},
+		}
+		err := validateCustomResource(instance)
+		Expect(err).To(HaveOccurred())
+	})
+
 	It("should not error if CalicoNetwork is provided on EKS", func() {
 		instance := &operator.Installation{}
 		instance.Spec.CNI = &operator.CNISpec{Type: operator.PluginCalico}
@@ -349,7 +463,7 @@ var _ = Describe("Installation validation tests", func() {
 		instance.Spec.KubernetesProvider = operator.ProviderEKS
 
 		// Fill in defaults and validate the result.
-		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+		Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 		Expect(validateCustomResource(instance)).NotTo(HaveOccurred())
 	})
 
@@ -519,7 +633,7 @@ var _ = Describe("Installation validation tests", func() {
 			})
 
 			It("with empty CalicoNetwork validates", func() {
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -533,7 +647,7 @@ var _ = Describe("Installation validation tests", func() {
 						NodeSelector:  "all()",
 					},
 				}
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -541,7 +655,7 @@ var _ = Describe("Installation validation tests", func() {
 			It("with BGP enabled validates", func() {
 				enable := operator.BGPEnabled
 				instance.Spec.CalicoNetwork.BGP = &enable
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -561,7 +675,7 @@ var _ = Describe("Installation validation tests", func() {
 						NodeSelector:  "all()",
 					},
 				}
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 			})
@@ -575,14 +689,14 @@ var _ = Describe("Installation validation tests", func() {
 			})
 
 			It("with nil LogSeverity", func() {
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogSeverity).To(Equal(operator.LogLevelInfo))
 			})
 
 			It("with nil LogFileMaxAgeDays", func() {
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogFileMaxAgeDays).To(Equal(uint32(30)))
@@ -591,14 +705,14 @@ var _ = Describe("Installation validation tests", func() {
 			It("with invalid LogFileMaxAgeDays", func() {
 				instance.Spec.Logging.CNI.LogFileMaxAgeDays = new(uint32)
 				*instance.Spec.Logging.CNI.LogFileMaxAgeDays = 0
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxAgeDays should be a positive non-zero integer"))
 			})
 
 			It("with nil LogFileMaxCount", func() {
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogFileMaxCount).To(Equal(uint32(10)))
@@ -607,14 +721,14 @@ var _ = Describe("Installation validation tests", func() {
 			It("with invalid LogFileMaxCount", func() {
 				instance.Spec.Logging.CNI.LogFileMaxCount = new(uint32)
 				*instance.Spec.Logging.CNI.LogFileMaxCount = 0
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.loggingConfig.cni.logFileMaxCount value should be greater than zero"))
 			})
 
 			It("with nil LogFileMaxSize", func() {
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(*instance.Spec.Logging.CNI.LogFileMaxSize).To(Equal(resource.MustParse("100Mi")))
@@ -623,25 +737,25 @@ var _ = Describe("Installation validation tests", func() {
 			It("with invalid LogFileMaxSize", func() {
 				instance.Spec.Logging.CNI.LogFileMaxSize = new(resource.Quantity)
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("1")
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err := validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("0")
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err = validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("-1")
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err = validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
 
 				*instance.Spec.Logging.CNI.LogFileMaxSize = resource.MustParse("1M")
-				Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+				Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 				err = validateCustomResource(instance)
 				Expect(err).To(HaveOccurred())
 				Expect(err).To(MatchError("spec.Logging.cni.logFileMaxSize format is not corrent. Suffix should be Ki | Mi | Gi | Ti | Pi | Ei"))
@@ -671,7 +785,7 @@ var _ = Describe("Installation validation tests", func() {
 		DescribeTable("test allowed plugins", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
 			instance.Spec.CNI.Type = plugin
 			instance.Spec.CNI.IPAM = &operator.IPAMSpec{Type: ipam}
-			Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+			Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 			err := validateCustomResource(instance)
 			Expect(err).NotTo(HaveOccurred())
 		}, nonCalicoCNIEntries)
@@ -720,6 +834,10 @@ var _ = Describe("Installation validation tests", func() {
 			Entry("ContainerIPForwarding", func(inst *operator.Installation) {
 				cipf := operator.ContainerIPForwardingEnabled
 				inst.Spec.CalicoNetwork.ContainerIPForwarding = &cipf
+			}),
+			Entry("LinuxPodInterfaceType", func(inst *operator.Installation) {
+				nk := operator.LinuxPodInterfaceNetkit
+				inst.Spec.CalicoNetwork.LinuxPodInterfaceType = &nk
 			}),
 		)
 		DescribeTable("should allow IPPool", func(plugin operator.CNIPluginType, ipam operator.IPAMPluginType) {
@@ -892,7 +1010,7 @@ var _ = Describe("Installation validation tests", func() {
 			Host: "1.2.3.4",
 			Port: "6443",
 		}
-		Expect(fillDefaults(instance, nil)).NotTo(HaveOccurred())
+		Expect(fillDefaults(instance, nil, operator.Calico)).NotTo(HaveOccurred())
 		err := validateCustomResource(instance)
 		Expect(err).NotTo(HaveOccurred())
 	})
@@ -1256,8 +1374,8 @@ var _ = Describe("Installation validation tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 	})
-	Describe("validate FIPSMode combined with Variant", func() {
-		DescribeTable("test that FIPSMode is not allowed in combination with Enterprise",
+	Describe("validate FIPSMode", func() {
+		DescribeTable("test that FIPSMode=Enabled is rejected since FIPS mode has been removed",
 			func(variant operator.ProductVariant, fipsMode operator.FIPSMode, expectErr bool) {
 				instance.Spec.Variant = variant
 				instance.Spec.FIPSMode = &fipsMode
@@ -1270,7 +1388,7 @@ var _ = Describe("Installation validation tests", func() {
 			},
 
 			Entry("Product: Calico FipsMode: Disabled", operator.Calico, operator.FIPSModeDisabled, false),
-			Entry("Product: Calico FipsMode: Enabled", operator.Calico, operator.FIPSModeEnabled, false),
+			Entry("Product: Calico FipsMode: Enabled", operator.Calico, operator.FIPSModeEnabled, true),
 			Entry("Product: CalicoEnterprise FipsMode: Disabled", operator.CalicoEnterprise, operator.FIPSModeDisabled, false),
 			Entry("Product: CalicoEnterprise FipsMode: Enabled", operator.CalicoEnterprise, operator.FIPSModeEnabled, true),
 		)

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tigera/operator/hack/release/internal/setup"
 	"github.com/urfave/cli/v3"
 )
 
@@ -81,7 +82,8 @@ var (
 		Category: githubFlagCategory,
 		Usage:    "Create a GitHub release",
 		Sources:  cli.EnvVars("CREATE_GITHUB_RELEASE"),
-		Value:    true,
+		// Enterprise defaults to true; the cloud variant defaults it off (see setup package).
+		Value: setup.CreateGitHubReleaseDefault,
 		Action: func(ctx context.Context, c *cli.Command, b bool) error {
 			if b && c.String(githubTokenFlag.Name) == "" {
 				return fmt.Errorf("github-token is required to create GitHub releases")
@@ -129,7 +131,7 @@ var (
 				// No need to validate version for hashrelease
 				return nil
 			}
-			if valid, err := isValidReleaseVersion(s); err != nil {
+			if valid, err := setup.IsValidReleaseVersion(s); err != nil {
 				return fmt.Errorf("error validating version format: %w", err)
 			} else if !valid {
 				return fmt.Errorf("version %q is not a valid release version", s)
@@ -269,7 +271,7 @@ var (
 				// No need to validate Calico version for hashrelease
 				return nil
 			}
-			if valid, err := isReleaseVersionFormat(s); err != nil {
+			if valid, err := setup.IsValidCalicoReleaseVersion(s); err != nil {
 				return fmt.Errorf("error validating Calico version format: %w", err)
 			} else if !valid {
 				return fmt.Errorf("version %q is not a valid Calico release version", s)
@@ -461,7 +463,7 @@ var (
 	skipValidationFlag      = &cli.BoolFlag{
 		Name:     "skip-validation",
 		Category: developmentFlagCategory,
-		Usage:    "Skip various validation steps (development and testing purposes only)",
+		Usage:    "Skip various validation steps except version check (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_VALIDATION"),
 		Value:    false,
 	}
@@ -478,5 +480,12 @@ var (
 		Usage:    "Skip checking that the current git branch is master or a release branch (development and testing purposes only)",
 		Sources:  cli.EnvVars("SKIP_BRANCH_CHECK"),
 		Value:    false,
+	}
+	versionCheckFlag = &cli.BoolWithInverseFlag{
+		Name:     "version-check",
+		Category: developmentFlagCategory,
+		Usage:    "Check that the provided version is valid and matches the git version. (development and testing purposes only)",
+		Sources:  cli.EnvVars("VERSION_CHECK"),
+		Value:    true,
 	}
 )

@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -55,7 +56,7 @@ var log = logf.Log.WithName("controller_packet_capture")
 // Add creates a new PacketCapture Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		// No need to start this controller
 		return nil
 	}
@@ -130,7 +131,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
 	reqLogger.Info("Reconciling PacketCapture")
 
-	packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
+	packetcaptureapi, err := eutils.GetPacketCaptureAPI(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(3).Info("PacketCaptureAPI CR not found", "err", err)
@@ -159,7 +160,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		}
 	}
 
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -169,12 +170,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	if !variant.IsEnterprise() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation variant to be an enterprise variant", nil, reqLogger)
-		return reconcile.Result{}, err
-	}
-
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -215,6 +211,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
 	packetCaptureCertSecret, err := certificateManager.GetOrCreateKeyPair(
 		r.client,
 		render.PacketCaptureServerCert,
@@ -226,13 +223,13 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	authenticationCR, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
+	keyValidatorConfig, err := eutils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain, false)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, reqLogger)
 		return reconcile.Result{}, err
@@ -291,7 +288,7 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 		components = append(components, pcPolicy)
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -321,5 +318,6 @@ func (r *ReconcilePacketCapture) Reconcile(ctx context.Context, request reconcil
 	if err = r.client.Status().Update(ctx, packetcaptureapi); err != nil {
 		return reconcile.Result{}, err
 	}
+
 	return reconcile.Result{}, nil
 }

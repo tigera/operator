@@ -20,16 +20,18 @@ import (
 	"strings"
 
 	"github.com/sirupsen/logrus"
+	"github.com/tigera/operator/hack/release/internal/command"
+	"github.com/tigera/operator/hack/release/internal/setup"
 	"github.com/urfave/cli/v3"
 )
 
 // check that the git working tree is clean.
 var checkGitClean = func(ctx context.Context) (context.Context, error) {
-	version, err := gitVersion()
+	out, err := command.Git("status", "--porcelain")
 	if err != nil {
-		return ctx, fmt.Errorf("error getting git version: %w", err)
+		return ctx, fmt.Errorf("checking git working tree status: %w", err)
 	}
-	if strings.Contains(version, "dirty") {
+	if strings.TrimSpace(out) != "" {
 		return ctx, fmt.Errorf("git working tree is dirty, please commit or stash changes before proceeding")
 	}
 	return ctx, nil
@@ -44,13 +46,22 @@ var checkVersionMatchesGitVersion = func(ctx context.Context, c *cli.Command) (c
 		checkLog.Debug("Skipping version check for hashrelease")
 		return ctx, nil
 	}
-	gitVer, err := gitVersion()
+	// Not using command.GitVersion() so that on a clean tagged HEAD it returns bare "vX.Y.Z"
+	// for accurate comparison against the user-provided version.
+	// command.GitVersion() uses --long for build-identifier purposes and would always append "-0-g<sha>".
+	gitVer, err := command.Git("describe", "--tags", "--abbrev=12", "--dirty")
 	if err != nil {
 		return ctx, fmt.Errorf("getting git version: %w", err)
 	}
 	checkLog.WithField("git-version", gitVer).Debug("Checking version matches git version")
 	checkLog.Info("Using versions")
-	if version != gitVer {
+	// Calico Cloud releases carry a -cloud suffix on the version/image (e.g. v1.44.0-cloud) but ride
+	// the enterprise git tag (v1.44.0), so match against the base version without the suffix.
+	gitMatch := version
+	if setup.IsCloud {
+		gitMatch = strings.TrimSuffix(version, "-cloud")
+	}
+	if gitMatch != gitVer {
 		return ctx, fmt.Errorf("provided version %q does not match git version %q. This is required for releases. \n"+
 			"If building a hashrelease, use either the --%s flag or set environment variable %s=true", version, gitVer, hashreleaseFlag.Name, hashreleaseFlagEnvVar)
 	}
@@ -65,7 +76,7 @@ var checkVersionFormat = func(ctx context.Context, c *cli.Command) (context.Cont
 		return ctx, nil
 	}
 	checkLog.Debug("Checking version format")
-	if isRelease, err := isValidReleaseVersion(version); err != nil {
+	if isRelease, err := setup.IsValidReleaseVersion(version); err != nil {
 		return ctx, fmt.Errorf("checking version format: %w", err)
 	} else if !isRelease {
 		return ctx, fmt.Errorf("provided version %q is not a valid release version. \n"+
@@ -75,6 +86,10 @@ var checkVersionFormat = func(ctx context.Context, c *cli.Command) (context.Cont
 }
 
 var checkVersion = func(ctx context.Context, c *cli.Command) (context.Context, error) {
+	if !c.Bool(versionCheckFlag.Name) {
+		logrus.Warn("Skipping version check, this is not recommended for releases")
+		return ctx, nil
+	}
 	ctx, err := checkVersionFormat(ctx, c)
 	if err != nil {
 		return ctx, err

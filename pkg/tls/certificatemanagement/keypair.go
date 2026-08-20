@@ -34,7 +34,8 @@ import (
 var ErrInvalidCertNoPEMData = errors.New("cert has no PEM data")
 
 type KeyPair struct {
-	CSRImage  string
+	CSRImage string
+
 	Name      string
 	Namespace string
 	// Golang's x509 package uses the 'any' type for all private and public keys. See x509.CreateCertificate() for more.
@@ -173,7 +174,8 @@ func (k *KeyPair) InitContainer(namespace string, securityContext *corev1.Securi
 		corev1.TLSCertKey,
 		k.DNSNames,
 		namespace,
-		securityContext)
+		securityContext,
+	)
 	initContainer.Name = fmt.Sprintf("%s-%s", k.GetName(), initContainer.Name)
 	return initContainer
 }
@@ -190,13 +192,13 @@ func tlsSecretMetadata(certPEM []byte) (labels map[string]string, annotations ma
 	}
 
 	// --- labels ---
-	labels["certificates.operator.tigera.io/signer"] = signerLabelValue(cert.Issuer.CommonName)
+	labels[SignerLabel] = signerLabelValue(cert.Issuer.CommonName)
 
 	// --- annotations ---
 	issuerCN := cert.Issuer.CommonName
-	annotations["certificates.operator.tigera.io/issuer"] = issuerCN
-	annotations["certificates.operator.tigera.io/signer"] = issuerCN
-	annotations["certificates.operator.tigera.io/expiry"] = cert.NotAfter.UTC().Format("2006-01-02T15:04:05Z")
+	annotations[IssuerAnnotation] = issuerCN
+	annotations[SignerLabel] = issuerCN
+	annotations[ExpiryAnnotation] = cert.NotAfter.UTC().Format(ExpiryFormat)
 
 	if len(cert.DNSNames) > 0 {
 		annotations["certificates.operator.tigera.io/dns-names"] = strings.Join(cert.DNSNames, ",")
@@ -275,15 +277,22 @@ func GetKeyCertPEM(secret *corev1.Secret) ([]byte, []byte) {
 		legacySecretCertName5 = "management-cluster.crt"
 	)
 	data := secret.Data
-	for keyField, certField := range map[string]string{
-		corev1.TLSPrivateKeyKey: corev1.TLSCertKey,
-		legacySecretKeyName:     legacySecretCertName,
-		legacySecretKeyName2:    legacySecretCertName2,
-		legacySecretKeyName3:    legacySecretCertName3,
-		legacySecretKeyName4:    legacySecretCertName4,
-		legacySecretKeyName5:    legacySecretCertName5,
+	// Check the recognised key/cert field-name pairs in a fixed priority order, standard
+	// tls.crt/tls.key first, then the legacy names. Iterating a map here would be a bug: Go
+	// randomizes map iteration order, so a secret that contains more than one recognised pair
+	// (e.g. the standard tls.crt/tls.key alongside a legacy cert/key that is intentionally kept
+	// during a certificate-rotation overlap) would return a non-deterministic cert. That flips
+	// the KeyPair's hash annotation between reconciles, which in turn triggers spurious rolling
+	// restarts of consumers such as Voltron/tigera-manager (dropping managed-cluster tunnels).
+	for _, pair := range []struct{ keyField, certField string }{
+		{corev1.TLSPrivateKeyKey, corev1.TLSCertKey},
+		{legacySecretKeyName, legacySecretCertName},
+		{legacySecretKeyName2, legacySecretCertName2},
+		{legacySecretKeyName3, legacySecretCertName3},
+		{legacySecretKeyName4, legacySecretCertName4},
+		{legacySecretKeyName5, legacySecretCertName5},
 	} {
-		key, cert := data[keyField], data[certField]
+		key, cert := data[pair.keyField], data[pair.certField]
 		if len(cert) > 0 {
 			return key, cert
 		}

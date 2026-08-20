@@ -71,8 +71,8 @@ type Config struct {
 }
 
 type elasticsearchMetrics struct {
-	cfg            *Config
-	esMetricsImage string
+	cfg         *Config
+	calicoImage string
 }
 
 func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
@@ -82,7 +82,7 @@ func (e *elasticsearchMetrics) ResolveImages(is *operatorv1.ImageSet) error {
 	path := e.cfg.Installation.ImagePath
 	prefix := e.cfg.Installation.ImagePrefix
 
-	e.esMetricsImage, err = components.GetReference(components.ComponentElasticsearchMetrics, reg, path, prefix, is)
+	e.calicoImage, err = components.GetReference(components.CombinedCalicoImage(e.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -234,10 +234,9 @@ func (e *elasticsearchMetrics) metricsDeployment() *appsv1.Deployment {
 					Containers: []corev1.Container{
 						{
 							Name:            ElasticsearchMetricsName,
-							Image:           e.esMetricsImage,
-							ImagePullPolicy: render.ImagePullPolicy(),
+							Image:           e.calicoImage,
 							SecurityContext: sc,
-							Command:         []string{"/bin/elasticsearch_exporter"},
+							Command:         []string{components.CalicoBinaryPath, "component", "elasticsearch-metrics"},
 							Args: []string{
 								"--es.uri=https://$(ELASTIC_USERNAME):$(ELASTIC_PASSWORD)@$(ELASTIC_HOST):$(ELASTIC_PORT)",
 								"--es.all", "--es.indices", "--es.indices_settings", "--es.shards", "--es.cluster_settings",

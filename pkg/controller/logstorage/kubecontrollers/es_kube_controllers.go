@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -44,6 +45,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
+	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -59,13 +63,15 @@ type ESKubeControllersController struct {
 	scheme          *runtime.Scheme
 	status          status.StatusManager
 	clusterDomain   string
+	variant         operatorv1.ProductVariant
 	elasticExternal bool
 	multiTenant     bool
+	cloud           bool
 	tierWatchReady  *utils.ReadyFlag
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
@@ -82,9 +88,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
 		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
 		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
 		elasticExternal: opts.ElasticExternal,
 		multiTenant:     opts.MultiTenant,
+		cloud:           opts.Cloud,
 		tierWatchReady:  &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -133,15 +141,21 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the calico-system namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	esKubeControllersNamespace := utils.NewNamespaceHelper(opts.MultiTenant, common.CalicoNamespace, "")
+	esKubeControllersNamespace := eutils.NewNamespaceHelper(opts.MultiTenant, common.CalicoNamespace, "")
 	if err := utils.AddConfigMapWatch(c, certificatemanagement.TrustedCertConfigMapName, esKubeControllersNamespace.InstallNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("log-storage-kubecontrollers failed to watch the Service resource: %w", err)
 	}
 	if err := utils.AddDeploymentWatch(c, esgateway.DeploymentName, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
 	}
-	if err := utils.AddDeploymentWatch(c, kubecontrollers.EsKubeController, esKubeControllersNamespace.InstallNamespace()); err != nil {
+	if err := utils.AddDeploymentWatch(c, entkubecontrollers.EsKubeController, esKubeControllersNamespace.InstallNamespace()); err != nil {
 		return fmt.Errorf("log-storage-access-controller failed to watch the Service resource: %w", err)
+	}
+	if opts.Cloud && opts.ElasticExternal {
+		// This ConfigMap is needed for utils.GetCloudConfig
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-kubecontrollers failed to watch the ConfigMap resource: %w", err)
+		}
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -168,14 +182,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Start goroutines to establish watches against projectcalico.org/v3 resources.
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, r.tierWatchReady)
 	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
-		{Name: kubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: esKubeControllersNamespace.InstallNamespace()},
+		{Name: entkubecontrollers.EsKubeControllerNetworkPolicyName, Namespace: esKubeControllersNamespace.InstallNamespace()},
 	})
 
 	return nil
 }
 
 func (r *ESKubeControllersController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.multiTenant, common.CalicoNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.multiTenant, common.CalicoNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - ESKubeControllers")
 
@@ -202,7 +216,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Get Installation resource.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -240,7 +254,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		return reconcile.Result{}, nil
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -248,7 +262,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 
 	if !r.elasticExternal {
 		// Wait for Elasticsearch to be installed and available
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -262,7 +276,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// Get secrets needed for kube-controllers to talk to elastic. This is needed for zero-tenants and single-tenants
 	// that deploy es-kube-controllers and need to talk to es-gateway
 	var kubeControllersUserSecret *core.Secret
-	kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, kubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
+	kubeControllersUserSecret, err = utils.GetSecret(ctx, r.client, entkubecontrollers.ElasticsearchKubeControllersUserSecret, helper.TruthNamespace())
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get kube controllers gateway secret", err, reqLogger)
 		return reconcile.Result{}, err
@@ -281,7 +295,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	hdler := utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)
 
 	// Get the Authentication resource.
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
 		return reconcile.Result{}, err
@@ -296,7 +310,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	// ESGateway is required in order for kube-controllers to operate successfully, since es-kube-controllers talks to ES
 	// via this gateway. However, in multi-tenant mode, es-kube-controllers doesn't talk to elasticsearch,
 	// so this is only needed in single-tenant clusters and zero tenants clusters
-	gwNSHelper := utils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
+	gwNSHelper := eutils.NewSingleTenantNamespaceHelper(render.ElasticsearchNamespace)
 	// Query the trusted bundle from the namespace.
 	gwTrustedBundle, err := cm.LoadTrustedBundle(ctx, r.client, gwNSHelper.InstallNamespace())
 	if err != nil {
@@ -307,7 +321,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		ctx,
 		gwNSHelper,
 		installationSpec,
-		variant,
+		r.variant,
 		pullSecrets,
 		hdler,
 		reqLogger,
@@ -325,7 +339,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 	}
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -338,15 +352,20 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		ClusterDomain:                r.clusterDomain,
 		Authentication:               authentication,
 		KubeControllersGatewaySecret: kubeControllersUserSecret,
-		LogStorageExists:             logStorage != nil,
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
 		Tenant:                       nil,
+		Cloud:                        r.cloud,
 	}
-	esKubeControllerComponents := kubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
+	if r.cloud {
+		if result, proceed, err := r.esKubeControllersAddCloudModificationsToConfig(&kubeControllersCfg, reqLogger, ctx); err != nil || !proceed {
+			return result, err
+		}
+	}
+	esKubeControllerComponents := entkubecontrollers.NewElasticsearchKubeControllers(&kubeControllersCfg)
 
-	imageSet, err := imageset.GetImageSet(ctx, r.client, variant)
+	imageSet, err := imageset.GetImageSet(ctx, r.client, r.variant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
 		return reconcile.Result{}, err

@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -86,7 +87,7 @@ func NewReconcilerWithShims(
 	scheme *runtime.Scheme,
 	status status.StatusManager,
 	provider operatorv1.Provider,
-	esCliCreator utils.ElasticsearchClientCreator,
+	esCliCreator esutils.ElasticsearchClientCreator,
 	clusterDomain string,
 	tierWatchReady *utils.ReadyFlag,
 ) (*ElasticSubController, error) {
@@ -94,6 +95,7 @@ func NewReconcilerWithShims(
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
+		Variant:          operatorv1.CalicoEnterprise,
 	}
 
 	r := &ElasticSubController{
@@ -103,6 +105,7 @@ func NewReconcilerWithShims(
 		tierWatchReady: tierWatchReady,
 		status:         status,
 		clusterDomain:  opts.ClusterDomain,
+		variant:        opts.Variant,
 		provider:       opts.DetectedProvider,
 		multiTenant:    opts.MultiTenant,
 	}
@@ -198,6 +201,8 @@ var _ = Describe("LogStorage controller", func() {
 					})).NotTo(HaveOccurred())
 
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 			})
 
@@ -317,6 +322,8 @@ var _ = Describe("LogStorage controller", func() {
 					})).NotTo(HaveOccurred())
 
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -1040,13 +1047,9 @@ var _ = Describe("LogStorage controller", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-								{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
+								{Image: "tigera/calico", Digest: "sha256:kubecontrollershash"},
 								{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 								{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
-								{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
-								{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
-								{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
-								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
 					})).ToNot(HaveOccurred())
@@ -1152,6 +1155,8 @@ var _ = Describe("LogStorage controller", func() {
 					})).ShouldNot(HaveOccurred())
 
 					mockStatus = &status.MockStatus{}
+					mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+					mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 					mockStatus.On("Run").Return()
 					mockStatus.On("OnCRFound").Return()
 					// mockStatus.On("SetMetaData", mock.Anything).Return()
@@ -1210,6 +1215,8 @@ var _ = Describe("LogStorage controller", func() {
 				setUpLogStorageComponents(cli, ctx, "", certificateManager)
 
 				mockStatus = &status.MockStatus{}
+				mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+				mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 				mockStatus.On("Run").Return()
 				mockStatus.On("AddStatefulSets", mock.Anything)
 				mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)

@@ -43,13 +43,18 @@ type CalicoNodeDaemonSetContainer struct {
 	// The probe handler is set by the operator and cannot be overridden.
 	// +optional
 	LivenessProbe *ProbeOverride `json:"livenessProbe,omitempty"`
+
+	// StartupProbe allows customization of the startup probe timing parameters.
+	// The probe handler is set by the operator.
+	// +optional
+	StartupProbe *ProbeOverride `json:"startupProbe,omitempty"`
 }
 
 // CalicoNodeDaemonSetInitContainer is a calico-node DaemonSet init container.
 type CalicoNodeDaemonSetInitContainer struct {
 	// Name is an enum which identifies the calico-node DaemonSet init container by name.
-	// Supported values are: install-cni, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner, mount-bpffs (deprecated, replaced by ebpf-bootstrap)
-	// +kubebuilder:validation:Enum=install-cni;hostpath-init;flexvol-driver;ebpf-bootstrap;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner;mount-bpffs
+	// Supported values are: install-cni, cni-plugins, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner, mount-bpffs (deprecated, replaced by ebpf-bootstrap)
+	// +kubebuilder:validation:Enum=install-cni;cni-plugins;hostpath-init;flexvol-driver;ebpf-bootstrap;node-certs-key-cert-provisioner;calico-node-prometheus-server-tls-key-cert-provisioner;mount-bpffs
 	Name string `json:"name"`
 
 	// Resources allows customization of limits and requests for compute resources such as cpu and memory.

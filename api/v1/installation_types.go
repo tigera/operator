@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	"fmt"
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -49,7 +48,7 @@ type Installation struct {
 type InstallationSpec struct {
 	// Variant is the product to install - one of Calico or CalicoEnterprise.
 	// TigeraSecureEnterprise is also accepted as a deprecated alias for CalicoEnterprise.
-	// Default: Calico
+	// If left unset, the operator fills in the variant it is running as.
 	// +optional
 	// +kubebuilder:validation:Enum=Calico;CalicoEnterprise;TigeraSecureEnterprise
 	Variant ProductVariant `json:"variant,omitempty"`
@@ -96,6 +95,14 @@ type InstallationSpec struct {
 	// applied to all images to be pulled.
 	// +optional
 	ImagePullSecrets []v1.LocalObjectReference `json:"imagePullSecrets,omitempty"`
+
+	// ImagePullPolicy is the pull policy applied to containers in pods rendered by the operator
+	// that do not explicitly set their own pull policy. If unset, defaults to IfNotPresent.
+	// This is useful in air-gapped environments where images are pre-loaded onto nodes and
+	// must not be re-pulled from a remote registry.
+	// +optional
+	// +kubebuilder:validation:Enum=Always;IfNotPresent;Never
+	ImagePullPolicy *v1.PullPolicy `json:"imagePullPolicy,omitempty"`
 
 	// KubernetesProvider specifies a particular provider of the Kubernetes platform and enables provider-specific configuration.
 	// If the specified value is empty, the Operator will attempt to automatically determine the current provider.
@@ -149,6 +156,23 @@ type InstallationSpec struct {
 	// +optional
 	FlexVolumePath string `json:"flexVolumePath,omitempty"`
 
+	// CalicoRunHostPath optionally specifies the host path mounted into calico-node containers at
+	// /var/run/calico. Environments such as microk8s place Calico runtime state under a non-standard
+	// host directory (for example /var/snap/microk8s/current/var/run/calico); set this field so the
+	// operator continues using that path after a manifest-to-operator migration.
+	// +optional
+	// +kubebuilder:default:="/var/run/calico"
+	// +kubebuilder:validation:MaxLength=1024
+	CalicoRunHostPath string `json:"calicoRunHostPath,omitempty"`
+
+	// CalicoLibHostPath optionally specifies the host path mounted into calico-node containers at
+	// /var/lib/calico. Pair this with CalicoRunHostPath when Calico data lives under a non-standard
+	// host directory (for example microk8s uses /var/snap/microk8s/current/var/lib/calico).
+	// +optional
+	// +kubebuilder:default:="/var/lib/calico"
+	// +kubebuilder:validation:MaxLength=1024
+	CalicoLibHostPath string `json:"calicoLibHostPath,omitempty"`
+
 	// KubeletVolumePluginPath optionally specifies enablement of Calico CSI plugin. If not specified,
 	// CSI will be enabled by default. If set to 'None', CSI will be disabled.
 	// Default: /var/lib/kubelet
@@ -201,6 +225,12 @@ type InstallationSpec struct {
 	// +optional
 	TyphaDeployment *TyphaDeployment `json:"typhaDeployment,omitempty"`
 
+	// TyphaPodDisruptionBudget configures the PodDisruptionBudget for the calico-typha
+	// Deployment. Fields left unset fall back to the operator's defaults. The PDB's
+	// selector is managed by the operator and cannot be overridden.
+	// +optional
+	TyphaPodDisruptionBudget *PodDisruptionBudgetOverride `json:"typhaPodDisruptionBudget,omitempty"`
+
 	// Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
 	// CalicoWindowsUpgradeDaemonSet configures the calico-windows-upgrade DaemonSet.
 	CalicoWindowsUpgradeDaemonSet *CalicoWindowsUpgradeDaemonSet `json:"calicoWindowsUpgradeDaemonSet,omitempty"`
@@ -208,9 +238,8 @@ type InstallationSpec struct {
 	// CalicoNodeWindowsDaemonSet configures the calico-node-windows DaemonSet.
 	CalicoNodeWindowsDaemonSet *CalicoNodeWindowsDaemonSet `json:"calicoNodeWindowsDaemonSet,omitempty"`
 
-	// FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-	// Only supported for Variant=Calico.
-	// Default: Disabled
+	// Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+	// installation degraded.
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	// +optional
 	FIPSMode *FIPSMode `json:"fipsMode,omitempty"`
@@ -236,6 +265,11 @@ type InstallationSpec struct {
 	// the cluster (including the API server) are exempt from proxying.
 	// +optional
 	Proxy *Proxy `json:"proxy,omitempty"`
+
+	// NetworkPolicy configures how the operator manages the NetworkPolicies and GlobalNetworkPolicies
+	// it installs to protect the Calico components it manages.
+	// +optional
+	NetworkPolicy *NetworkPolicySpec `json:"networkPolicy,omitempty"`
 }
 
 // BPFNetworkBootstrapType defines how the initial networking configuration is executed.
@@ -496,6 +530,18 @@ const (
 	ContainerIPForwardingDisabled ContainerIPForwardingType = "Disabled"
 )
 
+// LinuxPodInterfaceType specifies the type of virtual device the Calico CNI plugin
+// creates for the pod-side interface on Linux nodes.
+//
+// One of: Veth, Netkit
+// +kubebuilder:validation:Enum=Veth;Netkit
+type LinuxPodInterfaceType string
+
+const (
+	LinuxPodInterfaceVeth   LinuxPodInterfaceType = "Veth"
+	LinuxPodInterfaceNetkit LinuxPodInterfaceType = "Netkit"
+)
+
 // HostPortsType specifies host port support.
 //
 // One of: Enabled, Disabled
@@ -548,12 +594,13 @@ func BGPOptionPtr(b BGPOption) *BGPOption {
 }
 
 // ClusterRoutingMode describes the mode of cluster routing.
-// +kubebuilder:validation:Enum=BIRD;Felix
+// +kubebuilder:validation:Enum=BIRD;Felix;FelixIPIPOnly
 type ClusterRoutingMode string
 
 const (
-	ClusterRoutingModeBIRD  ClusterRoutingMode = "BIRD"
-	ClusterRoutingModeFelix ClusterRoutingMode = "Felix"
+	ClusterRoutingModeBIRD          ClusterRoutingMode = "BIRD"
+	ClusterRoutingModeFelix         ClusterRoutingMode = "Felix"
+	ClusterRoutingModeFelixIPIPOnly ClusterRoutingMode = "FelixIPIPOnly"
 )
 
 const (
@@ -633,10 +680,18 @@ type CalicoNetworkSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
 
-	// ClusterRoutingMode controls how nodes get a route to a workload on another node,
-	// when that workload's IP comes from an IP Pool with vxlanMode: Never. When ClusterRoutingMode is BIRD,
-	// confd and BIRD program that route. When ClusterRoutingMode is Felix, it is expected that Felix will program that route.
-	// Felix always programs such routes for IP Pools with vxlanMode: Always or vxlanMode: CrossSubnet. [Default: BIRD]
+	// ClusterRoutingMode controls which component programs the routes that a node needs in order to reach
+	// workloads on other nodes. It only applies to IP Pools with vxlanMode: Never; the routes for IP Pools
+	// with vxlanMode: Always or vxlanMode: CrossSubnet are always programmed by Felix.
+	// In BIRD mode, confd and BIRD program the routes for both IPIP and unencapsulated IP Pools.
+	// In Felix mode, Felix programs the routes for both IPIP and unencapsulated IP Pools.
+	// In FelixIPIPOnly mode, Felix programs the routes for IPIP IP Pools, and confd and BIRD program them
+	// for unencapsulated IP Pools.
+	// If not specified, the operator writes neither FelixConfiguration.programClusterRoutes nor
+	// BGPConfiguration.programClusterRoutes, so Calico's own defaults apply; as of Calico v3.33 those
+	// defaults are equivalent to FelixIPIPOnly.
+	// Note that BIRD programming of IPIP routes, which the BIRD mode selects, is deprecated as of
+	// Calico v3.33 and is intended for removal in v3.35.
 	// +optional
 	ClusterRoutingMode *ClusterRoutingMode `json:"clusterRoutingMode,omitempty"`
 
@@ -681,6 +736,18 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	ContainerIPForwarding *ContainerIPForwardingType `json:"containerIPForwarding,omitempty"`
+
+	// LinuxPodInterfaceType selects the virtual device type the Calico CNI plugin
+	// creates for each pod's interface on Linux nodes. When set to Netkit, the CNI
+	// plugin creates a netkit L2 pair on kernels that support it (Linux 6.7+) and
+	// falls back to a veth pair on older kernels. Netkit is recommended for the BPF
+	// dataplane, where it allows BPF programs to attach via BPF_NETKIT_PRIMARY for
+	// improved throughput and tail-latency under contention; for non-BPF dataplanes
+	// it is functionally equivalent to veth. Only valid when using the Calico CNI
+	// plugin.
+	// Default: Veth
+	// +optional
+	LinuxPodInterfaceType *LinuxPodInterfaceType `json:"linuxPodInterfaceType,omitempty"`
 
 	// Sysctl configures sysctl parameters for tuning plugin
 	// +optional
@@ -901,6 +968,25 @@ func (cp CNIPluginType) String() string {
 	return string(cp)
 }
 
+// CNISpecVersion is the version of the CNI specification declared in the
+// CNI configuration generated by the operator.
+type CNISpecVersion string
+
+const (
+	// CNISpecVersionAuto lets the operator choose the CNI spec version. The
+	// chosen version may be raised in future operator versions as older
+	// container runtimes fall out of support.
+	CNISpecVersionAuto CNISpecVersion = "Auto"
+
+	CNISpecVersion031 CNISpecVersion = "0.3.1"
+	CNISpecVersion040 CNISpecVersion = "0.4.0"
+	CNISpecVersion100 CNISpecVersion = "1.0.0"
+)
+
+// autoCNISpecVersion is the CNI spec version that Auto currently resolves
+// to. All container runtimes supported by this operator accept it.
+const autoCNISpecVersion = CNISpecVersion100
+
 type IPAMPluginType string
 
 const (
@@ -967,6 +1053,17 @@ type CNISpec struct {
 	// +optional
 	IPAM *IPAMSpec `json:"ipam"`
 
+	// SpecVersion configures the CNI specification version declared in the
+	// CNI configuration ("cniVersion") that the operator generates. Auto
+	// (the default) lets the operator choose an appropriate version, which
+	// may increase across operator upgrades. Pin an explicit version if a
+	// chained CNI plugin or container runtime in your environment requires
+	// one. Only relevant when using the Calico CNI plugin.
+	// Default: Auto
+	// +kubebuilder:validation:Enum=Auto;"0.3.1";"0.4.0";"1.0.0"
+	// +optional
+	SpecVersion *CNISpecVersion `json:"specVersion,omitempty"`
+
 	// BinDir is the path to the CNI binaries directory.
 	// If you have changed the installation directory for CNI binaries in the container runtime configuration,
 	// please ensure that this field points to the same directory as specified in the container runtime settings.
@@ -988,7 +1085,35 @@ type CNISpec struct {
 	// +optional
 	// +kubebuilder:validation:Type=string
 	ConfDir *string `json:"confDir,omitempty"`
+
+	// InstallMode controls which CNI plugin binaries the operator installs onto each node
+	// when CNI.Type is Calico.
+	// * All (default): the operator runs a cni-plugins init container that stages upstream
+	//   CNI plugin binaries (host-local, portmap, loopback, tuning, flannel) into a shared
+	//   volume, and the install-cni init container copies them onto the host alongside
+	//   Calico's own binaries.
+	// * CalicoOnly: skip the cni-plugins init container. Only Calico's own binaries are
+	//   installed. Use this when the host already provides the upstream plugins (e.g. kind,
+	//   certain managed node images).
+	//
+	// Default: All
+	// +optional
+	// +kubebuilder:validation:Enum=All;CalicoOnly
+	InstallMode *CNIInstallMode `json:"installMode,omitempty"`
 }
+
+// CNIInstallMode controls which CNI plugin binaries the operator installs onto the host.
+type CNIInstallMode string
+
+const (
+	// CNIInstallModeAll installs Calico's own CNI binaries plus the upstream plugin set
+	// (host-local, portmap, loopback, tuning, flannel) via a dedicated init container.
+	CNIInstallModeAll CNIInstallMode = "All"
+
+	// CNIInstallModeCalicoOnly installs only Calico's own CNI binaries; the host is
+	// expected to provide any required upstream plugins.
+	CNIInstallModeCalicoOnly CNIInstallMode = "CalicoOnly"
+)
 
 // InstallationStatus defines the observed state of the Calico or Calico Enterprise installation.
 type InstallationStatus struct {
@@ -1019,6 +1144,16 @@ type InstallationStatus struct {
 	// Ready, Progressing, Degraded or other customer types.
 	// +optional
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
+}
+
+// ResolvedSpecVersion is an extension method that returns the CNI spec
+// version to declare in the generated CNI config ("cniVersion"), resolving
+// Auto (and unset) to the operator's current default.
+func (c *CNISpec) ResolvedSpecVersion() string {
+	if c == nil || c.SpecVersion == nil || *c.SpecVersion == CNISpecVersionAuto {
+		return string(autoCNISpecVersion)
+	}
+	return string(*c.SpecVersion)
 }
 
 // BPFEnabled is an extension method that returns true if the Installation resource
@@ -1102,11 +1237,6 @@ type CertificateManagement struct {
 // IsFIPSModeEnabled is a convenience function for turning a FIPSMode reference into a bool.
 func IsFIPSModeEnabled(mode *FIPSMode) bool {
 	return mode != nil && *mode == FIPSModeEnabled
-}
-
-// IsFIPSModeEnabledString is a convenience function for turning a FIPSMode reference into a string formatted bool.
-func IsFIPSModeEnabledString(mode *FIPSMode) string {
-	return fmt.Sprintf("%t", IsFIPSModeEnabled(mode))
 }
 
 type WindowsNodeSpec struct {

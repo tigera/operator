@@ -355,6 +355,73 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(1))
 	})
+
+	It("should not delete and recreate a pool when the Installation uses a non-canonical IPv6 CIDR", func() {
+		// Regression test for https://github.com/tigera/operator/issues/4783.
+		// The Calico API server stores IP pool CIDRs in canonical form, so a pool created from a
+		// non-canonical CIDR in the Installation is persisted with a different textual representation
+		// (e.g. with leading zeros stripped). The operator must treat the two as the same pool;
+		// otherwise it repeatedly marks the pool for deletion and recreates it in an infinite loop.
+		const nonCanonicalCIDR = "fd20:5213:94f6:01e9:001f::/96"
+		const canonicalCIDR = "fd20:5213:94f6:1e9:1f::/96"
+
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+				CalicoNetwork: &operator.CalicoNetworkSpec{
+					IPPools: []operator.IPPool{
+						{CIDR: nonCanonicalCIDR},
+					},
+				},
+			},
+		}
+		Expect(c.Create(ctx, instance)).ShouldNot(HaveOccurred())
+
+		// Simulate a pool that the API server already normalized to its canonical form and that is
+		// owned by the operator (as indicated by the managed-by label).
+		existing := &v3.IPPool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "default-ipv6-ippool",
+				Labels: map[string]string{managedByLabel: managedByValue},
+			},
+			Spec: v3.IPPoolSpec{CIDR: canonicalCIDR},
+		}
+		Expect(c.Create(ctx, existing)).ShouldNot(HaveOccurred())
+
+		// Use the projectcalico.org/v3 API path so that, prior to the fix, the spurious deletion
+		// would actually be carried out rather than just marking the controller as degraded.
+		r.clientv3 = c
+		r.opts.UseV3CRDs = true
+
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		// Reconcile a couple of times to confirm we reach a steady state and aren't looping.
+		for i := 0; i < 2; i++ {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// The pool must still exist exactly once, retaining its canonical CIDR, and must not have
+		// been deleted and recreated.
+		ipPools := v3.IPPoolList{}
+		Expect(c.List(ctx, &ipPools)).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal(canonicalCIDR))
+	})
 })
 
 var _ = DescribeTable("cidrWithinCidr",

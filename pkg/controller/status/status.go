@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -51,6 +52,32 @@ const (
 	// The kubelet sends SIGKILL when a liveness probe fails, but other actors (OOM
 	// killer, manual kill) can also produce this code.
 	exitCodeSIGKILL = 137
+
+	// Container waiting reason strings. These are set by the container runtime and
+	// kubelet; Kubernetes does not define constants for them.
+	waitingCrashLoopBackOff = "CrashLoopBackOff"
+	waitingImagePullBackOff = "ImagePullBackOff"
+	waitingErrImagePull     = "ErrImagePull"
+
+	// deploymentRevisionAnnotation records the revision number of a ReplicaSet
+	// within its owning Deployment. Set by the deployment controller; Kubernetes
+	// does not export a constant for it.
+	deploymentRevisionAnnotation = "deployment.kubernetes.io/revision"
+
+	// defaultReadinessGracePeriod is how long a running pod may stay unready
+	// before we consider it failing, used for pods whose containers define no
+	// readiness probe. It also acts as a floor for the probe-derived grace
+	// period (see readinessGracePeriod), so we never flag a pod more
+	// aggressively than this. This avoids tripping Degraded for pods that are
+	// only briefly unready during a rolling update.
+	defaultReadinessGracePeriod = 60 * time.Second
+
+	// Kubelet defaults for probe timing fields, applied when a probe leaves them
+	// unset. The API server fills these in for real pods, but we default
+	// defensively so the derivation is correct for any pod object.
+	defaultProbePeriodSeconds    = 10
+	defaultProbeTimeoutSeconds   = 1
+	defaultProbeFailureThreshold = 3
 
 	customOverridesAnnotation = "operator.tigera.io/custom-overrides"
 )
@@ -95,6 +122,11 @@ type podIssue struct {
 	issueType podIssueType
 	message   string
 
+	// workload identifies the owning workload (e.g. `DaemonSet "calico-system/calico-node"`).
+	// It scopes dedup and the per-workload cap in summarizeIssues so issues from
+	// different workloads aren't merged together.
+	workload string
+
 	// isOldRevision is true if the pod belongs to an old revision during a rollout.
 	isOldRevision bool
 
@@ -103,21 +135,31 @@ type podIssue struct {
 	exitCode          int32
 }
 
+// key returns a deduplication key for this issue. Issues with the same key are grouped
+// together in summarizeIssues, so that e.g. 10 pods all OOMKilled produce one message
+// with "(10 pods affected)" rather than 10 separate messages.
 func (p podIssue) key() string {
-	return fmt.Sprintf("%d:%s:%d", p.issueType, p.terminationReason, p.exitCode)
+	return fmt.Sprintf("%s:%d:%s:%d", p.workload, p.issueType, p.terminationReason, p.exitCode)
 }
 
-const maxIssuesPerWorkload = 3
+// maxIssuesToReport is the maximum number of distinct issue types reported per workload.
+// Beyond this cap, additional issues are dropped to keep messages concise.
+const maxIssuesToReport = 3
 
 // summarizeIssues deduplicates, prioritizes, and caps a list of pod issues into
-// human-readable failing and progressing message slices.
+// human-readable failing and progressing message slices. Issues are grouped by
+// workload so each workload independently gets up to maxIssuesToReport reasons.
 func summarizeIssues(issues []podIssue) (failing []string, progressing []string) {
 	if len(issues) == 0 {
 		return nil, nil
 	}
 
-	// Sort: new-revision first, then by issue type priority (enum order).
+	// Sort: by workload (stable groups), then new-revision first, then by issue
+	// type priority (enum order).
 	sort.SliceStable(issues, func(i, j int) bool {
+		if issues[i].workload != issues[j].workload {
+			return issues[i].workload < issues[j].workload
+		}
 		if issues[i].isOldRevision != issues[j].isOldRevision {
 			return !issues[i].isOldRevision
 		}
@@ -125,6 +167,7 @@ func summarizeIssues(issues []podIssue) (failing []string, progressing []string)
 	})
 
 	// Group by key. First occurrence provides the message; count tracks duplicates.
+	// The key includes the workload, so dedup is per-workload.
 	type issueGroup struct {
 		issue podIssue
 		count int
@@ -141,13 +184,14 @@ func summarizeIssues(issues []podIssue) (failing []string, progressing []string)
 		groups = append(groups, issueGroup{issue: iss, count: 1})
 	}
 
-	// Cap at maxIssuesPerWorkload unique reasons.
-	if len(groups) > maxIssuesPerWorkload {
-		groups = groups[:maxIssuesPerWorkload]
-	}
-
-	// Format messages.
+	// Cap at maxIssuesToReport unique reasons per workload.
+	perWorkload := map[string]int{}
 	for _, g := range groups {
+		if perWorkload[g.issue.workload] >= maxIssuesToReport {
+			continue
+		}
+		perWorkload[g.issue.workload]++
+
 		msg := g.issue.message
 		if g.count > 1 {
 			msg += fmt.Sprintf(" (%d pods affected)", g.count)
@@ -610,6 +654,10 @@ func (m *statusManager) syncState() {
 	progressing := []string{}
 	failing := []string{}
 
+	// Accumulate per-pod issues across all watched workloads. Each issue is stamped
+	// with its workload, and summarizeIssues groups/caps per-workload at the end.
+	var podIssues []podIssue
+
 	// For each daemonset, check its rollout status.
 	for _, dsnn := range m.daemonsets {
 		ds := &appsv1.DaemonSet{}
@@ -643,10 +691,7 @@ func (m *statusManager) syncState() {
 		}
 
 		revision := m.currentDaemonSetRevision(ds)
-		issues := m.diagnosePods(ds.Spec.Selector, ds.Namespace, revision, ds.Annotations)
-		f, p := summarizeIssues(issues)
-		failing = append(failing, f...)
-		progressing = append(progressing, p...)
+		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("DaemonSet %q", dsnn.String()), ds.Spec.Selector, ds.Namespace, revision, ds.Annotations)...)
 	}
 
 	for _, depnn := range m.deployments {
@@ -683,10 +728,7 @@ func (m *statusManager) syncState() {
 		}
 
 		revision := m.currentDeploymentRevision(dep)
-		issues := m.diagnosePods(dep.Spec.Selector, dep.Namespace, revision, dep.Annotations)
-		f, p := summarizeIssues(issues)
-		failing = append(failing, f...)
-		progressing = append(progressing, p...)
+		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("Deployment %q", depnn.String()), dep.Spec.Selector, dep.Namespace, revision, dep.Annotations)...)
 	}
 
 	for _, depnn := range m.statefulsets {
@@ -720,10 +762,7 @@ func (m *statusManager) syncState() {
 			continue
 		}
 
-		issues := m.diagnosePods(ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision, ss.Annotations)
-		f, p := summarizeIssues(issues)
-		failing = append(failing, f...)
-		progressing = append(progressing, p...)
+		podIssues = append(podIssues, m.diagnosePods(fmt.Sprintf("StatefulSet %q", depnn.String()), ss.Spec.Selector, ss.Namespace, ss.Status.UpdateRevision, ss.Annotations)...)
 	}
 
 	for _, depnn := range m.cronjobs {
@@ -764,6 +803,12 @@ func (m *statusManager) syncState() {
 		}
 	}
 
+	// Summarize all pod-level issues collected from watched workloads into
+	// human-readable messages and merge them into the workload-level results.
+	podFailing, podProgressing := summarizeIssues(podIssues)
+	failing = append(failing, podFailing...)
+	progressing = append(progressing, podProgressing...)
+
 	m.progressing = progressing
 	m.failing = failing
 	m.hasSynced = true
@@ -797,9 +842,12 @@ func (m *statusManager) removeTigeraStatus() {
 }
 
 // diagnosePods lists pods matching the selector and returns a podIssue for each
-// unhealthy pod found. If currentRevision is non-empty, pods not matching that
-// revision are marked as old-revision.
-func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace string, currentRevision string, workloadAnnotations map[string]string) []podIssue {
+// unhealthy pod found. Each issue is stamped with the given workload identifier
+// for downstream grouping. If currentRevision is non-empty, pods not matching
+// that revision are marked as old-revision. workloadAnnotations carries the
+// owning workload's annotations so override hints can be correlated with pod
+// failures.
+func (m *statusManager) diagnosePods(workload string, selector *metav1.LabelSelector, namespace string, currentRevision string, workloadAnnotations map[string]string) []podIssue {
 	l := corev1.PodList{}
 	s, err := metav1.LabelSelectorAsMap(selector)
 	if err != nil {
@@ -813,49 +861,36 @@ func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace s
 
 	var issues []podIssue
 	for _, p := range l.Items {
-		oldRevision := currentRevision != "" && !podMatchesRevision(p, currentRevision)
+		isOldRevision := currentRevision != "" && !podMatchesRevision(p, currentRevision)
 
 		if p.Status.Phase == corev1.PodFailed {
 			issues = append(issues, podIssue{
+				workload:      workload,
 				severity:      severityFailing,
 				issueType:     issuePodFailed,
 				message:       fmt.Sprintf("Pod %s/%s has failed", p.Namespace, p.Name),
-				isOldRevision: oldRevision,
+				isOldRevision: isOldRevision,
 			})
 			continue
 		}
 
 		// Check init and regular container statuses for errors.
-		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, oldRevision, workloadAnnotations); len(iss) > 0 {
-			issues = append(issues, iss...)
-			continue
-		}
-		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, oldRevision, workloadAnnotations); len(iss) > 0 {
-			issues = append(issues, iss...)
-			continue
-		}
-
-		// Running but not passing readiness checks.
-		if p.Status.Phase == corev1.PodRunning {
-			for _, cond := range p.Status.Conditions {
-				if cond.Type == corev1.ContainersReady && cond.Status == corev1.ConditionFalse {
-					msg := fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name)
-					if hasOverride(workloadAnnotations, "readinessProbe") {
-						msg += "; custom readiness probe configuration is in effect"
-					}
-					issues = append(issues, podIssue{
-						severity:      severityFailing,
-						issueType:     issueNotReady,
-						message:       msg,
-						isOldRevision: oldRevision,
-					})
-					break
-				}
+		if iss := diagnoseContainers(p, p.Status.InitContainerStatuses, isOldRevision, workloadAnnotations); len(iss) > 0 {
+			for i := range iss {
+				iss[i].workload = workload
 			}
+			issues = append(issues, iss...)
+			continue
+		}
+		if iss := diagnoseContainers(p, p.Status.ContainerStatuses, isOldRevision, workloadAnnotations); len(iss) > 0 {
+			for i := range iss {
+				iss[i].workload = workload
+			}
+			issues = append(issues, iss...)
 			continue
 		}
 
-		// Pending pod - check for scheduling failures.
+		// Pending - check for scheduling failures.
 		if p.Status.Phase == corev1.PodPending {
 			msg := fmt.Sprintf("Pod %s/%s is pending", p.Namespace, p.Name)
 			for _, cond := range p.Status.Conditions {
@@ -867,24 +902,107 @@ func (m *statusManager) diagnosePods(selector *metav1.LabelSelector, namespace s
 				}
 			}
 			issues = append(issues, podIssue{
+				workload:      workload,
 				severity:      severityProgressing,
 				issueType:     issuePending,
 				message:       msg,
-				isOldRevision: oldRevision,
+				isOldRevision: isOldRevision,
 			})
+			continue
+		}
+
+		// Running - check if passing readiness checks. We only flag a pod once
+		// it has been unready for longer than the grace period, to minimize
+		// false positives during rolling updates. The grace period is derived
+		// from the pod's readiness probes so that slow-starting pods are not
+		// flagged before their probes would have had a chance to pass.
+		if p.Status.Phase == corev1.PodRunning {
+			grace := readinessGracePeriod(p)
+			for _, cond := range p.Status.Conditions {
+				if cond.Type != corev1.ContainersReady || cond.Status != corev1.ConditionFalse {
+					continue
+				}
+				// A zero LastTransitionTime means we can't tell how long the pod has been
+				// unready, so don't flag it - kubelet sets this field in practice.
+				if cond.LastTransitionTime.IsZero() {
+					continue
+				}
+				if time.Since(cond.LastTransitionTime.Time) > grace {
+					msg := fmt.Sprintf("Pod %s/%s is running but not ready", p.Namespace, p.Name)
+					if hasOverride(workloadAnnotations, "readinessProbe") {
+						msg += "; custom readiness probe configuration is in effect"
+					}
+					if hasOverride(workloadAnnotations, "startupProbe") {
+						msg += "; custom startup probe configuration is in effect"
+					}
+					issues = append(issues, podIssue{
+						workload:      workload,
+						severity:      severityFailing,
+						issueType:     issueNotReady,
+						message:       msg,
+						isOldRevision: isOldRevision,
+					})
+					break
+				}
+			}
 		}
 	}
 	return issues
 }
 
+// readinessGracePeriod returns how long the given pod may remain unready before
+// we treat it as failing. It is derived from the pod's startup and readiness
+// probes: a pod that legitimately takes a while to become ready (long initial
+// delay, lenient failure threshold, or a slow probe cadence) should not be
+// flagged before its probes would normally have settled. The value is the
+// worst-case settling time across all containers, floored at
+// defaultReadinessGracePeriod so we never flag a pod more aggressively than the
+// fixed default and so pods without probes still get a sensible grace period.
+func readinessGracePeriod(p corev1.Pod) time.Duration {
+	grace := defaultReadinessGracePeriod
+	for _, c := range p.Spec.Containers {
+		// Kubelet holds off readiness until the startup probe passes, so the budgets add.
+		d := probeSettlingTime(c.StartupProbe) + probeSettlingTime(c.ReadinessProbe)
+		if d > grace {
+			grace = d
+		}
+	}
+	return grace
+}
+
+// probeSettlingTime returns the worst-case time for a probe to pass or give up,
+// and zero for a nil probe.
+func probeSettlingTime(probe *corev1.Probe) time.Duration {
+	if probe == nil {
+		return 0
+	}
+
+	period := probe.PeriodSeconds
+	if period <= 0 {
+		period = defaultProbePeriodSeconds
+	}
+	timeout := probe.TimeoutSeconds
+	if timeout <= 0 {
+		timeout = defaultProbeTimeoutSeconds
+	}
+	threshold := probe.FailureThreshold
+	if threshold <= 0 {
+		threshold = defaultProbeFailureThreshold
+	}
+
+	// Initial delay, plus failureThreshold attempts each costing period plus timeout.
+	return time.Duration(probe.InitialDelaySeconds)*time.Second +
+		time.Duration(threshold)*time.Duration(period+timeout)*time.Second
+}
+
 // diagnoseContainers checks a list of container statuses for known error states and
 // returns a podIssue for each one found.
-func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevision bool, workloadAnnotations map[string]string) []podIssue {
+func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, isOldRevision bool, workloadAnnotations map[string]string) []podIssue {
 	var issues []podIssue
 	for _, c := range statuses {
 		if c.State.Waiting != nil {
 			switch c.State.Waiting.Reason {
-			case "CrashLoopBackOff":
+			case waitingCrashLoopBackOff:
 				msg := fmt.Sprintf("Pod %s/%s has crash looping container: %s", p.Namespace, p.Name, c.Name)
 				var termReason string
 				var exitCode int32
@@ -907,16 +1025,16 @@ func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevi
 					severity:          severityFailing,
 					issueType:         issueCrashLoopBackOff,
 					message:           msg,
-					isOldRevision:     oldRevision,
+					isOldRevision:     isOldRevision,
 					terminationReason: termReason,
 					exitCode:          exitCode,
 				})
-			case "ImagePullBackOff", "ErrImagePull":
+			case waitingImagePullBackOff, waitingErrImagePull:
 				issues = append(issues, podIssue{
 					severity:      severityFailing,
 					issueType:     issueImagePull,
-					message:       fmt.Sprintf("Pod %s/%s failed to pull container image for: %s", p.Namespace, p.Name, c.Name),
-					isOldRevision: oldRevision,
+					message:       fmt.Sprintf("Pod %s/%s failed to pull container image %q for container %s", p.Namespace, p.Name, c.Image, c.Name),
+					isOldRevision: isOldRevision,
 				})
 			}
 		}
@@ -926,7 +1044,7 @@ func diagnoseContainers(p corev1.Pod, statuses []corev1.ContainerStatus, oldRevi
 					severity:      severityFailing,
 					issueType:     issueTerminated,
 					message:       fmt.Sprintf("Pod %s/%s has terminated container: %s", p.Namespace, p.Name, c.Name),
-					isOldRevision: oldRevision,
+					isOldRevision: isOldRevision,
 				})
 			}
 		}
@@ -949,36 +1067,60 @@ func podMatchesRevision(p corev1.Pod, currentRevision string) bool {
 
 // currentDeploymentRevision returns the pod-template-hash of the active ReplicaSet
 // for the given Deployment. Returns empty string if it cannot be determined.
+// Only called when the Deployment is unhealthy. The List call goes through
+// the controller-runtime informer cache, not directly to the API server.
 func (m *statusManager) currentDeploymentRevision(dep *appsv1.Deployment) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	rsList := &appsv1.ReplicaSetList{}
 	s, err := metav1.LabelSelectorAsMap(dep.Spec.Selector)
 	if err != nil {
 		log.WithValues("reason", err).Info("Failed to parse deployment selector for revision lookup")
 		return ""
 	}
-	err = m.client.List(context.TODO(), rsList, client.MatchingLabels(s), client.InNamespace(dep.Namespace))
+	err = m.client.List(ctx, rsList, client.MatchingLabels(s), client.InNamespace(dep.Namespace))
 	if err != nil {
 		log.WithValues("reason", err).Info("Failed to list ReplicaSets for revision lookup")
 		return ""
 	}
 
-	// Find the ReplicaSet that is owned by this Deployment and has active replicas.
+	// During a rolling update both the new and old ReplicaSets can have
+	// Replicas > 0, so "has running pods" doesn't identify the active one.
+	// The active ReplicaSet is the one with the highest revision, recorded in
+	// the deployment.kubernetes.io/revision annotation - same idea as picking
+	// the max ControllerRevision in currentDaemonSetRevision.
+	var maxRevision int64
+	var currentHash string
 	for _, rs := range rsList.Items {
-		if !isOwnedBy(rs.OwnerReferences, dep.UID) {
+		// The Deployment selector can match ReplicaSets it doesn't own (e.g. from a
+		// previous Deployment with the same selector). Filter to ReplicaSets owned
+		// by this specific Deployment via the controller owner reference.
+		if ref := metav1.GetControllerOf(&rs); ref == nil || ref.UID != dep.UID {
 			continue
 		}
-		if rs.Status.Replicas > 0 {
-			return rs.Labels[appsv1.DefaultDeploymentUniqueLabelKey]
+		rev, err := strconv.ParseInt(rs.Annotations[deploymentRevisionAnnotation], 10, 64)
+		if err != nil {
+			continue
+		}
+		if rev > maxRevision {
+			maxRevision = rev
+			currentHash = rs.Labels[appsv1.DefaultDeploymentUniqueLabelKey]
 		}
 	}
-	return ""
+	return currentHash
 }
 
 // currentDaemonSetRevision returns the controller-revision-hash of the most recent
 // ControllerRevision for the given DaemonSet. Returns empty string if it cannot be determined.
+// Only called when the DaemonSet is unhealthy. The List call goes through
+// the controller-runtime informer cache, not directly to the API server.
 func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	revList := &appsv1.ControllerRevisionList{}
-	err := m.client.List(context.TODO(), revList, client.InNamespace(ds.Namespace))
+	err := m.client.List(ctx, revList, client.InNamespace(ds.Namespace))
 	if err != nil {
 		log.WithValues("reason", err).Info("Failed to list ControllerRevisions for revision lookup")
 		return ""
@@ -987,7 +1129,10 @@ func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
 	var maxRevision int64
 	var currentHash string
 	for _, rev := range revList.Items {
-		if !isOwnedBy(rev.OwnerReferences, ds.UID) {
+		// ControllerRevisions in the namespace are shared across all DaemonSets and
+		// StatefulSets there. Filter to ones owned by this specific DaemonSet via
+		// the controller owner reference.
+		if ref := metav1.GetControllerOf(&rev); ref == nil || ref.UID != ds.UID {
 			continue
 		}
 		if rev.Revision > maxRevision {
@@ -996,15 +1141,6 @@ func (m *statusManager) currentDaemonSetRevision(ds *appsv1.DaemonSet) string {
 		}
 	}
 	return currentHash
-}
-
-func isOwnedBy(refs []metav1.OwnerReference, uid types.UID) bool {
-	for _, ref := range refs {
-		if ref.UID == uid && ref.Controller != nil && *ref.Controller {
-			return true
-		}
-	}
-	return false
 }
 
 func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondition) {

@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gatewayapiv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
@@ -49,8 +50,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rsecret "github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -88,7 +91,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instance)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, false, "")
+		instance, err = eutils.GetManager(ctx, c, false, "")
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -102,7 +105,7 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err := c.Create(ctx, instanceA)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, true, tenantANamespace)
+		instance, err = eutils.GetManager(ctx, c, true, tenantANamespace)
 		Expect(err).NotTo(HaveOccurred())
 
 		tenantBNamespace := "tenant-b"
@@ -112,14 +115,14 @@ var _ = Describe("Manager controller tests", func() {
 		}
 		err = c.Create(ctx, instanceB)
 		Expect(err).NotTo(HaveOccurred())
-		instance, err = GetManager(ctx, c, true, tenantBNamespace)
+		instance, err = eutils.GetManager(ctx, c, true, tenantBNamespace)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	It("should return expected error when querying namespace that does not contain a manager instance", func() {
+	It("should return a nil instance and no error when querying a namespace that does not contain a manager instance", func() {
 		nsWithoutManager := "non-manager-ns"
-		instance, err := GetManager(ctx, c, true, nsWithoutManager)
-		Expect(kerror.IsNotFound(err)).To(BeTrue())
+		instance, err := eutils.GetManager(ctx, c, true, nsWithoutManager)
+		Expect(err).NotTo(HaveOccurred())
 		Expect(instance).To(BeNil())
 	})
 
@@ -165,6 +168,7 @@ var _ = Describe("Manager controller tests", func() {
 				opts: options.ControllerOptions{
 					ClusterDomain:    clusterDomain,
 					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 
@@ -200,12 +204,6 @@ var _ = Describe("Manager controller tests", func() {
 				},
 			)).NotTo(HaveOccurred())
 
-			Expect(c.Create(ctx, &operatorv1.Compliance{
-				ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-				Status: operatorv1.ComplianceStatus{
-					State: operatorv1.TigeraStatusReady,
-				},
-			})).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{Name: common.TigeraPrometheusNamespace},
 			})).NotTo(HaveOccurred())
@@ -218,9 +216,6 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 			caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
 			Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
-			complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
-			Expect(err).NotTo(HaveOccurred())
-			Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 			pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 			Expect(err).NotTo(HaveOccurred())
 			Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -438,7 +433,6 @@ var _ = Describe("Manager controller tests", func() {
 		var r ReconcileManager
 		var mockStatus *status.MockStatus
 		var licenseKey *v3.LicenseKey
-		var compliance *operatorv1.Compliance
 		var certificateManager certificatemanager.CertificateManager
 		var installation *operatorv1.Installation
 
@@ -454,6 +448,7 @@ var _ = Describe("Manager controller tests", func() {
 				tierWatchReady:  &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 
@@ -471,9 +466,7 @@ var _ = Describe("Manager controller tests", func() {
 			licenseKey = &v3.LicenseKey{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
 				Status: v3.LicenseKeyStatus{
-					Features: []string{
-						common.ComplianceFeature,
-					},
+					Features: []string{},
 				},
 			}
 			Expect(c.Create(ctx, licenseKey)).NotTo(HaveOccurred())
@@ -538,23 +531,12 @@ var _ = Describe("Manager controller tests", func() {
 				mockStatus.On("ReadyToMonitor")
 				mockStatus.On("SetMetaData", mock.Anything).Return()
 
-				compliance = &operatorv1.Compliance{
-					ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
-					Status: operatorv1.ComplianceStatus{
-						State: operatorv1.TigeraStatusReady,
-					},
-				}
-				Expect(c.Create(ctx, compliance)).NotTo(HaveOccurred())
-
 				// Provision certificates that the controller will query as part of the test.
 				var err error
 				certificateManager, err = certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 				Expect(err).NotTo(HaveOccurred())
 				caSecret := certificateManager.KeyPair().Secret(common.OperatorNamespace())
 				Expect(c.Create(ctx, caSecret)).NotTo(HaveOccurred())
-				complianceKp, err := certificateManager.GetOrCreateKeyPair(c, render.ComplianceServerCertSecret, common.OperatorNamespace(), []string{render.ComplianceServerCertSecret})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(c.Create(ctx, complianceKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
 				pcapKp, err := certificateManager.GetOrCreateKeyPair(c, render.PacketCaptureServerCert, common.OperatorNamespace(), []string{render.PacketCaptureServerCert})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(c.Create(ctx, pcapKp.Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
@@ -582,6 +564,64 @@ var _ = Describe("Manager controller tests", func() {
 				// Mark that watches were successful.
 				r.licenseAPIReady.MarkAsReady()
 				r.tierWatchReady.MarkAsReady()
+			})
+
+			// These cover the controller's half: reading the ConfigMap and handing the
+			// value to the renderer. The namespaced Role is where it is observable.
+			Context("RBAC management UI feature gate", func() {
+				roleKey := client.ObjectKey{Name: render.ManagerClusterRole, Namespace: common.CalicoNamespace}
+
+				writeGate := func(value string) {
+					Expect(c.Create(ctx, &corev1.ConfigMap{
+						ObjectMeta: metav1.ObjectMeta{
+							Name:      rbacmanagement.ConfigMapName,
+							Namespace: common.CalicoNamespace,
+						},
+						Data: map[string]string{rbacmanagement.ConfigMapKey: value},
+					})).NotTo(HaveOccurred())
+				}
+
+				// idpRoleExists reconciles and reports whether the gated Role landed.
+				idpRoleExists := func() bool {
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).NotTo(HaveOccurred())
+
+					err = c.Get(ctx, roleKey, &rbacv1.Role{})
+					if err != nil && !kerror.IsNotFound(err) {
+						Expect(err).NotTo(HaveOccurred())
+					}
+					return err == nil
+				}
+
+				It("withholds the namespaced Role when the admin has not created the ConfigMap", func() {
+					Expect(idpRoleExists()).To(BeFalse())
+				})
+
+				It("renders the namespaced Role once the admin enables the feature", func() {
+					writeGate("true")
+					Expect(idpRoleExists()).To(BeTrue())
+				})
+
+				It("withholds the namespaced Role when the admin sets the value to false", func() {
+					writeGate("false")
+					Expect(idpRoleExists()).To(BeFalse())
+				})
+
+				// An unreadable ConfigMap is unknown state, not absent, so it degrades
+				// rather than rendering as disabled.
+				It("degrades and requeues when the ConfigMap cannot be read", func() {
+					readErr := fmt.Errorf("the API server is having a bad day")
+					r.client = failingGateReadClient{Client: c, err: readErr}
+					// The shared mockStatus expects a full reconcile, which this returns
+					// early from, so assert the one call.
+					mockStatus.On("SetDegraded", operatorv1.ResourceReadError,
+						"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything).Return().Once()
+
+					_, err := r.Reconcile(ctx, reconcile.Request{})
+					Expect(err).To(MatchError(readErr))
+					mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceReadError,
+						"Error reading the RBAC management UI ConfigMap", readErr.Error(), mock.Anything)
+				})
 			})
 
 			It("should reconcile legacy manager namespace", func() {
@@ -626,22 +666,22 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(dashboard.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							components.ComponentUIAPIs.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							components.ComponentUIAPIs.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s:%s",
 							components.TigeraImagePath,
-							components.ComponentManagerProxy.Image,
-							components.ComponentManagerProxy.Version)))
+							components.ComponentTigeraCalico.Image,
+							components.ComponentTigeraCalico.Version)))
 				})
 				It("should use images from imageset", func() {
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()
@@ -650,9 +690,7 @@ var _ = Describe("Manager controller tests", func() {
 						Spec: operatorv1.ImageSetSpec{
 							Images: []operatorv1.Image{
 								{Image: "tigera/manager", Digest: "sha256:managerhash"},
-								{Image: "tigera/ui-apis", Digest: "sha256:uiapihash"},
-								{Image: "tigera/voltron", Digest: "sha256:voltronhash"},
-								{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+								{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 							},
 						},
 					})).ToNot(HaveOccurred())
@@ -680,22 +718,22 @@ var _ = Describe("Manager controller tests", func() {
 					Expect(dashboard.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							"sha256:uiapihash")))
+							components.ComponentTigeraCalico.Image,
+							"sha256:deadbeef0123456789")))
 					uiAPIContainer := test.GetContainer(d.Spec.Template.Spec.Containers, render.UIAPIsName)
 					Expect(uiAPIContainer).ToNot(BeNil())
 					Expect(uiAPIContainer.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentUIAPIs.Image,
-							"sha256:uiapihash")))
+							components.ComponentTigeraCalico.Image,
+							"sha256:deadbeef0123456789")))
 					vltrn := test.GetContainer(d.Spec.Template.Spec.Containers, render.VoltronName)
 					Expect(vltrn).ToNot(BeNil())
 					Expect(vltrn.Image).To(Equal(
 						fmt.Sprintf("some.registry.org/%s%s@%s",
 							components.TigeraImagePath,
-							components.ComponentManagerProxy.Image,
-							"sha256:voltronhash")))
+							components.ComponentTigeraCalico.Image,
+							"sha256:deadbeef0123456789")))
 				})
 			})
 
@@ -716,6 +754,7 @@ var _ = Describe("Manager controller tests", func() {
 						tierWatchReady:  readyFlag,
 						opts: options.ControllerOptions{
 							DetectedProvider: operatorv1.ProviderNone,
+							Variant:          operatorv1.CalicoEnterprise,
 						},
 					}
 				})
@@ -745,54 +784,6 @@ var _ = Describe("Manager controller tests", func() {
 					mockStatus.AssertExpectations(GinkgoT())
 				})
 
-				It("should degrade if compliance CR and compliance-enabled license is present, but compliance is not ready", func() {
-					compliance.Status.State = ""
-					Expect(c.Status().Update(ctx, compliance)).NotTo(HaveOccurred())
-					mockStatus = &status.MockStatus{}
-					mockStatus.On("OnCRFound").Return()
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return()
-					mockStatus.On("SetMetaData", mock.Anything).Return()
-					r.status = mockStatus
-
-					_, err := r.Reconcile(ctx, reconcile.Request{})
-
-					Expect(err).NotTo(HaveOccurred())
-					mockStatus.AssertExpectations(GinkgoT())
-				})
-
-				DescribeTable("should not degrade when compliance CR or compliance license feature is not present/active", func(crPresent, licenseFeatureActive bool) {
-					mockStatus = &status.MockStatus{}
-					mockStatus.On("IsAvailable").Return(true)
-					mockStatus.On("OnCRFound").Return()
-					mockStatus.On("AddDeployments", mock.Anything)
-					mockStatus.On("RemoveDeployments", []types.NamespacedName{{Name: render.LegacyManagerDeploymentName, Namespace: render.LegacyManagerNamespace}}).Return()
-					mockStatus.On("ClearDegraded")
-					mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
-					mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
-					mockStatus.On("SetDegraded", operatorv1.ResourceNotReady, "Compliance is not ready", mock.Anything, mock.Anything).Return().Maybe()
-					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything)
-					mockStatus.On("ReadyToMonitor")
-					mockStatus.On("SetMetaData", mock.Anything).Return()
-					r.status = mockStatus
-
-					if !crPresent {
-						Expect(c.Delete(ctx, compliance)).NotTo(HaveOccurred())
-					}
-					if !licenseFeatureActive {
-						licenseKey.Status.Features = []string{}
-						Expect(c.Update(ctx, licenseKey)).NotTo(HaveOccurred())
-					}
-
-					_, err := r.Reconcile(ctx, reconcile.Request{})
-
-					// Expect no error, and no degraded status from compliance
-					Expect(err).NotTo(HaveOccurred())
-					mockStatus.AssertExpectations(GinkgoT())
-				},
-					Entry("CR and license feature not present/active", false, false),
-					Entry("CR not present, license feature active", false, true),
-					Entry("CR present, license feature inactive", true, false),
-				)
 			})
 
 			Context("Reconcile for Condition status", func() {
@@ -821,7 +812,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -845,7 +836,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(0))
@@ -889,7 +880,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -950,7 +941,7 @@ var _ = Describe("Manager controller tests", func() {
 						Namespace: "",
 					}})
 					Expect(err).ShouldNot(HaveOccurred())
-					instance, err := GetManager(ctx, r.client, false, "")
+					instance, err := eutils.GetManager(ctx, r.client, false, "")
 					Expect(err).ShouldNot(HaveOccurred())
 
 					Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -1100,29 +1091,6 @@ var _ = Describe("Manager controller tests", func() {
 				})
 			})
 
-			Context("FIPS reconciliation", func() {
-				BeforeEach(func() {
-					fipsEnabled := operatorv1.FIPSModeEnabled
-					installation.Spec.FIPSMode = &fipsEnabled
-					Expect(c.Update(
-						ctx,
-						installation,
-					)).NotTo(HaveOccurred())
-				})
-				It("should not require presence of ElasticSearch ConfigMap", func() {
-					Expect(c.Delete(ctx, relasticsearch.NewClusterConfig("cluster", 1, 1, 1).ConfigMap())).NotTo(HaveOccurred())
-					elasticConfigMapKey := client.ObjectKey{
-						Name:      relasticsearch.ClusterConfigConfigMapName,
-						Namespace: common.OperatorNamespace(),
-					}
-					elasticConfigMap := corev1.ConfigMap{}
-					Expect(c.Get(ctx, elasticConfigMapKey, &elasticConfigMap)).To(HaveOccurred())
-
-					_, err := r.Reconcile(ctx, reconcile.Request{})
-					Expect(err).ShouldNot(HaveOccurred())
-				})
-			})
-
 			Context("non-cluster host", func() {
 				It("should read NonClusterHost resource", func() {
 					nonclusterhost := &operatorv1.NonClusterHost{
@@ -1268,6 +1236,28 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
+			It("should degrade when spec.ingressGateway is set on a tenant Manager", func() {
+				manager := &operatorv1.Manager{}
+				Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure", Namespace: tenantANamespace}, manager)).NotTo(HaveOccurred())
+				manager.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}
+				Expect(c.Update(ctx, manager)).NotTo(HaveOccurred())
+
+				mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, "spec.ingressGateway is not supported in multi-tenant clusters", mock.Anything, mock.Anything).Return()
+
+				result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(result).To(Equal(reconcile.Result{}))
+
+				mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.InvalidConfigurationError, "spec.ingressGateway is not supported in multi-tenant clusters", mock.Anything, mock.Anything)
+
+				// Nothing gateway-related is rendered for the tenant.
+				gw := &gatewayapiv1.Gateway{
+					TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+					ObjectMeta: metav1.ObjectMeta{Name: ManagerGatewayResourcePrefix + "-gateway", Namespace: tenantANamespace},
+				}
+				Expect(kerror.IsNotFound(test.GetResource(c, gw))).To(BeTrue())
+			})
+
 			It("should reconcile only if a namespace is provided", func() {
 				_, err := r.Reconcile(ctx, reconcile.Request{})
 				Expect(err).ShouldNot(HaveOccurred())
@@ -1354,6 +1344,24 @@ var _ = Describe("Manager controller tests", func() {
 				err = test.GetResource(c, &clusterRoleBinding)
 				Expect(kerror.IsNotFound(err)).Should(BeFalse())
 				Expect(clusterRoleBinding.Subjects).To(HaveLen(2))
+			})
+
+			// Multi-tenant force-disables the RBAC management UI on the ui-apis side, so
+			// the controller must resolve the switch to off even with the admin's gate on.
+			It("withholds the RBAC management UI access even when the admin enables the gate", func() {
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      rbacmanagement.ConfigMapName,
+						Namespace: common.CalicoNamespace,
+					},
+					Data: map[string]string{rbacmanagement.ConfigMapKey: "true"},
+				})).NotTo(HaveOccurred())
+
+				_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: tenantANamespace}})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				err = c.Get(ctx, client.ObjectKey{Name: render.ManagerClusterRole, Namespace: tenantANamespace}, &rbacv1.Role{})
+				Expect(kerror.IsNotFound(err)).To(BeTrue(), "expected no RBAC management UI Role in a tenant namespace")
 			})
 
 			Context("with both OSS and Enterprise managed clusters", func() {
@@ -1502,7 +1510,54 @@ var _ = Describe("Manager controller tests", func() {
 			})
 		})
 	})
+
+	Context("ensureGatewayNamespace", func() {
+		var r ReconcileManager
+
+		BeforeEach(func() {
+			r = ReconcileManager{client: c, scheme: scheme}
+		})
+
+		It("should create the namespace when it does not exist", func() {
+			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
+
+			ns := &corev1.Namespace{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			Expect(ns.Labels).To(HaveKeyWithValue("name", "ns-a"))
+			Expect(ns.OwnerReferences).To(BeEmpty())
+		})
+
+		It("should leave an existing namespace untouched", func() {
+			existing := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "ns-a",
+					Labels: map[string]string{"team": "netsec"},
+				},
+			}
+			Expect(c.Create(ctx, existing)).NotTo(HaveOccurred())
+
+			Expect(r.ensureGatewayNamespace(ctx, "ns-a")).NotTo(HaveOccurred())
+
+			ns := &corev1.Namespace{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			Expect(ns.Labels).To(Equal(map[string]string{"team": "netsec"}))
+		})
+	})
 })
+
+// failingGateReadClient fails the read of the gate ConfigMap and passes everything else
+// through, to distinguish an unreadable ConfigMap from an absent one.
+type failingGateReadClient struct {
+	client.Client
+	err error
+}
+
+func (f failingGateReadClient) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+	if _, ok := obj.(*corev1.ConfigMap); ok && key.Name == rbacmanagement.ConfigMapName {
+		return f.err
+	}
+	return f.Client.Get(ctx, key, obj, opts...)
+}
 
 func assertSANs(secret *corev1.Secret, expectedSAN string) {
 	var cert *x509.Certificate

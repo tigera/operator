@@ -23,7 +23,9 @@ import (
 	v1 "github.com/tigera/operator/api/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	policyv1 "k8s.io/api/policy/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/ptr"
 
@@ -135,11 +137,14 @@ var _ = Describe("Common components render tests", func() {
 
 	DescribeTable("check for unhandled fields",
 		func(overrides any, expectUnhandled bool, allowedExtraFields ...string) {
-			// Call applyReplicatedPodResourceOverrides to discover all the fields that
+			// Wrap getField so we can observe which paths the production
+			// code accesses, then run it to discover all the fields that
 			// we handle.
+			recorded, restore := recordHandledFields()
+			defer restore()
 			r := &replicatedPodResource{}
 			applyReplicatedPodResourceOverrides(r, overrides)
-			handledFields := append(overrideFieldsHandledInLastApplyCall, allowedExtraFields...)
+			handledFields := append(recorded(), allowedExtraFields...)
 
 			// Now traverse the structure to find any unhandled fields.
 			unhandledFields := findUnhandled(handledFields, "", reflect.TypeOf(overrides))
@@ -155,11 +160,6 @@ var _ = Describe("Common components render tests", func() {
 		Entry("CalicoNodeDaemonSet", &v1.CalicoNodeDaemonSet{}, false),
 		Entry("CalicoNodeWindowsDaemonSet", &v1.CalicoNodeWindowsDaemonSet{}, false),
 		Entry("CalicoWindowsUpgradeDaemonSet", &v1.CalicoWindowsUpgradeDaemonSet{}, false),
-		Entry("ComplianceBenchmarkerDaemonSet", &v1.ComplianceBenchmarkerDaemonSet{}, false),
-		Entry("ComplianceControllerDeployment", &v1.ComplianceControllerDeployment{}, false),
-		Entry("ComplianceReporterPodTemplate", &v1.ComplianceReporterPodTemplate{}, false),
-		Entry("ComplianceServerDeployment", &v1.ComplianceServerDeployment{}, false),
-		Entry("ComplianceSnapshotterDeployment", &v1.ComplianceSnapshotterDeployment{}, false),
 		Entry("CSINodeDriverDaemonSet", &v1.CSINodeDriverDaemonSet{}, false),
 		Entry("DashboardsJob", &v1.DashboardsJob{}, false),
 		Entry("DexDeployment", &v1.DexDeployment{}, false),
@@ -181,7 +181,7 @@ var _ = Describe("Common components render tests", func() {
 		Entry("EKSLogForwarderDeployment", &v1.EKSLogForwarderDeployment{}, false),
 		Entry("ElasticsearchMetricsDeployment", &v1.ElasticsearchMetricsDeployment{}, false),
 		Entry("ESGatewayDeployment", &v1.ESGatewayDeployment{}, false),
-		Entry("FluentdDaemonSet", &v1.FluentdDaemonSet{}, false),
+		Entry("FluentBitDaemonSet", &v1.FluentBitDaemonSet{}, false),
 		Entry("GatewayCertgenJob", &v1.GatewayCertgenJob{}, false),
 		Entry("GatewayControllerDeployment", &v1.GatewayControllerDeployment{}, false),
 		Entry("GatewayDeployment", &v1.GatewayDeployment{}, false),
@@ -1268,7 +1268,7 @@ var _ = Describe("Common components render tests", func() {
 			d := appsv1.Deployment{}
 			d.Spec.Template.Spec.Containers = []corev1.Container{
 				{
-					Name:  "compliance-server",
+					Name:  "calico-manager",
 					Image: "test-image",
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/health"}},
@@ -1277,13 +1277,13 @@ var _ = Describe("Common components render tests", func() {
 			}
 
 			period := int32(30)
-			overrides := &v1.ComplianceServerDeployment{
-				Spec: &v1.ComplianceServerDeploymentSpec{
-					Template: &v1.ComplianceServerDeploymentPodTemplateSpec{
-						Spec: &v1.ComplianceServerDeploymentPodSpec{
-							Containers: []v1.ComplianceServerDeploymentContainer{
+			overrides := &v1.ManagerDeployment{
+				Spec: &v1.ManagerDeploymentSpec{
+					Template: &v1.ManagerDeploymentPodTemplateSpec{
+						Spec: &v1.ManagerDeploymentPodSpec{
+							Containers: []v1.ManagerDeploymentContainer{
 								{
-									Name:           "compliance-server",
+									Name:           "calico-manager",
 									ReadinessProbe: &v1.ProbeOverride{PeriodSeconds: &period},
 								},
 							},
@@ -1300,7 +1300,7 @@ var _ = Describe("Common components render tests", func() {
 			d := appsv1.Deployment{}
 			d.Spec.Template.Spec.Containers = []corev1.Container{
 				{
-					Name:  "compliance-server",
+					Name:  "calico-manager",
 					Image: "test-image",
 					ReadinessProbe: &corev1.Probe{
 						ProbeHandler: corev1.ProbeHandler{HTTPGet: &corev1.HTTPGetAction{Path: "/health"}},
@@ -1315,13 +1315,13 @@ var _ = Describe("Common components render tests", func() {
 			overrideResources := corev1.ResourceRequirements{
 				Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("500m")},
 			}
-			overrides := &v1.ComplianceServerDeployment{
-				Spec: &v1.ComplianceServerDeploymentSpec{
-					Template: &v1.ComplianceServerDeploymentPodTemplateSpec{
-						Spec: &v1.ComplianceServerDeploymentPodSpec{
-							Containers: []v1.ComplianceServerDeploymentContainer{
+			overrides := &v1.ManagerDeployment{
+				Spec: &v1.ManagerDeploymentSpec{
+					Template: &v1.ManagerDeploymentPodTemplateSpec{
+						Spec: &v1.ManagerDeploymentPodSpec{
+							Containers: []v1.ManagerDeploymentContainer{
 								{
-									Name:           "compliance-server",
+									Name:           "calico-manager",
 									ReadinessProbe: &v1.ProbeOverride{PeriodSeconds: &period},
 									LivenessProbe:  &v1.ProbeOverride{PeriodSeconds: &period},
 									Resources:      &overrideResources,
@@ -1339,17 +1339,171 @@ var _ = Describe("Common components render tests", func() {
 			Expect(ann).To(ContainSubstring("resources"))
 		})
 
+		It("should apply a startup probe override and set the annotation", func() {
+			ds := appsv1.DaemonSet{}
+			ds.Spec.Template.Spec.Containers = []corev1.Container{
+				{
+					Name:  "calico-node",
+					Image: "test-image",
+					StartupProbe: &corev1.Probe{
+						ProbeHandler:     corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"/bin/calico-node", "-felix-ready"}}},
+						PeriodSeconds:    2,
+						TimeoutSeconds:   5,
+						FailureThreshold: 150,
+					},
+				},
+			}
+
+			period := int32(5)
+			threshold := int32(60)
+			overrides := &v1.CalicoNodeDaemonSet{
+				Spec: &v1.CalicoNodeDaemonSetSpec{
+					Template: &v1.CalicoNodeDaemonSetPodTemplateSpec{
+						Spec: &v1.CalicoNodeDaemonSetPodSpec{
+							Containers: []v1.CalicoNodeDaemonSetContainer{
+								{
+									Name:         "calico-node",
+									StartupProbe: &v1.ProbeOverride{PeriodSeconds: &period, FailureThreshold: &threshold},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			ApplyDaemonSetOverrides(&ds, overrides)
+			sp := ds.Spec.Template.Spec.Containers[0].StartupProbe
+			Expect(sp.PeriodSeconds).To(Equal(int32(5)))
+			Expect(sp.FailureThreshold).To(Equal(int32(60)))
+			Expect(sp.TimeoutSeconds).To(Equal(int32(5)))
+			Expect(sp.Exec.Command).To(Equal([]string{"/bin/calico-node", "-felix-ready"}))
+			Expect(ds.Annotations).To(HaveKeyWithValue(CustomOverridesAnnotation, "startupProbe"))
+		})
+
 		It("should not set annotation when no probe or resource overrides", func() {
 			d := appsv1.Deployment{}
 			d.Spec.Template.Spec.Containers = []corev1.Container{
-				{Name: "compliance-server", Image: "test-image"},
+				{Name: "calico-manager", Image: "test-image"},
 			}
-			overrides := &v1.ComplianceServerDeployment{
-				Spec: &v1.ComplianceServerDeploymentSpec{},
+			overrides := &v1.ManagerDeployment{
+				Spec: &v1.ManagerDeploymentSpec{},
 			}
 			ApplyDeploymentOverrides(&d, overrides)
 			Expect(d.Annotations).NotTo(HaveKey(CustomOverridesAnnotation))
 		})
+	})
+})
+
+var _ = Describe("ApplyPodDisruptionBudgetOverrides", func() {
+	var pdb *policyv1.PodDisruptionBudget
+
+	BeforeEach(func() {
+		pdb = &policyv1.PodDisruptionBudget{
+			ObjectMeta: metav1.ObjectMeta{Name: "calico-typha", Namespace: "calico-system"},
+			Spec: policyv1.PodDisruptionBudgetSpec{
+				MaxUnavailable: ptr.To(intstr.FromInt(1)),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{"k8s-app": "calico-typha"},
+				},
+			},
+		}
+	})
+
+	It("does nothing when overrides is nil", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, nil)
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+	})
+
+	It("does not panic on nil PDB", func() {
+		Expect(func() {
+			ApplyPodDisruptionBudgetOverrides(nil, &v1.PodDisruptionBudgetOverride{
+				Spec: &v1.PodDisruptionBudgetOverrideSpec{
+					MinAvailable: ptr.To(intstr.FromInt(2)),
+				},
+			})
+		}).ToNot(Panic())
+	})
+
+	It("applies only UnhealthyPodEvictionPolicy and preserves default MaxUnavailable", func() {
+		policy := policyv1.AlwaysAllow
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				UnhealthyPodEvictionPolicy: &policy,
+			},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(*pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(policyv1.AlwaysAllow))
+	})
+
+	It("clears MaxUnavailable when MinAvailable is set", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable: ptr.To(intstr.FromInt(2)),
+			},
+		})
+		Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
+		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+	})
+
+	It("clears MinAvailable when MaxUnavailable is set to a percentage", func() {
+		pdb.Spec.MaxUnavailable = nil
+		pdb.Spec.MinAvailable = ptr.To(intstr.FromInt(3))
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MaxUnavailable: ptr.To(intstr.FromString("50%")),
+			},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromString("50%"))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+	})
+
+	It("applies MinAvailable + UnhealthyPodEvictionPolicy together", func() {
+		policy := policyv1.AlwaysAllow
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable:               ptr.To(intstr.FromInt(2)),
+				UnhealthyPodEvictionPolicy: &policy,
+			},
+		})
+		Expect(pdb.Spec.MinAvailable).To(Equal(ptr.To(intstr.FromInt(2))))
+		Expect(pdb.Spec.MaxUnavailable).To(BeNil())
+		Expect(*pdb.Spec.UnhealthyPodEvictionPolicy).To(Equal(policyv1.AlwaysAllow))
+	})
+
+	It("never mutates the selector", func() {
+		original := pdb.Spec.Selector.DeepCopy()
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Spec: &v1.PodDisruptionBudgetOverrideSpec{
+				MinAvailable: ptr.To(intstr.FromInt(2)),
+			},
+		})
+		Expect(pdb.Spec.Selector).To(Equal(original))
+	})
+
+	It("merges metadata labels and annotations onto the PDB", func() {
+		pdb.Labels = map[string]string{"existing": "label"}
+		pdb.Annotations = map[string]string{"existing": "ann"}
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Metadata: &v1.Metadata{
+				Labels:      map[string]string{"new": "label"},
+				Annotations: map[string]string{"new": "ann"},
+			},
+		})
+		Expect(pdb.Labels).To(Equal(map[string]string{"existing": "label", "new": "label"}))
+		Expect(pdb.Annotations).To(Equal(map[string]string{"existing": "ann", "new": "ann"}))
+	})
+
+	It("treats a nil Spec as no spec override", func() {
+		ApplyPodDisruptionBudgetOverrides(pdb, &v1.PodDisruptionBudgetOverride{
+			Metadata: &v1.Metadata{Labels: map[string]string{"a": "b"}},
+		})
+		Expect(pdb.Spec.MaxUnavailable).To(Equal(ptr.To(intstr.FromInt(1))))
+		Expect(pdb.Spec.MinAvailable).To(BeNil())
+		Expect(pdb.Spec.UnhealthyPodEvictionPolicy).To(BeNil())
+		Expect(pdb.Labels).To(HaveKeyWithValue("a", "b"))
 	})
 })
 
@@ -1366,6 +1520,28 @@ func addContainer(cs []corev1.Container) []corev1.Container {
 	containers = append(containers, cs[0])
 	containers = append(containers, newContainer)
 	return containers
+}
+
+// recordHandledFields swaps the package-level getField with a wrapper that
+// records each field path accessed, then returns:
+//   - recorded: a closure returning the accumulated paths
+//   - restore: a function (typically deferred) that restores the original getField
+//
+// The wrapper passes raw fieldNames through to the original getField, so any
+// per-type path adjustments made there are unchanged. Recording mirrors those
+// adjustments via normalizeFieldPath so the recorded paths match the field
+// names we actually look up.
+//
+// NOT safe under parallel test execution: the swap mutates package state.
+// All "check for unhandled fields" entries run serially in this Describe.
+func recordHandledFields() (recorded func() []string, restore func()) {
+	var rec []string
+	original := getField
+	getField = func(overrides any, fieldNames ...string) reflect.Value {
+		rec = append(rec, strings.Join(normalizeFieldPath(overrides, fieldNames), "."))
+		return original(overrides, fieldNames...)
+	}
+	return func() []string { return append([]string(nil), rec...) }, func() { getField = original }
 }
 
 // defaultedDaemonSet returns a DaemonSet with its fields populated.

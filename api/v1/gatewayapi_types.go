@@ -17,6 +17,7 @@ limitations under the License.
 package v1
 
 import (
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -78,6 +79,51 @@ type GatewayAPISpec struct {
 	// does not yet have any version of those CRDs.
 	// +optional
 	CRDManagement *CRDManagement `json:"crdManagement,omitempty"`
+
+	// Extensions enables and configures Tigera-built add-ons that sit on top of the
+	// Gateway API data plane.  Each add-on is opt-in: an unset Extensions, an unset
+	// add-on field, and an empty add-on object all leave the add-on disabled.
+	// +optional
+	Extensions *GatewayAPIExtensions `json:"extensions,omitempty"`
+}
+
+// GatewayAPIExtensions enables and configures Tigera-built Gateway API add-ons.
+type GatewayAPIExtensions struct {
+	// WAF enables and configures the Tigera Web Application Firewall (Coraza WASM
+	// + applicationlayer reconcilers).  Default-off semantics: when WAF is nil,
+	// when WAF.State is nil, and when WAF.State is "Disabled", the operator does
+	// not render the WAF env vars or RBAC on calico-kube-controllers.  Set
+	// WAF.State = "Enabled" to turn the feature on.  See design
+	// `tigera/designs#25` (PMREQ-384) for the full surface.
+	// +optional
+	WAF *WAFExtensionSpec `json:"waf,omitempty"`
+}
+
+// WAFExtensionSpec configures the WAF Gateway API add-on.
+type WAFExtensionSpec struct {
+	// State turns the WAF Gateway API add-on on or off.  Default (nil or
+	// "Disabled") means the operator does not render the WAF surface on
+	// calico-kube-controllers.  Set to "Enabled" to opt in.
+	// +optional
+	State *WAFExtensionState `json:"state,omitempty"`
+}
+
+// WAFExtensionState is the on/off enum for the WAF Gateway API add-on.
+// +kubebuilder:validation:Enum=Enabled;Disabled
+type WAFExtensionState string
+
+const (
+	WAFExtensionStateEnabled  WAFExtensionState = "Enabled"
+	WAFExtensionStateDisabled WAFExtensionState = "Disabled"
+)
+
+// IsWAFGatewayExtensionEnabled returns true if spec.extensions.waf.state == Enabled.
+// Unset Extensions, unset WAF, unset State, and explicit Disabled all return false.
+func (s *GatewayAPISpec) IsWAFGatewayExtensionEnabled() bool {
+	if s == nil || s.Extensions == nil || s.Extensions.WAF == nil || s.Extensions.WAF.State == nil {
+		return false
+	}
+	return *s.Extensions.WAF.State == WAFExtensionStateEnabled
 }
 
 type GatewayClassSpec struct {
@@ -508,4 +554,17 @@ type GatewayServiceSpec struct {
 
 	// +optional
 	LoadBalancerIP *string `json:"loadBalancerIP,omitempty"`
+
+	// Patch allows the Service for a gateway to be patched in ways that aren't more explicitly
+	// supported by the fields above.  For example, the following YAML could be used to set the
+	// Service's healthCheckNodePort:
+	//
+	//   patch:
+	//     type: StrategicMerge
+	//     value:
+	//       spec:
+	//         healthCheckNodePort: 12345
+	//
+	// +optional
+	Patch *envoyapi.KubernetesPatchSpec `json:"patch,omitempty"`
 }

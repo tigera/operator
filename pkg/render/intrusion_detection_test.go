@@ -124,7 +124,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.IntrusionDetectionManagedClustersWatchRoleBindingName}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
@@ -156,6 +155,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			{Name: "LINSEED_CLIENT_CERT", Value: "/intrusion-detection-tls/tls.crt"},
 			{Name: "LINSEED_CLIENT_KEY", Value: "/intrusion-detection-tls/tls.key"},
 			{Name: "LINSEED_TOKEN", Value: "/var/run/secrets/kubernetes.io/serviceaccount/token"},
+			{Name: "MANAGEMENT_CLUSTER", Value: "false"},
 		}
 		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(Equal(idcExpectedEnvVars))
 		Expect(idc.Spec.Template.Spec.Containers[0].VolumeMounts).To(HaveLen(2))
@@ -212,7 +212,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 			rbacv1.PolicyRule{
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{"securityeventwebhooks"},
+				Resources: []string{"securityeventwebhooks", "securityeventwebhooks/status"},
 				Verbs:     []string{"get", "list", "watch", "update"},
 			},
 			rbacv1.PolicyRule{
@@ -249,15 +249,27 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			},
 		))
 
-		roleBindingWatchManagedClusters := rtest.GetResource(resources, render.IntrusionDetectionManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-		Expect(roleBindingWatchManagedClusters.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
-		Expect(roleBindingWatchManagedClusters.Subjects).To(ConsistOf([]rbacv1.Subject{
+		// The managed-clusters watch binding should not be rendered on standalone clusters.
+		Expect(rtest.GetResource(resources, render.IntrusionDetectionManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding")).To(BeNil())
+	})
+
+	It("should render the managed-clusters watch ClusterRoleBinding on a management cluster", func() {
+		cfg.ManagementCluster = true
+		component := render.IntrusionDetection(cfg)
+		resources, _ := component.Objects()
+
+		crb := rtest.GetResource(resources, render.IntrusionDetectionManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
+		Expect(crb.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
+		Expect(crb.Subjects).To(ConsistOf([]rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
 				Name:      render.IntrusionDetectionName,
 				Namespace: render.IntrusionDetectionNamespace,
 			},
 		}))
+
+		idc := rtest.GetResource(resources, "intrusion-detection-controller", render.IntrusionDetectionNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(idc.Spec.Template.Spec.Containers[0].Env).To(ContainElement(corev1.EnvVar{Name: "MANAGEMENT_CLUSTER", Value: "true"}))
 	})
 
 	It("should render finalizers rbac resources in the IDS ClusterRole for an Openshift management/standalone cluster", func() {
@@ -301,7 +313,6 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "intrusion-detection-controller", Namespace: "tigera-intrusion-detection"}},
-			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.IntrusionDetectionManagedClustersWatchRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.pod"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkpolicy"}},
 			&v3.GlobalAlertTemplate{ObjectMeta: metav1.ObjectMeta{Name: "policy.globalnetworkset"}},
@@ -689,6 +700,7 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 			cfg.BindNamespaces = []string{tenantANamespace, tenantBNamespace}
 			cfg.Tenant = tenantA
 			cfg.ExternalElastic = true
+			cfg.ManagementCluster = true
 		})
 
 		It("should render multi-tenant resources", func() {
@@ -733,8 +745,8 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 					Action:   v3.Allow,
 					Protocol: &networkpolicy.UDPProtocol,
 					Destination: v3.EntityRule{
-						NamespaceSelector: "projectcalico.org/name == 'kube-system'",
-						Selector:          "k8s-app == 'kube-dns'",
+						NamespaceSelector: "kubernetes.io/metadata.name == 'kube-system'",
+						Selector:          "k8s-app in { 'kube-dns', 'coredns' }",
 						Ports:             networkpolicy.Ports(53),
 					},
 				},
@@ -742,6 +754,15 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 					Action:      v3.Allow,
 					Protocol:    &networkpolicy.TCPProtocol,
 					Destination: networkpolicy.CreateEntityRule(tenantANamespace, "tigera-linseed", 8444),
+				},
+				{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						NamespaceSelector: fmt.Sprintf("kubernetes.io/metadata.name == '%s'", tenantANamespace),
+						Selector:          "k8s-app == 'calico-manager'",
+						Ports:             networkpolicy.Ports(9443),
+					},
 				},
 				{
 					Action:      v3.Allow,
@@ -841,9 +862,9 @@ var _ = Describe("Intrusion Detection rendering tests", func() {
 func assertEnvVarlistMatch(envVars []corev1.EnvVar, expectedEnvVars []expectedEnvVar) {
 	for _, expected := range expectedEnvVars {
 		if expected.val != "" {
-			Expect(envVars).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
+			ExpectWithOffset(1, envVars).To(ContainElement(corev1.EnvVar{Name: expected.name, Value: expected.val}))
 		} else {
-			Expect(envVars).To(ContainElement(corev1.EnvVar{
+			ExpectWithOffset(1, envVars).To(ContainElement(corev1.EnvVar{
 				Name: expected.name,
 				ValueFrom: &corev1.EnvVarSource{
 					SecretKeyRef: &corev1.SecretKeySelector{

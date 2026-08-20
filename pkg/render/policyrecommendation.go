@@ -81,8 +81,8 @@ type PolicyRecommendationConfiguration struct {
 }
 
 type policyRecommendationComponent struct {
-	cfg   *PolicyRecommendationConfiguration
-	image string
+	cfg         *PolicyRecommendationConfiguration
+	calicoImage string
 }
 
 func PolicyRecommendation(cfg *PolicyRecommendationConfiguration) Component {
@@ -97,7 +97,7 @@ func (pr *policyRecommendationComponent) ResolveImages(is *operatorv1.ImageSet) 
 	prefix := pr.cfg.Installation.ImagePrefix
 
 	var err error
-	pr.image, err = components.GetReference(components.ComponentPolicyRecommendation, reg, path, prefix, is)
+	pr.calicoImage, err = components.GetReference(components.CombinedCalicoImage(pr.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
@@ -359,8 +359,8 @@ func (pr *policyRecommendationComponent) deployment() *appsv1.Deployment {
 
 	controllerContainer := corev1.Container{
 		Name:            "policy-recommendation-controller",
-		Image:           pr.image,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           pr.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "policy-recommendation"},
 		Env:             envs,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,

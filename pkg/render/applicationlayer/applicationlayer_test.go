@@ -286,6 +286,16 @@ var _ = Describe("Tigera Secure Application Layer rendering tests", func() {
 		container = test.GetContainer(ds.Spec.Template.Spec.Containers, "dikastes")
 		Expect(container).NotTo(BeNil())
 		Expect(container.Resources).To(Equal(l7LogCollectorResources))
+		// dikastes runs from the combined "calico" binary, not a top-level /dikastes.
+		Expect(container.Command).To(Equal([]string{
+			"/usr/bin/calico", "component", "dikastes",
+			"server",
+			"--dial", "/var/run/felix/nodeagent/socket",
+			"--listen", "/var/run/dikastes/dikastes.sock",
+			"--waf-ruleset-root-dir", "/etc/waf",
+			"--waf-ruleset-file", "tigera.conf",
+			"--per-host-waf-enabled",
+		}))
 
 	})
 

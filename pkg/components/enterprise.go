@@ -20,57 +20,9 @@ package components
 var (
 	EnterpriseRelease string = "master"
 
-	ComponentAPIServer = Component{
+	ComponentTigeraCalico = Component{
 		Version:   "master",
-		Image:     "apiserver",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceBenchmarker = Component{
-		Version:   "master",
-		Image:     "compliance-benchmarker",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceController = Component{
-		Version:   "master",
-		Image:     "compliance-controller",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceReporter = Component{
-		Version:   "master",
-		Image:     "compliance-reporter",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceServer = Component{
-		Version:   "master",
-		Image:     "compliance-server",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentComplianceSnapshotter = Component{
-		Version:   "master",
-		Image:     "compliance-snapshotter",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentTigeraCSRInitContainer = Component{
-		Version:   "master",
-		Image:     "key-cert-provisioner",
+		Image:     "calico",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -85,12 +37,12 @@ var (
 	}
 
 	ComponentEckElasticsearch = Component{
-		Version: "8.19.10",
+		Version: "8.19.17",
 		variant: enterpriseVariant,
 	}
 
 	ComponentEckKibana = Component{
-		Version: "8.19.10",
+		Version: "8.19.17",
 		variant: enterpriseVariant,
 	}
 
@@ -111,7 +63,7 @@ var (
 	}
 
 	ComponentECKElasticsearchOperator = Component{
-		Version: "2.16.0",
+		Version: "3.5.0",
 		variant: enterpriseVariant,
 	}
 
@@ -123,49 +75,17 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentUIAPIs = Component{
+	ComponentFluentBit = Component{
 		Version:   "master",
-		Image:     "ui-apis",
+		Image:     "fluent-bit",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
 	}
 
-	ComponentESGateway = Component{
+	ComponentFluentBitWindows = Component{
 		Version:   "master",
-		Image:     "es-gateway",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentLinseed = Component{
-		Version:   "master",
-		Image:     "linseed",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentFluentd = Component{
-		Version:   "master",
-		Image:     "fluentd",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentFluentdWindows = Component{
-		Version:   "master",
-		Image:     "fluentd-windows",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentGuardian = Component{
-		Version:   "master",
-		Image:     "guardian",
+		Image:     "fluent-bit-windows",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -174,22 +94,6 @@ var (
 	ComponentIntrusionDetectionController = Component{
 		Version:   "master",
 		Image:     "intrusion-detection-controller",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentWAFHTTPFilter = Component{
-		Version:   "master",
-		Image:     "waf-http-filter",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentSecurityEventWebhooksProcessor = Component{
-		Version:   "master",
-		Image:     "webhooks-processor",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -219,41 +123,9 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentManagerProxy = Component{
-		Version:   "master",
-		Image:     "voltron",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentPacketCapture = Component{
-		Version:   "master",
-		Image:     "packetcapture",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentPolicyRecommendation = Component{
-		Version:   "master",
-		Image:     "policy-recommendation",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentEgressGateway = Component{
 		Version:   "master",
 		Image:     "egress-gateway",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentL7Collector = Component{
-		Version:   "master",
-		Image:     "l7-collector",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -282,16 +154,8 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentL7AdmissionController = Component{
-		Version:   "master",
-		Image:     "l7-admission-controller",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentCoreOSPrometheus = Component{
-		Version: "v3.9.1",
+		Version: "v3.13.2",
 		variant: enterpriseVariant,
 	}
 
@@ -303,38 +167,14 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentTigeraPrometheusService = Component{
-		Version:   "master",
-		Image:     "prometheus-service",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentCoreOSAlertmanager = Component{
-		Version: "v0.30.1",
+		Version: "v0.32.1",
 		variant: enterpriseVariant,
 	}
 
 	ComponentPrometheusAlertmanager = Component{
 		Version:   "master",
 		Image:     "alertmanager",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentQueryServer = Component{
-		Version:   "master",
-		Image:     "queryserver",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentTigeraKubeControllers = Component{
-		Version:   "master",
-		Image:     "kube-controllers",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -356,22 +196,6 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentTigeraTypha = Component{
-		Version:   "master",
-		Image:     "typha",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentTigeraCNI = Component{
-		Version:   "master",
-		Image:     "cni",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	ComponentTigeraCNIWindows = Component{
 		Version:   "master",
 		Image:     "cni-windows",
@@ -380,33 +204,9 @@ var (
 		variant:   enterpriseVariant,
 	}
 
-	ComponentElasticsearchMetrics = Component{
+	ComponentTigeraCNIPlugins = Component{
 		Version:   "master",
-		Image:     "elasticsearch-metrics",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentTigeraFlexVolume = Component{
-		Version:   "master",
-		Image:     "pod2daemon-flexvol",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentTigeraCSI = Component{
-		Version:   "master",
-		Image:     "csi",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
-	ComponentTigeraCSINodeDriverRegistrar = Component{
-		Version:   "master",
-		Image:     "node-driver-registrar",
+		Image:     "third-party-cni-plugins",
 		Registry:  "",
 		imagePath: "",
 		variant:   enterpriseVariant,
@@ -464,63 +264,30 @@ var (
 		variant:  enterpriseVariant,
 	}
 
-	ComponentTigeraWebhooks = Component{
-		Version:   "master",
-		Image:     "webhooks",
-		Registry:  "",
-		imagePath: "",
-		variant:   enterpriseVariant,
-	}
-
 	// Only components that correspond directly to images should be included in this list,
 	// Components that are only for providing a version should be left out of this list.
 	EnterpriseImages = []Component{
-		ComponentAPIServer,
-		ComponentComplianceBenchmarker,
-		ComponentComplianceController,
-		ComponentComplianceReporter,
-		ComponentComplianceServer,
-		ComponentComplianceSnapshotter,
-		ComponentTigeraCSRInitContainer,
+		ComponentTigeraCalico,
 		ComponentDeepPacketInspection,
 		ComponentElasticTseeInstaller,
 		ComponentElasticsearch,
 		ComponentElasticsearchOperator,
-		ComponentUIAPIs,
-		ComponentFluentd,
-		ComponentFluentdWindows,
-		ComponentGuardian,
+		ComponentFluentBit,
+		ComponentFluentBitWindows,
 		ComponentIntrusionDetectionController,
-		ComponentWAFHTTPFilter,
-		ComponentSecurityEventWebhooksProcessor,
 		ComponentKibana,
 		ComponentManager,
 		ComponentDex,
-		ComponentManagerProxy,
-		ComponentPacketCapture,
-		ComponentPolicyRecommendation,
 		ComponentEgressGateway,
-		ComponentL7Collector,
 		ComponentGatewayL7Collector,
 		ComponentEnvoyProxy,
+		ComponentDikastes,
 		ComponentPrometheus,
-		ComponentTigeraPrometheusService,
 		ComponentPrometheusAlertmanager,
-		ComponentQueryServer,
-		ComponentTigeraKubeControllers,
 		ComponentTigeraNode,
 		ComponentTigeraNodeWindows,
-		ComponentTigeraTypha,
-		ComponentTigeraCNI,
 		ComponentTigeraCNIWindows,
-		ComponentElasticsearchMetrics,
-		ComponentESGateway,
-		ComponentLinseed,
-		ComponentDikastes,
-		ComponentL7AdmissionController,
-		ComponentTigeraFlexVolume,
-		ComponentTigeraCSI,
-		ComponentTigeraCSINodeDriverRegistrar,
+		ComponentTigeraCNIPlugins,
 		ComponentGatewayAPIEnvoyGateway,
 		ComponentGatewayAPIEnvoyProxy,
 		ComponentGatewayAPIEnvoyRatelimit,
@@ -528,6 +295,5 @@ var (
 		ComponentIstioInstallCNI,
 		ComponentIstioZTunnel,
 		ComponentIstioProxyv2,
-		ComponentTigeraWebhooks,
 	}
 )

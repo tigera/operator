@@ -58,7 +58,7 @@ const (
 // Add creates a new LogStorage Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
@@ -151,6 +151,17 @@ func FillDefaults(opr *operatorv1.LogStorage) {
 		opr.Spec.Nodes = &operatorv1.Nodes{Count: 1}
 	}
 
+	if opr.Spec.Kibana == nil {
+		opr.Spec.Kibana = &operatorv1.Kibana{}
+	}
+	if opr.Spec.Kibana.Spec == nil {
+		opr.Spec.Kibana.Spec = &operatorv1.KibanaSpec{}
+	}
+	if opr.Spec.Kibana.Spec.Replicas == nil {
+		var replicas int32 = 1
+		opr.Spec.Kibana.Spec.Replicas = &replicas
+	}
+
 	if opr.Spec.ComponentResources == nil {
 		limits := corev1.ResourceList{}
 		requests := corev1.ResourceList{}
@@ -226,7 +237,7 @@ func (r *LogStorageInitializer) Reconcile(ctx context.Context, request reconcile
 	r.status.OnCRFound()
 
 	// Get Installation resource.
-	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)

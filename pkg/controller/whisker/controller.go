@@ -78,6 +78,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	for _, secretName := range []string{
 		certificatemanagement.CASecretName,
+		whisker.WhiskerKeyPairSecret,
 		goldmane.GoldmaneKeyPairSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
@@ -129,6 +130,7 @@ func newReconciler(
 		provider:      p,
 		status:        statusMgr,
 		clusterDomain: opts.ClusterDomain,
+		variant:       opts.Variant,
 	}
 	c.status.Run(opts.ShutdownContext)
 	return c
@@ -143,6 +145,7 @@ type Reconciler struct {
 	provider      operatorv1.Provider
 	status        status.StatusManager
 	clusterDomain string
+	variant       operatorv1.ProductVariant
 }
 
 // Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
@@ -171,7 +174,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	// SetMetaData in the TigeraStatus such as observedGenerations.
 	defer r.status.SetMetaData(&whiskerCR.ObjectMeta)
 
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r.cli)
 	if err != nil {
 		return reconcile.Result{}, err
 	} else if installationSpec == nil {
@@ -198,11 +201,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	whiskerCertificateNames := dns.GetServiceDNSNames(whisker.WhiskerName, whisker.WhiskerNamespace, r.clusterDomain)
+	whiskerCertificateNames = append(whiskerCertificateNames, "localhost")
+	whiskerKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerKeyPairSecret, whisker.WhiskerNamespace, whiskerCertificateNames)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	whiskerBackendCertificateNames := dns.GetServiceDNSNames("whisker-backend", whisker.WhiskerNamespace, r.clusterDomain)
 	whiskerBackendCertificateNames = append(whiskerBackendCertificateNames, "localhost", "127.0.0.1")
 	backendKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerBackendKeyPairSecret, whisker.WhiskerNamespace, whiskerBackendCertificateNames)
 	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, log)
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker-backend TLS certificate", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
@@ -240,6 +251,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		OpenShift:             r.provider.IsOpenShift(),
 		Installation:          installationSpec,
 		TrustedCertBundle:     trustedBundle,
+		WhiskerKeyPair:        whiskerKeyPair,
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
 		ClusterDomain:         r.clusterDomain,
@@ -260,13 +272,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TruthNamespace:  common.OperatorNamespace(),
 		ServiceAccounts: []string{whisker.WhiskerServiceAccountName},
 		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
+			rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true),
 			rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
 		},
 		TrustedBundle: trustedBundle,
 	})
 
 	components := []render.Component{certComponent, whisker.Whisker(cfg)}
-	if err = imageset.ApplyImageSet(ctx, r.cli, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.cli, r.variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}

@@ -42,6 +42,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -58,7 +60,7 @@ var log = logf.Log.WithName("controller_policy_recommendation")
 // Add creates a new PolicyRecommendation Controller and adds it to the Manager. The Manager will
 // set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		// No need to start this controller
 		return nil
 	}
@@ -77,7 +79,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("policy-recommendation-controller failed to watch Tenant resource: %w", err)
 		}
@@ -136,6 +138,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// Watch for changes to TigeraStatus
 	if err = utils.AddTigeraStatusWatch(c, ResourceName); err != nil {
 		return fmt.Errorf("policy-recommendation-controller failed to watch policy-recommendation Tigerastatus: %w", err)
+	}
+
+	if opts.Cloud && opts.ElasticExternal {
+		// This ConfigMap is needed for eutils.GetCloudConfig
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("policy-recommendation-controller failed to watch the ConfigMap resource: %w", err)
+		}
 	}
 
 	return nil
@@ -201,7 +210,7 @@ func GetPolicyRecommendation(ctx context.Context, cli client.Client, mt bool, ns
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.PolicyRecommendationNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.PolicyRecommendationNamespace, request.Namespace)
 	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	logc.Info("Reconciling PolicyRecommendation")
 
@@ -211,7 +220,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		logc.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -297,7 +306,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	}
 
 	// Query for the installation object.
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -313,7 +322,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
 		return reconcile.Result{}, err
@@ -333,6 +342,17 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 		return reconcile.Result{}, err
 	}
 
+	if r.opts.Cloud && r.opts.ElasticExternal && !r.opts.MultiTenant {
+		// For Calico Cloud single-tenant clusters sharing an external ES, extract the tenant
+		// information from the cloud config map.
+		cloudConfig, err := eutils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, logc)
+			return reconcile.Result{}, err
+		}
+		tenant = eutils.TenantFromCloudConfig(cloudConfig)
+	}
+
 	// Create a component handler to manage the rendered component.
 	defaultHandler := utils.NewComponentHandler(log, r.client, r.scheme, policyRecommendation)
 
@@ -340,7 +360,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// For multi-tenant, the cluster role will be bind to the service account in the tenant namespace
 	// For single-tenant or zero-tenant, the cluster role will be bind to the tigera-policy-recommendation service account
 	// in the calico-system namespace
-	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -460,7 +480,7 @@ func (r *ReconcilePolicyRecommendation) Reconcile(ctx context.Context, request r
 	// Render the desired objects from the CRD and create or update them.
 	component := render.PolicyRecommendation(policyRecommendationCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
 		return reconcile.Result{}, err
 	}
@@ -519,10 +539,12 @@ func (r *ReconcilePolicyRecommendation) createDefaultPolicyRecommendationScope(c
 	}
 
 	prs.Name = "default"
-	prs.Spec.NamespaceSpec.RecStatus = "Disabled"
-	prs.Spec.NamespaceSpec.Selector = "!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"
+	prs.Spec.NamespaceSpec = &v3.PolicyRecommendationScopeNamespaceSpec{
+		RecStatus: "Disabled",
+		Selector:  "!(kubernetes.io/metadata.name starts with 'tigera-') && !(kubernetes.io/metadata.name starts with 'calico-') && !(kubernetes.io/metadata.name starts with 'kube-')",
+	}
 	if r.opts.DetectedProvider.IsOpenShift() {
-		prs.Spec.NamespaceSpec.Selector += " && !(projectcalico.org/name starts with 'openshift-')"
+		prs.Spec.NamespaceSpec.Selector += " && !(kubernetes.io/metadata.name starts with 'openshift-')"
 	}
 
 	if err := r.client.Create(ctx, prs); err != nil {

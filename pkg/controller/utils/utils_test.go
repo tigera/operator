@@ -32,10 +32,12 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -52,56 +54,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
-
-var _ = Describe("Utils elasticsearch license type tests", func() {
-	var (
-		c      client.Client
-		ctx    context.Context
-		scheme *runtime.Scheme
-		log    logr.Logger
-	)
-
-	BeforeEach(func() {
-		// Create a Kubernetes client.
-		scheme = runtime.NewScheme()
-		err := apis.AddToScheme(scheme, false)
-		Expect(err).NotTo(HaveOccurred())
-
-		Expect(corev1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(apps.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-		Expect(batchv1.SchemeBuilder.AddToScheme(scheme)).ShouldNot(HaveOccurred())
-
-		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
-		ctx = context.Background()
-		log = logf.Log.WithName("utils-test-logger")
-	})
-
-	It("Returns license type from elastic-licensing", func() {
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
-			Data:       map[string]string{"eck_license_level": "enterprise"},
-		})).ShouldNot(HaveOccurred())
-		license, err := GetElasticLicenseType(ctx, c, log)
-		Expect(err).ShouldNot(HaveOccurred())
-		Expect(license).Should(Equal(render.ElasticsearchLicenseTypeEnterprise))
-	})
-
-	It("Return error if elastic-licensing not found", func() {
-		license, err := GetElasticLicenseType(ctx, c, log)
-		Expect(err).Should(HaveOccurred())
-		Expect(license).Should(Equal(render.ElasticsearchLicenseTypeUnknown))
-	})
-
-	It("Return error if license type if missing", func() {
-		Expect(c.Create(ctx, &corev1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{Namespace: eck.OperatorNamespace, Name: eck.LicenseConfigMapName},
-		})).ShouldNot(HaveOccurred())
-		_, err := GetElasticLicenseType(ctx, c, log)
-		Expect(err).Should(HaveOccurred())
-	})
-})
 
 var _ = Describe("Tigera License polling test", func() {
 	var client fakeClient
@@ -277,53 +230,17 @@ var _ = Describe("PopulateK8sServiceEndPoint", func() {
 	})
 })
 
-var _ = Describe("Utils ElasticSearch test", func() {
-	var (
-		userPrefix = "test-es-prefix"
-		clusterID  = "clusterUUID"
-		tenantID   = "tenantID"
-	)
-	It("should generate usernames in expected format", func() {
-		generatedESUsername := formatName(userPrefix, clusterID, tenantID)
-		expectedESUsername := fmt.Sprintf("%s_%s_%s", userPrefix, clusterID, tenantID)
-		Expect(generatedESUsername).To(Equal(expectedESUsername))
-	})
-
-	It("should generate Linseed ElasticUser with expected username and roles", func() {
-		linseedUser := LinseedUser(clusterID, tenantID)
-		expectedLinseedESName := fmt.Sprintf("%s_%s_%s", ElasticsearchUserNameLinseed, clusterID, tenantID)
-
-		Expect(linseedUser.Username).To(Equal(expectedLinseedESName))
-		Expect(len(linseedUser.Roles)).To(Equal(1))
-		linseedRole := linseedUser.Roles[0]
-		Expect(linseedRole.Name).To(Equal(expectedLinseedESName))
-
-		expectedLinseedRoleDef := RoleDefinition{
-			Cluster: []string{"monitor", "manage_index_templates", "manage_ilm"},
-			Indices: []RoleIndex{
-				{
-					// Include both single-index and multi-index name formats.
-					Names:      []string{indexPattern("tigera_secure_ee_*", "*", ".*", tenantID), "calico_*"},
-					Privileges: []string{"create_index", "write", "manage", "read"},
-				},
-			},
-		}
-
-		Expect(*linseedRole.Definition).To(Equal(expectedLinseedRoleDef))
-	})
-})
-
 type fakeClient struct {
-	discovery discovery.DiscoveryInterface
+	discovery discovery.DiscoveryInterfaces
 	kubernetes.Interface
 }
 
 type fakeDiscovery struct {
-	discovery.DiscoveryInterface
+	discovery.DiscoveryInterfaces
 	mock.Mock
 }
 
-func (m fakeClient) Discovery() discovery.DiscoveryInterface {
+func (m fakeClient) Discovery() discovery.DiscoveryInterfaces {
 	return m.discovery
 }
 
@@ -339,6 +256,11 @@ type mockController struct {
 
 func (m *mockController) WatchObject(obj client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
 	args := m.Called(obj, eventhandler, predicates)
+	return args.Error(0)
+}
+
+func (m *mockController) WatchObjectInCache(cch cache.Cache, obj client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	args := m.Called(cch, obj, eventhandler, predicates)
 	return args.Error(0)
 }
 
@@ -520,19 +442,6 @@ var _ = Describe("CreatePredicateForObject", func() {
 			Expect(p.Delete(event.DeleteEvent{Object: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "other-object", Namespace: "test-namespace"}}})).To(BeFalse())
 		})
 	})
-
-	DescribeTable("should correctly determine whether Dex is enabled",
-		func(authentication *opv1.Authentication, expectedResult bool) {
-			Expect(DexEnabled(authentication)).To(Equal(expectedResult))
-		},
-		Entry("when authentication is nil", nil, false),
-		Entry("when authentication is not nil and OIDC is nil",
-			&opv1.Authentication{Spec: opv1.AuthenticationSpec{OIDC: nil}}, true),
-		Entry("when authentication is not nil and OIDC type is OIDCTypeTigera",
-			&opv1.Authentication{Spec: opv1.AuthenticationSpec{OIDC: &opv1.AuthenticationOIDC{Type: opv1.OIDCTypeTigera}}}, false),
-		Entry("when authentication is not nil and OIDC type is different",
-			&opv1.Authentication{Spec: opv1.AuthenticationSpec{OIDC: &opv1.AuthenticationOIDC{Type: opv1.OIDCTypeDex}}}, true),
-	)
 })
 
 var _ = Describe("WaitToAddResourceWatch with custom predicates", func() {
@@ -575,6 +484,22 @@ var _ = Describe("WaitToAddResourceWatch with custom predicates", func() {
 		// generation-based one). The custom predicate is wrapped via predicate.And(), so we
 		// just verify it was called and fires on resource version changes.
 		ctrl.AssertCalled(GinkgoT(), "WatchObject", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	It("should watch an unstructured object", func() {
+		u := &unstructured.Unstructured{}
+		u.SetGroupVersionKind(schema.GroupVersionKind{Group: "test.example.com", Version: "v1", Kind: "TestResource"})
+		u.SetName("default")
+
+		disc.On("ServerResourcesForGroupVersion", testGV).Return(&metav1.APIResourceList{
+			APIResources: []metav1.APIResource{{Kind: "TestResource"}},
+		})
+		ctrl.On("WatchObject", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+
+		flag := &ReadyFlag{}
+		WaitToAddResourceWatch(ctrl, k8sClient, log, flag, []client.Object{u}, predicate.ResourceVersionChangedPredicate{})
+
+		Expect(flag.IsReady()).To(BeTrue())
 	})
 
 	It("should work with a nil flag", func() {

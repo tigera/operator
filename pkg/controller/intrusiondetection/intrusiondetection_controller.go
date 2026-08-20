@@ -41,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/installation"
 	"github.com/tigera/operator/pkg/controller/logcollector"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/tenancy"
@@ -48,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
@@ -63,7 +65,7 @@ var log = logf.Log.WithName("controller_intrusiondetection")
 // Add creates a new IntrusionDetection Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		// No need to start this controller.
 		return nil
 	}
@@ -87,7 +89,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	policiesToWatch := []types.NamespacedName{
@@ -210,7 +212,7 @@ func getIntrusionDetection(ctx context.Context, cli client.Client, mt bool, ns s
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.IntrusionDetectionNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.IntrusionDetectionNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling IntrusionDetection")
 
@@ -220,7 +222,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -267,7 +269,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 	isManagedCluster := managementClusterConnection != nil
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -286,7 +288,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 
 	if !isManagedCluster && !r.opts.ElasticExternal {
 		// Check if Elasticsearch is ready.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -330,7 +332,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	}
 
 	// Query for the installation object.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -429,11 +431,22 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 		bundleMaker = nil
 	}
 
+	if r.opts.Cloud && r.opts.ElasticExternal && !r.opts.MultiTenant {
+		// For Calico Cloud single-tenant clusters sharing an external ES, extract the tenant
+		// information from the cloud config map.
+		cloudConfig, err := eutils.GetCloudConfig(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		tenant = eutils.TenantFromCloudConfig(cloudConfig)
+	}
+
 	// Create a component handler to manage the rendered component.
 	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.TenantNamespaces(r.client)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving tenant namespaces", err, reqLogger)
 		return reconcile.Result{}, err
@@ -470,7 +483,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 	})
 	intrusionDetectionComponent := render.IntrusionDetection(intrusionDetectionCfg)
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, intrusionDetectionComponent); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, intrusionDetectionComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -531,7 +544,7 @@ func (r *ReconcileIntrusionDetection) Reconcile(ctx context.Context, request rec
 			ClusterDomain:      r.opts.ClusterDomain,
 			DPICertSecret:      dpiKeyPair,
 		})
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, dpiComponent); err != nil {
+		if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, dpiComponent); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 			return reconcile.Result{}, err
 		}

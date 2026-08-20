@@ -42,6 +42,12 @@ const (
 	// TrustedCertConfigMapNamePublic is the name of the trusted certificate bundle ConfigMap that includes public CAs, used
 	// only in multi-tenant environments as a single namespace requires both a trusted bundle with public CAs as well as one without.
 	TrustedCertConfigMapNamePublic = "tigera" + TrustedCertConfigMapSuffixPublic
+
+	// Certificate metadata labels and annotations set on TLS secrets.
+	SignerLabel      = "certificates.operator.tigera.io/signer"
+	IssuerAnnotation = "certificates.operator.tigera.io/issuer"
+	ExpiryAnnotation = "certificates.operator.tigera.io/expiry"
+	ExpiryFormat     = "2006-01-02T15:04:05Z"
 )
 
 // KeyPairInterface wraps a Secret object that contains a private key and a certificate. Whether CertificateManagement is

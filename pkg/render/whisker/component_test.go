@@ -27,7 +27,7 @@ import (
 	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -36,10 +36,19 @@ import (
 )
 
 var (
+	defaultWhiskerKeyPair    = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: whisker.WhiskerKeyPairSecret}}, nil, "")
 	defaultTLSKeyPair        = certificatemanagement.NewKeyPair(&corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "key-pair"}}, nil, "")
 	defaultTrustedCertBundle = certificatemanagement.CreateTrustedBundle(nil)
 	numExpectedObjects       = 5
 	numDeprecatedObjects     = 1
+
+	// calicoImageRef resolves the combined calico/calico image exactly as the
+	// renderer does, so the expected image tracks the pinned ComponentCalico
+	// version on any branch (:master on master, :v3.32.x on release-v1.43)
+	// rather than a hardcoded tag.
+	calicoImageRef, _ = components.GetReference(components.CombinedCalicoImage(&operatorv1.InstallationSpec{Variant: operatorv1.Calico}), "", "", "", nil)
+	// whiskerImageRef resolves the whisker image the same way the renderer does.
+	whiskerImageRef, _ = components.GetReference(components.ComponentCalicoWhisker, "", "", "", nil)
 )
 
 var _ = Describe("ComponentRendering", func() {
@@ -56,6 +65,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.Calico,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerKeyPair:        defaultWhiskerKeyPair,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
@@ -68,6 +78,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.CalicoEnterprise,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerKeyPair:        defaultWhiskerKeyPair,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
@@ -77,6 +88,7 @@ var _ = Describe("ComponentRendering", func() {
 
 	DescribeTable("Whisker Deployment", func(cfg *whisker.Configuration, expected *appsv1.Deployment) {
 		component := whisker.Whisker(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
 		objsToCreate, _ := component.Objects()
 
 		deployment, err := rtest.GetResourceOfType[*appsv1.Deployment](objsToCreate, whisker.WhiskerName, whisker.WhiskerNamespace)
@@ -90,6 +102,7 @@ var _ = Describe("ComponentRendering", func() {
 					Variant:            operatorv1.Calico,
 				},
 				TrustedCertBundle:     defaultTrustedCertBundle,
+				WhiskerKeyPair:        defaultWhiskerKeyPair,
 				WhiskerBackendKeyPair: defaultTLSKeyPair,
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 				ClusterID:             "test-cluster-id",
@@ -111,15 +124,18 @@ var _ = Describe("ComponentRendering", func() {
 					Template: corev1.PodTemplateSpec{
 						ObjectMeta: metav1.ObjectMeta{
 							Name: whisker.WhiskerDeploymentName,
+							Annotations: map[string]string{
+								defaultWhiskerKeyPair.HashAnnotationKey(): defaultWhiskerKeyPair.HashAnnotationValue(),
+								defaultTLSKeyPair.HashAnnotationKey():     defaultTLSKeyPair.HashAnnotationValue(),
+							},
 						},
 						Spec: corev1.PodSpec{
 							ServiceAccountName: whisker.WhiskerServiceAccountName,
 							Tolerations:        append(rmeta.TolerateCriticalAddonsAndControlPlane, rmeta.TolerateGKEARM64NoSchedule),
 							Containers: []corev1.Container{
 								{
-									Name:            whisker.WhiskerContainerName,
-									Image:           "",
-									ImagePullPolicy: render.ImagePullPolicy(),
+									Name:  whisker.WhiskerContainerName,
+									Image: whiskerImageRef,
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "CALICO_VERSION", Value: "test-calico-version"},
@@ -134,18 +150,21 @@ var _ = Describe("ComponentRendering", func() {
 											MountPath: "/etc/nginx/conf.d",
 											ReadOnly:  true,
 										},
+										defaultWhiskerKeyPair.VolumeMount(rmeta.OSTypeLinux),
 									},
 								},
 								{
-									Name:            whisker.WhiskerBackendContainerName,
-									Image:           "",
-									ImagePullPolicy: render.ImagePullPolicy(),
+									Name:    whisker.WhiskerBackendContainerName,
+									Image:   calicoImageRef,
+									Command: []string{"/usr/bin/calico", "component", "whisker-backend"},
 									Env: []corev1.EnvVar{
 										{Name: "LOG_LEVEL", Value: "INFO"},
 										{Name: "PORT", Value: "3002"},
 										{Name: "GOLDMANE_HOST", Value: "goldmane.calico-system.svc.cluster.domain:7443"},
 										{Name: "TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
 										{Name: "TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
+										{Name: "SERVER_TLS_CERT_PATH", Value: defaultTLSKeyPair.VolumeMountCertificateFilePath()},
+										{Name: "SERVER_TLS_KEY_PATH", Value: defaultTLSKeyPair.VolumeMountKeyFilePath()},
 									},
 									SecurityContext: securitycontext.NewNonRootContext(),
 									VolumeMounts: append(
@@ -155,6 +174,7 @@ var _ = Describe("ComponentRendering", func() {
 							},
 							Volumes: []corev1.Volume{
 								defaultTrustedCertBundle.Volume(),
+								defaultWhiskerKeyPair.Volume(),
 								defaultTLSKeyPair.Volume(),
 								{
 									Name: "nginx-config",
@@ -179,6 +199,7 @@ var _ = Describe("ComponentRendering", func() {
 				Variant:            operatorv1.Calico,
 			},
 			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
 			WhiskerBackendKeyPair: defaultTLSKeyPair,
 			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			ClusterID:             "test-cluster-id",
@@ -209,6 +230,7 @@ var _ = Describe("ComponentRendering", func() {
 				},
 			},
 			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
 			WhiskerBackendKeyPair: defaultTLSKeyPair,
 			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			ClusterID:             "test-cluster-id",
@@ -225,6 +247,26 @@ var _ = Describe("ComponentRendering", func() {
 		actual, ok := config.Data["default.conf"]
 		Expect(ok).To(BeTrue(), "expected default.conf to be present in config map")
 		Expect(actual).To(Equal(whisker.NginxConfigDual))
+	})
+
+	It("should render a service with HTTPS port", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:     defaultTrustedCertBundle,
+			WhiskerKeyPair:        defaultWhiskerKeyPair,
+			WhiskerBackendKeyPair: defaultTLSKeyPair,
+			Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+		}
+		component := whisker.Whisker(cfg)
+		objsToCreate, _ := component.Objects()
+
+		svc, err := rtest.GetResourceOfType[*corev1.Service](objsToCreate, "whisker", whisker.WhiskerNamespace)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(svc.Spec.Ports).To(HaveLen(1))
+		Expect(svc.Spec.Ports[0].Port).To(Equal(int32(whisker.WhiskerServicePort)))
 	})
 
 	It("Should apply overrides", func() {
@@ -322,7 +364,15 @@ var _ = Describe("ComponentRendering", func() {
 		deployment, err := GetOverriddenWhiskerDeployment(overrides)
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(deployment.Spec.Template.ObjectMeta.Labels).To(Equal(podLabels))
-		Expect(deployment.Spec.Template.ObjectMeta.Annotations).To(Equal(podAnnotations))
+		// Override annotations are merged on top of the rendered key pair hash annotations.
+		expectedAnnotations := map[string]string{
+			defaultWhiskerKeyPair.HashAnnotationKey(): defaultWhiskerKeyPair.HashAnnotationValue(),
+			defaultTLSKeyPair.HashAnnotationKey():     defaultTLSKeyPair.HashAnnotationValue(),
+		}
+		for k, v := range podAnnotations {
+			expectedAnnotations[k] = v
+		}
+		Expect(deployment.Spec.Template.ObjectMeta.Annotations).To(Equal(expectedAnnotations))
 		Expect(deployment.Spec.Template.Spec.Affinity).To(Equal(affinity))
 		Expect(deployment.Spec.Template.Spec.TopologySpreadConstraints).To(Equal(topologyConstraints))
 		Expect(deployment.Spec.Template.Spec.NodeSelector).To(Equal(nodeSelector))
@@ -340,6 +390,7 @@ func GetOverriddenWhiskerDeployment(overrides *operatorv1.WhiskerDeployment) (*a
 			Variant:            operatorv1.Calico,
 		},
 		TrustedCertBundle:     defaultTrustedCertBundle,
+		WhiskerKeyPair:        defaultWhiskerKeyPair,
 		WhiskerBackendKeyPair: defaultTLSKeyPair,
 		Whisker: &operatorv1.Whisker{
 			Spec: operatorv1.WhiskerSpec{

@@ -16,4 +16,3 @@ blocks:
         - name: Clear Entire Cache
           commands:
             - 'cache clear'
-

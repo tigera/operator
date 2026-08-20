@@ -14,7 +14,11 @@
 
 package istio
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 type GlobalConfig struct {
 	IstioNamespace         string           `json:"istioNamespace,omitempty"`
@@ -22,6 +26,7 @@ type GlobalConfig struct {
 	Proxy                  *ProxyConfig     `json:"proxy,omitempty"`
 	ProxyInit              *ProxyInitConfig `json:"proxy_init,omitempty"`
 	Platform               string           `json:"platform,omitempty"`
+	ImagePullSecrets       []string         `json:"imagePullSecrets,omitempty"`
 }
 
 type ProxyConfig struct {
@@ -30,6 +35,10 @@ type ProxyConfig struct {
 
 type ProxyInitConfig struct {
 	Image string `json:"image,omitempty"`
+}
+
+type GatewaysConfig struct {
+	SeccompProfile *corev1.SeccompProfile `json:"seccompProfile,omitempty"`
 }
 
 type AmbientConfig struct {
@@ -42,10 +51,11 @@ type BaseOpts struct {
 }
 
 type IstiodOpts struct {
-	Image                   string        `json:"image,omitempty"`
-	Global                  *GlobalConfig `json:"global,omitempty"`
-	Profile                 string        `json:"profile,omitempty"`
-	TrustedZtunnelNamespace string        `json:"trustedZtunnelNamespace,omitempty"`
+	Image                   string          `json:"image,omitempty"`
+	Global                  *GlobalConfig   `json:"global,omitempty"`
+	Gateways                *GatewaysConfig `json:"gateways,omitempty"`
+	Profile                 string          `json:"profile,omitempty"`
+	TrustedZtunnelNamespace string          `json:"trustedZtunnelNamespace,omitempty"`
 }
 
 type IstioCNIOpts struct {

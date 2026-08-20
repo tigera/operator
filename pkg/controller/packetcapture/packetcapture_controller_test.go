@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -156,8 +157,8 @@ var _ = Describe("packet capture controller tests", func() {
 			status:         mockStatus,
 			tierWatchReady: ready,
 			opts: options.ControllerOptions{
-				DetectedProvider:    operatorv1.ProviderNone,
-				EnterpriseCRDExists: true,
+				DetectedProvider: operatorv1.ProviderNone,
+				Variant:          operatorv1.CalicoEnterprise,
 			},
 		}
 
@@ -187,8 +188,8 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(pcContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentPacketCapture.Image,
-					components.ComponentPacketCapture.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 			Expect(pcContainer.VolumeMounts).To(ConsistOf([]corev1.VolumeMount{
 				{
 					Name:      packetCaptureSecret.Name,
@@ -206,8 +207,8 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s:%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCSRInitContainer.Image,
-					components.ComponentTigeraCSRInitContainer.Version)))
+					components.ComponentTigeraCalico.Image,
+					components.ComponentTigeraCalico.Version)))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
 				ObjectMeta: metav1.ObjectMeta{
@@ -226,8 +227,7 @@ var _ = Describe("packet capture controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-						{Image: "tigera/packetcapture", Digest: "sha256:packetcapturehash"},
+						{Image: "tigera/calico", Digest: "sha256:calicocsrinithash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -249,14 +249,14 @@ var _ = Describe("packet capture controller tests", func() {
 			Expect(pcContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentPacketCapture.Image,
-					"sha256:packetcapturehash")))
+					components.ComponentTigeraCalico.Image,
+					"sha256:calicocsrinithash")))
 			csrinitContainer := test.GetContainer(pcDeployment.Spec.Template.Spec.InitContainers, "tigera-packetcapture-server-tls-key-cert-provisioner")
 			Expect(csrinitContainer).ToNot(BeNil())
 			Expect(csrinitContainer.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentTigeraCSRInitContainer.Image,
+					components.ComponentTigeraCalico.Image,
 					"sha256:calicocsrinithash")))
 			pcSecret := corev1.Secret{
 				TypeMeta: metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
@@ -321,8 +321,8 @@ var _ = Describe("packet capture controller tests", func() {
 				status:         mockStatus,
 				tierWatchReady: readyFlag,
 				opts: options.ControllerOptions{
-					DetectedProvider:    operatorv1.ProviderNone,
-					EnterpriseCRDExists: true,
+					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 			Expect(cli.Create(ctx, installation)).To(BeNil())
@@ -366,7 +366,7 @@ var _ = Describe("packet capture controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
+			instance, err := eutils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(1))
 
@@ -389,7 +389,7 @@ var _ = Describe("packet capture controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
+			instance, err := eutils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
@@ -430,7 +430,7 @@ var _ = Describe("packet capture controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
+			instance, err := eutils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(3))
 
@@ -512,7 +512,7 @@ var _ = Describe("packet capture controller tests", func() {
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetPacketCaptureAPI(ctx, r.client)
+			instance, err := eutils.GetPacketCaptureAPI(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(3))
 
@@ -558,9 +558,9 @@ var _ = Describe("packet capture controller tests", func() {
 					status:         mockStatus,
 					tierWatchReady: ready,
 					opts: options.ControllerOptions{
-						DetectedProvider:    operatorv1.ProviderNone,
-						EnterpriseCRDExists: true,
-						MultiTenant:         true,
+						DetectedProvider: operatorv1.ProviderNone,
+						Variant:          operatorv1.CalicoEnterprise,
+						MultiTenant:      true,
 					},
 				}
 
@@ -587,9 +587,9 @@ var _ = Describe("packet capture controller tests", func() {
 					status:         mockStatus,
 					tierWatchReady: ready,
 					opts: options.ControllerOptions{
-						DetectedProvider:    operatorv1.ProviderNone,
-						EnterpriseCRDExists: true,
-						MultiTenant:         false,
+						DetectedProvider: operatorv1.ProviderNone,
+						Variant:          operatorv1.CalicoEnterprise,
+						MultiTenant:      false,
 					},
 				}
 

@@ -19,11 +19,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
-	esv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/elasticsearch/v1"
 	"github.com/elastic/cloud-on-k8s/v2/pkg/utils/stringsutil"
 	csiv1 "sigs.k8s.io/secrets-store-csi-driver/apis/v1"
 
@@ -35,7 +33,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -43,10 +40,12 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
+	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -58,7 +57,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/logstorage/eck"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 )
 
 const (
@@ -67,6 +66,8 @@ const (
 	// for production, as this will cause problems with upgrade.
 	unsupportedIgnoreAnnotation = "unsupported.operator.tigera.io/ignore"
 )
+
+var log = logf.Log.WithName("utils")
 
 var (
 	DefaultInstanceKey           = client.ObjectKey{Name: "default"}
@@ -95,9 +96,7 @@ var (
 // ContextLoggerForResource provides a logger instance with context set for the provided object.
 func ContextLoggerForResource(log logr.Logger, obj client.Object) logr.Logger {
 	gvk := obj.GetObjectKind().GroupVersionKind()
-	name := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetName()
-	namespace := obj.(metav1.ObjectMetaAccessor).GetObjectMeta().GetNamespace()
-	return log.WithValues("name", name, "namespace", namespace, "kind", gvk.Kind)
+	return log.WithValues("name", obj.GetName(), "namespace", obj.GetNamespace(), "kind", gvk.Kind)
 }
 
 // IgnoreObject returns true if the object has been marked as ignored by the user,
@@ -119,6 +118,12 @@ func V3Client(config *rest.Config) (client.Client, error) {
 		return nil, fmt.Errorf("failed to add projectcalico.org/v3 to scheme: %w", err)
 	}
 
+	// The component handler reads the Installation regardless of which client writes the rendered
+	// objects, so this client needs to be able to resolve operator.tigera.io types as well.
+	if err := operatorv1.AddToScheme(scheme); err != nil {
+		return nil, fmt.Errorf("failed to add operator.tigera.io to scheme: %w", err)
+	}
+
 	c, err := client.New(config, client.Options{Scheme: scheme})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create API client: %w", err)
@@ -132,10 +137,6 @@ func AddInstallationWatch(c ctrlruntime.Controller) error {
 
 func AddAPIServerWatch(c ctrlruntime.Controller) error {
 	return c.WatchObject(&operatorv1.APIServer{}, &handler.EnqueueRequestForObject{})
-}
-
-func AddComplianceWatch(c ctrlruntime.Controller) error {
-	return c.WatchObject(&operatorv1.Compliance{}, &handler.EnqueueRequestForObject{})
 }
 
 func AddNamespaceWatch(c ctrlruntime.Controller, name string) error {
@@ -196,6 +197,13 @@ func AddServiceWatchWithHandler(c ctrlruntime.Controller, name, namespace string
 func AddDeploymentWatch(c ctrlruntime.Controller, name, namespace string) error {
 	return AddNamespacedWatch(c, &appsv1.Deployment{
 		TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "V1"},
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+	}, &handler.EnqueueRequestForObject{})
+}
+
+func AddDaemonsetWatch(c ctrlruntime.Controller, name, namespace string) error {
+	return AddNamespacedWatch(c, &appsv1.DaemonSet{
+		TypeMeta:   metav1.TypeMeta{Kind: "DaemonSet", APIVersion: "apps/v1"},
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
 	}, &handler.EnqueueRequestForObject{})
 }
@@ -329,31 +337,6 @@ func IsProjectCalicoV3Available(client client.Client, opts options.ControllerOpt
 	return true
 }
 
-func LogStorageExists(ctx context.Context, cli client.Client) (bool, error) {
-	instance := &operatorv1.LogStorage{}
-	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, instance)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return false, nil
-		}
-		return false, err
-	}
-
-	return true, nil
-}
-
-func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCollector, error) {
-	logCollector := &operatorv1.LogCollector{}
-	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, logCollector)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return logCollector, nil
-}
-
 // FetchClusterInformation fetches and returns the clusterinformation.
 func FetchClusterInformation(ctx context.Context, cli client.Client) (v3.ClusterInformation, error) {
 	instance := &v3.ClusterInformation{}
@@ -447,12 +430,11 @@ func GetInstallationPullSecrets(i *operatorv1.InstallationSpec, c client.Client)
 	return secrets, nil
 }
 
-// Return the AplicationLayer CR if present. No error is returned if it was not
-// found.
-func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.ApplicationLayer, error) {
-	applicationLayer := &operatorv1.ApplicationLayer{}
+// Return the Istio CR if present. No error is returned if it was not found.
+func GetIstio(ctx context.Context, c client.Client) (*operatorv1.Istio, error) {
+	istio := &operatorv1.Istio{}
 
-	err := c.Get(ctx, DefaultEnterpriseInstanceKey, applicationLayer)
+	err := c.Get(ctx, DefaultInstanceKey, istio)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, nil
@@ -460,22 +442,7 @@ func GetApplicationLayer(ctx context.Context, c client.Client) (*operatorv1.Appl
 		return nil, err
 	}
 
-	return applicationLayer, nil
-}
-
-// Return the ManagementCluster CR if present. No error is returned if it was not found.
-func GetManagementCluster(ctx context.Context, c client.Client) (*operatorv1.ManagementCluster, error) {
-	managementCluster := &operatorv1.ManagementCluster{}
-
-	err := c.Get(ctx, DefaultEnterpriseInstanceKey, managementCluster)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-
-	return managementCluster, nil
+	return istio, nil
 }
 
 // Return the ManagementClusterConnection CR if present. No error is returned if it was not found.
@@ -512,70 +479,20 @@ func GetIfExists[E any, ClientObj ClientObjType[E]](ctx context.Context, key cli
 	return obj, nil
 }
 
-// GetNonClusterHost finds the NonClusterHost CR in your cluster.
-func GetNonClusterHost(ctx context.Context, cli client.Client) (*operatorv1.NonClusterHost, error) {
-	nonclusterhost := &operatorv1.NonClusterHost{}
-
-	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, nonclusterhost)
+// RBACManagementEnabled reports whether the RBAC management UI should be rendered.
+// The feature is Enterprise-only, and multi-tenant force-disables it on the ui-apis
+// side. Otherwise the admin's switch decides; an absent ConfigMap reads as disabled.
+func RBACManagementEnabled(ctx context.Context, c client.Client, variant operatorv1.ProductVariant, multiTenant bool) (bool, error) {
+	if !variant.IsEnterprise() || multiTenant {
+		return false, nil
+	}
+	gate, err := GetIfExists[corev1.ConfigMap](ctx, client.ObjectKey{
+		Name: rbacmanagement.ConfigMapName, Namespace: common.CalicoNamespace,
+	}, c)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
+		return false, err
 	}
-
-	return nonclusterhost, nil
-}
-
-// GetAuthentication finds the authentication CR in your cluster.
-func GetAuthentication(ctx context.Context, cli client.Client) (*operatorv1.Authentication, error) {
-	authentication := &operatorv1.Authentication{}
-	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, authentication)
-	if err != nil {
-		return nil, err
-	}
-
-	return authentication, nil
-}
-
-// GetTenant returns the Tenant instance in the given namespace.
-func GetTenant(ctx context.Context, mt bool, cli client.Client, ns string) (*operatorv1.Tenant, string, error) {
-	if !mt {
-		// Multi-tenancy isn't enabled. Return nil.
-		return nil, "", nil
-	}
-
-	key := client.ObjectKey{Name: "default", Namespace: ns}
-	instance := &operatorv1.Tenant{}
-	err := cli.Get(ctx, key, instance)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if instance.Spec.ID == "" {
-		return nil, "", fmt.Errorf("tenant %s/%s has no ID specified", ns, instance.Name)
-	}
-	return instance, instance.Spec.ID, nil
-}
-
-// TenantNamespaces returns all namespaces that contain a tenant.
-// include is an optional filter function that returns true if the tenant should be included, false otherwise.
-func TenantNamespaces(ctx context.Context, cli client.Client, include TenantFilter) ([]string, error) {
-	namespaces := []string{}
-	tenants := operatorv1.TenantList{}
-	err := cli.List(ctx, &tenants)
-	if err != nil {
-		return nil, err
-	}
-	for _, t := range tenants.Items {
-		if include == nil || include(&t) {
-			namespaces = append(namespaces, t.Namespace)
-		}
-	}
-
-	// Sort the namespaces, so that the output is deterministic.
-	sort.Strings(namespaces)
-	return namespaces, nil
+	return rbacmanagement.Enabled(gate), nil
 }
 
 // GetInstallationStatus returns the current installation status, for use by other controllers.
@@ -588,14 +505,13 @@ func GetInstallationStatus(ctx context.Context, client client.Client) (*operator
 	return &instance.Status, nil
 }
 
-// GetInstallationSpec returns the current installation, for use by other controllers. It accounts for overlays and
-// returns the variant according to status.Variant, which is leveraged by other controllers to know when it is safe to
-// launch enterprise-dependent components.
-func GetInstallationSpec(ctx context.Context, client client.Client) (operatorv1.ProductVariant, *operatorv1.InstallationSpec, error) {
+// GetInstallationSpec returns the current installation, accounting for overlays. Controllers take
+// the variant from their ControllerOptions instead, so that the whole process agrees on one value.
+func GetInstallationSpec(ctx context.Context, client client.Client) (*operatorv1.InstallationSpec, error) {
 	// Fetch the Installation instance. We only support a single instance named "default".
 	instance := &operatorv1.Installation{}
 	if err := client.Get(ctx, DefaultInstanceKey, instance); err != nil {
-		return instance.Status.Variant, nil, err
+		return nil, err
 	}
 
 	spec := instance.Spec
@@ -604,13 +520,13 @@ func GetInstallationSpec(ctx context.Context, client client.Client) (operatorv1.
 	overlay := operatorv1.Installation{}
 	if err := client.Get(ctx, OverlayInstanceKey, &overlay); err != nil {
 		if !errors.IsNotFound(err) {
-			return instance.Status.Variant, nil, err
+			return nil, err
 		}
 	} else {
 		spec = OverrideInstallationSpec(spec, overlay.Spec)
 	}
 
-	return instance.Status.Variant, &spec, nil
+	return &spec, nil
 }
 
 // GetAPIServer finds the correct API server instance and returns a message and error in the case of an error.
@@ -638,43 +554,6 @@ func GetAPIServer(ctx context.Context, client client.Client) (*operatorv1.APISer
 		}
 	}
 	return instance, "", nil
-}
-
-// GetPacketCapture finds the PacketCapture CR in your cluster.
-func GetPacketCaptureAPI(ctx context.Context, cli client.Client) (*operatorv1.PacketCaptureAPI, error) {
-	pc := &operatorv1.PacketCaptureAPI{}
-	err := cli.Get(ctx, DefaultEnterpriseInstanceKey, pc)
-	if err != nil {
-		return nil, err
-	}
-
-	return pc, nil
-}
-
-// GetElasticLicenseType returns the license type from elastic-licensing ConfigMap that ECK operator keeps updated.
-func GetElasticLicenseType(ctx context.Context, cli client.Client, logger logr.Logger) (render.ElasticsearchLicenseType, error) {
-	cm := &corev1.ConfigMap{}
-	err := cli.Get(ctx, client.ObjectKey{Name: eck.LicenseConfigMapName, Namespace: eck.OperatorNamespace}, cm)
-	if err != nil {
-		return render.ElasticsearchLicenseTypeUnknown, err
-	}
-	license, ok := cm.Data["eck_license_level"]
-	if !ok {
-		return render.ElasticsearchLicenseTypeUnknown, fmt.Errorf("eck_license_level not available")
-	}
-
-	return StrToElasticLicenseType(license, logger), nil
-}
-
-// StrToElasticLicenseType maps Elasticsearch license to one of the known and expected value.
-func StrToElasticLicenseType(license string, logger logr.Logger) render.ElasticsearchLicenseType {
-	if license == string(render.ElasticsearchLicenseTypeEnterprise) ||
-		license == string(render.ElasticsearchLicenseTypeBasic) ||
-		license == string(render.ElasticsearchLicenseTypeEnterpriseTrial) {
-		return render.ElasticsearchLicenseType(license)
-	}
-	logger.V(3).Info("Elasticsearch license %s is unexpected", license)
-	return render.ElasticsearchLicenseTypeUnknown
 }
 
 type resourceWatchContext struct {
@@ -854,18 +733,6 @@ func GetKubeControllerMetricsPort(ctx context.Context, client client.Client) (in
 	return kubeControllersMetricsPort, nil
 }
 
-func GetElasticsearch(ctx context.Context, c client.Client) (*esv1.Elasticsearch, error) {
-	es := esv1.Elasticsearch{}
-	err := c.Get(ctx, client.ObjectKey{Name: render.ElasticsearchName, Namespace: render.ElasticsearchNamespace}, &es)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &es, nil
-}
-
 // AddKubeProxyWatch creates a watch on the kube-proxy DaemonSet.
 func AddKubeProxyWatch(c ctrlruntime.Controller) error {
 	ds := &appsv1.DaemonSet{
@@ -934,43 +801,36 @@ func GetDNSServiceName(provider operatorv1.Provider) types.NamespacedName {
 	return kubeDNSServiceName
 }
 
-// MonitorConfigMap starts a goroutine which exits if the given configmap's data is changed.
-func MonitorConfigMap(cs kubernetes.Interface, name string, data map[string]string) error {
-	informer := cache.NewSharedInformer(
-		cache.NewListWatchFromClient(
-			cs.CoreV1().RESTClient(),
-			"configmaps",
-			common.OperatorNamespace(),
-			fields.OneTermEqualSelector("metadata.name", name),
-		),
-		&corev1.ConfigMap{},
-		0, // no resync period
-	)
-	_, err := informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		UpdateFunc: func(_, newObj interface{}) {
-			if !compareMap(data, newObj.(*corev1.ConfigMap).Data) {
-				log.Info("detected config change. rebooting")
-				os.Exit(0)
-			}
-			log.Info("ignoring configmap update as data was not modified")
-		},
-		AddFunc: func(obj interface{}) {
-			if !compareMap(data, obj.(*corev1.ConfigMap).Data) {
-				log.Info("detected config creation change. rebooting")
-				os.Exit(0)
-			}
-			log.Info("ignoring configmap creation as data was not modified")
-		},
-	})
+// MonitorConfigMap exits the operator if the given ConfigMap's data is changed.
+func MonitorConfigMap(ctx context.Context, ca ctrlcache.Cache, name string, data map[string]string) error {
+	// The cache isn't running yet, so don't wait on a sync that can't happen.
+	informer, err := ca.GetInformer(ctx, &corev1.ConfigMap{}, ctrlcache.BlockUntilSynced(false))
 	if err != nil {
 		return err
 	}
 
-	go informer.Run(make(chan struct{}))
-	for !informer.HasSynced() {
-		time.Sleep(1 * time.Second)
+	// The shared cache isn't filtered to this ConfigMap, so match on it here.
+	namespace := common.OperatorNamespace()
+	check := func(obj interface{}) {
+		cm, ok := obj.(*corev1.ConfigMap)
+		if !ok || cm.Name != name || cm.Namespace != namespace {
+			return
+		}
+
+		if compareMap(data, cm.Data) {
+			log.Info("ignoring configmap event as data was not modified")
+			return
+		}
+
+		log.Info("detected config change. rebooting")
+		os.Exit(0)
 	}
-	return nil
+
+	_, err = informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    check,
+		UpdateFunc: func(_, newObj interface{}) { check(newObj) },
+	})
+	return err
 }
 
 func compareMap(m1, m2 map[string]string) bool {
@@ -983,14 +843,6 @@ func compareMap(m1, m2 map[string]string) bool {
 		}
 	}
 	return true
-}
-
-func DexEnabled(authentication *operatorv1.Authentication) bool {
-	enableDex := authentication != nil
-	if enableDex && authentication.Spec.OIDC != nil && authentication.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
-		enableDex = false
-	}
-	return enableDex
 }
 
 func VerifySysctl(pluginData []operatorv1.Sysctl) error {

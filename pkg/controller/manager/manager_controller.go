@@ -16,10 +16,17 @@ package manager
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
+	"net"
+	"slices"
+	"strings"
 
+	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,25 +34,32 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/compliance"
+	"github.com/tigera/operator/pkg/controller/gatewayapi"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	tigerakvc "github.com/tigera/operator/pkg/render/common/authentication/tigera/key_validator_config"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
+	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
@@ -63,7 +77,7 @@ var log = logf.Log.WithName("controller_manager")
 // Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		// No need to start this controller.
 		return nil
 	}
@@ -84,11 +98,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
+	helper := eutils.NewNamespaceHelper(opts.MultiTenant, render.ManagerNamespace, "")
 
 	if err := utils.AddSecretsWatch(c, render.VoltronLinseedTLS, helper.InstallNamespace()); err != nil {
 		return err
@@ -96,10 +110,19 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	go utils.WaitToAddLicenseKeyWatch(c, opts.K8sClientset, log, licenseAPIReady)
 	go utils.WaitToAddTierWatch(networkpolicy.CalicoTierName, c, opts.K8sClientset, log, tierWatchReady)
-	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, []types.NamespacedName{
+	policiesToWatch := []types.NamespacedName{
 		{Name: render.ManagerPolicyName, Namespace: helper.InstallNamespace()},
-		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: helper.InstallNamespace()},
-	})
+	}
+	// The default-deny policy in calico-system is owned by the Installation
+	// controller; only watch it here when we render it ourselves, i.e. in
+	// multi-tenant mode where the Manager lives in a tenant namespace.
+	if helper.InstallNamespace() != common.CalicoNamespace {
+		policiesToWatch = append(policiesToWatch, types.NamespacedName{
+			Name:      networkpolicy.CalicoComponentDefaultDenyPolicyName,
+			Namespace: helper.InstallNamespace(),
+		})
+	}
+	go utils.WaitToAddNetworkPolicyWatches(c, opts.K8sClientset, log, policiesToWatch)
 
 	// Watch for changes to primary resource Manager
 	err = c.WatchObject(&operatorv1.Manager{}, &handler.EnqueueRequestForObject{})
@@ -124,9 +147,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.APIServer{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
 	}
-	if err = c.WatchObject(&operatorv1.Compliance{}, eventHandler); err != nil {
-		return fmt.Errorf("manager-controller failed to watch APIServer resource: %w", err)
-	}
 	if err = c.WatchObject(&operatorv1.ManagementCluster{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch primary resource: %w", err)
 	}
@@ -145,6 +165,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if err = c.WatchObject(&operatorv1.ImageSet{}, eventHandler); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ImageSet: %w", err)
 	}
+	if err = c.WatchObject(&operatorv1.LogStorage{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch LogStorage resource: %w", err)
+	}
+	if err = c.WatchObject(&operatorv1.GatewayAPI{}, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch GatewayAPI resource: %w", err)
+	}
 	if opts.MultiTenant {
 		if err = c.WatchObject(&operatorv1.Tenant{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("manager-controller failed to watch Tenant resource: %w", err)
@@ -161,7 +187,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 			// We need to watch for es-gateway certificate because ui-apis still creates a
 			// client to talk to elastic via es-gateway
 			render.ManagerTLSSecretName, relasticsearch.PublicCertSecret,
-			render.VoltronTunnelSecretName, render.ComplianceServerCertSecret, render.PacketCaptureServerCert,
+			render.VoltronTunnelSecretName, render.VoltronAdditionalTunnelSecretName,
+			render.PacketCaptureServerCert,
 			render.ManagerInternalTLSSecretName, monitor.PrometheusServerTLSSecretName, certificatemanagement.CASecretName,
 		} {
 			if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
@@ -170,12 +197,45 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		}
 	}
 
+	// The gateway TLS secret is watched across all namespaces: the truth copy
+	// lives in the operator namespace, the rendered copy in the
+	// user-configurable gateway namespace.
+	if err = utils.AddSecretsWatch(c, ManagerGatewayTLSSecretName, ""); err != nil {
+		return fmt.Errorf("manager-controller failed to watch the secret '%s': %w", ManagerGatewayTLSSecretName, err)
+	}
+
+	// Gateway and HTTPRoute status transitions must re-run
+	// gatewayUnhealthyReason so the Degraded state tracks gateway health.
+	// The watch arms once the Gateway API CRDs exist. Gateway health lives
+	// in status, which does not bump the generation, so the default
+	// generation-based predicate would drop these events — match by name
+	// and accept every event instead.
+	gatewayWatchPredicate := predicate.NewPredicateFuncs(func(o client.Object) bool {
+		return o.GetName() == ManagerGatewayResourcePrefix+"-gateway" ||
+			o.GetName() == ManagerGatewayResourcePrefix+"-route"
+	})
+	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, nil, []client.Object{
+		&gapi.Gateway{
+			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerGatewayResourcePrefix + "-gateway"},
+		},
+		&gapi.HTTPRoute{
+			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerGatewayResourcePrefix + "-route"},
+		},
+	}, gatewayWatchPredicate)
+
 	if err = utils.AddConfigMapWatch(c, tigerakvc.StaticWellKnownJWKSConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", tigerakvc.StaticWellKnownJWKSConfigMapName, err)
 	}
 
+	// Watched so that toggling the RBAC management UI re-renders the access gated on it.
+	if err = utils.AddConfigMapWatch(c, rbacmanagement.ConfigMapName, common.CalicoNamespace, eventHandler); err != nil {
+		return fmt.Errorf("manager-controller failed to watch ConfigMap resource %s: %w", rbacmanagement.ConfigMapName, err)
+	}
+
 	if err = utils.AddConfigMapWatch(c, relasticsearch.ClusterConfigConfigMapName, common.OperatorNamespace(), eventHandler); err != nil {
-		return fmt.Errorf("compliance-controller failed to watch the ConfigMap resource: %w", err)
+		return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %w", err)
 	}
 
 	if err = utils.AddNamespaceWatch(c, common.TigeraPrometheusNamespace); err != nil {
@@ -185,6 +245,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	if !opts.ElasticExternal {
 		if err = utils.AddConfigMapWatch(c, eck.LicenseConfigMapName, eck.OperatorNamespace, eventHandler); err != nil {
 			return fmt.Errorf("manager-controller failed to watch the ConfigMap resource: %v", err)
+		}
+	}
+
+	if opts.Cloud {
+		if err = addCloudWatch(c, eventHandler, opts.ElasticExternal); err != nil {
+			return fmt.Errorf("manager-controller failed to add CC watches: %v", err)
 		}
 	}
 
@@ -219,30 +285,13 @@ type ReconcileManager struct {
 	opts            options.ControllerOptions
 }
 
-// GetManager returns the default manager instance with defaults populated.
-func GetManager(ctx context.Context, cli client.Client, mt bool, ns string) (*operatorv1.Manager, error) {
-	key := client.ObjectKey{Name: "tigera-secure"}
-	if mt {
-		key.Namespace = ns
-	}
-
-	// Fetch the manager instance. We only support a single instance named "tigera-secure".
-	instance := &operatorv1.Manager{}
-	err := cli.Get(ctx, key, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	return instance, nil
-}
-
 // Reconcile reads that state of the cluster for a Manager object and makes changes based on the state read
 // and what is in the Manager.Spec
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	// Perform any common preparation that needs to be done for single-tenant and multi-tenant scenarios.
-	helper := utils.NewNamespaceHelper(r.opts.MultiTenant, render.ManagerNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.ManagerNamespace, request.Namespace)
 	logc := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace(), "multi-tenant", r.opts.MultiTenant)
 	logc.Info("Reconciling Manager")
 
@@ -252,7 +301,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Check if this is a tenant-scoped request.
-	tenant, _, err := utils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		logc.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -262,15 +311,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Fetch the Manager instance that corresponds with this reconcile trigger.
-	instance, err := GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
+	instance, err := eutils.GetManager(ctx, r.client, r.opts.MultiTenant, request.Namespace)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			logc.Info("Manager object not found")
-			r.status.OnCRNotFound()
-			return reconcile.Result{}, nil
-		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Manager", err, logc)
 		return reconcile.Result{}, err
+	}
+	if instance == nil {
+		logc.Info("Manager object not found")
+		r.status.OnCRNotFound()
+		return reconcile.Result{}, nil
 	}
 	logc.V(2).Info("Loaded config", "config", instance)
 	r.status.OnCRFound()
@@ -320,8 +369,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// TODO: Do we need a license per-tenant in the management cluster?
-	license, err := utils.FetchLicenseKey(ctx, r.client)
-	if err != nil {
+	if _, err := utils.FetchLicenseKey(ctx, r.client); err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "License not found", err, logc)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
@@ -333,7 +381,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// Fetch the Installation instance. We need this for a few reasons.
 	// - We need to make sure it has successfully completed installation.
 	// - We need to get the registry information from its spec.
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, logc)
@@ -353,7 +401,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, logc)
 		return reconcile.Result{}, err
 	}
-
 	dnsNames := dns.GetServiceDNSNames(render.ManagerServiceName, helper.InstallNamespace(), r.opts.ClusterDomain)
 
 	// Continue to add in the legacy names and namespaces of manager components to cover version skew scenarios. These
@@ -389,14 +436,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	// Determine if compliance is enabled.
-	complianceLicenseFeatureActive := utils.IsFeatureActive(license, common.ComplianceFeature)
-	complianceCR, err := compliance.GetCompliance(ctx, r.client, r.opts.MultiTenant, request.Namespace)
-	if err != nil && !errors.IsNotFound(err) {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying compliance: ", err, logc)
-		return reconcile.Result{}, err
-	}
-
 	// Build a trusted bundle containing all of the certificates of components that communicate with the manager pod.
 	// This bundle contains the root CA used to sign all operator-generated certificates, as well as the explicitly named
 	// certificates, in case the user has provided their own cert in lieu of the default certificate.
@@ -411,7 +450,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			render.TigeraLinseedSecret,
 		}
 
-		packetcaptureapi, err := utils.GetPacketCaptureAPI(ctx, r.client)
+		packetcaptureapi, err := eutils.GetPacketCaptureAPI(ctx, r.client)
 		if err != nil && !errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying PacketCapture CR", err, logc)
 			return reconcile.Result{}, err
@@ -441,20 +480,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		if monitorCR.Spec.ExternalPrometheus == nil {
 			trustedSecretNames = append(trustedSecretNames, monitor.PrometheusServerTLSSecretName)
 		}
-
-		if complianceLicenseFeatureActive && complianceCR != nil {
-			// Check that compliance is running.
-			if complianceCR.Status.State != operatorv1.TigeraStatusReady {
-				r.status.SetDegraded(operatorv1.ResourceNotReady, "Compliance is not ready", nil, logc)
-				return reconcile.Result{}, nil
-			}
-			trustedSecretNames = append(trustedSecretNames, render.ComplianceServerCertSecret)
-		}
 	}
 
 	var authenticationCR *operatorv1.Authentication
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err = utils.GetAuthentication(ctx, r.client)
+	authenticationCR, err = eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, logc)
 		return reconcile.Result{}, err
@@ -462,7 +492,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if authenticationCR != nil && authenticationCR.Status.State != operatorv1.TigeraStatusReady {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Authentication is not ready authenticationCR status: %s", authenticationCR.Status.State), nil, logc)
 		return reconcile.Result{}, nil
-	} else if utils.DexEnabled(authenticationCR) {
+	} else if eutils.DexEnabled(authenticationCR) {
 		trustedSecretNames = append(trustedSecretNames, render.DexTLSSecretName)
 	}
 
@@ -471,6 +501,31 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating trusted bundle for manager", err, logc)
 	}
+
+	// Handle all the resources that are specific to Calico Cloud. For non-cloud installs this is
+	// skipped entirely, leaving mcr at its zero value and enterprise behavior unchanged.
+	var mcr render.ManagerCloudResources
+	if r.opts.Cloud {
+		var reconcileResult *reconcile.Result
+		bundleMaker, mcr, tenant, reconcileResult, err = r.handleCloudReconcile(
+			ctx,
+			logc,
+			helper,
+			tenant,
+			authenticationCR,
+			certificateManager,
+			bundleMaker,
+			trustedSecretNames,
+			request.Namespace,
+		)
+		if err != nil {
+			// status degraded should already be set by r.handleCloudReconcile
+			return reconcile.Result{}, err
+		} else if reconcileResult != nil {
+			return *reconcileResult, nil
+		}
+	}
+
 	certificateManager.AddToStatusManager(r.status, helper.InstallNamespace())
 
 	// Check that Prometheus is running
@@ -493,7 +548,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, logc)
 		return reconcile.Result{}, err
@@ -586,7 +641,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		tunnelSecretPassthrough = render.NewCreationPassthrough(tunnelCASecret)
 	}
 
-	keyValidatorConfig, err := utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
+	keyValidatorConfig, err := eutils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain, r.opts.Cloud && !r.opts.MultiTenant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "Failed to process the authentication CR.", err, logc)
 		return reconcile.Result{}, err
@@ -594,7 +649,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 	elasticLicenseType := render.ElasticsearchLicenseTypeBasic
 	if !r.opts.ElasticExternal && managementClusterConnection == nil {
-		if elasticLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
+		if elasticLicenseType, err = esutils.GetElasticLicenseType(ctx, r.client, logc); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch license", err, logc)
 			return reconcile.Result{}, err
 		}
@@ -624,11 +679,11 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Determine the namespaces to which we must bind the cluster role.
-	namespaces, err := helper.FilteredTenantNamespaces(r.client, utils.ManagedEnterpriseOnly)
+	namespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, eutils.ManagedEnterpriseOnly)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	ossTenantNamespaces, err := helper.FilteredTenantNamespaces(r.client, utils.ManagedCalicoOnly)
+	ossTenantNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, eutils.ManagedCalicoOnly)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -640,7 +695,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	// Check if non-cluster host feature is enabled.
-	nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+	nonclusterhost, err := eutils.GetNonClusterHost(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query NonClusterHost resource", err, logc)
 		return reconcile.Result{}, err
@@ -652,32 +707,69 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// If an additional tunnel CA secret has been provisioned in the truth namespace, Voltron
+	// will mount it and serve TLS from it. This is only relevant for management clusters
+	// (Voltron is what consumes the additional CA). The secret is managed out-of-band; the
+	// controller just watches and consumes it.
+	var additionalTunnelServerCert certificatemanagement.KeyPairInterface
+	if managementCluster != nil {
+		additionalTunnelServerCert, err = r.resolveAdditionalTunnelCert(ctx, helper.TruthNamespace())
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error resolving additional tunnel CA", err, logc)
+			return reconcile.Result{}, err
+		}
+	}
+
+	// Determine if Kibana is enabled based on multi-tenancy and LogStorage replicas.
+	kibanaEnabled := !r.opts.MultiTenant
+	if kibanaEnabled {
+		ls := &operatorv1.LogStorage{}
+		if err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, ls); err != nil {
+			if !errors.IsNotFound(err) {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to query LogStorage resource", err, logc)
+				return reconcile.Result{}, err
+			}
+		} else {
+			kibanaEnabled = lscommon.KibanaEnabled(ls, r.opts.MultiTenant)
+		}
+	}
+
+	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, r.client, installationSpec.Variant, tenant.MultiTenant())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the RBAC management UI ConfigMap", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
-		VoltronRouteConfig:      routeConfig,
-		KeyValidatorConfig:      keyValidatorConfig,
-		TrustedCertBundle:       trustedBundle,
-		TLSKeyPair:              tlsSecret,
-		VoltronLinseedKeyPair:   linseedVoltronServerCert,
-		PullSecrets:             pullSecrets,
-		OpenShift:               r.opts.DetectedProvider.IsOpenShift(),
-		Installation:            installationSpec,
-		ManagementCluster:       managementCluster,
-		NonClusterHost:          nonclusterhost,
-		TunnelServerCert:        tunnelServerCert,
-		InternalTLSKeyPair:      internalTrafficSecret,
-		ClusterDomain:           r.opts.ClusterDomain,
-		ESLicenseType:           elasticLicenseType,
-		Replicas:                replicas,
-		Compliance:              complianceCR,
-		ComplianceLicenseActive: complianceLicenseFeatureActive,
-		ComplianceNamespace:     utils.NewNamespaceHelper(r.opts.MultiTenant, render.ComplianceNamespace, request.Namespace).InstallNamespace(),
-		Namespace:               helper.InstallNamespace(),
-		TruthNamespace:          helper.TruthNamespace(),
-		Tenant:                  tenant,
-		ExternalElastic:         r.opts.ElasticExternal,
-		BindingNamespaces:       namespaces,
-		OSSTenantNamespaces:     ossTenantNamespaces,
-		Manager:                 instance,
+		VoltronRouteConfig:         routeConfig,
+		KeyValidatorConfig:         keyValidatorConfig,
+		TrustedCertBundle:          trustedBundle,
+		TLSKeyPair:                 tlsSecret,
+		VoltronLinseedKeyPair:      linseedVoltronServerCert,
+		PullSecrets:                pullSecrets,
+		OpenShift:                  r.opts.DetectedProvider.IsOpenShift(),
+		Installation:               installationSpec,
+		ManagementCluster:          managementCluster,
+		NonClusterHost:             nonclusterhost,
+		TunnelServerCert:           tunnelServerCert,
+		AdditionalTunnelServerCert: additionalTunnelServerCert,
+		InternalTLSKeyPair:         internalTrafficSecret,
+		ClusterDomain:              r.opts.ClusterDomain,
+		ESLicenseType:              elasticLicenseType,
+		Replicas:                   replicas,
+		Namespace:                  helper.InstallNamespace(),
+		TruthNamespace:             helper.TruthNamespace(),
+		Tenant:                     tenant,
+		ExternalElastic:            r.opts.ElasticExternal,
+		BindingNamespaces:          namespaces,
+		OSSTenantNamespaces:        ossTenantNamespaces,
+		Manager:                    instance,
+		Authentication:             authenticationCR,
+		KibanaEnabled:              kibanaEnabled,
+		RBACManagementEnabled:      rbacManagementEnabled,
+		CACertCommonName:           certificateManager.CACertCommonName(),
+		Cloud:                      r.opts.Cloud,
+		CloudResources:             mcr,
 	}
 
 	// Render the desired objects from the CRD and create or update them.
@@ -687,9 +779,90 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, component); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, logc)
 		return reconcile.Result{}, err
+	}
+
+	// Resolve gateway components. Cleanup is label-driven: every Gateway
+	// carrying this component's label outside the desired namespace (or in
+	// any namespace, when spec.ingressGateway is nil) marks leftover resources to
+	// tear down. No state is stored — each reconcile converges from what is
+	// observed on the cluster.
+	var gatewayComponents []render.Component
+	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
+	if r.opts.MultiTenant {
+		// Multi-tenant CIG is not supported: resource names and the cleanup
+		// label carry no tenant identity, so tenants would fight over the
+		// same Gateway and could delete each other's resources — including
+		// the GatewayAPI controller's per-namespace SA and RoleBinding.
+		// Nothing is ever created, so there is nothing to clean up either.
+		if instance.Spec.IngressGateway != nil {
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "spec.ingressGateway is not supported in multi-tenant clusters", nil, logc)
+			return reconcile.Result{}, nil
+		}
+	} else if instance.Spec.IngressGateway != nil {
+		gwComp, gwKeyPair, result, err := r.resolveGateway(ctx, instance, authenticationCR, certificateManager, helper, logc)
+		if err != nil {
+			return result, err
+		}
+		if gwComp == nil {
+			return result, nil
+		}
+		gatewayTLSKeyPair = gwKeyPair
+
+		gwNS := instance.Spec.IngressGateway.NamespaceOrDefault()
+		strays, _, err := r.managerGatewayNamespaces(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, logc)
+			return reconcile.Result{}, err
+		}
+		for _, ns := range strays {
+			if ns == gwNS {
+				continue
+			}
+			gatewayComponents = append(gatewayComponents, rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
+				ResourcePrefix:      ManagerGatewayResourcePrefix,
+				GatewayNamespace:    ns,
+				BackendNamespace:    helper.InstallNamespace(),
+				TLSSecretName:       ManagerGatewayTLSSecretName,
+				Enterprise:          true,
+				MoveTargetNamespace: gwNS,
+			}))
+		}
+		gatewayComponents = append(gatewayComponents, gwComp)
+	} else {
+		// Tear down every labeled Gateway's namespace. The install namespace
+		// is always included: it holds the Backend and ReferenceGrant, and
+		// this covers partial renders that never produced a labeled Gateway.
+		namespaces, gatewayCRDsPresent, err := r.managerGatewayNamespaces(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, logc)
+			return reconcile.Result{}, err
+		}
+		if gatewayCRDsPresent && !slices.Contains(namespaces, helper.InstallNamespace()) {
+			namespaces = append(namespaces, helper.InstallNamespace())
+		}
+		for _, ns := range namespaces {
+			gatewayComponents = append(gatewayComponents, rgateway.DeletionComponent(&rgateway.DeletionConfiguration{
+				ResourcePrefix:   ManagerGatewayResourcePrefix,
+				GatewayNamespace: ns,
+				BackendNamespace: helper.InstallNamespace(),
+				TLSSecretName:    ManagerGatewayTLSSecretName,
+				Enterprise:       true,
+			}))
+		}
+	}
+
+	keyPairOptions := []rcertificatemanagement.KeyPairOption{
+		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+		rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
+		rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
+		rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
+		rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, true),
+	}
+	if gatewayTLSKeyPair != nil {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(gatewayTLSKeyPair, true, false))
 	}
 
 	components := []render.Component{
@@ -701,13 +874,8 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			Namespace:       helper.InstallNamespace(),
 			TruthNamespace:  helper.TruthNamespace(),
 			ServiceAccounts: []string{render.ManagerServiceAccount},
-			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-				rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
-				rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-				rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
-			},
-			TrustedBundle: bundleMaker,
+			KeyPairOptions:  keyPairOptions,
+			TrustedBundle:   bundleMaker,
 		}),
 	}
 
@@ -715,10 +883,22 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		components = append(components, tunnelSecretPassthrough)
 	}
 
+	components = append(components, gatewayComponents...)
+
 	for _, component := range components {
 		if err := defaultHandler.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, logc)
 			return reconcile.Result{}, err
+		}
+	}
+
+	if instance.Spec.IngressGateway != nil {
+		// An unhealthy gateway degrades the component without tearing down
+		// deployed resources. The requeue re-checks until Envoy converges;
+		// the degraded state then clears on the pass below.
+		if msg := r.gatewayUnhealthyReason(ctx, instance.Spec.IngressGateway.NamespaceOrDefault()); msg != "" {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, logc)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 
@@ -806,4 +986,248 @@ func getVoltronRouteConfig(ctx context.Context, cli client.Client, managerNamesp
 	}
 
 	return builder.Build()
+}
+
+// resolveAdditionalTunnelCert looks up the additional tunnel CA secret in the truth namespace.
+// When the secret is present, a KeyPair is returned so that Voltron mounts the CA and gets the
+// corresponding environment variables set. When the secret is absent, (nil, nil) is returned and
+// Voltron runs without the additional CA. The secret is created and rotated out-of-band; this
+// controller only consumes it.
+func (r *ReconcileManager) resolveAdditionalTunnelCert(
+	ctx context.Context,
+	truthNamespace string,
+) (certificatemanagement.KeyPairInterface, error) {
+	secret, err := utils.GetSecret(ctx, r.client, render.VoltronAdditionalTunnelSecretName, truthNamespace)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read %s secret: %w", render.VoltronAdditionalTunnelSecretName, err)
+	}
+	if secret == nil {
+		return nil, nil
+	}
+	return certificatemanagement.NewKeyPair(secret, nil, ""), nil
+}
+
+const (
+	ManagerGatewayTLSSecretName  = "calico-manager-gateway-tls"
+	ManagerGatewayResourcePrefix = "calico-manager"
+)
+
+// managerGatewayNamespaces returns the sorted, de-duplicated namespaces of
+// Gateways carrying this component's gateway label. A missing Gateway API CRD
+// yields an empty list — there is nothing to clean up on clusters without
+// CIG. In multi-tenant mode the list is skipped: the label value is shared
+// across tenants, so one tenant's cleanup must not see another's Gateways.
+// The bool reports whether the Gateway API CRDs are installed at all: when
+// they are not, no gateway object can exist and cleanup must be skipped —
+// even a Delete call fails against a kind the API server does not serve.
+func (r *ReconcileManager) managerGatewayNamespaces(ctx context.Context) ([]string, bool, error) {
+	if r.opts.MultiTenant {
+		return nil, false, nil
+	}
+	gwList := &gapi.GatewayList{}
+	if err := r.client.List(ctx, gwList, client.MatchingLabels{rgateway.GatewayLabel: ManagerGatewayResourcePrefix}); err != nil {
+		var noMatch *apimeta.NoKindMatchError
+		if stderrors.As(err, &noMatch) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	var namespaces []string
+	for _, gw := range gwList.Items {
+		if !slices.Contains(namespaces, gw.Namespace) {
+			namespaces = append(namespaces, gw.Namespace)
+		}
+	}
+	slices.Sort(namespaces)
+	return namespaces, true, nil
+}
+
+// resolveGateway validates the Manager spec.ingressGateway configuration, resolves the
+// GatewayClass, provisions the TLS keypair, and returns a gateway render component.
+func (r *ReconcileManager) resolveGateway(
+	ctx context.Context,
+	instance *operatorv1.Manager,
+	authenticationCR *operatorv1.Authentication,
+	certManager certificatemanager.CertificateManager,
+	helper eutils.NamespaceHelper,
+	logc logr.Logger,
+) (render.Component, certificatemanagement.KeyPairInterface, reconcile.Result, error) {
+	gw := instance.Spec.IngressGateway
+
+	// Fetch GatewayAPI CR.
+	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; gateway resources will not be rendered", err, logc)
+			return nil, nil, reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
+		return nil, nil, reconcile.Result{}, err
+	}
+
+	// Resolve gatewayClassName.
+	gatewayClassName, err := resolveGatewayClassName(gw, gatewayAPI)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to resolve gateway class", err, logc)
+		return nil, nil, reconcile.Result{}, err
+	}
+
+	// OIDC hostname check. managerDomain is a base URL (https://host[:port]);
+	// only the host must match spec.ingressGateway.hostname — scheme and port are
+	// ignored.
+	if authenticationCR != nil && authenticationCR.Spec.ManagerDomain != "" {
+		if managerDomainHost(authenticationCR.Spec.ManagerDomain) != gw.Hostname {
+			err := fmt.Errorf("Authentication.spec.managerDomain %q does not match spec.ingressGateway.hostname %q — OIDC redirects will fail",
+				authenticationCR.Spec.ManagerDomain, gw.Hostname)
+			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Gateway hostname mismatch", err, logc)
+			return nil, nil, reconcile.Result{}, err
+		}
+	}
+
+	// Create the gateway namespace if it does not exist. calico-system is
+	// skipped: the Installation controller owns it.
+	if gwNS := gw.NamespaceOrDefault(); gwNS != common.CalicoNamespace {
+		if err := r.ensureGatewayNamespace(ctx, gwNS); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, logc)
+			return nil, nil, reconcile.Result{}, err
+		}
+	}
+
+	// Provision TLS keypair for the gateway listener.
+	gwTLSKeyPair, err := certManager.GetOrCreateKeyPair(
+		r.client,
+		ManagerGatewayTLSSecretName,
+		helper.TruthNamespace(),
+		[]string{gw.Hostname})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, logc)
+		return nil, nil, reconcile.Result{}, err
+	}
+
+	gwCfg := &rgateway.Configuration{
+		Hostname:                     gw.Hostname,
+		GatewayNamespace:             gw.NamespaceOrDefault(),
+		GatewayClassName:             gatewayClassName,
+		BackendServiceName:           render.ManagerServiceName,
+		BackendPort:                  render.ManagerPort,
+		BackendNamespace:             helper.InstallNamespace(),
+		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
+		TLSKeyPair:                   gwTLSKeyPair,
+		ResourcePrefix:               ManagerGatewayResourcePrefix,
+		Enterprise:                   true,
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+	}
+
+	return rgateway.Component(gwCfg), gwTLSKeyPair, reconcile.Result{}, nil
+}
+
+// ensureGatewayNamespace creates the gateway namespace if it does not exist.
+// The namespace is created without an owner reference and is never deleted by
+// the operator: a user-provided namespace may hold other workloads.
+func (r *ReconcileManager) ensureGatewayNamespace(ctx context.Context, name string) error {
+	err := r.client.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
+	if err == nil || !errors.IsNotFound(err) {
+		return err
+	}
+	ns := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: map[string]string{"name": name},
+		},
+	}
+	if err := r.client.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
+		return err
+	}
+	return nil
+}
+
+// gatewayUnhealthyReason reads the Gateway and HTTPRoute status conditions
+// and returns why the gateway is not ready, or "" when every condition is
+// healthy. Per the design, an unhealthy gateway degrades the component — the
+// caller sets Degraded and requeues; deployed resources are never torn down.
+// NotFound is reported too: the requeue re-checks once the cache catches up
+// with the resources this reconcile just applied.
+func (r *ReconcileManager) gatewayUnhealthyReason(ctx context.Context, gatewayNS string) string {
+	gatewayName := ManagerGatewayResourcePrefix + "-gateway"
+	routeName := ManagerGatewayResourcePrefix + "-route"
+
+	gw := &gapi.Gateway{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: gatewayName, Namespace: gatewayNS}, gw); err != nil {
+		if errors.IsNotFound(err) {
+			return fmt.Sprintf("Gateway %s/%s not found yet", gatewayNS, gatewayName)
+		}
+		return fmt.Sprintf("Failed to read Gateway %s/%s status: %v", gatewayNS, gatewayName, err)
+	}
+
+	if msg := unhealthyCondition(gw.Status.Conditions, string(gapi.GatewayConditionAccepted), "Gateway not accepted"); msg != "" {
+		return msg
+	}
+	if msg := unhealthyCondition(gw.Status.Conditions, string(gapi.GatewayConditionProgrammed), "Gateway not programmed"); msg != "" {
+		return msg
+	}
+
+	route := &gapi.HTTPRoute{}
+	if err := r.client.Get(ctx, client.ObjectKey{Name: routeName, Namespace: gatewayNS}, route); err != nil {
+		if errors.IsNotFound(err) {
+			return fmt.Sprintf("HTTPRoute %s/%s not found yet", gatewayNS, routeName)
+		}
+		return fmt.Sprintf("Failed to read HTTPRoute %s/%s status: %v", gatewayNS, routeName, err)
+	}
+	for _, ps := range route.Status.Parents {
+		if msg := unhealthyCondition(ps.Conditions, string(gapi.RouteConditionAccepted), "HTTPRoute not accepted"); msg != "" {
+			return msg
+		}
+		if msg := unhealthyCondition(ps.Conditions, string(gapi.RouteConditionResolvedRefs), "HTTPRoute refs not resolved"); msg != "" {
+			return msg
+		}
+	}
+
+	return ""
+}
+
+// unhealthyCondition returns a message when the named condition exists and is
+// not True. A missing condition is healthy: the controller has not written
+// its verdict yet, and Accepted/Programmed gate readiness once it does.
+func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix string) string {
+	for _, cond := range conditions {
+		if cond.Type == condType && cond.Status != metav1.ConditionTrue {
+			return fmt.Sprintf("%s: %s", msgPrefix, cond.Message)
+		}
+	}
+	return ""
+}
+
+// managerDomainHost extracts the host from a managerDomain-style value —
+// scheme and port, when present, are dropped.
+func managerDomainHost(s string) string {
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "https://"), "http://")
+	if host, _, err := net.SplitHostPort(s); err == nil {
+		return host
+	}
+	return s
+}
+
+// resolveGatewayClassName determines the GatewayClass name to use based on the
+// user's spec.ingressGateway.gatewayClassName or the GatewayAPI CR's configured classes.
+func resolveGatewayClassName(gw *operatorv1.IngressGatewaySpec, gatewayAPI *operatorv1.GatewayAPI) (string, error) {
+	if gw.GatewayClassName != nil && *gw.GatewayClassName != "" {
+		name := *gw.GatewayClassName
+		for _, c := range gatewayAPI.Spec.GatewayClasses {
+			if c.Name == name {
+				return name, nil
+			}
+		}
+		return "", fmt.Errorf("GatewayClass %q not found; verify GatewayAPI CR includes this class", name)
+	}
+
+	classes := gatewayAPI.Spec.GatewayClasses
+	switch len(classes) {
+	case 0:
+		return "", fmt.Errorf("no GatewayClasses configured on GatewayAPI CR")
+	case 1:
+		return classes[0].Name, nil
+	default:
+		return "", fmt.Errorf("multiple GatewayClasses configured on GatewayAPI CR; set spec.ingressGateway.gatewayClassName to select one")
+	}
 }

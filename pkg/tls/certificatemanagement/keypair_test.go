@@ -28,6 +28,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	corev1 "k8s.io/api/core/v1"
+
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -200,6 +202,54 @@ var _ = Describe("TLS secret metadata", func() {
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(secret.Labels["certificates.operator.tigera.io/signer"]).To(Equal("unknown"))
+		})
+	})
+
+	Describe("GetKeyCertPEM()", func() {
+		It("should read the standard tls.crt/tls.key pair", func() {
+			secret := &corev1.Secret{Data: map[string][]byte{
+				"tls.key": []byte("standard-key"),
+				"tls.crt": []byte("standard-cert"),
+			}}
+			key, cert := certificatemanagement.GetKeyCertPEM(secret)
+			Expect(string(key)).To(Equal("standard-key"))
+			Expect(string(cert)).To(Equal("standard-cert"))
+		})
+
+		It("should fall back to legacy cert/key names when the standard pair is absent", func() {
+			secret := &corev1.Secret{Data: map[string][]byte{
+				"key":  []byte("legacy-key"),
+				"cert": []byte("legacy-cert"),
+			}}
+			key, cert := certificatemanagement.GetKeyCertPEM(secret)
+			Expect(string(key)).To(Equal("legacy-key"))
+			Expect(string(cert)).To(Equal("legacy-cert"))
+		})
+
+		// Regression test: a secret may legitimately hold both the standard tls.crt/tls.key pair
+		// and a legacy cert/key pair at the same time (e.g. an expired legacy cert kept during a
+		// rotation overlap). Selection must be deterministic and always prefer the standard pair;
+		// otherwise the KeyPair hash annotation flaps and rolls consumers like tigera-manager.
+		It("should deterministically prefer tls.crt/tls.key when both standard and legacy pairs exist", func() {
+			secret := &corev1.Secret{Data: map[string][]byte{
+				"tls.key": []byte("standard-key"),
+				"tls.crt": []byte("standard-cert"),
+				"key":     []byte("legacy-key"),
+				"cert":    []byte("legacy-cert"),
+			}}
+			// Run many times to defeat Go's randomized map iteration order.
+			for i := 0; i < 100; i++ {
+				key, cert := certificatemanagement.GetKeyCertPEM(secret)
+				Expect(string(key)).To(Equal("standard-key"))
+				Expect(string(cert)).To(Equal("standard-cert"))
+			}
+		})
+
+		It("should return nil when no recognised pair is present", func() {
+			secret := &corev1.Secret{Data: map[string][]byte{"unrelated": []byte("x")}}
+			key, cert := certificatemanagement.GetKeyCertPEM(secret)
+			Expect(key).To(BeNil())
+			Expect(cert).To(BeNil())
 		})
 	})
 })

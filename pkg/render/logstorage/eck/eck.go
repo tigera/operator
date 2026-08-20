@@ -363,9 +363,8 @@ func (e *eck) operatorStatefulSet() *appsv1.StatefulSet {
 					NodeSelector:       e.cfg.Installation.ControlPlaneNodeSelector,
 					Tolerations:        tolerations,
 					Containers: []corev1.Container{{
-						Image:           e.esOperatorImage,
-						ImagePullPolicy: render.ImagePullPolicy(),
-						Name:            "manager",
+						Image: e.esOperatorImage,
+						Name:  "manager",
 						// Verbosity level of logs. -2=Error, -1=Warn, 0=Info, 0 and above=Debug
 						Args: []string{
 							"manager",

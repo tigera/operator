@@ -25,8 +25,6 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -51,6 +49,8 @@ const (
 
 	TyphaContainerName = "calico-typha"
 
+	TyphaClusterRoleName = "calico-typha"
+
 	TyphaNonClusterHostSuffix            = "-noncluster-host"
 	TyphaNonClusterHostNetworkPolicyName = networkpolicy.CalicoComponentPolicyPrefix + "typha-noncluster-host-access"
 
@@ -69,12 +69,12 @@ var (
 // TyphaConfiguration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/typha on a cluster.
 type TyphaConfiguration struct {
-	K8sServiceEp      k8sapi.ServiceEndpoint
+	K8sServiceEp k8sapi.ServiceEndpoint
+
 	Installation      *operatorv1.InstallationSpec
 	TLS               *TyphaNodeTLS
 	MigrateNamespaces bool
 	ClusterDomain     string
-	NonClusterHost    *operatorv1.NonClusterHost
 
 	// The health port that Felix is bound to. We configure Typha to bind to the port
 	// that is one less.
@@ -91,7 +91,7 @@ type typhaComponent struct {
 	cfg *TyphaConfiguration
 
 	// Generated internal config, built from the given configuration.
-	typhaImage string
+	calicoImage string
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -99,19 +99,12 @@ func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.typhaImage, err = components.GetReference(components.ComponentTigeraTypha, reg, path, prefix, is)
-	} else {
-		if operatorv1.IsFIPSModeEnabled(c.cfg.Installation.FIPSMode) {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTyphaFIPS, reg, path, prefix, is)
-		} else {
-			c.typhaImage, err = components.GetReference(components.ComponentCalicoTypha, reg, path, prefix, is)
-		}
-	}
-	if err != nil {
-		return err
-	}
-	return nil
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	return err
+}
+
+func (c *typhaComponent) TyphaConfig() *TyphaConfiguration {
+	return c.cfg
 }
 
 func (c *typhaComponent) SupportedOSType() rmeta.OSType {
@@ -119,11 +112,15 @@ func (c *typhaComponent) SupportedOSType() rmeta.OSType {
 }
 
 func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
+	pdb := c.typhaPodDisruptionBudget()
+	if overrides := c.cfg.Installation.TyphaPodDisruptionBudget; overrides != nil {
+		rcomp.ApplyPodDisruptionBudgetOverrides(pdb, overrides)
+	}
 	objs := []client.Object{
 		c.typhaServiceAccount(),
 		c.typhaRole(),
 		c.typhaRoleBinding(),
-		c.typhaPodDisruptionBudget(),
+		pdb,
 	}
 	objs = append(objs, c.typhaServices()...)
 
@@ -134,16 +131,6 @@ func (c *typhaComponent) Objects() ([]client.Object, []client.Object) {
 	}
 
 	return objs, nil
-}
-
-func NewTyphaNonClusterHostPolicy(cfg *TyphaConfiguration) Component {
-	return NewPassthrough(
-		[]client.Object{typhaNonClusterHostCalicoSystemPolicy(cfg)},
-		[]client.Object{
-			// allow-tigera Tier was renamed to calico-system
-			networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("typha-noncluster-host-access", common.CalicoNamespace),
-		},
-	)
 }
 
 func (c *typhaComponent) typhaPodDisruptionBudget() *policyv1.PodDisruptionBudget {
@@ -208,7 +195,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 	role := &rbacv1.ClusterRole{
 		TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:   "calico-typha",
+			Name:   TyphaClusterRoleName,
 			Labels: map[string]string{},
 		},
 
@@ -283,6 +270,7 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 					"stagednetworkpolicies",
 					"globalnetworksets",
 					"hostendpoints",
+					"hostqospolicies",
 					"ipamblocks",
 					"ippools",
 					"ipreservations",
@@ -356,25 +344,6 @@ func (c *typhaComponent) typhaRole() *rbacv1.ClusterRole {
 			},
 		},
 	}
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		extraRules := []rbacv1.PolicyRule{
-			{
-				// Tigera Secure needs to be able to read licenses, and config.
-				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-				Resources: []string{
-					"licensekeys",
-					"remoteclusterconfigurations",
-					"packetcaptures",
-					"deeppacketinspections",
-					"externalnetworks",
-					"egressgatewaypolicies",
-					"bfdconfigurations",
-				},
-				Verbs: []string{"get", "list", "watch"},
-			},
-		}
-		role.Rules = append(role.Rules, extraRules...)
-	}
 	if c.cfg.Installation.KubernetesProvider.IsOpenShift() {
 		role.Rules = append(role.Rules, rbacv1.PolicyRule{
 			APIGroups:     []string{"security.openshift.io"},
@@ -421,8 +390,11 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 		annotations["prometheus.io/port"] = fmt.Sprintf("%d", *c.cfg.Installation.TyphaMetricsPort)
 	}
 
-	// Allow tolerations to be overwritten by the end-user.
-	tolerations := rmeta.TolerateAll
+	// Allow tolerations to be overwritten by the end-user. By default Typha uses
+	// the bootstrap toleration set: broad enough to schedule on otherwise tainted
+	// nodes during install (before the CNI / cloud provider are ready), but narrow
+	// enough that cordoned nodes are still avoided.
+	tolerations := rmeta.TolerateBootstrap
 	if len(c.cfg.Installation.ControlPlaneTolerations) != 0 {
 		tolerations = c.cfg.Installation.ControlPlaneTolerations
 	}
@@ -476,22 +448,6 @@ func (c *typhaComponent) typhaDeployment() []client.Object {
 	// fix up the other places.
 	c.applyPostOverrideFixUps(deploy)
 
-	if c.cfg.NonClusterHost != nil {
-		// Create a separate deployment to handle non-cluster host requests.
-		deployNonClusterHost := deploy.DeepCopy()
-		deployNonClusterHost.Name += TyphaNonClusterHostSuffix
-		// Replace Typha secret annotation for NonClusterHost deployment.
-		delete(deployNonClusterHost.Spec.Template.Annotations, c.cfg.TLS.TyphaSecret.HashAnnotationKey())
-		deployNonClusterHost.Spec.Template.Annotations[c.cfg.TLS.TyphaSecretNonClusterHost.HashAnnotationKey()] = c.cfg.TLS.TyphaSecretNonClusterHost.HashAnnotationValue()
-		// Remove the affinity and use pod network
-		deployNonClusterHost.Spec.Template.Spec.Affinity = nil
-		deployNonClusterHost.Spec.Template.Spec.HostNetwork = false
-		// Tune Typha container and volumes for NonClusterHost deployment.
-		deployNonClusterHost.Spec.Template.Spec.Containers = []corev1.Container{c.typhaContainerNonClusterHost()}
-		deployNonClusterHost.Spec.Template.Spec.Volumes = c.volumeNonClusterHost()
-		return []client.Object{deploy, deployNonClusterHost}
-	}
-
 	return []client.Object{deploy}
 }
 
@@ -533,25 +489,11 @@ func (c *typhaComponent) volumes() []corev1.Volume {
 	}
 }
 
-func (c *typhaComponent) volumeNonClusterHost() []corev1.Volume {
-	return []corev1.Volume{
-		c.cfg.TLS.TrustedBundle.Volume(),
-		c.cfg.TLS.TyphaSecretNonClusterHost.Volume(),
-	}
-}
-
 // typhaVolumeMounts creates the typha's volume mounts.
 func (c *typhaComponent) typhaVolumeMounts() []corev1.VolumeMount {
 	return append(
 		c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.TLS.TyphaSecret.VolumeMount(c.SupportedOSType()),
-	)
-}
-
-func (c *typhaComponent) typhaVolumeMountsNonClusterHost() []corev1.VolumeMount {
-	return append(
-		c.cfg.TLS.TrustedBundle.VolumeMounts(c.SupportedOSType()),
-		c.cfg.TLS.TyphaSecretNonClusterHost.VolumeMount(c.SupportedOSType()),
 	)
 }
 
@@ -570,8 +512,8 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 	lp, rp := c.livenessReadinessProbes("localhost")
 	return corev1.Container{
 		Name:            TyphaContainerName,
-		Image:           c.typhaImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "typha"},
 		Resources:       c.typhaResources(),
 		Env:             c.typhaEnvVars(c.cfg.TLS.TyphaSecret),
 		VolumeMounts:    c.typhaVolumeMounts(),
@@ -580,14 +522,6 @@ func (c *typhaComponent) typhaContainer() corev1.Container {
 		ReadinessProbe:  rp,
 		SecurityContext: securitycontext.NewNonRootContext(),
 	}
-}
-
-func (c *typhaComponent) typhaContainerNonClusterHost() corev1.Container {
-	container := c.typhaContainer()
-	container.Env = c.typhaEnvVarsNonClusterHost()
-	container.VolumeMounts = c.typhaVolumeMountsNonClusterHost()
-	container.LivenessProbe, container.ReadinessProbe = c.livenessReadinessProbes("")
-	return container
 }
 
 // typhaResources creates the typha's resource requirements.
@@ -629,15 +563,6 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 		typhaEnv = append(typhaEnv, corev1.EnvVar{Name: "FELIX_INTERFACEPREFIX", Value: "azv"})
 	}
 
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		if c.cfg.Installation.CalicoNetwork != nil && c.cfg.Installation.CalicoNetwork.MultiInterfaceMode != nil {
-			typhaEnv = append(typhaEnv, corev1.EnvVar{
-				Name:  "MULTI_INTERFACE_MODE",
-				Value: c.cfg.Installation.CalicoNetwork.MultiInterfaceMode.Value(),
-			})
-		}
-	}
-
 	// If host-local IPAM is in use, we need to configure typha to use the Kubernetes pod CIDR.
 	cni := c.cfg.Installation.CNI
 	if cni != nil && cni.IPAM != nil && cni.IPAM.Type == operatorv1.IPAMPluginHostLocal {
@@ -660,38 +585,16 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 	return typhaEnv
 }
 
-func replaceOrAppendEnvVar(envVars []corev1.EnvVar, key, value string) []corev1.EnvVar {
-	found := false
-	for i := range envVars {
-		if envVars[i].Name == key {
-			envVars[i].Value = value
-			found = true
-		}
-	}
-
-	if !found && value != "" {
-		envVars = append(envVars, corev1.EnvVar{Name: key, Value: value})
-	}
-	return envVars
-}
-
-func (c *typhaComponent) typhaEnvVarsNonClusterHost() []corev1.EnvVar {
-	// Update Typha client common name or URISAN for non-cluster hosts.
-	// At least one of TYPHA_CLIENTCN or TYPHA_CLIENTURISAN must be set.
-	envVars := c.typhaEnvVars(c.cfg.TLS.TyphaSecretNonClusterHost)
-	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTCN", c.cfg.TLS.NodeNonClusterHostCommonName)
-	envVars = replaceOrAppendEnvVar(envVars, "TYPHA_CLIENTURISAN", c.cfg.TLS.NodeNonClusterHostURISAN)
-
-	// Tell the health aggregator to listen on all interfaces.
-	envVars = append(envVars, corev1.EnvVar{Name: "TYPHA_HEALTHHOST", Value: "0.0.0.0"})
-	return envVars
-}
-
 // typhaHealthPort returns the liveness and readiness port to use for typha.
 func typhaHealthPort(cfg *TyphaConfiguration) int {
-	// We use the felix health port, minus one, to determine the port to use for Typha.
-	// This isn't ideal, but allows for some control of the typha port.
-	return cfg.FelixHealthPort - 1
+	return TyphaHealthPort(cfg.FelixHealthPort)
+}
+
+// TyphaHealthPort returns the health port Typha binds to, given Felix's.
+// We use the felix health port, minus one, to determine the port to use for Typha.
+// This isn't ideal, but allows for some control of the typha port.
+func TyphaHealthPort(felixHealthPort int) int {
+	return felixHealthPort - 1
 }
 
 // livenessReadinessProbes creates the typha's liveness and readiness probes.
@@ -745,13 +648,6 @@ func (c *typhaComponent) typhaServices() []client.Object {
 		},
 	}
 
-	if c.cfg.NonClusterHost != nil {
-		svcNonClusterHost := svc.DeepCopy()
-		svcNonClusterHost.Name += TyphaNonClusterHostSuffix
-		svcNonClusterHost.Labels[AppLabelName] += TyphaNonClusterHostSuffix
-		svcNonClusterHost.Spec.Selector[AppLabelName] += TyphaNonClusterHostSuffix
-		return []client.Object{svc, svcNonClusterHost}
-	}
 	return []client.Object{svc}
 }
 
@@ -819,52 +715,6 @@ func (c *typhaComponent) typhaPrometheusService() *corev1.Service {
 			Selector: map[string]string{
 				AppLabelName: TyphaK8sAppName,
 			},
-		},
-	}
-}
-
-func typhaNonClusterHostCalicoSystemPolicy(cfg *TyphaConfiguration) *v3.NetworkPolicy {
-	egressRules := []v3.Rule{}
-	egressRules = networkpolicy.AppendDNSEgressRules(egressRules, cfg.Installation.KubernetesProvider.IsOpenShift())
-	egressRules = append(egressRules, []v3.Rule{
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicy.KubeAPIServerEntityRule,
-		},
-	}...)
-
-	ingressRules := []v3.Rule{
-		{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Ports: networkpolicy.Ports(uint16(TyphaPort), uint16(typhaHealthPort(cfg))),
-			},
-		},
-	}
-
-	if r, err := cfg.K8sServiceEp.DestinationEntityRule(); r != nil && err == nil {
-		egressRules = append(egressRules, v3.Rule{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: *r,
-		})
-	}
-
-	return &v3.NetworkPolicy{
-		TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      TyphaNonClusterHostNetworkPolicyName,
-			Namespace: common.CalicoNamespace,
-		},
-		Spec: v3.NetworkPolicySpec{
-			Order:    &networkpolicy.HighPrecedenceOrder,
-			Tier:     networkpolicy.CalicoTierName,
-			Selector: networkpolicy.KubernetesAppSelector(common.TyphaDeploymentName + TyphaNonClusterHostSuffix),
-			Types:    []v3.PolicyType{v3.PolicyTypeEgress, v3.PolicyTypeIngress},
-			Egress:   egressRules,
-			Ingress:  ingressRules,
 		},
 	}
 }

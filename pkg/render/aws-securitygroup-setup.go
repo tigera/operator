@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2019-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -117,7 +117,6 @@ func (c *awsSGSetupComponent) setupJob() *batchv1.Job {
 					Containers: []corev1.Container{{
 						Name:            "aws-security-group-setup",
 						Image:           c.image,
-						ImagePullPolicy: ImagePullPolicy(),
 						Args:            []string{"--aws-sg-setup"},
 						Env:             envVars,
 						SecurityContext: securitycontext.NewNonRootContext(),

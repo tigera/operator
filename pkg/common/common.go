@@ -24,8 +24,6 @@ const (
 	// Monitor + Prometheus related const
 	TigeraPrometheusNamespace = "tigera-prometheus"
 
-	// ComplianceFeature name
-	ComplianceFeature = "compliance-reports"
 	// ThreatDefenseFeature feature name
 	ThreatDefenseFeature = "threat-defense"
 	// ExportLogsFeature to 3rd party systems feature name
@@ -36,11 +34,23 @@ const (
 	EgressAccessControlFeature = "egress-access-control"
 	// PolicyRecommendation feature name
 	PolicyRecommendationFeature = "policy-recommendation"
+	// OpenTelemetryCollectorFeature gates the OpenTelemetry Collector component in the license.
+	OpenTelemetryCollectorFeature = "otel-collector"
 	// MultipleOwnersLabel used to indicate multiple owner references.
 	// If the render code places this label on an object, the object mergeState machinery will merge owner
 	// references with any that already exist on the object rather than replace the owner references. Further
 	// the controller in the owner reference will not be set.
 	MultipleOwnersLabel = "operator.tigera.io/multipleOwners"
+
+	// HostNetworkedPodLabel marks pods that run with hostNetwork=true and are
+	// managed by the operator. The podiprecovery controller uses this label
+	// to identify pods that need their IPs re-checked after a node IP change
+	// (Kubernetes does not refresh status.podIPs for existing hostNetwork pods;
+	// see https://github.com/kubernetes/kubernetes/issues/93897). It is
+	// applied centrally by setStandardSelectorAndLabels in pkg/controller/utils
+	// to any pod template with Spec.HostNetwork == true, so render packages
+	// do not need to apply it themselves.
+	HostNetworkedPodLabel = "operator.tigera.io/host-networked"
 
 	// Sidecar common names
 	SidecarMutatingWebhookConfigName = "tigera-sidecar-webhook-configuration"

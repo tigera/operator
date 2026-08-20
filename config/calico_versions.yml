@@ -13,6 +13,8 @@ components:
     version: master
   cni-windows:
     version: master
+  third-party-cni-plugins:
+    version: master
   kube-controllers:
     version: master
   goldmane:
@@ -22,8 +24,6 @@ components:
   apiserver:
     version: master
   csi:
-    version: master
-  csi-node-driver-registrar:
     version: master
   key-cert-provisioner:
     version: master
@@ -48,4 +48,6 @@ components:
   istio-proxyv2:
     version: master
   webhooks:
+    version: master
+  calico:
     version: master

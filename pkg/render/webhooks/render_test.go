@@ -93,6 +93,16 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		rtest.ExpectResources(resources, expectedResources)
 
+		// Verify the Calico (non-enterprise) variant uses the combined calico/calico image with Command set.
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		Expect(dep.Spec.Template.Spec.Containers).To(HaveLen(1))
+		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
+			fmt.Sprintf("test-registry.com/%s%s:%s",
+				components.CalicoImagePath,
+				components.ComponentCalico.Image,
+				components.ComponentCalico.Version)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Command).To(Equal([]string{"/usr/bin/calico", "component", "webhooks"}))
+
 		// Verify the ClusterRole includes expected rules.
 		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
 		Expect(cr.Rules).To(ContainElements(
@@ -112,6 +122,15 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Resources: []string{"managedclusters"},
 			Verbs:     []string{"list", "watch", "update"},
 		}))
+
+		// The audit-logging webhook targets the Enterprise-only /audit endpoint, so it must not
+		// be registered on Calico OSS.
+		vwc, err := rtest.GetResourceOfType[*admissionregistrationv1.ValidatingWebhookConfiguration](resources, "api.projectcalico.org", "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(vwc.Webhooks).To(ConsistOf(
+			HaveField("Name", "tiered-rbac.api.projectcalico.org"),
+			HaveField("Name", "cluster-info.api.projectcalico.org"),
+		))
 	})
 
 	It("should render all resources for Enterprise with the correct image", func() {
@@ -126,42 +145,10 @@ var _ = Describe("Webhooks rendering tests", func() {
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&admissionregistrationv1.ValidatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "api.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "ValidatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"}},
-			&admissionregistrationv1.MutatingWebhookConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "api.projectcalico.org"}, TypeMeta: metav1.TypeMeta{Kind: "MutatingWebhookConfiguration", APIVersion: "admissionregistration.k8s.io/v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 		}
 		rtest.ExpectResources(resources, expectedResources)
-
-		// Verify the MutatingWebhookConfiguration has the expected webhooks.
-		mwc, err := rtest.GetResourceOfType[*admissionregistrationv1.MutatingWebhookConfiguration](resources, "api.projectcalico.org", "")
-		Expect(err).NotTo(HaveOccurred())
-		Expect(mwc.Webhooks).To(HaveLen(1))
-		Expect(mwc.Webhooks[0].Name).To(Equal("uisettings.api.projectcalico.org"))
-		Expect(*mwc.Webhooks[0].ClientConfig.Service.Path).To(Equal("/uisettings"))
-		Expect(*mwc.Webhooks[0].FailurePolicy).To(Equal(admissionregistrationv1.Fail))
-		Expect(*mwc.Webhooks[0].TimeoutSeconds).To(Equal(int32(10)))
-		Expect(mwc.Webhooks[0].Rules).To(HaveLen(1))
-		Expect(mwc.Webhooks[0].Rules[0].Operations).To(ConsistOf(
-			admissionregistrationv1.Create,
-			admissionregistrationv1.Update,
-			admissionregistrationv1.Delete,
-		))
-		Expect(mwc.Webhooks[0].Rules[0].Rule.Resources).To(Equal([]string{"uisettings"}))
-
-		// Verify the ClusterRole includes the enterprise-only rules.
-		cr := rtest.GetResource(resources, webhooks.WebhooksName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(cr.Rules).To(ContainElements(
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "watch", "update"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"get"},
-			},
-		))
 
 		// Verify Enterprise uses the Tigera webhooks image.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -169,8 +156,8 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).To(Equal(
 			fmt.Sprintf("test-registry.com/%s%s:%s",
 				components.TigeraImagePath,
-				components.ComponentTigeraWebhooks.Image,
-				components.ComponentTigeraWebhooks.Version)))
+				components.ComponentTigeraCalico.Image,
+				components.ComponentTigeraCalico.Version)))
 	})
 
 	It("should not include UISettingsGroup rule for Calico", func() {
@@ -184,80 +171,6 @@ var _ = Describe("Webhooks rendering tests", func() {
 			Resources: []string{"uisettingsgroups"},
 			Verbs:     []string{"get"},
 		}))
-	})
-
-	It("should render tunnel secret RBAC for a single-tenant management cluster", func() {
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{
-			Spec: operatorv1.ManagementClusterSpec{
-				TLS: &operatorv1.TLS{
-					SecretName: "test-tunnel-secret",
-				},
-			},
-		}
-		component := webhooks.Component(cfg)
-		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-		resources, _ := component.Objects()
-
-		// Should have a namespace-scoped Role and RoleBinding.
-		role := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
-		Expect(role.Rules).To(ConsistOf(rbacv1.PolicyRule{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{"test-tunnel-secret"},
-		}))
-
-		rb := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
-		Expect(rb.RoleRef.Name).To(Equal(webhooks.WebhooksSecretsRBACName))
-		Expect(rb.Subjects).To(ConsistOf(rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      webhooks.WebhooksName,
-			Namespace: common.CalicoNamespace,
-		}))
-	})
-
-	It("should render tunnel secret RBAC for a multi-tenant management cluster", func() {
-		cfg.ManagementCluster = &operatorv1.ManagementCluster{
-			Spec: operatorv1.ManagementClusterSpec{
-				TLS: &operatorv1.TLS{
-					SecretName: "test-tunnel-secret",
-				},
-			},
-		}
-		cfg.MultiTenant = true
-		component := webhooks.Component(cfg)
-		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-		resources, _ := component.Objects()
-
-		// Should have a cluster-scoped ClusterRole and ClusterRoleBinding.
-		cr := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
-		Expect(cr.Rules).To(ConsistOf(rbacv1.PolicyRule{
-			APIGroups:     []string{""},
-			Resources:     []string{"secrets"},
-			Verbs:         []string{"get"},
-			ResourceNames: []string{"test-tunnel-secret"},
-		}))
-
-		crb := rtest.GetResource(resources, webhooks.WebhooksSecretsRBACName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
-		Expect(crb.RoleRef.Name).To(Equal(webhooks.WebhooksSecretsRBACName))
-		Expect(crb.Subjects).To(ConsistOf(rbacv1.Subject{
-			Kind:      "ServiceAccount",
-			Name:      webhooks.WebhooksName,
-			Namespace: common.CalicoNamespace,
-		}))
-	})
-
-	It("should clean up tunnel secret RBAC when not a management cluster", func() {
-		component := webhooks.Component(cfg)
-		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
-		_, objsToDelete := component.Objects()
-
-		Expect(objsToDelete).To(ContainElements(
-			&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName}},
-			&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName}},
-			&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
-			&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: webhooks.WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
-		))
 	})
 
 	It("should set control plane tolerations by default", func() {
@@ -303,6 +216,24 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(dep.Spec.Template.Spec.NodeSelector).To(HaveKeyWithValue("foo", "bar"))
 	})
 
+	It("should render a readiness probe on the webhook container", func() {
+		component := webhooks.Component(cfg)
+		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
+		resources, _ := component.Objects()
+
+		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+		probe := dep.Spec.Template.Spec.Containers[0].ReadinessProbe
+		Expect(probe).NotTo(BeNil())
+		Expect(probe.HTTPGet).NotTo(BeNil())
+		Expect(probe.HTTPGet.Path).To(Equal("/readyz"))
+		Expect(probe.HTTPGet.Port.IntValue()).To(Equal(6443))
+		Expect(probe.HTTPGet.Scheme).To(Equal(corev1.URISchemeHTTPS))
+		Expect(probe.PeriodSeconds).To(Equal(int32(10)))
+		Expect(probe.TimeoutSeconds).To(Equal(int32(5)))
+
+		Expect(dep.Spec.Template.Spec.Containers[0].LivenessProbe).To(BeNil())
+	})
+
 	It("should use default container port (6443) when no override is set", func() {
 		component := webhooks.Component(cfg)
 		Expect(component.ResolveImages(nil)).NotTo(HaveOccurred())
@@ -317,10 +248,32 @@ var _ = Describe("Webhooks rendering tests", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(svc.Spec.Ports[0].TargetPort.IntValue()).To(Equal(6443))
 
-		// Verify the network policy defaults to 6443.
+		// Verify the network policy.
 		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
+		Expect(np.Spec.Ingress).To(HaveLen(4))
+
+		// Rule 1: Allow from kube-apiserver.
+		Expect(np.Spec.Ingress[0].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[0].Source.Services).To(Equal(&v3.ServiceMatch{
+			Namespace: "default",
+			Name:      "kubernetes",
+		}))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
-		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(6443)))
+
+		// Rule 2: Allow from the konnectivity agents that proxy apiserver traffic on AKS and GKE.
+		Expect(np.Spec.Ingress[1].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[1].Source.NamespaceSelector).To(Equal("kubernetes.io/metadata.name == 'kube-system'"))
+		Expect(np.Spec.Ingress[1].Source.Selector).To(Equal("app == 'konnectivity-agent' || k8s-app == 'konnectivity-agent'"))
+		Expect(np.Spec.Ingress[1].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
+
+		// Rule 3: Deny from any workload endpoint. The orchestrator selector excludes NetworkSets.
+		Expect(np.Spec.Ingress[2].Action).To(Equal(v3.Deny))
+		Expect(np.Spec.Ingress[2].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[2].Source.Selector).To(Equal("has(projectcalico.org/orchestrator)"))
+
+		// Rule 4: Fallback allow for non-pod sources (including tunnel-SNAT'd hostnet apiserver traffic).
+		Expect(np.Spec.Ingress[3].Action).To(Equal(v3.Allow))
+		Expect(np.Spec.Ingress[3].Destination.Ports[0].MinPort).To(Equal(uint16(6443)))
 	})
 
 	It("should use custom container port", func() {
@@ -348,6 +301,8 @@ var _ = Describe("Webhooks rendering tests", func() {
 		// Verify the container port is set to the custom value.
 		dep := rtest.GetResource(resources, webhooks.WebhooksName, common.CalicoNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort).To(Equal(customPort))
+		Expect(dep.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port.IntValue()).To(Equal(int(customPort)))
+		Expect(dep.Spec.Template.Spec.Containers[0].Args).To(ContainElement(fmt.Sprintf("--port=%d", customPort)))
 
 		// Verify the service target port uses the custom value.
 		svc, err := rtest.GetResourceOfType[*corev1.Service](resources, webhooks.WebhooksName, common.CalicoNamespace)
@@ -356,9 +311,13 @@ var _ = Describe("Webhooks rendering tests", func() {
 
 		// Verify the network policy uses the custom port.
 		np := rtest.GetResource(resources, webhooks.WebhooksPolicyName, common.CalicoNamespace, "projectcalico.org", "v3", "NetworkPolicy").(*v3.NetworkPolicy)
-		Expect(np.Spec.Ingress[0].Destination.Ports).To(HaveLen(1))
+		Expect(np.Spec.Ingress).To(HaveLen(4))
 		Expect(np.Spec.Ingress[0].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
-		Expect(np.Spec.Ingress[0].Destination.Ports[0].MaxPort).To(Equal(uint16(customPort)))
+		Expect(np.Spec.Ingress[1].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
+		Expect(np.Spec.Ingress[2].Action).To(Equal(v3.Deny))
+		Expect(np.Spec.Ingress[2].Source.NamespaceSelector).To(Equal("all()"))
+		Expect(np.Spec.Ingress[2].Source.Selector).To(Equal("has(projectcalico.org/orchestrator)"))
+		Expect(np.Spec.Ingress[3].Destination.Ports[0].MinPort).To(Equal(uint16(customPort)))
 	})
 
 	It("should not use host network by default on non-EKS", func() {

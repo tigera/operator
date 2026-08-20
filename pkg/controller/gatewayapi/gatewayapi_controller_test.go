@@ -30,20 +30,26 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	apiextenv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	gapi "sigs.k8s.io/gateway-api/apis/v1"
 	"sigs.k8s.io/yaml" // gopkg.in/yaml.v2 didn't parse all the fields but this package did
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
+	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 var _ = Describe("Gateway API controller tests", func() {
@@ -67,6 +73,14 @@ var _ = Describe("Gateway API controller tests", func() {
 		// Create a client that will have a CRUD interface of k8s objects.
 		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
 		ctx = context.Background()
+
+		// Seed the operator CA secret in the fake client so that certificatemanager.Create
+		// (called by ReconcileGatewayAPI.Reconcile to build the trusted bundle) does not
+		// fail with "CA secret does not exist".
+		certificateManager, err := certificatemanager.Create(c, nil, dns.DefaultClusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
+		Expect(err).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, certificateManager.KeyPair().Secret(common.OperatorNamespace()))).NotTo(HaveOccurred())
+
 		installation = &operatorv1.Installation{
 			ObjectMeta: metav1.ObjectMeta{Name: "default"},
 			Spec: operatorv1.InstallationSpec{
@@ -83,6 +97,8 @@ var _ = Describe("Gateway API controller tests", func() {
 			},
 		}
 		mockStatus = &status.MockStatus{}
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 		mockStatus.On("OnCRFound").Return()
 		mockStatus.On("AddDaemonsets", mock.Anything).Return()
 		mockStatus.On("AddDeployments", mock.Anything).Return()
@@ -93,15 +109,19 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On("ClearDegraded")
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
+		mockStatus.On("RemoveDeployments", mock.Anything).Return()
 
 		fakeComponentHandlers = nil
 		r = &ReconcileGatewayAPI{
 			client:              c,
 			scheme:              scheme,
 			status:              mockStatus,
+			variant:             operatorv1.CalicoEnterprise,
+			tierWatchReady:      &utils.ReadyFlag{},
 			newComponentHandler: FakeComponentHandler,
 			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },
+			watchGateways:       func() error { return nil },
 		}
 	})
 
@@ -687,11 +707,157 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).ToNot(Equal(DefaultPolicySyncPrefix))
 		Expect(actualFelixConfig.Spec.PolicySyncPathPrefix).To(Equal("/dev/null"))
 	})
+
+	// Legacy tigera-gateway teardown (remove with the teardown gate once 3.x upgrades are unsupported).
+	It("deletes only GatewayClass/GatewayAPI-owned legacy resources in tigera-gateway, leaving the GatewayClass and unrelated resources", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: gatewayapi.GatewayClassName}})).NotTo(HaveOccurred())
+
+		By("seeding the legacy controller + a class-owned proxy (Deployment/Service/SA/ConfigMap)")
+		Expect(c.Create(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "envoy-gateway"}})).NotTo(HaveOccurred())
+		ownedByClass := []metav1.OwnerReference{{APIVersion: "gateway.networking.k8s.io/v1", Kind: "GatewayClass", Name: gatewayapi.GatewayClassName, UID: "abc"}}
+		Expect(c.Create(ctx, &appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234", OwnerReferences: ownedByClass}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234", OwnerReferences: ownedByClass}})).NotTo(HaveOccurred())
+
+		By("seeding an unrelated, unowned ServiceAccount + ConfigMap a user might have placed there")
+		Expect(c.Create(ctx, &corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "user-sa"}})).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Namespace: "tigera-gateway", Name: "user-config"}})).NotTo(HaveOccurred())
+
+		By("first reconcile: deletes the controller alone (so it can't re-create proxies), keeps the proxy")
+		result, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gateway"}, &appsv1.Deployment{}))).To(BeTrue())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234"}, &appsv1.Deployment{})).NotTo(HaveOccurred())
+
+		By("second reconcile: controller gone, so the orphaned class-owned proxy resources are deleted")
+		result, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.RequeueAfter).To(BeNumerically(">", 0))
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234"}, &appsv1.Deployment{}))).To(BeTrue())
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "envoy-gw-ns-gw-abcd1234"}, &corev1.ServiceAccount{}))).To(BeTrue())
+
+		By("leaving unrelated unowned resources and the GatewayClass untouched")
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-sa"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-config"}, &corev1.ConfigMap{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, &gapi.GatewayClass{})).NotTo(HaveOccurred())
+	})
+
+	It("writes per-namespace Gateway resources owned by the namespace's Gateways (Enterprise)", func() {
+		// These go through the real component handler, which is what merges each Gateway's
+		// owner reference in rather than replacing what is already there.
+		r.newComponentHandler = utils.NewComponentHandler
+		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
+		Expect(err).NotTo(HaveOccurred())
+		pullSecrets := []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}}
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw2", UID: "u2"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "other-ns", Name: "gw3", UID: "u3"}, Spec: gapi.GatewaySpec{GatewayClassName: "not-ours"}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: common.CalicoNamespace, Name: "gw4", UID: "u4"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+		}
+		Expect(r.reconcileGatewayNamespaceResources(ctx, bundle, pullSecrets, true, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+
+		By("creating the bundle + WAF SA/RoleBindings/pull-secret in app-ns, owned by both Gateways")
+		ownerNames := func(o client.Object) []string {
+			var n []string
+			for _, ref := range o.GetOwnerReferences() {
+				if ref.Kind == "Gateway" {
+					n = append(n, ref.Name)
+				}
+			}
+			return n
+		}
+		cm := &corev1.ConfigMap{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: certificatemanagement.TrustedCertConfigMapName}, cm)).NotTo(HaveOccurred())
+		Expect(ownerNames(cm)).To(ConsistOf("gw1", "gw2"))
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "waf-http-filter"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "waf-http-filter-gateway-resources"}, &rbacv1.RoleBinding{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-operator-secrets"}, &rbacv1.RoleBinding{})).NotTo(HaveOccurred())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-pull-secret"}, &corev1.Secret{})).NotTo(HaveOccurred())
+
+		By("skipping namespaces whose Gateway is not ours, and reserved namespaces")
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "other-ns", Name: certificatemanagement.TrustedCertConfigMapName}, &corev1.ConfigMap{}))).To(BeTrue())
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: common.CalicoNamespace, Name: "waf-http-filter"}, &corev1.ServiceAccount{}))).To(BeTrue())
+	})
+
+	It("keeps owner references another feature put on the shared RoleBinding and pull secret", func() {
+		// The waypoint controller renders the same tigera-operator-secrets RoleBinding and the
+		// same pull secret copies into the same namespaces, owned by the Istio CR. Dropping
+		// those references would have the objects garbage collected along with the last of our
+		// Gateways while a waypoint in that namespace still needed them.
+		r.newComponentHandler = utils.NewComponentHandler
+		istioRef := metav1.OwnerReference{APIVersion: "operator.tigera.io/v1", Kind: "Istio", Name: "default", UID: "istio-uid"}
+
+		By("seeding both objects with an Istio owner reference")
+		rb := render.CreateOperatorSecretsRoleBinding("app-ns")
+		rb.OwnerReferences = []metav1.OwnerReference{istioRef}
+		Expect(c.Create(ctx, rb)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{
+			Namespace:       "app-ns",
+			Name:            "tigera-pull-secret",
+			OwnerReferences: []metav1.OwnerReference{istioRef},
+		}})).NotTo(HaveOccurred())
+
+		pullSecrets := []*corev1.Secret{{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}}}
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+		}
+		Expect(r.reconcileGatewayNamespaceResources(ctx, nil, pullSecrets, true, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+
+		By("keeping the Istio reference and adding our Gateway alongside it")
+		ownerKinds := func(o client.Object) []string {
+			var k []string
+			for _, ref := range o.GetOwnerReferences() {
+				k = append(k, ref.Kind+"/"+ref.Name)
+			}
+			return k
+		}
+		updatedRB := &rbacv1.RoleBinding{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-operator-secrets"}, updatedRB)).NotTo(HaveOccurred())
+		Expect(ownerKinds(updatedRB)).To(ConsistOf("Istio/default", "Gateway/gw1"))
+
+		updatedSecret := &corev1.Secret{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-pull-secret"}, updatedSecret)).NotTo(HaveOccurred())
+		Expect(ownerKinds(updatedSecret)).To(ConsistOf("Istio/default", "Gateway/gw1"))
+
+		By("not leaving the multiple-owners label behind on the written objects")
+		Expect(updatedRB.Labels).NotTo(HaveKey(common.MultipleOwnersLabel))
+	})
+
+	It("retains the reference of a Gateway that has changed to a class we do not own", func() {
+		// References are merged, never recomputed, so one stays until the Gateway that owns it is
+		// deleted and garbage collection removes it. A Gateway that moved to a class we do not
+		// manage therefore keeps its reference and holds the object alive. That is the accepted
+		// trade for never dropping a reference some other controller wrote: recomputing our own
+		// references on every pass is what dropped the waypoint controller's Istio reference.
+		r.newComponentHandler = utils.NewComponentHandler
+		flippedRef := metav1.OwnerReference{APIVersion: "gateway.networking.k8s.io/v1", Kind: "Gateway", Name: "flipped", UID: "u-flipped"}
+
+		rb := render.CreateOperatorSecretsRoleBinding("app-ns")
+		rb.OwnerReferences = []metav1.OwnerReference{flippedRef}
+		Expect(c.Create(ctx, rb)).NotTo(HaveOccurred())
+
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "flipped", UID: "u-flipped"}, Spec: gapi.GatewaySpec{GatewayClassName: "not-ours"}},
+		}
+		Expect(r.reconcileGatewayNamespaceResources(ctx, nil, nil, true, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+
+		updatedRB := &rbacv1.RoleBinding{}
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: "tigera-operator-secrets"}, updatedRB)).NotTo(HaveOccurred())
+		var owners []string
+		for _, ref := range updatedRB.OwnerReferences {
+			owners = append(owners, ref.Kind+"/"+ref.Name)
+		}
+		Expect(owners).To(ConsistOf("Gateway/flipped", "Gateway/gw1"))
+	})
 })
 
 var fakeComponentHandlers []*fakeComponentHandler
 
-func FakeComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object) utils.ComponentHandler {
+func FakeComponentHandler(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler {
 	h := &fakeComponentHandler{
 		client: client,
 		scheme: scheme,

@@ -34,6 +34,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -87,6 +88,8 @@ var _ = Describe("Egress Gateway controller tests", func() {
 				},
 			}
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("OnCRFound").Return()
 
 			r = ReconcileEgressGateway{
@@ -827,6 +830,11 @@ type mockController struct {
 }
 
 func (m *mockController) WatchObject(object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
+	m.watchedObjects = append(m.watchedObjects, object)
+	return nil
+}
+
+func (m *mockController) WatchObjectInCache(_ cache.Cache, object client.Object, eventhandler handler.EventHandler, predicates ...predicate.Predicate) error {
 	m.watchedObjects = append(m.watchedObjects, object)
 	return nil
 }

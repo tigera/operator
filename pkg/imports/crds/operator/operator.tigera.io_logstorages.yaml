@@ -892,6 +892,12 @@ spec:
                     spec:
                       description: Spec is the specification of the Kibana.
                       properties:
+                        replicas:
+                          description: |-
+                            Replicas defines the number of Kibana replicas. When set to 0, Kibana is not rendered.
+                            Default: 1
+                          format: int32
+                          type: integer
                         template:
                           description:
                             Template describes the Kibana pod that will be

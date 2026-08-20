@@ -44,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	rauth "github.com/tigera/operator/pkg/render/common/authentication"
@@ -60,7 +61,7 @@ const ResourceName = "monitor"
 var log = logf.Log.WithName("controller_monitor")
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
@@ -81,8 +82,8 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		{Name: monitor.PrometheusPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusAPIPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: monitor.PrometheusOperatorPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.AlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
-		{Name: monitor.MeshAlertManagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.AlertmanagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
+		{Name: monitor.MeshAlertmanagerPolicyName, Namespace: common.TigeraPrometheusNamespace},
 		{Name: networkpolicy.CalicoComponentDefaultDenyPolicyName, Namespace: common.TigeraPrometheusNamespace},
 	}
 
@@ -108,11 +109,12 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, promethe
 		tierWatchReady:  tierWatchReady,
 		licenseAPIReady: licenseAPIReady,
 		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
 		multiTenant:     opts.MultiTenant,
+		cloud:           opts.Cloud,
 	}
 
 	r.status.AddStatefulSets([]types.NamespacedName{
-		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)},
 		{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("prometheus-%s", monitor.CalicoNodePrometheus)},
 	})
 
@@ -142,6 +144,19 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		return fmt.Errorf("monitor-controller failed to watch ManagementClusterConnection resource: %w", err)
 	}
 
+	// LogCollector decides whether the OpenTelemetry Collector's ServiceMonitor and
+	// the egress rule that reaches it are rendered, so enabling or disabling export
+	// has to wake this controller.
+	if err = c.WatchObject(&operatorv1.LogCollector{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch LogCollector resource: %w", err)
+	}
+
+	// Both also follow the collector's Service; without this watch they would wait
+	// for the periodic reconcile.
+	if err = utils.AddServiceWatch(c, render.OpenTelemetryCollectorName, render.OpenTelemetryCollectorNamespace); err != nil {
+		return fmt.Errorf("monitor-controller failed to watch the OpenTelemetry Collector Service: %w", err)
+	}
+
 	if err = c.WatchObject(&v3.FelixConfiguration{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("monitor-controller failed to watch FelixConfiguration resource: %w", err)
 	}
@@ -150,10 +165,8 @@ func add(_ manager.Manager, c ctrlruntime.Controller) error {
 		certificatemanagement.CASecretName,
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
 		monitor.PrometheusServerTLSSecretName,
-		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
-		render.EKSLogForwarderTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secret, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch secret: %w", err)
@@ -191,7 +204,9 @@ type ReconcileMonitor struct {
 	tierWatchReady  *utils.ReadyFlag
 	licenseAPIReady *utils.ReadyFlag
 	clusterDomain   string
+	variant         operatorv1.ProductVariant
 	multiTenant     bool
+	cloud           bool
 }
 
 func (r *ReconcileMonitor) getMonitor(ctx context.Context) (*operatorv1.Monitor, error) {
@@ -242,6 +257,15 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	// Track alertmanager statefulset health only when it has replicas.
+	alertmanagerSS := types.NamespacedName{Namespace: common.TigeraPrometheusNamespace, Name: fmt.Sprintf("alertmanager-%s", monitor.CalicoNodeAlertmanager)}
+	if instance.Spec.Alertmanager != nil && instance.Spec.Alertmanager.AlertmanagerSpec != nil &&
+		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas != nil && *instance.Spec.Alertmanager.AlertmanagerSpec.Replicas > 0 {
+		r.status.AddStatefulSets([]types.NamespacedName{alertmanagerSS})
+	} else {
+		r.status.RemoveStatefulSets(alertmanagerSS)
+	}
 	if instance.Spec.ExternalPrometheus != nil {
 		if err = r.client.Get(ctx, client.ObjectKey{Name: instance.Spec.ExternalPrometheus.Namespace}, &corev1.Namespace{}); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Failed to get external prometheus namespace %s",
@@ -269,6 +293,32 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	licenseStatus := utils.GetLicenseStatus(license, gracePeriod)
 	licenseExpired := licenseStatus == utils.LicenseStatusExpired
 
+	// The collector's ServiceMonitor and the Prometheus egress rule that reaches it
+	// live here, but follow LogCollector. Gate them on the same conditions the otel
+	// controller deploys on, so the two cannot disagree.
+	openTelemetryEnabled := false
+	logCollector, err := utils.GetIfExists[operatorv1.LogCollector](ctx, utils.DefaultEnterpriseInstanceKey, r.client)
+	if err != nil {
+		// Requeue instead of assuming "disabled", which would flap both resources
+		// on an apiserver blip.
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading LogCollector", err, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
+	if logCollector != nil {
+		openTelemetryEnabled = logCollector.Spec.OpenTelemetry.Deployable(utils.IsFeatureActive(license, common.OpenTelemetryCollectorFeature))
+	}
+	if openTelemetryEnabled {
+		// A valid, licensed spec is not enough: the otel controller stops short of
+		// rendering when material an exporter names is missing. Follow the Service,
+		// which exists only once the collector was actually deployed.
+		present, err := r.openTelemetryServicePresent(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the OpenTelemetry Collector Service", err, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		}
+		openTelemetryEnabled = present
+	}
+
 	// When in the grace period, schedule a requeue so the controller automatically
 	// transitions to expired state when the grace period elapses.
 	var graceRequeueAfter time.Duration
@@ -277,7 +327,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		graceRequeueAfter = time.Until(license.Status.Expiry.Add(gracePeriod))
 	}
 
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -327,10 +377,12 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Note: fluent-bit is not in this list — its metrics endpoint is scraped
+	// over plain HTTP (fluent-bit's monitoring server has no TLS support), so
+	// Prometheus has no need to trust the fluent-bit certificate.
 	trustedBundle := certificateManager.CreateTrustedBundle()
 	for _, certificateName := range []string{
 		esmetrics.ElasticsearchMetricsServerTLSSecret,
-		render.FluentdPrometheusTLSSecretName,
 		render.NodePrometheusTLSServerSecret,
 		render.CalicoAPIServerTLSSecretName,
 		kubecontrollers.KubeControllerPrometheusTLSSecret,
@@ -353,14 +405,14 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	certificateManager.AddToStatusManager(r.status, common.TigeraPrometheusNamespace)
 
 	// Fetch the Authentication spec. If present, we use to configure user authentication.
-	authenticationCR, err := utils.GetAuthentication(ctx, r.client)
+	authenticationCR, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying Authentication", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 	var keyValidatorConfig rauth.KeyValidatorConfig
 	if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
-		keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain)
+		keyValidatorConfig, err = eutils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.clusterDomain, r.cloud && !r.multiTenant)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to process the authentication CR.", err, reqLogger)
 			return reconcile.Result{}, err
@@ -408,6 +460,21 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	// Create operator TLS keypair only when mTLS is enabled (METRICS_SCHEME=https).
+	// The Service and ServiceMonitor are created whenever metrics are enabled.
+	operatorMetricsEnabled := common.MetricsEnabled()
+	var operatorTLSSecret certificatemanagement.KeyPairInterface
+	if common.MetricsTLSEnabled() {
+		operatorMetricsServiceName := common.OperatorName() + "-metrics"
+		operatorTLSDNSNames := dns.GetServiceDNSNames(operatorMetricsServiceName, common.OperatorNamespace(), r.clusterDomain)
+		operatorTLSSecret, err = certificateManager.GetOrCreateKeyPair(r.client, monitor.OperatorTLSSecretName, common.OperatorNamespace(), operatorTLSDNSNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating operator metrics TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		trustedBundle.AddCertificates(operatorTLSSecret)
+	}
+
 	monitorCfg := &monitor.Config{
 		Monitor:                       instance.Spec,
 		Installation:                  installationSpec,
@@ -422,6 +489,11 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		KubeControllerPort:            kubeControllersMetricsPort,
 		FelixPrometheusMetricsEnabled: utils.IsFelixPrometheusMetricsEnabled(felixConfiguration),
 		LicenseExpired:                licenseExpired,
+		OpenTelemetryEnabled:          openTelemetryEnabled,
+		OperatorMetricsEnabled:        operatorMetricsEnabled,
+		OperatorNamespace:             common.OperatorNamespace(),
+		OperatorName:                  common.OperatorName(),
+		OperatorTLSSecret:             operatorTLSSecret,
 	}
 
 	// Render prometheus component
@@ -433,6 +505,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 			KeyPairOptions: []rcertificatemanagement.KeyPairOption{
 				rcertificatemanagement.NewKeyPairOption(serverTLSSecret, true, true),
 				rcertificatemanagement.NewKeyPairOption(clientTLSSecret, true, true),
+				rcertificatemanagement.NewKeyPairOption(operatorTLSSecret, true, true),
 			},
 			TrustedBundle: trustedBundle,
 		}),
@@ -450,7 +523,7 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 		components = append(components, monitor.MonitorPolicy(monitorCfg))
 	}
 
-	if err = imageset.ApplyImageSet(ctx, r.client, variant, components...); err != nil {
+	if err = imageset.ApplyImageSet(ctx, r.client, r.variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -466,9 +539,18 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 	r.status.ReadyToMonitor()
 
 	if licenseExpired {
+		r.status.ClearWarning("license-grace-period")
 		r.status.SetDegraded(operatorv1.ResourceValidationError,
 			"License is expired - Contact Tigera support or email licensing@tigera.io", nil, reqLogger)
 		return reconcile.Result{}, nil
+	}
+
+	// Check license grace period warning.
+	if licenseStatus == utils.LicenseStatusInGracePeriod {
+		r.status.SetWarning("license-grace-period",
+			"License has expired and is within the grace period. Please renew your license to avoid service disruption.")
+	} else {
+		r.status.ClearWarning("license-grace-period")
 	}
 
 	// Check BYO certificate expiry warnings.
@@ -494,6 +576,17 @@ func (r *ReconcileMonitor) Reconcile(ctx context.Context, request reconcile.Requ
 }
 
 func fillDefaults(instance *operatorv1.Monitor) {
+	if instance.Spec.Alertmanager == nil {
+		instance.Spec.Alertmanager = &operatorv1.Alertmanager{}
+	}
+	if instance.Spec.Alertmanager.AlertmanagerSpec == nil {
+		instance.Spec.Alertmanager.AlertmanagerSpec = &operatorv1.AlertmanagerSpec{}
+	}
+	if instance.Spec.Alertmanager.AlertmanagerSpec.Replicas == nil {
+		var replicas int32 = 0
+		instance.Spec.Alertmanager.AlertmanagerSpec.Replicas = &replicas
+	}
+
 	if instance.Spec.ExternalPrometheus != nil && instance.Spec.ExternalPrometheus.ServiceMonitor != nil {
 
 		if len(instance.Spec.ExternalPrometheus.ServiceMonitor.Labels) == 0 {
@@ -527,6 +620,19 @@ func fillDefaults(instance *operatorv1.Monitor) {
 // PrometheusTLSServerDNSNames returns all the DNS names valid for the prometheus server TLS asset.
 func PrometheusTLSServerDNSNames(clusterDomain string) []string {
 	return dns.GetServiceDNSNames(monitor.PrometheusServiceServiceName, common.TigeraPrometheusNamespace, clusterDomain)
+}
+
+// openTelemetryServicePresent reports whether the otel controller has got as far
+// as creating the Service the ServiceMonitor selects.
+func (r *ReconcileMonitor) openTelemetryServicePresent(ctx context.Context) (bool, error) {
+	key := client.ObjectKey{Name: render.OpenTelemetryCollectorName, Namespace: render.OpenTelemetryCollectorNamespace}
+	if err := r.client.Get(ctx, key, &corev1.Service{}); err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 //go:embed alertmanager-config.yaml

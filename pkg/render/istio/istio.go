@@ -16,6 +16,7 @@ package istio
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -52,6 +53,7 @@ type IstioComponent struct {
 	IstioInstallCNIImage string
 	IstioZTunnelImage    string
 	IstioProxyv2Image    string
+	L7CollectorImage     string
 
 	resources *IstioResources
 }
@@ -104,6 +106,11 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 					Image: istioFakeImageProxyv2,
 				},
 			},
+			Gateways: &GatewaysConfig{
+				SeccompProfile: &corev1.SeccompProfile{
+					Type: corev1.SeccompProfileTypeRuntimeDefault,
+				},
+			},
 			Profile:                 "ambient",
 			TrustedZtunnelNamespace: IstioNamespace,
 		},
@@ -122,6 +129,15 @@ func Istio(cfg *Configuration) (*IstioComponentCRDs, *IstioComponent, error) {
 			},
 		},
 	}
+	// Pass imagePullSecrets to istiod so it injects them into waypoint pod specs.
+	if len(cfg.PullSecrets) > 0 {
+		secretNames := make([]string, 0, len(cfg.PullSecrets))
+		for _, s := range cfg.PullSecrets {
+			secretNames = append(secretNames, s.Name)
+		}
+		istioResOpts.IstiodOpts.Global.ImagePullSecrets = secretNames
+	}
+
 	// Set platform on all charts that have platform-specific behavior.
 	// The embedded Helm charts use zzz_profile.yaml to load platform profiles
 	// (e.g., profile-platform-openshift.yaml) which configure CNI paths, SCC
@@ -201,6 +217,18 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		c.IstioProxyv2Image, err = components.GetReference(components.ComponentIstioProxyv2, reg, path, prefix, is)
 		if err != nil {
 			return err
+		}
+		if c.waypointLoggingEnabled() {
+			// The waypoint l7-collector runs as the "l7-collector" subcommand of
+			// the combined calico binary, so it reuses the calico/calico image
+			// that calico-node already pulls onto every node. Paired with
+			// imagePullPolicy: IfNotPresent on the sidecar, waypoint pods in user
+			// namespaces resolve the image from the node cache and never need an
+			// image-pull secret copied into their namespace.
+			c.L7CollectorImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+			if err != nil {
+				return err
+			}
 		}
 	} else {
 		c.IstioPilotImage, err = components.GetReference(components.ComponentCalicoIstioPilot, reg, path, prefix, is)
@@ -299,7 +327,30 @@ func (c *IstioComponent) Objects() ([]client.Object, []client.Object) {
 	objs = append(objs, res.CNI...)
 	objs = append(objs, res.ZTunnel...)
 
+	// Waypoint L7 logging is Enterprise-only. The five resources (the
+	// l7-collector defaults ConfigMap, the EnvoyFilter-writer Role and
+	// RoleBinding, and the two EnvoyFilters) live in the Istio system namespace
+	// so Istio's deployment controller applies them as class defaults to every
+	// Gateway using the istio-waypoint GatewayClass.
+	if c.cfg.Installation.Variant.IsEnterprise() {
+		if c.waypointLoggingEnabled() {
+			objs = append(objs, L7WaypointObjects(c.cfg.IstioNamespace, c.L7CollectorImage)...)
+		} else {
+			// Delete in the reverse of the create order so the EnvoyFilters can be deleted.
+			del := L7WaypointObjects(c.cfg.IstioNamespace, "")
+			slices.Reverse(del)
+			toDelete = append(toDelete, del...)
+		}
+	}
+
 	return objs, toDelete
+}
+
+// waypointLoggingEnabled reports whether L7 logging should be rendered for
+// waypoint proxies. Defaults to true when the field is unset. Delegates to the
+// shared api helper so the renderer and the policy-sync predicate stay aligned.
+func (c *IstioComponent) waypointLoggingEnabled() bool {
+	return c.cfg.Istio.WaypointLoggingEnabled()
 }
 
 func (c *IstioComponent) Ready() bool {

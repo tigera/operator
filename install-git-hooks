@@ -2,5 +2,7 @@
 
 set -e
 
-cd .git/hooks
+common_dir=$(git rev-parse --git-common-dir)  # handle regular and worktree repos
+mkdir -p "$common_dir/hooks"
+cd "$common_dir/hooks"
 ln -sf ../../git-hooks/* ./

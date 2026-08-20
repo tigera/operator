@@ -16,10 +16,13 @@ package networkpolicy
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -49,7 +52,7 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 				Action:   v3.Allow,
 				Protocol: &UDPProtocol,
 				Destination: v3.EntityRule{
-					NamespaceSelector: "projectcalico.org/name == 'openshift-dns'",
+					NamespaceSelector: "kubernetes.io/metadata.name == 'openshift-dns'",
 					Selector:          "dns.operator.openshift.io/daemonset-dns == 'default'",
 					Ports:             Ports(5353),
 				},
@@ -58,7 +61,7 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 				Action:   v3.Allow,
 				Protocol: &TCPProtocol,
 				Destination: v3.EntityRule{
-					NamespaceSelector: "projectcalico.org/name == 'openshift-dns'",
+					NamespaceSelector: "kubernetes.io/metadata.name == 'openshift-dns'",
 					Selector:          "dns.operator.openshift.io/daemonset-dns == 'default'",
 					Ports:             Ports(5353),
 				},
@@ -69,9 +72,10 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 			Action:   v3.Allow,
 			Protocol: &UDPProtocol,
 			Destination: v3.EntityRule{
-				NamespaceSelector: "projectcalico.org/name == 'kube-system'",
-				Selector:          "k8s-app == 'kube-dns'",
-				Ports:             Ports(53),
+				NamespaceSelector: "kubernetes.io/metadata.name == 'kube-system'",
+				// In most Kubernetes distros the label is for kube-dns, but in Canonical it is for coredns.
+				Selector: "k8s-app in { 'kube-dns', 'coredns' }",
+				Ports:    Ports(53),
 			},
 		})
 	}
@@ -82,7 +86,7 @@ func AppendDNSEgressRules(egressRules []v3.Rule, openShift bool) []v3.Rule {
 // CreateEntityRule creates an entity rule that matches traffic using label selectors based on namespace, deployment name, and port.
 func CreateEntityRule(namespace string, deploymentName string, ports ...uint16) v3.EntityRule {
 	return v3.EntityRule{
-		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
+		NamespaceSelector: fmt.Sprintf("kubernetes.io/metadata.name == '%s'", namespace),
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
 		Ports:             Ports(ports...),
 	}
@@ -92,7 +96,7 @@ func CreateEntityRule(namespace string, deploymentName string, ports ...uint16) 
 func CreateSourceEntityRule(namespace string, deploymentName string) v3.EntityRule {
 	return v3.EntityRule{
 		Selector:          fmt.Sprintf("k8s-app == '%s'", deploymentName),
-		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", namespace),
+		NamespaceSelector: fmt.Sprintf("kubernetes.io/metadata.name == '%s'", namespace),
 	}
 }
 
@@ -138,16 +142,29 @@ func AppendServiceSelectorDNSEgressRules(egressRules []v3.Rule, openShift bool) 
 			},
 		}...)
 	} else {
-		egressRules = append(egressRules, v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &UDPProtocol,
-			Destination: v3.EntityRule{
-				Services: &v3.ServiceMatch{
-					Namespace: "kube-system",
-					Name:      "kube-dns",
+		// In most Kubernetes distros, the DNS service is kube-dns, but in Canonical it is coredns.
+		egressRules = append(egressRules, []v3.Rule{
+			{
+				Action:   v3.Allow,
+				Protocol: &UDPProtocol,
+				Destination: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Namespace: "kube-system",
+						Name:      "kube-dns",
+					},
 				},
 			},
-		})
+			{
+				Action:   v3.Allow,
+				Protocol: &UDPProtocol,
+				Destination: v3.EntityRule{
+					Services: &v3.ServiceMatch{
+						Namespace: "kube-system",
+						Name:      "coredns",
+					},
+				},
+			},
+		}...)
 	}
 
 	return egressRules
@@ -201,6 +218,12 @@ var KubeAPIServerEntityRule = v3.EntityRule{
 		Namespace: "default",
 		Name:      "kubernetes",
 	},
+}
+
+// Konnectivity agents proxy apiserver traffic into the cluster. AKS and GKE label them differently.
+var KonnectivityAgentEntityRule = v3.EntityRule{
+	NamespaceSelector: "kubernetes.io/metadata.name == 'kube-system'",
+	Selector:          "app == 'konnectivity-agent' || k8s-app == 'konnectivity-agent'",
 }
 
 // Helper creates a helper for building network policies for multi-tenant capable components.
@@ -284,30 +307,6 @@ func (h *NetworkPolicyHelper) PolicyRecommendationSourceEntityRule() v3.EntityRu
 	return CreateSourceEntityRule(h.namespace(common.CalicoNamespace), "tigera-policy-recommendation")
 }
 
-func (h *NetworkPolicyHelper) ComplianceServerEntityRule() v3.EntityRule {
-	return CreateEntityRule(h.namespace("tigera-compliance"), "compliance-server", 5443)
-}
-
-func (h *NetworkPolicyHelper) ComplianceServerSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-server")
-}
-
-func (h *NetworkPolicyHelper) ComplianceBenchmarkerSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-benchmarker")
-}
-
-func (h *NetworkPolicyHelper) ComplianceControllerSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-controller")
-}
-
-func (h *NetworkPolicyHelper) ComplianceSnapshotterSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-snapshotter")
-}
-
-func (h *NetworkPolicyHelper) ComplianceReporterSourceEntityRule() v3.EntityRule {
-	return CreateSourceEntityRule(h.namespace("tigera-compliance"), "compliance-reporter")
-}
-
 func (h *NetworkPolicyHelper) IntrusionDetectionSourceEntityRule() v3.EntityRule {
 	return CreateSourceEntityRule(h.namespace("tigera-intrusion-detection"), "intrusion-detection-controller")
 }
@@ -330,7 +329,7 @@ func DeprecatedAllowTigeraNetworkPolicyObject(name, namespace string) client.Obj
 const PrometheusSelector = "k8s-app == 'tigera-prometheus'"
 
 var PrometheusEntityRule = v3.EntityRule{
-	NamespaceSelector: "projectcalico.org/name == 'tigera-prometheus'",
+	NamespaceSelector: "kubernetes.io/metadata.name == 'tigera-prometheus'",
 	Selector:          PrometheusSelector,
 	Ports:             Ports(9095),
 }
@@ -338,4 +337,89 @@ var PrometheusEntityRule = v3.EntityRule{
 var PrometheusSourceEntityRule = v3.EntityRule{
 	NamespaceSelector: "name == 'tigera-prometheus'",
 	Selector:          PrometheusSelector,
+}
+
+// ExternalDestination is a parsed egress target: the host as written plus the
+// resolved TCP port.
+type ExternalDestination struct {
+	Host string
+	Port uint16
+}
+
+// ParseExternalDestination extracts the host and port from an endpoint, which may
+// be a bare "host:port" or a URL. When a URL carries no explicit port the scheme's
+// default is used. It reports false when no port can be determined.
+func ParseExternalDestination(endpoint string) (ExternalDestination, bool) {
+	if host, portStr, err := net.SplitHostPort(endpoint); err == nil {
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 && p <= 65535 {
+			return ExternalDestination{Host: host, Port: uint16(p)}, true
+		}
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return ExternalDestination{}, false
+	}
+	if portStr := u.Port(); portStr != "" {
+		if p, err := strconv.Atoi(portStr); err == nil && p > 0 && p <= 65535 {
+			return ExternalDestination{Host: u.Hostname(), Port: uint16(p)}, true
+		}
+	}
+	switch u.Scheme {
+	case "https":
+		return ExternalDestination{Host: u.Hostname(), Port: 443}, true
+	case "http":
+		return ExternalDestination{Host: u.Hostname(), Port: 80}, true
+	}
+	return ExternalDestination{}, false
+}
+
+// clusterService splits an in-cluster Service DNS name --
+// <service>.<namespace>.svc[.cluster.local] -- into its namespace and name.
+// Each element is checked with the upstream DNS-label validator rather than a
+// pattern of our own.
+func clusterService(host string) (namespace, name string, ok bool) {
+	parts := strings.Split(host, ".")
+	if len(parts) < 3 || parts[2] != "svc" {
+		return "", "", false
+	}
+	for _, p := range append([]string{parts[0], parts[1]}, parts[3:]...) {
+		if len(validation.IsDNS1123Label(p)) > 0 {
+			return "", "", false
+		}
+	}
+	return parts[1], parts[0], true
+}
+
+// ExternalDestinationEntityRule builds the tightest destination rule available for
+// an external endpoint:
+//
+//   - a literal IP becomes an exact /32 or /128 net;
+//   - a hostname becomes a Domains rule, but only when allowDomains is set —
+//     domain-based rules require the egress-access-control license feature;
+//   - otherwise the destination is left open and only the port is constrained.
+//
+// The last case is a deliberate fallback: without the license feature we cannot
+// name the host, and dropping the rule entirely would break egress.
+func ExternalDestinationEntityRule(dest ExternalDestination, allowDomains bool) v3.EntityRule {
+	rule := v3.EntityRule{Ports: Ports(dest.Port)}
+	// An in-cluster Service is matched by service, not by domain: Calico resolves
+	// Domains rules from observed DNS answers, which does not cover a ClusterIP
+	// reached through the cluster domain.
+	if ns, name, ok := clusterService(dest.Host); ok {
+		// A service match carries the Service's own ports; Calico rejects a rule
+		// that sets both ("cannot specify ports with a service selector").
+		return CreateServiceSelectorEntityRule(ns, name)
+	}
+	if ip := net.ParseIP(dest.Host); ip != nil {
+		suffix := "/128"
+		if ip.To4() != nil {
+			suffix = "/32"
+		}
+		rule.Nets = []string{ip.String() + suffix}
+		return rule
+	}
+	if allowDomains && dest.Host != "" {
+		rule.Domains = []string{dest.Host}
+	}
+	return rule
 }

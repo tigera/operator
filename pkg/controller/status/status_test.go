@@ -16,6 +16,9 @@ package status
 
 import (
 	"context"
+	"fmt"
+	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,6 +33,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 
+	"k8s.io/utils/ptr"
 	controllerRuntimeClient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -72,8 +76,6 @@ var _ = Describe("Status reporting tests", func() {
 		oldVersionSm = New(oldVersionClient, "test-component", &common.VersionInfo{Major: 1, Minor: 18}).(*statusManager)
 		Expect(oldVersionSm.IsAvailable()).To(BeFalse())
 	})
-
-	boolPtr := func(b bool) *bool { return &b }
 
 	Context("without CR found", func() {
 		It("status is not created", func() {
@@ -507,8 +509,9 @@ var _ = Describe("Status reporting tests", func() {
 						Phase: corev1.PodRunning,
 						Conditions: []corev1.PodCondition{
 							{
-								Type:   corev1.ContainersReady,
-								Status: corev1.ConditionFalse,
+								Type:               corev1.ContainersReady,
+								Status:             corev1.ConditionFalse,
+								LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute)),
 							},
 						},
 					},
@@ -540,6 +543,106 @@ var _ = Describe("Status reporting tests", func() {
 				sm.updateStatus()
 				Expect(sm.IsDegraded()).To(BeTrue())
 				Expect(sm.failing).To(ContainElement(ContainSubstring("running but not ready")))
+			})
+
+			Context("readiness grace period", func() {
+				selector := &metav1.LabelSelector{MatchLabels: map[string]string{"grace": "true"}}
+
+				notReadyPod := func(name string, transitioned time.Time) *corev1.Pod {
+					return &corev1.Pod{
+						ObjectMeta: metav1.ObjectMeta{
+							Namespace: "NS1",
+							Name:      name,
+							Labels:    map[string]string{"grace": "true"},
+						},
+						Status: corev1.PodStatus{
+							Phase: corev1.PodRunning,
+							Conditions: []corev1.PodCondition{
+								{
+									Type:               corev1.ContainersReady,
+									Status:             corev1.ConditionFalse,
+									LastTransitionTime: metav1.NewTime(transitioned),
+								},
+							},
+						},
+					}
+				}
+
+				// withReadinessProbe returns the pod with a single container carrying
+				// the given readiness probe, so the grace period is derived from it.
+				withReadinessProbe := func(p *corev1.Pod, probe *corev1.Probe) *corev1.Pod {
+					p.Spec.Containers = []corev1.Container{{Name: "c", ReadinessProbe: probe}}
+					return p
+				}
+
+				It("should not flag a pod unready for less than the grace period", func() {
+					Expect(client.Create(ctx, notReadyPod("recently-unready", time.Now().Add(-10*time.Second)))).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(BeEmpty())
+				})
+
+				It("should flag a pod unready for longer than the grace period", func() {
+					Expect(client.Create(ctx, notReadyPod("long-unready", time.Now().Add(-90*time.Second)))).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(HaveLen(1))
+					Expect(issues[0].issueType).To(Equal(issueNotReady))
+				})
+
+				It("should not flag a pod with an unset LastTransitionTime", func() {
+					Expect(client.Create(ctx, notReadyPod("no-transition-time", time.Time{}))).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(BeEmpty())
+				})
+
+				It("should derive a longer grace period from the readiness probe", func() {
+					// initialDelay 300s + 3 * (10s + 1s) = 333s, far longer than the
+					// default. A pod unready for 90s is still within its startup window.
+					probe := &corev1.Probe{
+						InitialDelaySeconds: 300,
+						PeriodSeconds:       10,
+						TimeoutSeconds:      1,
+						FailureThreshold:    3,
+					}
+					pod := withReadinessProbe(notReadyPod("slow-start", time.Now().Add(-90*time.Second)), probe)
+					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(BeEmpty())
+
+					// Once it has been unready past the derived window, it is flagged.
+					pod2 := withReadinessProbe(notReadyPod("slow-start-stuck", time.Now().Add(-400*time.Second)), probe)
+					Expect(client.Create(ctx, pod2)).NotTo(HaveOccurred())
+					issues = sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(HaveLen(1))
+					Expect(issues[0].issueType).To(Equal(issueNotReady))
+				})
+
+				It("should derive a longer grace period from the startup probe", func() {
+					// calico-node's startup probe: 150 * (2s + 5s) = 1050s of budget.
+					startup := &corev1.Probe{PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 150}
+					readiness := &corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 5, FailureThreshold: 3}
+					pod := notReadyPod("starting-up", time.Now().Add(-300*time.Second))
+					pod.Spec.Containers = []corev1.Container{{Name: "c", StartupProbe: startup, ReadinessProbe: readiness}}
+					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(BeEmpty())
+
+					stuck := notReadyPod("startup-stuck", time.Now().Add(-1200*time.Second))
+					stuck.Spec.Containers = []corev1.Container{{Name: "c", StartupProbe: startup, ReadinessProbe: readiness}}
+					Expect(client.Create(ctx, stuck)).NotTo(HaveOccurred())
+					issues = sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(HaveLen(1))
+					Expect(issues[0].issueType).To(Equal(issueNotReady))
+				})
+
+				It("should not derive a grace period shorter than the default floor", func() {
+					// A tight probe derives ~33s, but the default floor keeps the grace
+					// at 60s so we never flag more aggressively than the fixed default.
+					probe := &corev1.Probe{PeriodSeconds: 10, TimeoutSeconds: 1, FailureThreshold: 3}
+					pod := withReadinessProbe(notReadyPod("tight-probe", time.Now().Add(-45*time.Second)), probe)
+					Expect(client.Create(ctx, pod)).NotTo(HaveOccurred())
+					issues := sm.diagnosePods("Test", selector, "NS1", "", nil)
+					Expect(issues).To(BeEmpty())
+				})
 			})
 		})
 
@@ -610,11 +713,12 @@ var _ = Describe("Status reporting tests", func() {
 				// Current ReplicaSet.
 				Expect(client.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "NS1",
-						Name:      "DP1-new",
-						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						Namespace:   "NS1",
+						Name:        "DP1-new",
+						Labels:      map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dp1-uid", Controller: boolPtr(true)},
+							{UID: "dp1-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -626,11 +730,12 @@ var _ = Describe("Status reporting tests", func() {
 				// Old ReplicaSet.
 				Expect(client.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "NS1",
-						Name:      "DP1-old",
-						Labels:    map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						Namespace:   "NS1",
+						Name:        "DP1-old",
+						Labels:      map[string]string{"app": "dp1", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dp1-uid", Controller: boolPtr(true)},
+							{UID: "dp1-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -1157,7 +1262,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueCrashLoopBackOff))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1183,7 +1288,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).To(ContainSubstring("possible liveness probe failure"))
 		})
@@ -1202,7 +1307,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueImagePull))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1222,7 +1327,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueTerminated))
 		})
@@ -1233,7 +1338,7 @@ var _ = Describe("Status reporting tests", func() {
 				Spec:       corev1.PodSpec{},
 				Status:     corev1.PodStatus{Phase: corev1.PodFailed},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePodFailed))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1246,11 +1351,11 @@ var _ = Describe("Status reporting tests", func() {
 				Status: corev1.PodStatus{
 					Phase: corev1.PodRunning,
 					Conditions: []corev1.PodCondition{
-						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute))},
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issueNotReady))
 			Expect(issues[0].severity).To(Equal(severityFailing))
@@ -1271,7 +1376,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePending))
 			Expect(issues[0].severity).To(Equal(severityProgressing))
@@ -1284,7 +1389,7 @@ var _ = Describe("Status reporting tests", func() {
 				Spec:       corev1.PodSpec{},
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].issueType).To(Equal(issuePending))
 			Expect(issues[0].severity).To(Equal(severityProgressing))
@@ -1315,7 +1420,7 @@ var _ = Describe("Status reporting tests", func() {
 				Status:     corev1.PodStatus{Phase: corev1.PodPending},
 			})).NotTo(HaveOccurred())
 
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(2))
 		})
 
@@ -1330,7 +1435,7 @@ var _ = Describe("Status reporting tests", func() {
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(BeEmpty())
 		})
 
@@ -1341,12 +1446,12 @@ var _ = Describe("Status reporting tests", func() {
 				Status: corev1.PodStatus{
 					Phase: corev1.PodRunning,
 					Conditions: []corev1.PodCondition{
-						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute))},
 					},
 				},
 			})).NotTo(HaveOccurred())
 			overrides := map[string]string{"operator.tigera.io/custom-overrides": "readinessProbe,resources"}
-			issues := sm.diagnosePods(selector, "ns", "", overrides)
+			issues := sm.diagnosePods("Test", selector, "ns", "", overrides)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).To(ContainSubstring("custom readiness probe configuration is in effect"))
 		})
@@ -1369,7 +1474,7 @@ var _ = Describe("Status reporting tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 			overrides := map[string]string{"operator.tigera.io/custom-overrides": "livenessProbe"}
-			issues := sm.diagnosePods(selector, "ns", "", overrides)
+			issues := sm.diagnosePods("Test", selector, "ns", "", overrides)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).To(ContainSubstring("custom liveness probe configuration is in effect"))
 		})
@@ -1392,7 +1497,7 @@ var _ = Describe("Status reporting tests", func() {
 				},
 			})).NotTo(HaveOccurred())
 			overrides := map[string]string{"operator.tigera.io/custom-overrides": "resources"}
-			issues := sm.diagnosePods(selector, "ns", "", overrides)
+			issues := sm.diagnosePods("Test", selector, "ns", "", overrides)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).To(ContainSubstring("custom resource limits are in effect"))
 		})
@@ -1404,11 +1509,11 @@ var _ = Describe("Status reporting tests", func() {
 				Status: corev1.PodStatus{
 					Phase: corev1.PodRunning,
 					Conditions: []corev1.PodCondition{
-						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse},
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute))},
 					},
 				},
 			})).NotTo(HaveOccurred())
-			issues := sm.diagnosePods(selector, "ns", "", nil)
+			issues := sm.diagnosePods("Test", selector, "ns", "", nil)
 			Expect(issues).To(HaveLen(1))
 			Expect(issues[0].message).NotTo(ContainSubstring("custom"))
 		})
@@ -1440,11 +1545,12 @@ var _ = Describe("Status reporting tests", func() {
 				// Current ReplicaSet.
 				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns",
-						Name:      "dep1-abc123",
-						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
+						Namespace:   "ns",
+						Name:        "dep1-abc123",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "abc123"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dep-uid", Controller: boolPtr(true)},
+							{UID: "dep-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -1455,11 +1561,12 @@ var _ = Describe("Status reporting tests", func() {
 				// Old ReplicaSet.
 				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
 					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "ns",
-						Name:      "dep1-old999",
-						Labels:    map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
+						Namespace:   "ns",
+						Name:        "dep1-old999",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old999"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "dep-uid", Controller: boolPtr(true)},
+							{UID: "dep-uid", Controller: ptr.To(true)},
 						},
 					},
 					Spec: appsv1.ReplicaSetSpec{
@@ -1470,6 +1577,52 @@ var _ = Describe("Status reporting tests", func() {
 
 				rev := sm.currentDeploymentRevision(dep)
 				Expect(rev).To(Equal("abc123"))
+			})
+
+			It("should return the newest revision when the old ReplicaSet still has running pods mid-rollout", func() {
+				dep := &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", UID: "dep-uid"},
+					Spec: appsv1.DeploymentSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+				}
+				// New ReplicaSet, still scaling up - both ReplicaSets have
+				// Replicas > 0 during the rollout, so the revision annotation
+				// is what distinguishes them.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:   "ns",
+						Name:        "dep1-new",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: ptr.To(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 1},
+				})).NotTo(HaveOccurred())
+				// Old ReplicaSet, still scaling down.
+				Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace:   "ns",
+						Name:        "dep1-old",
+						Labels:      map[string]string{"app": "test", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+						Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
+						OwnerReferences: []metav1.OwnerReference{
+							{UID: "dep-uid", Controller: ptr.To(true)},
+						},
+					},
+					Spec: appsv1.ReplicaSetSpec{
+						Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "test"}},
+					},
+					Status: appsv1.ReplicaSetStatus{Replicas: 2},
+				})).NotTo(HaveOccurred())
+
+				rev := sm.currentDeploymentRevision(dep)
+				Expect(rev).To(Equal("new-hash"))
 			})
 
 			It("should return empty string when no ReplicaSets exist", func() {
@@ -1495,7 +1648,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "ds1-rev1",
 						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-old"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "ds-uid", Controller: boolPtr(true)},
+							{UID: "ds-uid", Controller: ptr.To(true)},
 						},
 					},
 					Revision: 1,
@@ -1506,7 +1659,7 @@ var _ = Describe("Status reporting tests", func() {
 						Name:      "ds1-rev2",
 						Labels:    map[string]string{appsv1.ControllerRevisionHashLabelKey: "hash-new"},
 						OwnerReferences: []metav1.OwnerReference{
-							{UID: "ds-uid", Controller: boolPtr(true)},
+							{UID: "ds-uid", Controller: ptr.To(true)},
 						},
 					},
 					Revision: 2,
@@ -1523,6 +1676,370 @@ var _ = Describe("Status reporting tests", func() {
 				rev := sm.currentDaemonSetRevision(ds)
 				Expect(rev).To(BeEmpty())
 			})
+		})
+	})
+})
+
+// getTigeraStatusCondition returns the condition of the given type from the TigeraStatus, or nil if not found.
+func getTigeraStatusCondition(ts *operator.TigeraStatus, condType operator.StatusConditionType) *operator.TigeraStatusCondition {
+	for _, c := range ts.Status.Conditions {
+		if c.Type == condType {
+			return &c
+		}
+	}
+	return nil
+}
+
+var _ = Describe("Status manager integration tests", Ordered, func() {
+	var cl controllerRuntimeClient.Client
+	var ctx = context.Background()
+
+	BeforeAll(func() {
+		scheme := runtime.NewScheme()
+		Expect(appsv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(corev1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		Expect(batchv1.AddToScheme(scheme)).NotTo(HaveOccurred())
+		err := apis.AddToScheme(scheme, false)
+		Expect(err).NotTo(HaveOccurred())
+		cl = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+	})
+
+	Describe("degraded message content", func() {
+		It("should include CrashLoopBackOff with termination context in the TigeraStatus", func() {
+			sm := New(cl, "crash-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(1)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep1"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep1", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "crash"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 1,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "crash-pod", Labels: map[string]string{"app": "crash"}},
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "main",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "crash-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(operator.ConditionTrue))
+			Expect(degraded.Message).To(ContainSubstring("crash looping container"))
+			Expect(degraded.Message).To(ContainSubstring("OOMKilled, exit code 137"))
+		})
+
+		It("should include 'running but not ready' in the TigeraStatus", func() {
+			sm := New(cl, "notready-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(1)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep2"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep2", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "notready"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 1,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "notready-pod", Labels: map[string]string{"app": "notready"}},
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					Conditions: []corev1.PodCondition{
+						{Type: corev1.ContainersReady, Status: corev1.ConditionFalse, LastTransitionTime: metav1.NewTime(time.Now().Add(-2 * time.Minute))},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "notready-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(operator.ConditionTrue))
+			Expect(degraded.Message).To(ContainSubstring("running but not ready"))
+		})
+
+		It("should include pending pod scheduler reason in the TigeraStatus progressing message", func() {
+			sm := New(cl, "pending-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(1)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep3"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep3", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "pending"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 1,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "pending-pod", Labels: map[string]string{"app": "pending"}},
+				Spec:       corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodPending,
+					Conditions: []corev1.PodCondition{
+						{
+							Type:    corev1.PodScheduled,
+							Status:  corev1.ConditionFalse,
+							Message: "0/3 nodes are available: 3 Insufficient memory",
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "pending-test"}, ts)).NotTo(HaveOccurred())
+
+			progressing := getTigeraStatusCondition(ts, operator.ComponentProgressing)
+			Expect(progressing).NotTo(BeNil())
+			Expect(progressing.Status).To(Equal(operator.ConditionTrue))
+			Expect(progressing.Message).To(ContainSubstring("Insufficient memory"))
+		})
+
+		It("should report not-found workloads as degraded in TigeraStatus", func() {
+			sm := New(cl, "notfound-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "missing-dep"}})
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "notfound-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Status).To(Equal(operator.ConditionTrue))
+			Expect(degraded.Message).To(ContainSubstring(`Deployment "ns/missing-dep" not found`))
+		})
+	})
+
+	Describe("deduplication and capping in TigeraStatus", func() {
+		It("should deduplicate identical pod failures and show count", func() {
+			sm := New(cl, "dedup-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(3)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep-dedup"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep-dedup", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "dedup"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 3,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			// Create 3 pods all OOMKilled - should be deduplicated into one message.
+			for i := 0; i < 3; i++ {
+				Expect(cl.Create(ctx, &corev1.Pod{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "ns",
+						Name:      fmt.Sprintf("dedup-pod-%d", i),
+						Labels:    map[string]string{"app": "dedup"},
+					},
+					Spec: corev1.PodSpec{},
+					Status: corev1.PodStatus{
+						Phase: corev1.PodRunning,
+						ContainerStatuses: []corev1.ContainerStatus{
+							{
+								Name:  "main",
+								State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+								LastTerminationState: corev1.ContainerState{
+									Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+								},
+							},
+						},
+					},
+				})).NotTo(HaveOccurred())
+			}
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "dedup-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+			Expect(degraded.Message).To(ContainSubstring("3 pods affected"))
+		})
+	})
+
+	Describe("rollout revision awareness in TigeraStatus", func() {
+		It("should annotate old-revision failures and prioritize new-revision failures", func() {
+			sm := New(cl, "rollout-test", &common.VersionInfo{Major: 1, Minor: 19}).(*statusManager)
+			sm.OnCRFound()
+			sm.ReadyToMonitor()
+
+			gen := int64(1)
+			replicas := int32(2)
+			sm.AddDeployments([]types.NamespacedName{{Namespace: "ns", Name: "dep-rollout"}})
+
+			Expect(cl.Create(ctx, &appsv1.Deployment{
+				ObjectMeta: metav1.ObjectMeta{Namespace: "ns", Name: "dep-rollout", UID: "rollout-uid", Generation: gen},
+				Spec: appsv1.DeploymentSpec{
+					Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}},
+					Replicas: &replicas,
+				},
+				Status: appsv1.DeploymentStatus{
+					ObservedGeneration:  gen,
+					UnavailableReplicas: 2,
+					AvailableReplicas:   0,
+					ReadyReplicas:       0,
+				},
+			})).NotTo(HaveOccurred())
+
+			// Current ReplicaSet.
+			Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:   "ns",
+					Name:        "dep-rollout-new",
+					Labels:      map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+					Annotations: map[string]string{"deployment.kubernetes.io/revision": "2"},
+					OwnerReferences: []metav1.OwnerReference{
+						{UID: "rollout-uid", Controller: ptr.To(true)},
+					},
+				},
+				Spec:   appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}}},
+				Status: appsv1.ReplicaSetStatus{Replicas: 1},
+			})).NotTo(HaveOccurred())
+
+			// Old ReplicaSet.
+			Expect(cl.Create(ctx, &appsv1.ReplicaSet{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace:   "ns",
+					Name:        "dep-rollout-old",
+					Labels:      map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+					Annotations: map[string]string{"deployment.kubernetes.io/revision": "1"},
+					OwnerReferences: []metav1.OwnerReference{
+						{UID: "rollout-uid", Controller: ptr.To(true)},
+					},
+				},
+				Spec:   appsv1.ReplicaSetSpec{Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "rollout"}}},
+				Status: appsv1.ReplicaSetStatus{Replicas: 0},
+			})).NotTo(HaveOccurred())
+
+			// New-revision pod crash looping.
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "rollout-new-pod",
+					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "new-hash"},
+				},
+				Spec: corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "main",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: terminationReasonError, ExitCode: 1},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			// Old-revision pod crash looping with different reason.
+			Expect(cl.Create(ctx, &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Namespace: "ns",
+					Name:      "rollout-old-pod",
+					Labels:    map[string]string{"app": "rollout", appsv1.DefaultDeploymentUniqueLabelKey: "old-hash"},
+				},
+				Spec: corev1.PodSpec{},
+				Status: corev1.PodStatus{
+					Phase: corev1.PodRunning,
+					ContainerStatuses: []corev1.ContainerStatus{
+						{
+							Name:  "main",
+							State: corev1.ContainerState{Waiting: &corev1.ContainerStateWaiting{Reason: "CrashLoopBackOff"}},
+							LastTerminationState: corev1.ContainerState{
+								Terminated: &corev1.ContainerStateTerminated{Reason: "OOMKilled", ExitCode: 137},
+							},
+						},
+					},
+				},
+			})).NotTo(HaveOccurred())
+
+			sm.updateStatus()
+
+			ts := &operator.TigeraStatus{}
+			Expect(cl.Get(ctx, types.NamespacedName{Name: "rollout-test"}, ts)).NotTo(HaveOccurred())
+
+			degraded := getTigeraStatusCondition(ts, operator.ComponentDegraded)
+			Expect(degraded).NotTo(BeNil())
+
+			// The message should contain both failures, with the new-revision first.
+			// Messages are newline-joined by degradedMessage().
+			lines := strings.Split(degraded.Message, "\n")
+			Expect(lines).To(HaveLen(2))
+			Expect(lines[0]).NotTo(ContainSubstring("old revision"))
+			Expect(lines[1]).To(ContainSubstring("old revision"))
 		})
 	})
 })

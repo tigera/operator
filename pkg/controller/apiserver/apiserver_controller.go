@@ -26,7 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -40,6 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/common/validation"
 	apiserver "github.com/tigera/operator/pkg/common/validation/apiserver"
 	webhooksvalidation "github.com/tigera/operator/pkg/common/validation/webhooks"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration/datastoremigration"
@@ -49,11 +50,10 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	"github.com/tigera/operator/pkg/render/common/authentication"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -72,10 +72,11 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		tierWatchReady:      &utils.ReadyFlag{},
 		migrationWatchReady: &utils.ReadyFlag{},
 		opts:                opts,
+		ext:                 opts.Extensions.APIServer(),
 	}
 	r.status.Run(opts.ShutdownContext)
 
-	c, err := ctrlruntime.NewController("apiserver-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("apiserver-controller", mgr, ctrl.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create apiserver-controller: %w", err)
 	}
@@ -103,39 +104,10 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch ConfigMap %s: %w", render.K8sSvcEndpointConfigMapName, err)
 	}
 
-	if opts.EnterpriseCRDExists {
-		// Watch for changes to ApplicationLayer
-		err = c.WatchObject(&operatorv1.ApplicationLayer{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch ApplicationLayer resource: %v", err)
-		}
-
-		// Watch for changes to primary resource ManagementCluster
-		err = c.WatchObject(&operatorv1.ManagementCluster{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
-		}
-
-		// Watch for changes to primary resource ManagementClusterConnection
-		err = c.WatchObject(&operatorv1.ManagementClusterConnection{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch primary resource: %v", err)
-		}
-
-		for _, namespace := range []string{common.OperatorNamespace(), render.APIServerNamespace} {
-			for _, secretName := range []string{render.VoltronTunnelSecretName, render.ManagerTLSSecretName} {
-				if err = utils.AddSecretsWatch(c, secretName, namespace); err != nil {
-					return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
-				}
-			}
-		}
-
-		// Watch for changes to authentication
-		err = c.WatchObject(&operatorv1.Authentication{}, &handler.EnqueueRequestForObject{})
-		if err != nil {
-			return fmt.Errorf("apiserver-controller failed to watch resource: %w", err)
-		}
-
+	// The variant extension registers the enterprise watches it needs (the management
+	// cluster CRs, ApplicationLayer, Authentication, and the tunnel secrets).
+	if err = opts.Extensions.APIServer().Watches(c); err != nil {
+		return fmt.Errorf("apiserver-controller failed to set up extension watches: %w", err)
 	}
 
 	// Watch for the namespace(s) managed by this controller.
@@ -146,8 +118,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	for _, secretName := range []string{
 		"calico-apiserver-certs",
 		certificatemanagement.CASecretName,
-		render.DexTLSSecretName,
-		monitor.PrometheusClientTLSSecretName,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("apiserver-controller failed to watch the Secret resource: %v", err)
@@ -159,6 +129,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
 	}
 	if err = utils.AddDeploymentWatch(c, "calico-apiserver", "calico-apiserver"); err != nil {
+		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
+	}
+
+	// The cutover is gated on this Deployment's readiness, so react to it rather than waiting for the
+	// next periodic reconcile.
+	if err = utils.AddDeploymentWatch(c, render.APIServerName, render.APIServerNamespace); err != nil {
 		return fmt.Errorf("apiserver-controller failed to watch Deployment: %w", err)
 	}
 
@@ -188,11 +164,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// to migration phase changes (e.g., goes hands-off during Migrating).
 	// Uses ResourceVersionChangedPredicate because migration phase transitions
 	// are status-only updates that don't bump generation.
-	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
-		&datastoremigration.DatastoreMigration{
-			TypeMeta: metav1.TypeMeta{Kind: "DatastoreMigration", APIVersion: "migration.projectcalico.org/v1beta1"},
-		},
-	}, predicate.ResourceVersionChangedPredicate{})
+	go func() {
+		// Calico v3.32 serves DatastoreMigration at v1beta1 and v3.33 at v1, so wait for the
+		// CRD before picking a version.
+		datastoremigration.WaitForServedVersion(opts.ShutdownContext, opts.K8sClientset.Discovery())
+		utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.migrationWatchReady, []client.Object{
+			datastoremigration.WatchObject(),
+		}, predicate.ResourceVersionChangedPredicate{})
+	}()
 
 	log.V(5).Info("Controller created and Watches setup")
 	return nil
@@ -211,6 +190,7 @@ type ReconcileAPIServer struct {
 	tierWatchReady      *utils.ReadyFlag
 	migrationWatchReady *utils.ReadyFlag
 	opts                options.ControllerOptions
+	ext                 extensions.APIServerExtension
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -287,7 +267,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Query for the installation object.
-	_, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -314,16 +294,6 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Since apiserver and queryserver may have different UID:GID at run-time, we need to produce this secret in separate volumes and with different permissions.
-	var queryServerTLSSecretCertificateManagementOnly certificatemanagement.KeyPairInterface
-	if installationSpec.CertificateManagement != nil {
-		queryServerTLSSecretCertificateManagementOnly, err = certificateManager.GetOrCreateKeyPair(r.client, "query-server-tls", common.OperatorNamespace(), dns.GetServiceDNSNames(render.APIServerServiceName, render.APIServerNamespace, r.opts.ClusterDomain))
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to get or create tls key pair", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
 	certificateManager.AddToStatusManager(r.status, render.APIServerNamespace)
 
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.client)
@@ -332,102 +302,35 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		return reconcile.Result{}, err
 	}
 
-	// Query enterprise-only data.
-	var trustedBundle certificatemanagement.TrustedBundle
-	var applicationLayer *operatorv1.ApplicationLayer
-	var managementCluster *operatorv1.ManagementCluster
-	var managementClusterConnection *operatorv1.ManagementClusterConnection
-	var keyValidatorConfig authentication.KeyValidatorConfig
-	includeV3NetworkPolicy := false
-
-	if installationSpec.Variant.IsEnterprise() {
-		trustedBundle, err = certificateManager.CreateNamedTrustedBundleFromSecrets(render.APIServerResourceName, r.client,
-			common.OperatorNamespace(), false)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		applicationLayer, err = utils.GetApplicationLayer(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ApplicationLayer", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		managementCluster, err = utils.GetManagementCluster(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		managementClusterConnection, err = utils.GetManagementClusterConnection(ctx, r.client)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if managementClusterConnection != nil && managementCluster != nil {
-			err = fmt.Errorf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		// Management cluster only: check if the tunnel CA secret has been created. The apiserver mounts this secret so
-		// it can sign certificates for managed clusters. If the managementCluster has not been defaulted then we should
-		// not degrade. This is because the manager_controller exits the reconcile loop if the apiserver is not available.
-		if managementCluster != nil && managementCluster.Spec.TLS != nil && !r.opts.MultiTenant {
-			tunnelSecretName := managementCluster.Spec.TLS.SecretName
-			// The manager_controller should have written this secret. We know this since spec.TLS has been defaulted.
-			// If the secret does not exist, we degrade this controller.
-			_, err := utils.GetSecret(ctx, r.client, tunnelSecretName, common.OperatorNamespace())
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Unable to fetch the tunnel secret", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
-		prometheusCertificate, err := certificateManager.GetCertificate(r.client, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get certificate", err, reqLogger)
-			return reconcile.Result{}, err
-		} else if prometheusCertificate != nil {
-			trustedBundle.AddCertificates(prometheusCertificate)
-		}
-
-		var authenticationCR *operatorv1.Authentication
-		// Fetch the Authentication spec. If present, we use it to configure user authentication.
-		authenticationCR, err = utils.GetAuthentication(ctx, r.client)
-		if err != nil && !errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		if authenticationCR != nil && authenticationCR.Status.State == operatorv1.TigeraStatusReady {
-			if utils.DexEnabled(authenticationCR) {
-				// Do not include DEX TLS Secret Name if authentication CR does not have type Dex
-				secret := render.DexTLSSecretName
-				certificate, err := certificateManager.GetCertificate(r.client, secret, common.OperatorNamespace())
-				if err != nil {
-					r.status.SetDegraded(operatorv1.CertificateError, fmt.Sprintf("Failed to retrieve %s", secret),
-						err, reqLogger)
-					return reconcile.Result{}, err
-				} else if certificate == nil {
-					reqLogger.Info(fmt.Sprintf("Waiting for secret '%s' to become available", secret))
-					r.status.SetDegraded(operatorv1.ResourceNotReady,
-						fmt.Sprintf("Waiting for secret '%s' to become available", secret),
-						nil, reqLogger)
-					return reconcile.Result{}, nil
-				}
-				trustedBundle.AddCertificates(certificate)
-			}
-
-			keyValidatorConfig, err = utils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain)
-			if err != nil {
-				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get KeyValidator Config", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
+	// Run the variant extension: it validates the configuration and produces the
+	// enterprise render data (the trusted bundle, the query server certificate, the
+	// management cluster CRs, the OIDC config, and the resolved L7 sidecar images). For
+	// the core operator this is a no-op and the render inputs carries no extension data.
+	ci := controller.Inputs{
+		RenderInputs: render.Inputs{
+			Installation:  installationSpec,
+			ClusterDomain: r.opts.ClusterDomain,
+		},
+		Client:             r.client,
+		CertificateManager: certificateManager,
 	}
+	ci, extraKeyPairs, err := r.ext.ExtendInputs(ctx, ci)
+	if err != nil {
+		if reason, ok := extensions.DegradedReason(err); ok {
+			r.status.SetDegraded(reason, err.Error(), nil, reqLogger)
+			if reason == operatorv1.ResourceNotReady {
+				// The controller watches what the extension is waiting on, so let the
+				// watch trigger the next reconcile.
+				return reconcile.Result{}, nil
+			}
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing the API server extension", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	trustedBundle := ci.RenderInputs.TrustedBundle
+
+	includeV3NetworkPolicy := false
 
 	// Ensure the calico-system tier exists, before rendering any network policies within it.
 	//
@@ -459,7 +362,24 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Create a component handler to manage the rendered component.
-	handler := utils.NewComponentHandler(log, r.client, r.scheme, instance)
+	handler := utils.NewComponentHandler(
+		log,
+		r.client,
+		r.scheme,
+		instance,
+		utils.WithModifier(func(c render.Component) render.Component {
+			return r.ext.Modify(c, ci.RenderInputs)
+		}),
+	)
+
+	var holdCutover bool
+	if !r.opts.UseV3CRDs {
+		holdCutover, err = holdAPIServiceCutover(ctx, r.client)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying the projectcalico.org/v3 APIService", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
 
 	// Render the desired objects from the CRD and create or update them.
 	reqLogger.V(3).Info("rendering components")
@@ -470,18 +390,15 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		Installation:                 installationSpec,
 		APIServer:                    &instance.Spec,
 		ForceHostNetwork:             false,
-		ApplicationLayer:             applicationLayer,
-		ManagementCluster:            managementCluster,
-		ManagementClusterConnection:  managementClusterConnection,
 		TLSKeyPair:                   tlsSecret,
 		PullSecrets:                  pullSecrets,
 		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
 		TrustedBundle:                trustedBundle,
 		MultiTenant:                  r.opts.MultiTenant,
-		KeyValidatorConfig:           keyValidatorConfig,
 		KubernetesVersion:            r.opts.KubernetesVersion,
+		ClusterDomain:                r.opts.ClusterDomain,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
-		QueryServerTLSKeyPairCertificateManagementOnly: queryServerTLSSecretCertificateManagementOnly,
+		HoldAPIServiceCutover:        holdCutover,
 	}
 
 	var components []render.Component
@@ -489,6 +406,9 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	var webhooksTLS certificatemanagement.KeyPairInterface
 	certKeyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
+	}
+	for _, kp := range extraKeyPairs {
+		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(kp, true, true))
 	}
 	if r.opts.UseV3CRDs {
 		// If using v3 CRDs, we render the webhooks component that handles various RBAC and validation
@@ -526,13 +446,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))
 	}
 
-	// v3 NetworkPolicy will fail to reconcile if the API server deployment is unhealthy. In case the API Server
-	// deployment becomes unhealthy and reconciliation of non-NetworkPolicy resources in the apiserver controller
-	// would resolve it, we render the network policies of components last to prevent a chicken-and-egg scenario.
-	if !r.opts.UseV3CRDs && includeV3NetworkPolicy {
-		components = append(components, render.APIServerPolicy(&apiServerCfg))
-	}
-
+	// Add in the API server component itself.
 	component, err := render.APIServer(&apiServerCfg)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceRenderingError, "Error rendering APIServer", err, reqLogger)
@@ -549,6 +463,25 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}),
 	)
 
+	// If the projectcalico.org/v3 API group is being backed by our aggregated API server, then v3 NetworkPolicy will fail to reconcile until the Calico API server is healthy.
+	// Thus, we only render v3.NetworkPolicy after the aggregated API server becomes available to avoid a chicken-and-egg scenario.
+	//
+	// If the projectcalico.org/v3 API group is implemented using CRDs natively, we can install network policies immediately, as there is no
+	// dependency on the API server deployment.
+	//
+	// We do this last to avoid transient errors with policy preventing progression of the controller.
+	//
+	// While the cutover is held the previous API server is still serving, so the policy can go first
+	// instead, closing the window in which the new workload runs with no policy of its own.
+	if r.opts.UseV3CRDs || includeV3NetworkPolicy {
+		policy := render.APIServerPolicy(&apiServerCfg)
+		if holdCutover {
+			components = append([]render.Component{policy}, components...)
+		} else {
+			components = append(components, policy)
+		}
+	}
+
 	if err = imageset.ApplyImageSet(ctx, r.client, installationSpec.Variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
@@ -562,10 +495,19 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 	}
 
 	// Check BYO certificate expiry warnings.
-	certificatemanagement.CheckKeyPairWarnings(map[string]certificatemanagement.KeyPairInterface{
+	keyPairWarnings := map[string]certificatemanagement.KeyPairInterface{
 		render.CalicoAPIServerTLSSecretName: tlsSecret,
 		webhooks.WebhooksTLSSecretName:      webhooksTLS,
-	}, r.status)
+	}
+	for _, kp := range extraKeyPairs {
+		keyPairWarnings[kp.GetName()] = kp
+	}
+	certificatemanagement.CheckKeyPairWarnings(keyPairWarnings, r.status)
+
+	if holdCutover {
+		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for the Calico API server to become ready before repointing the projectcalico.org/v3 APIService", nil, reqLogger)
+		return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+	}
 
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()

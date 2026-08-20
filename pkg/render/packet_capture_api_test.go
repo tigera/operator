@@ -79,7 +79,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		},
 	}}
 	// Installation with minimal setup
-	defaultInstallation := operatorv1.InstallationSpec{}
+	defaultInstallation := operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise}
 
 	// Rendering packet capture resources
 	renderPacketCapture := func(i operatorv1.InstallationSpec, config authentication.KeyValidatorConfig) (resources []client.Object) {
@@ -104,6 +104,8 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureServiceAccountName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureClusterRoleBindingName}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.Role{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCapturePodExecRoleName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}},
+			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCapturePodExecRoleBindingName, Namespace: common.CalicoNamespace}, TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&appsv1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureDeploymentName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"}},
 			&corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: render.PacketCaptureServiceName, Namespace: render.PacketCaptureNamespace}, TypeMeta: metav1.TypeMeta{Kind: "Service", APIVersion: "v1"}},
 			&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.TigeraOperatorSecrets, Namespace: render.PacketCaptureNamespace}},
@@ -191,9 +193,9 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 		return []corev1.Container{
 			{
-				Name:            render.PacketCaptureContainerName,
-				Image:           fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentPacketCapture.Image, components.ComponentPacketCapture.Version),
-				ImagePullPolicy: render.ImagePullPolicy(),
+				Name:    render.PacketCaptureContainerName,
+				Image:   fmt.Sprintf("%s%s%s:%s", components.TigeraRegistry, components.TigeraImagePath, components.ComponentTigeraCalico.Image, components.ComponentTigeraCalico.Version),
+				Command: []string{components.CalicoBinaryPath, "component", "packetcapture"},
 				SecurityContext: &corev1.SecurityContext{
 					AllowPrivilegeEscalation: ptr.To(false),
 					Capabilities: &corev1.Capabilities{
@@ -325,6 +327,31 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			},
 		}))
 
+		// The pod/exec Role lets the PacketCapture API read capture files off the
+		// per-node calico-node pod; it is namespaced to calico-system.
+		podExecRole := rtest.GetResource(resources, render.PacketCapturePodExecRoleName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "Role").(*rbacv1.Role)
+		Expect(podExecRole.Rules).To(ConsistOf([]rbacv1.PolicyRule{
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods/exec"},
+				Verbs:     []string{"create"},
+			},
+			{
+				APIGroups: []string{""},
+				Resources: []string{"pods"},
+				Verbs:     []string{"list"},
+			},
+		}))
+		podExecRoleBinding := rtest.GetResource(resources, render.PacketCapturePodExecRoleBindingName, common.CalicoNamespace, "rbac.authorization.k8s.io", "v1", "RoleBinding").(*rbacv1.RoleBinding)
+		Expect(podExecRoleBinding.RoleRef.Name).To(Equal(render.PacketCapturePodExecRoleName))
+		Expect(podExecRoleBinding.Subjects).To(ConsistOf([]rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      render.PacketCaptureServiceAccountName,
+				Namespace: render.PacketCaptureNamespace,
+			},
+		}))
+
 		// Check service
 		service := rtest.GetResource(resources, render.PacketCaptureServiceName, render.PacketCaptureNamespace, "", "v1", "Service").(*corev1.Service)
 		Expect(service.Spec.Ports).To(ConsistOf([]corev1.ServicePort{
@@ -350,6 +377,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 			Value:    "bar",
 		}
 		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			Variant:                 operatorv1.CalicoEnterprise,
 			ControlPlaneTolerations: []corev1.Toleration{t},
 		}, nil)
 
@@ -362,6 +390,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	It("should render toleration on GKE", func() {
 		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			Variant:            operatorv1.CalicoEnterprise,
 			KubernetesProvider: operatorv1.ProviderGKE,
 		}, nil)
 		deployment := rtest.GetResource(resources, render.PacketCaptureDeploymentName, render.PacketCaptureNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -376,6 +405,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		resources := renderPacketCapture(operatorv1.InstallationSpec{
+			Variant:            operatorv1.CalicoEnterprise,
 			KubernetesProvider: operatorv1.ProviderOpenShift,
 		}, nil)
 
@@ -391,7 +421,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 	It("should render all resources for an installation with certificate management", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
-		installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+		installation := operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 
 		certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 		Expect(err).NotTo(HaveOccurred())
@@ -460,7 +490,7 @@ var _ = Describe("Rendering tests for PacketCapture API component", func() {
 		It("should override container's resource request and render init container with default values", func() {
 			ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 			cert, _, _ := ca.Config.GetPEMBytes() // create a valid pem block
-			installation := operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
+			installation := operatorv1.InstallationSpec{Variant: operatorv1.CalicoEnterprise, CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}}
 
 			certificateManager, err := certificatemanager.Create(cli, &installation, clusterDomain, common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())

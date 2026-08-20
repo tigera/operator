@@ -12,16 +12,16 @@ NATIVE_ARCH := $(shell bash -c 'if [[ "$(shell uname -m)" == "x86_64" ]]; then e
 NATIVE_OS := $(shell uname -s | tr A-Z a-z)
 
 # The version of kustomize we use for generating bundles
-KUSTOMIZE_VERSION = v5.6.0
+KUSTOMIZE_VERSION = v5.8.1
 KUSTOMIZE_DOWNLOAD_URL = https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2F$(KUSTOMIZE_VERSION)/kustomize_$(KUSTOMIZE_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
 
 # Our version of operator-sdk
-OPERATOR_SDK_VERSION = v1.39.2
+OPERATOR_SDK_VERSION = v1.42.2
 OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/download/$(OPERATOR_SDK_VERSION)/operator-sdk_$(NATIVE_OS)_$(NATIVE_ARCH)
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.20.1
+HELM3_VERSION = v3.21.3
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -101,8 +101,15 @@ endif
 REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
-GO_BUILD_VER?=1.26.1-llvm20.1.8-k8s1.35.3
-CALICO_BASE_VER ?= ubi9-1774634880
+# The project Go version.
+GO_VERSION?=1.26.5
+# Version of Kubernetes to use for dependencies, tests, and kubectl.
+K8S_VERSION?=v1.37.0-beta.0
+# The version of LLVM to use for the go-build image.
+LLVM_VERSION?=21.1.8
+# Calico toolchain versions and the calico/go-build image to use.
+GO_BUILD_VER?=$(GO_VERSION)-llvm$(LLVM_VERSION)-k8s$(K8S_VERSION:v%=%)
+CALICO_BASE_VER ?= ubi9-1784675397
 CALICO_BUILD?=calico/go-build:$(GO_BUILD_VER)-$(BUILDARCH)
 CALICO_BASE ?= calico/base:$(CALICO_BASE_VER)
 SRC_FILES=$(shell find ./pkg -name '*.go')
@@ -148,10 +155,34 @@ CONTAINERIZED= mkdir -p .go-pkg-cache $(GOMOD_CACHE) && \
 
 DOCKER_RUN := $(CONTAINERIZED) $(CALICO_BUILD)
 
+# Calico Cloud build variant. `make <target> VARIANT=cloud` builds and pushes the operator-cloud
+# image to GCR (gcr.io/tigera-tesla/operator-cloud), amd64 only.
+# These sit before the enterprise defaults and use `?=` so the environment still wins: hashreleases
+# push the cloud image to the hashrelease registry instead (see hack/release/README.md).
+CLOUD_LDFLAGS=
+ifeq ($(VARIANT),cloud)
+BUILD_IMAGE?=tigera-tesla/operator-cloud
+BINARY_NAME?=operator-cloud
+IMAGE_REGISTRY?=gcr.io
+PUSH_IMAGE_PREFIXES?=gcr.io/
+EXCLUDE_MANIFEST_REGISTRIES?=gcr.io/
+# amd64 only. Constrain ARCHES (not just VALIDARCHES) so push-all, which iterates ARCHES, does not
+# try to push arches that were never built.
+ARCHES:=amd64
+# Bake cloud mode into the operator binary so it cannot be disabled at runtime (see isCloudBuild in
+# cmd/cloud.go). buildVariant lives in package main, which the linker addresses as "main" (not by its
+# import path), so this -X target is "main.buildVariant" rather than a $(PACKAGE_NAME)-prefixed path.
+CLOUD_LDFLAGS=-X main.buildVariant=cloud
+endif
+
 BUILD_IMAGE?=tigera/operator
 
 BUILD_DIR?=build/_output
 BINDIR?=$(BUILD_DIR)/bin
+
+# Name of the built operator binary. The Calico Cloud variant suffixes it with -cloud
+# (see VARIANT=cloud above) so the cloud artifact is easy to tell apart from the enterprise one.
+BINARY_NAME?=operator
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
@@ -168,7 +199,6 @@ endif
 EXCLUDE_MANIFEST_REGISTRIES?=""
 PUSH_MANIFEST_IMAGE_PREFIXES=$(PUSH_IMAGE_PREFIXES:$(EXCLUDE_MANIFEST_REGISTRIES)%=)
 PUSH_NONMANIFEST_IMAGE_PREFIXES=$(filter-out $(PUSH_MANIFEST_IMAGE_PREFIXES),$(PUSH_IMAGE_PREFIXES))
-
 
 imagetag:
 ifndef IMAGETAG
@@ -232,7 +262,7 @@ endif
 
 # To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
 ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
-ISTIO_VERSION ?= 1.28.1
+ISTIO_VERSION ?= 1.29.2
 ISTIO_RESOURCES_DIR = pkg/render/istio
 ISTIO_CHARTS = base istiod cni ztunnel
 ISTIO_CHART_FILES = $(addprefix $(ISTIO_RESOURCES_DIR)/,$(addsuffix .tgz,$(ISTIO_CHARTS)))
@@ -247,22 +277,14 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.7.0
-ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
-ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
-ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
+ENVOY_GATEWAY_VERSION ?= v1.8.3
+ENVOY_GATEWAY_CHART = pkg/render/gatewayapi/gateway-helm.tgz
 
-$(ENVOY_GATEWAY_RESOURCES): $(HACK_BIN)/helm-$(BUILDARCH)
-	echo "---" > $@
-	echo "apiVersion: v1" >> $@
-	echo "kind: Namespace" >> $@
-	echo "metadata:" >> $@
-	echo "  name: $(ENVOY_GATEWAY_NAMESPACE)" >> $@
-	$(HELM_BUILDARCH_BINARY) template $(ENVOY_GATEWAY_PREFIX) $(ENVOY_GATEWAY_HELM_CHART) \
+$(ENVOY_GATEWAY_CHART): $(HACK_BIN)/helm-$(BUILDARCH)
+	$(HELM_BUILDARCH_BINARY) pull $(ENVOY_GATEWAY_HELM_CHART) \
 		--version $(ENVOY_GATEWAY_VERSION) \
-		-n $(ENVOY_GATEWAY_NAMESPACE) \
-		--include-crds \
-	>> $@
+		--destination pkg/render/gatewayapi/
+	@mv pkg/render/gatewayapi/gateway-helm-$(ENVOY_GATEWAY_VERSION).tgz $@
 
 $(HELM_BUILDARCH_BINARY): $(HELM_BUILDARCH_VERSIONED_BINARY)
 	$(info ░▒▓ symlink $(HELM_BUILDARCH_VERSIONED_BINARY) -> $(HELM_BUILDARCH_BINARY))
@@ -275,24 +297,25 @@ $(HELM_BUILDARCH_VERSIONED_BINARY): | $(HACK_BIN)
 	@chmod a+x $(HELM_BUILDARCH_VERSIONED_BINARY)
 
 
-build: $(BINDIR)/operator-$(ARCH)
-$(BINDIR)/operator-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+build: $(BINDIR)/$(BINARY_NAME)-$(ARCH)
+$(BINDIR)/$(BINARY_NAME)-$(ARCH): $(SRC_FILES) $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	mkdir -p $(BINDIR)
 	$(CONTAINERIZED) -e CGO_ENABLED=$(CGO_ENABLED) -e GOEXPERIMENT=$(GOEXPERIMENT) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	go build -buildvcs=false -v -o $(BINDIR)/operator-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) -s -w" ./cmd/main.go'
+	go build -buildvcs=false -v -o $(BINDIR)/$(BINARY_NAME)-$(ARCH) -tags "$(TAGS)" -ldflags "-X $(PACKAGE_NAME)/version.VERSION=$(GIT_VERSION) $(CLOUD_LDFLAGS) -s -w" ./cmd/'
 ifeq ($(ARCH), $(filter $(ARCH),amd64))
-	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/operator-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
+	$(CONTAINERIZED) $(CALICO_BUILD) sh -c 'strings $(BINDIR)/$(BINARY_NAME)-$(ARCH) | grep '_Cfunc__goboringcrypto_' 1> /dev/null'
 endif
 
 .PHONY: image
 image: build $(BUILD_IMAGE)
 
 $(BUILD_IMAGE): $(BUILD_IMAGE)-$(ARCH)
-$(BUILD_IMAGE)-$(ARCH): $(BINDIR)/operator-$(ARCH)
+$(BUILD_IMAGE)-$(ARCH): $(BINDIR)/$(BINARY_NAME)-$(ARCH)
 	docker buildx build --load --platform=linux/$(ARCH) --pull \
 		--build-arg GIT_VERSION=$(GIT_VERSION) \
 		--build-arg CALICO_BASE=$(CALICO_BASE) \
+		--build-arg BINARY_NAME=$(BINARY_NAME) \
 		-t $(BUILD_IMAGE):latest-$(ARCH) \
 		-f build/Dockerfile .
 ifeq ($(ARCH),amd64)
@@ -322,6 +345,7 @@ $(BINDIR)/kind:
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(ISTIO_CHART_FILES)
+	rm -rf $(ENVOY_GATEWAY_CHART)
 	rm -rf build/init/bin
 	rm -rf hack/bin
 	rm -rf .go-pkg-cache
@@ -339,7 +363,7 @@ GINKGO_FOCUS?=.*
 ENVTEST_K8S_VERSION?=1.34.x
 
 .PHONY: ut
-ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+ut: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.22 && \
@@ -348,7 +372,7 @@ ut: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
 
 ## Run the functional tests
 fv: cluster-create load-container-images run-fvs cluster-destroy
-run-fvs: $(ENVOY_GATEWAY_RESOURCES) $(ISTIO_CHART_FILES)
+run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 	-mkdir -p .go-pkg-cache report
 	$(CONTAINERIZED) $(CALICO_BUILD) sh -c '$(GIT_CONFIG_SSH) \
 	ginkgo -focus="$(GINKGO_FOCUS)" $(GINKGO_ARGS) "$(FV_DIR)"'
@@ -377,84 +401,28 @@ cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 
 FV_IMAGE_REGISTRY := docker.io
 VERSION_TAG := master
+CALICO_IMAGE := calico/calico
 NODE_IMAGE := calico/node
-APISERVER_IMAGE := calico/apiserver
-CNI_IMAGE := calico/cni
-FLEXVOL_IMAGE := calico/pod2daemon-flexvol
-KUBECONTROLLERS_IMAGE := calico/kube-controllers
-TYPHA_IMAGE := calico/typha
-CSI_IMAGE := calico/csi
-NODE_DRIVER_REGISTRAR_IMAGE := calico/node-driver-registrar
-GOLDMANE_IMAGE := calico/goldmane
 WHISKER_IMAGE := calico/whisker
-WHISKER_BACKEND_IMAGE := calico/whisker-backend
+
+.PHONY: calico-calico.tar
+calico-calico.tar:
+	docker pull $(FV_IMAGE_REGISTRY)/$(CALICO_IMAGE):$(VERSION_TAG)
+	docker save --output $@ $(CALICO_IMAGE):$(VERSION_TAG)
 
 .PHONY: calico-node.tar
 calico-node.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(NODE_IMAGE):$(VERSION_TAG)
 
-.PHONY: calico-apiserver.tar
-calico-apiserver.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(APISERVER_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(APISERVER_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-cni.tar
-calico-cni.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CNI_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(CNI_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-pod2daemon-flexvol.tar
-calico-pod2daemon-flexvol.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(FLEXVOL_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(FLEXVOL_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-kube-controllers.tar
-calico-kube-controllers.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(KUBECONTROLLERS_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-typha.tar
-calico-typha.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(TYPHA_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(TYPHA_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-csi.tar
-calico-csi.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(CSI_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(CSI_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-node-driver-registrar.tar
-calico-node-driver-registrar.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(NODE_DRIVER_REGISTRAR_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-goldmane.tar
-calico-goldmane.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(GOLDMANE_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(GOLDMANE_IMAGE):$(VERSION_TAG)
-
-.PHONY: calico-goldmane.tar
+.PHONY: calico-whisker.tar
 calico-whisker.tar:
 	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_IMAGE):$(VERSION_TAG)
 	docker save --output $@ $(WHISKER_IMAGE):$(VERSION_TAG)
 
-.PHONY: calico-goldmane.tar
-calico-whisker-backend.tar:
-	docker pull $(FV_IMAGE_REGISTRY)/$(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
-	docker save --output $@ $(WHISKER_BACKEND_IMAGE):$(VERSION_TAG)
-
-IMAGE_TARS := calico-node.tar \
-	calico-apiserver.tar \
-	calico-cni.tar \
-	calico-pod2daemon-flexvol.tar \
-	calico-kube-controllers.tar \
-	calico-typha.tar \
-	calico-csi.tar \
-	calico-node-driver-registrar.tar \
-	calico-goldmane.tar \
-	calico-whisker.tar \
-	calico-whisker-backend.tar
+IMAGE_TARS := calico-calico.tar \
+	calico-node.tar \
+	calico-whisker.tar
 
 load-container-images: ./test/load_images_on_kind_cluster.sh $(IMAGE_TARS)
 	# Load the latest tar files onto the currently running kind cluster.
@@ -476,6 +444,7 @@ deploy-crds: kubectl
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/calico/policy.networking.k8s.io/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/v1.crd.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/policy.networking.k8s.io/ && \
+		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/applicationlayer.projectcalico.org/ && \
 		$(BINDIR)/kubectl apply -f pkg/imports/crds/enterprise/01-crd-eck-bundle.yaml && \
 		$(BINDIR)/kubectl create -f deploy/crds/prometheus
 
@@ -514,6 +483,11 @@ format-check:
 	echo $$files; \
 	echo Try running \"make fix\" and committing any changes; \
 	exit 1'
+
+.PHONY: yaml-lint
+## Lint YAML files
+yaml-lint:
+	@docker run --rm $$(tty -s && echo "-it" || echo) -v $(CURDIR):/data cytopia/yamllint:latest .
 
 .PHONY: dirty-check
 dirty-check:
@@ -561,6 +535,11 @@ endif
 release-tag: var-require-all-RELEASE_TAG-GITHUB_TOKEN
 	$(MAKE) release VERSION=$(RELEASE_TAG)
 	REPO=$(REPO) $(MAKE) release-publish VERSION=$(RELEASE_TAG)
+
+# Calico Cloud releases reuse release-tag with VARIANT=cloud, e.g.
+# `make release-tag VARIANT=cloud RELEASE_TAG=vX.Y.Z-cloud`. The release tool applies cloud
+# behavior (GCR/operator-cloud image, vX.Y.Z-cloud version format, no GitHub release) at runtime
+# based on VARIANT. Cloud tags are the regular operator version with a -cloud suffix.
 
 ## Generate release notes for the specified VERSION.
 release-notes: hack/bin/release var-require-all-VERSION-GITHUB_TOKEN
@@ -614,11 +593,16 @@ hack/bin/release: $(shell find ./hack/release -type f)
 	sh -c '$(GIT_CONFIG_SSH) \
 	go build -buildvcs=false -o hack/bin/release ./hack/release'
 
+# Calico Cloud releases use the same release binary and targets with VARIANT=cloud, e.g.
+# `make release VARIANT=cloud` / `make release-tag VARIANT=cloud`. The release tool activates its
+# cloud behavior (GCR/operator-cloud image, vX.Y.Z-cloud version format, no GitHub release) at
+# runtime when VARIANT=cloud; no separate binary or build tag is required.
+
 hack/release/ut:
 	mkdir -p report/release
 	$(CONTAINERIZED) $(CALICO_BUILD) \
 	sh -c '$(GIT_CONFIG_SSH) \
-	gotestsum --format=testname --junitfile report/release/ut.xml $(PACKAGE_NAME)/hack/release'
+	gotestsum --format=testname --junitfile report/release/ut.xml $$(go list $(PACKAGE_NAME)/hack/release/... | grep -v /hack/release/validate)'
 
 release-from: hack/bin/release var-require-all-VERSION-OPERATOR_BASE_VERSION var-require-one-of-EE_IMAGES_VERSIONS-OS_IMAGES_VERSIONS
 	hack/bin/release from
@@ -636,7 +620,17 @@ release-prep: hack/bin/release hack/bin/gh var-require-all-VERSION var-require-o
 	@REPO=$(REPO) hack/bin/release prep
 
 create-release-branch: hack/bin/release var-require-all-CALICO_REF-ENTERPRISE_REF var-require-one-of-STREAM-RELEASE_STREAM
-	hack/bin/release branch
+	hack/bin/release branch cut
+
+GOTESTSUM_VERSION?=1.13.0
+$(HACK_BIN)/gotestsum: $(HACK_BIN)
+	@curl -sSL -o $(HACK_BIN)/gotestsum.tar.gz https://github.com/gotestyourself/gotestsum/releases/download/v$(GOTESTSUM_VERSION)/gotestsum_$(GOTESTSUM_VERSION)_$(NATIVE_OS)_$(NATIVE_ARCH).tar.gz
+	@tar -zxvf $(HACK_BIN)/gotestsum.tar.gz -C $(HACK_BIN) gotestsum
+	@chmod +x $@
+	@rm $(HACK_BIN)/gotestsum.tar.gz
+
+branch-validate: hack/bin/release $(HACK_BIN)/gotestsum var-require-one-of-STREAM-RELEASE_STREAM
+	PATH=$$PATH:$(CURDIR)/$(HACK_BIN) hack/bin/release branch validate
 
 ###############################################################################
 # Utilities
@@ -688,6 +682,7 @@ define prep_local_crds
 	mkdir -p pkg/imports/crds/$(product)/v1.crd.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/v3.projectcalico.org/
 	mkdir -p pkg/imports/crds/$(product)/policy.networking.k8s.io/
+	mkdir -p pkg/imports/crds/$(product)/applicationlayer.projectcalico.org/
 	mkdir -p pkg/imports/admission/$(product)
 	mkdir -p .crds/$(product)
 endef
@@ -716,6 +711,11 @@ define copy_k8s_policy_crds
     $(eval product := $(1))
 	@mv pkg/imports/crds/$(product)/v1.crd.projectcalico.org/policy.networking.k8s.io_* pkg/imports/crds/$(product)/policy.networking.k8s.io/ 2>/dev/null; true
 	@echo "Moved $(product) K8s policy CRDs to dedicated directory"
+endef
+define copy_applicationlayer_crds
+    $(eval product := $(1))
+	@mv pkg/imports/crds/$(product)/v3.projectcalico.org/applicationlayer.projectcalico.org_* pkg/imports/crds/$(product)/applicationlayer.projectcalico.org/ 2>/dev/null; true
+	@echo "Moved $(product) ApplicationLayer CRDs to dedicated directory"
 endef
 define copy_eck_crds
     $(eval dir := $(1))
@@ -767,6 +767,7 @@ update-enterprise-crds: fetch-enterprise-crds
 	$(call copy_v1_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_v3_crds, $(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_k8s_policy_crds,"enterprise")
+	$(call copy_applicationlayer_crds,"enterprise")
 	$(call copy_eck_crds,$(ENTERPRISE_CRDS_DIR),"enterprise")
 	$(call copy_admission_policies,$(ENTERPRISE_CRDS_DIR),"enterprise")
 
@@ -972,14 +973,14 @@ test-crds: test-enterprise-crds test-calico-crds
 # TODO: Improve this testing by comparing the individual source files
 # with the yaml printed out, this will need to be a yaml diff since the
 # fields won't necessarily be in the same order or indentation.
-test-calico-crds: $(BINDIR)/operator-$(ARCH)
-	$(BINDIR)/operator-$(ARCH) --print-calico-crds all >/dev/null 2>&1
+test-calico-crds: $(BINDIR)/$(BINARY_NAME)-$(ARCH)
+	$(BINDIR)/$(BINARY_NAME)-$(ARCH) --print-calico-crds all >/dev/null 2>&1
 
 # TODO: Improve this testing by comparing the individual source files
 # with the yaml printed out, this will need to be a yaml diff since the
 # fields won't necessarily be in the same order or indentation.
-test-enterprise-crds: $(BINDIR)/operator-$(ARCH)
-	$(BINDIR)/operator-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1
+test-enterprise-crds: $(BINDIR)/$(BINARY_NAME)-$(ARCH)
+	$(BINDIR)/$(BINARY_NAME)-$(ARCH) --print-enterprise-crds all >/dev/null 2>&1
 
 # Always install the git hooks to prevent potentially problematic commits.
 hooks_installed:=$(shell ./install-git-hooks)
@@ -988,9 +989,15 @@ hooks_installed:=$(shell ./install-git-hooks)
 install-git-hooks:
 	./install-git-hooks
 
+GIT_COMMON_DIR := $(realpath $(shell git rev-parse --git-common-dir 2>/dev/null))
+ifneq ($(GIT_COMMON_DIR),$(realpath $(CURDIR)/.git))
+# Handle worktrees where .git is a file - we need to get the actual location
+WORKTREE_GIT_MOUNT := -v $(GIT_COMMON_DIR):$(GIT_COMMON_DIR):rw
+endif
+
 .PHONY: pre-commit
 pre-commit:
-	$(CONTAINERIZED) $(foreach ALTERNATE,$(shell cat $(shell git rev-parse --git-dir)/objects/info/alternates 2>/dev/null),-v $(ALTERNATE):$(ALTERNATE):ro) $(CALICO_BUILD) git-hooks/pre-commit-in-container
+	$(CONTAINERIZED) $(WORKTREE_GIT_MOUNT) $(foreach ALTERNATE,$(shell cat $(GIT_COMMON_DIR)/objects/info/alternates 2>/dev/null),-v $(ALTERNATE):$(ALTERNATE):ro) $(CALICO_BUILD) git-hooks/pre-commit-in-container
 
 # var-set-% checks if there is a non empty variable for the value describe by %. If FAIL_NOT_SET is set, then var-set-%
 # fails with an error message. If FAIL_NOT_SET is not set, then var-set-% appends a 1 to VARSET if the variable isn't
@@ -1072,7 +1079,6 @@ gen-enterprise-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-enterprise.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(enterprise_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1091,7 +1097,6 @@ gen-calico-imageset: $(BUILD_DIR)
 	@echo "  images:" >> $(BUILD_DIR)/imageset-calico.yaml
 	@docker run $(OPERATOR_IMAGE) --print-images=$(calico_img_filter) | \
 	  grep -v "Failed to read" | \
-	  grep -v -e fips | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \
 	  digest=$$($(CRANE) digest $${line}$(double_quote)); \
@@ -1100,7 +1105,7 @@ gen-calico-imageset: $(BUILD_DIR)
 	done
 ifeq ($(OLD_STYLE_PRINT_IMAGE),true)
 	@docker run $(OPERATOR_IMAGE) --print-images=list | \
-	  grep -v -e "Failed to read" -e fips | \
+	  grep -v -e "Failed to read" | \
 	  grep -e 'tigera/key-cert-provisioner' | \
 	while read -r line; do \
 	  echo "Adding digest for $${line}"; \

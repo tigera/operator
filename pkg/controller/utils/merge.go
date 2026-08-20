@@ -18,6 +18,7 @@ import (
 	"reflect"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
@@ -58,6 +59,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	case BOnlySet, Different:
 		inst.ImagePullSecrets = make([]v1.LocalObjectReference, len(override.ImagePullSecrets))
 		copy(inst.ImagePullSecrets, override.ImagePullSecrets)
+	}
+
+	switch compareFields(inst.ImagePullPolicy, override.ImagePullPolicy) {
+	case BOnlySet, Different:
+		inst.ImagePullPolicy = ptr.To(*override.ImagePullPolicy)
 	}
 
 	switch compareFields(inst.KubernetesProvider, override.KubernetesProvider) {
@@ -111,6 +117,16 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 	switch compareFields(inst.FlexVolumePath, override.FlexVolumePath) {
 	case BOnlySet, Different:
 		inst.FlexVolumePath = override.FlexVolumePath
+	}
+
+	switch compareFields(inst.CalicoRunHostPath, override.CalicoRunHostPath) {
+	case BOnlySet, Different:
+		inst.CalicoRunHostPath = override.CalicoRunHostPath
+	}
+
+	switch compareFields(inst.CalicoLibHostPath, override.CalicoLibHostPath) {
+	case BOnlySet, Different:
+		inst.CalicoLibHostPath = override.CalicoLibHostPath
 	}
 
 	switch compareFields(inst.KubeletVolumePluginPath, override.KubeletVolumePluginPath) {
@@ -185,6 +201,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.TyphaDeployment = mergeTyphaDeployment(inst.TyphaDeployment, override.TyphaDeployment)
 	}
 
+	switch compareFields(inst.TyphaPodDisruptionBudget, override.TyphaPodDisruptionBudget) {
+	case BOnlySet, Different:
+		inst.TyphaPodDisruptionBudget = override.TyphaPodDisruptionBudget.DeepCopy()
+	}
+
 	switch compareFields(inst.CalicoWindowsUpgradeDaemonSet, override.CalicoWindowsUpgradeDaemonSet) {
 	case BOnlySet:
 		inst.CalicoWindowsUpgradeDaemonSet = override.CalicoWindowsUpgradeDaemonSet.DeepCopy()
@@ -224,6 +245,11 @@ func OverrideInstallationSpec(cfg, override operatorv1.InstallationSpec) operato
 		inst.Proxy = override.Proxy
 	}
 
+	switch compareFields(inst.NetworkPolicy, override.NetworkPolicy) {
+	case BOnlySet, Different:
+		inst.NetworkPolicy = override.NetworkPolicy
+	}
+
 	return inst
 }
 
@@ -259,6 +285,11 @@ func mergeCNISpecs(cfg, override *operatorv1.CNISpec) *operatorv1.CNISpec {
 		out.IPAM = override.IPAM.DeepCopy()
 	}
 
+	switch compareFields(out.SpecVersion, override.SpecVersion) {
+	case BOnlySet, Different:
+		out.SpecVersion = override.SpecVersion
+	}
+
 	switch compareFields(out.BinDir, override.BinDir) {
 	case BOnlySet, Different:
 		out.BinDir = override.BinDir
@@ -267,6 +298,11 @@ func mergeCNISpecs(cfg, override *operatorv1.CNISpec) *operatorv1.CNISpec {
 	switch compareFields(out.ConfDir, override.ConfDir) {
 	case BOnlySet, Different:
 		out.ConfDir = override.ConfDir
+	}
+
+	switch compareFields(out.InstallMode, override.InstallMode) {
+	case BOnlySet, Different:
+		out.InstallMode = override.InstallMode
 	}
 
 	return out
@@ -346,6 +382,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 	switch compareFields(out.ContainerIPForwarding, override.ContainerIPForwarding) {
 	case BOnlySet, Different:
 		out.ContainerIPForwarding = override.ContainerIPForwarding
+	}
+
+	switch compareFields(out.LinuxPodInterfaceType, override.LinuxPodInterfaceType) {
+	case BOnlySet, Different:
+		out.LinuxPodInterfaceType = override.LinuxPodInterfaceType
 	}
 
 	switch compareFields(out.Sysctl, override.Sysctl) {

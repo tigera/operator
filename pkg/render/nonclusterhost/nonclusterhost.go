@@ -164,6 +164,7 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 				"ippools",
 				"licensekeys",
 				"networkpolicies",
+				"networks",
 				"networksets",
 				"packetcaptures",
 				"remoteclusterconfigurations",
@@ -191,9 +192,9 @@ func (c *nonClusterHostComponent) clusterRole() *rbacv1.ClusterRole {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 		{
-			// Allow post flow logs to linseed.
+			// Allow posting flow logs, DNS logs, and policy activity logs to linseed.
 			APIGroups: []string{"linseed.tigera.io"},
-			Resources: []string{"flowlogs"},
+			Resources: []string{"flowlogs", "dnslogs", "policyactivity"},
 			Verbs:     []string{"create"},
 		},
 	}...)

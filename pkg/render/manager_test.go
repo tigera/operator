@@ -17,7 +17,6 @@ package render_test
 import (
 	"fmt"
 	"reflect"
-	"strconv"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -45,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/authentication"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/testutils"
 	"github.com/tigera/operator/pkg/tls"
@@ -55,7 +55,6 @@ import (
 var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	var replicas int32 = 2
 	installation := &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas}
-	compliance := &operatorv1.Compliance{}
 
 	expectedManagerPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager.json")
 	expectedManagerOpenshiftPolicy := testutils.GetExpectedPolicyFromFile("testutils/expected_policies/manager_ocp.json")
@@ -67,19 +66,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 		}
 		resourcesToCreate, resourcesToDelete := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			nonClusterHost:          nonclusterhost,
-			installation:            installation,
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: nil,
+			nonClusterHost:    nonclusterhost,
+			installation:      installation,
+			ns:                render.ManagerNamespace,
 		})
 
 		// Should render the correct resources.
 		expectedResourcesToCreate := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -131,9 +127,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		manager := deployment.Spec.Template.Spec.Containers[3]
 
 		Expect(manager.Image).Should(Equal(components.TigeraRegistry + "tigera/manager:" + components.ComponentManager.Version))
-		Expect(uiAPIs.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
-		Expect(dashboard.Image).Should(Equal(components.TigeraRegistry + "tigera/ui-apis:" + components.ComponentUIAPIs.Version))
-		Expect(voltron.Image).Should(Equal(components.TigeraRegistry + "tigera/voltron:" + components.ComponentManagerProxy.Version))
+		Expect(uiAPIs.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
+		Expect(dashboard.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
+		Expect(voltron.Image).Should(Equal(components.CalicoRegistry + "calico/calico:" + components.ComponentCalico.Version))
 
 		// manager container
 		Expect(*manager.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -204,9 +200,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(dashboard.VolumeMounts[1].MountPath).To(Equal(fmt.Sprintf("/%s", render.ManagerInternalTLSSecretName)))
 
 		Expect(dashboard.ReadinessProbe).NotTo(BeNil())
-		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/dashboard-api", "-ready"}))
+		Expect(dashboard.ReadinessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/calico", "component", "dashboards", "ready"}))
 		Expect(dashboard.LivenessProbe).NotTo(BeNil())
-		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/dashboard-api", "-ready"}))
+		Expect(dashboard.LivenessProbe.ProbeHandler.Exec.Command).To(Equal([]string{"/usr/bin/calico", "component", "dashboards", "ready"}))
 
 		Expect(dashboard.SecurityContext).NotTo(BeNil())
 		Expect(*dashboard.SecurityContext.AllowPrivilegeEscalation).To(BeFalse())
@@ -214,8 +210,8 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		// voltron container
 		Expect(voltron.Env).To(ContainElements([]corev1.EnvVar{
-			{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: "true"},
 			{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: "true"},
+			{Name: "VOLTRON_LOG_COLLECTOR_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
 			{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: "https://calico-api.calico-system.svc:8080"},
 			{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy/"},
 			{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: "/etc/pki/tls/certs/tigera-ca-bundle.crt"},
@@ -248,12 +244,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	It("should render toleration on GKE", func() {
 		installation.KubernetesProvider = operatorv1.ProviderGKE
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            installation,
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      installation,
+			ns:                render.ManagerNamespace,
 		})
 		deployment := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(deployment).NotTo(BeNil())
@@ -267,11 +261,9 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should render SecurityContextConstrains properly when provider is OpenShift", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift},
-			compliance:              compliance,
-			complianceFeatureActive: true,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, KubernetesProvider: operatorv1.ProviderOpenShift},
 		})
 
 		// calico-manager-role clusterRole should have openshift securitycontextconstraints PolicyRule
@@ -284,39 +276,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}))
 	})
 
-	DescribeTable("should set container env appropriately when compliance is not fully available",
-		func(crPresent bool, licenseFeatureActive bool, complianceEnabled bool) {
-			var complianceCR *operatorv1.Compliance
-			if crPresent {
-				complianceCR = &operatorv1.Compliance{}
-			}
-
-			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              complianceCR,
-				complianceFeatureActive: licenseFeatureActive,
-				ns:                      render.ManagerNamespace,
-			})
-
-			deployment := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
-			voltron := deployment.Spec.Template.Spec.Containers[1]
-			Expect(voltron.Env).To(ContainElement(corev1.EnvVar{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(complianceEnabled)}))
-		},
-		Entry("Both CR and license feature not present/active", false, false, false),
-		Entry("CR not present, license feature active", false, true, true),
-		Entry("CR present, license feature not active", true, false, false),
-	)
-
 	It("should render the correct ClusterRole", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            installation,
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      installation,
+			ns:                render.ManagerNamespace,
 		})
 
 		clusterRole := rtest.GetResource(resourcesToCreate, render.ManagerClusterRole, "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
@@ -345,10 +310,27 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettings",
+					"uisettingsgroups",
+					"uisettingsgroups/data",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettings", "uisettingsgroups/data"},
+				Verbs:     []string{"delete"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -375,7 +357,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -450,8 +432,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"l7flows",
 					"l7logs",
 					"l7logs-multi-cluster",
+					"waflogs",
+					"waflogs-multi-cluster",
 					"events",
 					"processes",
+					"policyactivity",
 				},
 				Verbs: []string{"get"},
 			},
@@ -467,11 +452,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
-			},
 		}))
 		roleBindingWatchManagedClusters := rtest.GetResource(resourcesToCreate, render.ManagerManagedClustersWatchRoleBindingName, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
 		Expect(roleBindingWatchManagedClusters.RoleRef.Name).To(Equal(render.ManagedClustersWatchClusterRoleName))
@@ -486,7 +466,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(roleUpdateManagedClusters.Rules).To(ConsistOf([]rbacv1.PolicyRule{
 			{
 				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
+				Resources: []string{"managedclusters", "managedclusters/status"},
 				Verbs:     []string{"update"},
 			},
 		}))
@@ -503,12 +483,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should set OIDC Authority environment when auth-type is OIDC", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    true,
-			managementCluster:       nil,
-			installation:            installation,
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              true,
+			managementCluster: nil,
+			installation:      installation,
+			ns:                render.ManagerNamespace,
 		})
 		d := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(d).NotTo(BeNil())
@@ -519,6 +497,13 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			ValueFrom: nil,
 		}
 		Expect(d.Spec.Template.Spec.Containers[3].Env).To(ContainElement(oidcEnvVar))
+
+		// dashboard-api must get its own bare-prefixed OIDC_AUTH_* env vars so it can
+		// validate the bearer token voltron forwards on /dashboards/*.
+		dashboard := rtest.GetContainer(d.Spec.Template.Spec.Containers, render.DashboardAPIName)
+		Expect(dashboard).NotTo(BeNil())
+		Expect(dashboard.Env).To(ContainElement(corev1.EnvVar{Name: "OIDC_AUTH_ENABLED", Value: "true"}))
+		Expect(dashboard.Env).To(ContainElement(corev1.EnvVar{Name: "OIDC_AUTH_ISSUER", Value: "https://127.0.0.1/dex"}))
 	})
 
 	Describe("public ca bundle", func() {
@@ -581,18 +566,15 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 	It("should render multicluster settings properly", func() {
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       &operatorv1.ManagementCluster{},
-			installation:            installation,
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: &operatorv1.ManagementCluster{},
+			installation:      installation,
+			ns:                render.ManagerNamespace,
 		})
 
 		// Should render the correct resources.
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -673,10 +655,27 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettings",
+					"uisettingsgroups",
+					"uisettingsgroups/data",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettings", "uisettingsgroups/data"},
+				Verbs:     []string{"delete"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -703,7 +702,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -783,8 +782,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 					"l7flows",
 					"l7logs",
 					"l7logs-multi-cluster",
+					"waflogs",
+					"waflogs-multi-cluster",
 					"events",
 					"processes",
+					"policyactivity",
 				},
 				Verbs: []string{"get"},
 			},
@@ -799,11 +801,6 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
-			},
-			{
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
 			},
 		}))
 	})
@@ -884,17 +881,14 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		ca, _ := tls.MakeCA(rmeta.DefaultOperatorCASignerName())
 		cert, _, _ := ca.Config.GetPEMBytes()
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{CertificateManagement: &operatorv1.CertificateManagement{CACert: cert}, ControlPlaneReplicas: &replicas},
+			ns:                render.ManagerNamespace,
 		})
 
 		expectedResources := []client.Object{
 			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
-			&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: "calico-system.default-deny", Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"}},
 			&corev1.ServiceAccount{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerServiceAccount, Namespace: render.ManagerNamespace}, TypeMeta: metav1.TypeMeta{Kind: "ServiceAccount", APIVersion: "v1"}},
 			&rbacv1.ClusterRole{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRole}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}},
 			&rbacv1.ClusterRoleBinding{ObjectMeta: metav1.ObjectMeta{Name: render.ManagerClusterRoleBinding}, TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}},
@@ -925,6 +919,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		Expect(deployment.Spec.Template.Spec.Volumes[0].Secret).To(BeNil())
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Name).To(Equal(render.ManagerInternalTLSSecretName))
 		Expect(deployment.Spec.Template.Spec.Volumes[2].Secret).To(BeNil())
+
+		voltronContainer := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.VoltronName)
+		var caSignerName string
+		for _, e := range voltronContainer.Env {
+			if e.Name == "VOLTRON_CA_SIGNER_NAME" {
+				caSignerName = e.Value
+				break
+			}
+		}
+		Expect(caSignerName).NotTo(BeEmpty(), "Expected VOLTRON_CA_SIGNER_NAME to be set")
 	})
 
 	It("should not render PodAffinity when ControlPlaneReplicas is 1", func() {
@@ -932,12 +936,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		installation.ControlPlaneReplicas = &replicas
 
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			ns:                render.ManagerNamespace,
 		})
 		deploy, ok := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -949,12 +951,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		installation.ControlPlaneReplicas = &replicas
 
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			ns:                render.ManagerNamespace,
 		})
 		deploy, ok := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
 		Expect(ok).To(BeTrue())
@@ -994,13 +994,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
-			manager:                 &managercfg,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			ns:                render.ManagerNamespace,
+			manager:           &managercfg,
 		})
 
 		d, ok := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1051,13 +1049,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
-			manager:                 &managercfg,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas},
+			ns:                render.ManagerNamespace,
+			manager:           &managercfg,
 		})
 
 		d, ok := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1110,13 +1106,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 		}
 
 		resourcesToCreate, _ := renderObjects(renderConfig{
-			oidc:                    false,
-			managementCluster:       nil,
-			installation:            &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, CertificateManagement: certificateManagement},
-			compliance:              compliance,
-			complianceFeatureActive: true,
-			ns:                      render.ManagerNamespace,
-			manager:                 &managercfg,
+			oidc:              false,
+			managementCluster: nil,
+			installation:      &operatorv1.InstallationSpec{ControlPlaneReplicas: &replicas, CertificateManagement: certificateManagement},
+			ns:                render.ManagerNamespace,
+			manager:           &managercfg,
 		})
 
 		d, ok := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1144,13 +1138,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			func(scenario testutils.CalicoSystemScenario) {
 				// Default configuration.
 				resourcesToCreate, _ := renderObjects(renderConfig{
-					openshift:               scenario.OpenShift,
-					oidc:                    false,
-					managementCluster:       nil,
-					installation:            installation,
-					compliance:              compliance,
-					complianceFeatureActive: true,
-					ns:                      render.ManagerNamespace,
+					openshift:         scenario.OpenShift,
+					oidc:              false,
+					managementCluster: nil,
+					installation:      installation,
+					ns:                render.ManagerNamespace,
 				})
 
 				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesToCreate)
@@ -1176,13 +1168,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render calico-system policy for the non-cluster-host scenario", func() {
 			renderCfg := renderConfig{
-				openshift:               false,
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      render.ManagerNamespace,
+				openshift:         false,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                render.ManagerNamespace,
 			}
 			resourcesWithoutNonClusterHosts, _ := renderObjects(renderCfg)
 			renderCfg.nonClusterHost = &operatorv1.NonClusterHost{
@@ -1197,17 +1187,17 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			policyWithNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithNonClusterHosts)
 			policyWithoutNonClusterHosts := testutils.GetCalicoSystemPolicyFromResources(policyName, resourcesWithoutNonClusterHosts)
 
-			// Validate that we have a single egress rule added for the fluentd service.
+			// Validate that we have a single egress rule added for the fluent-bit service.
 			Expect(policyWithoutNonClusterHosts.Spec.Ingress).To(Equal(policyWithNonClusterHosts.Spec.Ingress))
 			Expect(len(policyWithoutNonClusterHosts.Spec.Egress)).To(Equal(len(policyWithNonClusterHosts.Spec.Egress) - 1))
-			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(11))
-			Expect(policyWithNonClusterHosts.Spec.Egress[8]).To(Equal(v3.Rule{
+			Expect(len(policyWithNonClusterHosts.Spec.Egress)).To(Equal(10))
+			Expect(policyWithNonClusterHosts.Spec.Egress[7]).To(Equal(v3.Rule{
 				Action:   v3.Allow,
 				Protocol: &networkpolicy.TCPProtocol,
 				Destination: v3.EntityRule{
 					Services: &v3.ServiceMatch{
 						Namespace: render.LogCollectorNamespace,
-						Name:      render.FluentdInputService,
+						Name:      render.FluentBitInputService,
 					},
 				},
 			}))
@@ -1220,12 +1210,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render expected components inside expected namespace for each manager instance", func() {
 			tenantAResourcesToCreate, tenantAResourcesToDelete := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantANamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantANamespace,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenantA",
@@ -1270,12 +1258,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			rtest.ExpectResources(tenantAResourcesToDelete, expectedTenantAResourcesToDelete)
 
 			tenantBResourcesToCreate, tenantBResourcesToDelete := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantBNamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantBNamespace,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenantB",
@@ -1322,13 +1308,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render cluster role binding with tenant namespaces as subjects", func() {
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantBNamespace,
-				bindingNamespaces:       []string{tenantANamespace, tenantBNamespace},
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantBNamespace,
+				bindingNamespaces: []string{tenantANamespace, tenantBNamespace},
 			})
 
 			crb := rtest.GetResource(resourcesToCreate, render.ManagerClusterRoleBinding, "", "rbac.authorization.k8s.io", "v1", "ClusterRoleBinding").(*rbacv1.ClusterRoleBinding)
@@ -1348,14 +1332,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render distinct RBAC for Calico OSS managed cluster tenants", func() {
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantBNamespace,
-				bindingNamespaces:       []string{tenantANamespace, tenantBNamespace},
-				ossBindingNamespaces:    []string{tenantBNamespace},
+				oidc:                 false,
+				managementCluster:    nil,
+				installation:         installation,
+				ns:                   tenantBNamespace,
+				bindingNamespaces:    []string{tenantANamespace, tenantBNamespace},
+				ossBindingNamespaces: []string{tenantBNamespace},
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenantB",
@@ -1381,13 +1363,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render cluster role/roles with additional RBAC", func() {
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantANamespace,
-				bindingNamespaces:       []string{tenantANamespace},
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantANamespace,
+				bindingNamespaces: []string{tenantANamespace},
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenantA",
@@ -1425,14 +1405,12 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				},
 			}
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantANamespace,
-				tenant:                  tenant,
-				externalElastic:         true,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantANamespace,
+				tenant:            tenant,
+				externalElastic:   true,
 			})
 			d := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
 			envs := d.Spec.Template.Spec.Containers[1].Env
@@ -1449,12 +1427,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render multi-tenant environment variables for connected Calico clusters", func() {
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantANamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantANamespace,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenant",
@@ -1476,13 +1452,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should not install UISettings / UISettingsGroups", func() {
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantBNamespace,
-				bindingNamespaces:       []string{tenantANamespace, tenantBNamespace},
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantBNamespace,
+				bindingNamespaces: []string{tenantANamespace, tenantBNamespace},
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenant",
@@ -1512,12 +1486,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}
 
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				tenant:                  tenant,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				tenant:            tenant,
 			})
 
 			d := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, "", appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
@@ -1540,13 +1512,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			}
 
 			resourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				tenant:                  tenant,
-				ns:                      tenantANamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				tenant:            tenant,
+				ns:                tenantANamespace,
 			})
 
 			d := rtest.GetResource(resourcesToCreate, render.ManagerDeploymentName, tenantANamespace, appsv1.GroupName, "v1", "Deployment").(*appsv1.Deployment)
@@ -1563,13 +1533,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Spec:       operatorv1.TenantSpec{ID: "tenant-a"},
 			}
 			resources, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      tenantANamespace,
-				tenant:                  tenant,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                tenantANamespace,
+				tenant:            tenant,
 			})
 
 			deployment := rtest.GetResource(resources, render.ManagerDeploymentName, tenantANamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1581,12 +1549,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 	Context("single-tenant rendering", func() {
 		It("should render single-tenant environment variables with external elastic", func() {
 			tenantAResourcesToCreate, tenantAResourcesToDelete := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      render.ManagerNamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                render.ManagerNamespace,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenant",
@@ -1637,12 +1603,10 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 
 		It("should render single-tenant environment variables with internal elastic", func() {
 			tenantAResourcesToCreate, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				ns:                      render.ManagerNamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				ns:                render.ManagerNamespace,
 				tenant: &operatorv1.Tenant{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "tenant",
@@ -1676,13 +1640,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Spec:       operatorv1.TenantSpec{ID: "tenant-a"},
 			}
 			resources, _ := renderObjects(renderConfig{
-				oidc:                    false,
-				managementCluster:       nil,
-				installation:            installation,
-				compliance:              compliance,
-				complianceFeatureActive: true,
-				tenant:                  tenant,
-				ns:                      render.ManagerNamespace,
+				oidc:              false,
+				managementCluster: nil,
+				installation:      installation,
+				tenant:            tenant,
+				ns:                render.ManagerNamespace,
 			})
 
 			deployment := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
@@ -1690,22 +1652,223 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Expect(rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.DashboardAPIName)).To(BeNil())
 		})
 	})
+
+	Context("RBAC management UI", func() {
+		var installation *operatorv1.InstallationSpec
+		BeforeEach(func() {
+			replicas := int32(1)
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.CalicoEnterprise,
+				Registry:             "testregistry.com/",
+			}
+		})
+
+		// The create rule is unique to this Role, so it identifies the access without
+		// matching the whole rule set.
+		nsCreateRule := rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps", "secrets"},
+			Verbs:     []string{"create"},
+		}
+
+		// Read-only access to the gate ui-apis watches.
+		gateReadRule := rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch"},
+		}
+
+		It("does not render the namespaced RBAC UI role while the feature gate is off", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+			})
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role")).To(BeNil())
+		})
+
+		It("renders the namespaced RBAC UI role with read access to the feature gate when enabled", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation:          installation,
+				ns:                    render.ManagerNamespace,
+				rbacManagementEnabled: true,
+			})
+			role := rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
+			Expect(role.Rules).To(ContainElement(nsCreateRule))
+			// ui-apis keeps read access to the gate so it can observe the admin
+			// switching the feature back off.
+			Expect(role.Rules).To(ContainElement(gateReadRule))
+		})
+
+		// A tenant reaches the renderer with the switch already off: multi-tenant
+		// force-disables the feature on the ui-apis side.
+		It("does not add the manager-side RBAC rules when the switch is off in multi-tenant mode", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation:          installation,
+				ns:                    "tenant-a",
+				bindingNamespaces:     []string{"tenant-a"},
+				rbacManagementEnabled: false,
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-a",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+			})
+			Expect(rtest.GetResource(resources, render.ManagerClusterRole, "tenant-a", rbacv1.GroupName, "v1", "Role")).To(BeNil())
+
+			// The cluster rules and the namespaced grant are gated on the same
+			// condition and must be dropped together; assert both halves so the
+			// two gates cannot drift apart.
+			clusterRole := rtest.GetResource(resources, render.ManagerManagedCalicoClusterRole, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(clusterRole.Rules).NotTo(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"compliances"},
+				Verbs:     []string{"get"},
+			}))
+		})
+
+		Context("LDAP egress network policy gate", func() {
+			policyName := types.NamespacedName{Name: "calico-system.manager-access", Namespace: render.ManagerNamespace}
+			// ldapEgress is the fallback rule shape rendered when LDAP is configured
+			// on the Authentication CR but its host is empty: ports open, destination
+			// unscoped.
+			ldapEgress := v3.Rule{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(389, 636),
+				},
+			}
+			It("adds an unscoped LDAP egress when LDAP auth is configured but no host is set", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					rbacManagementEnabled: true, ldapConfigured: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a Domains match when the LDAP host is a hostname", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					rbacManagementEnabled: true, ldapConfigured: true,
+					ldapHost: "ad.example.com:636",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Domains: []string{"ad.example.com"},
+						Ports:   networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a /32 Nets match when the LDAP host is an IPv4 address", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					rbacManagementEnabled: true, ldapConfigured: true,
+					ldapHost: "10.20.30.40:389",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets:  []string{"10.20.30.40/32"},
+						Ports: networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("scopes LDAP egress to a /128 Nets match when the LDAP host is an IPv6 address", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					rbacManagementEnabled: true, ldapConfigured: true,
+					ldapHost: "[2001:db8::1]:636",
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).To(ContainElement(v3.Rule{
+					Action:   v3.Allow,
+					Protocol: &networkpolicy.TCPProtocol,
+					Destination: v3.EntityRule{
+						Nets:  []string{"2001:db8::1/128"},
+						Ports: networkpolicy.Ports(389, 636),
+					},
+				}))
+				// The unscoped fallback rule must not also be present.
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when LDAP auth is not configured", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					rbacManagementEnabled: true, ldapConfigured: false,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress when the feature gate is off, even with LDAP configured", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation: installation, ns: render.ManagerNamespace,
+					ldapConfigured: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(policyName, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+
+			It("omits LDAP egress in multi-tenant mode even with LDAP auth configured", func() {
+				resources, _ := renderObjects(renderConfig{
+					installation:      installation,
+					ns:                "tenant-a",
+					bindingNamespaces: []string{"tenant-a"},
+					tenant: &operatorv1.Tenant{
+						ObjectMeta: metav1.ObjectMeta{Name: "tenantA", Namespace: "tenant-a"},
+						Spec: operatorv1.TenantSpec{
+							ID:                    "tenant-a",
+							ManagedClusterVariant: &operatorv1.Calico,
+						},
+					},
+					ldapConfigured: true,
+				})
+				policy := testutils.GetCalicoSystemPolicyFromResources(
+					types.NamespacedName{Name: "calico-system.manager-access", Namespace: "tenant-a"}, resources)
+				Expect(policy.Spec.Egress).NotTo(ContainElement(ldapEgress))
+			})
+		})
+	})
 })
 
 type renderConfig struct {
-	oidc                    bool
-	managementCluster       *operatorv1.ManagementCluster
-	nonClusterHost          *operatorv1.NonClusterHost
-	installation            *operatorv1.InstallationSpec
-	compliance              *operatorv1.Compliance
-	complianceFeatureActive bool
-	openshift               bool
-	ns                      string
-	bindingNamespaces       []string
-	ossBindingNamespaces    []string
-	tenant                  *operatorv1.Tenant
-	manager                 *operatorv1.Manager
-	externalElastic         bool
+	oidc                 bool
+	managementCluster    *operatorv1.ManagementCluster
+	nonClusterHost       *operatorv1.NonClusterHost
+	installation         *operatorv1.InstallationSpec
+	openshift            bool
+	ns                   string
+	bindingNamespaces    []string
+	ossBindingNamespaces []string
+	tenant               *operatorv1.Tenant
+	manager              *operatorv1.Manager
+	externalElastic      bool
+	// ldapConfigured, when true, sets Authentication.spec.ldap (gating the RBAC-UI
+	// LDAP egress rule); ldapHost sets Authentication.spec.ldap.host (scoping it).
+	ldapConfigured bool
+	ldapHost       string
+	// rbacManagementEnabled mirrors the admin's rbac-ui-config value.
+	rbacManagementEnabled bool
+	cloud                 bool
+	voltronMetricsEnabled bool
+	cloudResources        render.ManagerCloudResources
 }
 
 func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
@@ -1750,28 +1913,41 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 		roc.bindingNamespaces = []string{roc.ns}
 	}
 
+	if roc.voltronMetricsEnabled {
+		roc.cloudResources.VoltronMetricsEnabled = true
+		roc.cloudResources.VoltronInternalHttpsPort = 9444
+	}
+
 	cfg := &render.ManagerConfiguration{
-		KeyValidatorConfig:      dexCfg,
-		TrustedCertBundle:       bundle,
-		TLSKeyPair:              managerTLS,
-		Installation:            roc.installation,
-		ManagementCluster:       roc.managementCluster,
-		NonClusterHost:          roc.nonClusterHost,
-		TunnelServerCert:        tunnelSecret,
-		VoltronLinseedKeyPair:   voltronLinseedKP,
-		InternalTLSKeyPair:      internalTraffic,
-		ClusterDomain:           dns.DefaultClusterDomain,
-		ESLicenseType:           render.ElasticsearchLicenseTypeEnterpriseTrial,
-		Replicas:                roc.installation.ControlPlaneReplicas,
-		Compliance:              roc.compliance,
-		ComplianceLicenseActive: roc.complianceFeatureActive,
-		OpenShift:               roc.openshift,
-		Namespace:               roc.ns,
-		BindingNamespaces:       roc.bindingNamespaces,
-		OSSTenantNamespaces:     roc.ossBindingNamespaces,
-		Tenant:                  roc.tenant,
-		Manager:                 roc.manager,
-		ExternalElastic:         roc.externalElastic,
+		KeyValidatorConfig:    dexCfg,
+		TrustedCertBundle:     bundle,
+		TLSKeyPair:            managerTLS,
+		Installation:          roc.installation,
+		ManagementCluster:     roc.managementCluster,
+		NonClusterHost:        roc.nonClusterHost,
+		TunnelServerCert:      tunnelSecret,
+		VoltronLinseedKeyPair: voltronLinseedKP,
+		InternalTLSKeyPair:    internalTraffic,
+		ClusterDomain:         dns.DefaultClusterDomain,
+		ESLicenseType:         render.ElasticsearchLicenseTypeEnterpriseTrial,
+		Replicas:              roc.installation.ControlPlaneReplicas,
+		OpenShift:             roc.openshift,
+		Namespace:             roc.ns,
+		BindingNamespaces:     roc.bindingNamespaces,
+		OSSTenantNamespaces:   roc.ossBindingNamespaces,
+		Tenant:                roc.tenant,
+		Manager:               roc.manager,
+		ExternalElastic:       roc.externalElastic,
+		CACertCommonName:      certificateManager.CACertCommonName(),
+		RBACManagementEnabled: roc.rbacManagementEnabled,
+		Cloud:                 roc.cloud,
+		CloudResources:        roc.cloudResources,
+	}
+
+	if roc.ldapConfigured {
+		cfg.Authentication = &operatorv1.Authentication{
+			Spec: operatorv1.AuthenticationSpec{LDAP: &operatorv1.AuthenticationLDAP{Host: roc.ldapHost}},
+		}
 	}
 
 	if roc.tenant.MultiTenant() {

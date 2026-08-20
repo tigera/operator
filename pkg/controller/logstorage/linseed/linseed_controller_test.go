@@ -72,16 +72,16 @@ func NewLinseedControllerWithShims(
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
 		MultiTenant:      multiTenant,
+		Variant:          operatorv1.CalicoEnterprise,
 	}
 
 	r := &LinseedSubController{
 		client:         cli,
 		scheme:         scheme,
 		status:         status,
-		clusterDomain:  opts.ClusterDomain,
-		multiTenant:    opts.MultiTenant,
 		tierWatchReady: &utils.ReadyFlag{},
 		dpiAPIReady:    &utils.ReadyFlag{},
+		opts:           opts,
 	}
 	r.tierWatchReady.MarkAsReady()
 	r.dpiAPIReady.MarkAsReady()
@@ -158,6 +158,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 	Context("Single tenant", func() {
 		BeforeEach(func() {
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run").Return()
 			mockStatus.On("AddDaemonsets", mock.Anything)
 			mockStatus.On("AddDeployments", mock.Anything)
@@ -257,13 +259,9 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-						{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
 						{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 						{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
-						{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
-						{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
-						{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:linseedhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -283,7 +281,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
-			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentLinseed.Image, "sha256:linseedhash")))
+			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, "sha256:linseedhash")))
 		})
 	})
 
@@ -320,6 +318,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(cli.Create(ctx, tenant)).ShouldNot(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run").Return()
 			mockStatus.On("AddDaemonsets", mock.Anything)
 			mockStatus.On("AddDeployments", mock.Anything)
@@ -480,13 +480,9 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/elasticsearch", Digest: "sha256:elasticsearchhash"},
-						{Image: "tigera/kube-controllers", Digest: "sha256:kubecontrollershash"},
 						{Image: "tigera/kibana", Digest: "sha256:kibanahash"},
 						{Image: "tigera/eck-operator", Digest: "sha256:eckoperatorhash"},
-						{Image: "tigera/elasticsearch-metrics", Digest: "sha256:esmetricshash"},
-						{Image: "tigera/es-gateway", Digest: "sha256:esgatewayhash"},
-						{Image: "tigera/linseed", Digest: "sha256:linseedhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:linseedhash"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -506,7 +502,7 @@ var _ = Describe("LogStorage Linseed controller", func() {
 			Expect(test.GetResource(cli, &linseedDp)).To(BeNil())
 			linseed := test.GetContainer(linseedDp.Spec.Template.Spec.Containers, linseed.DeploymentName)
 			Expect(linseed).ToNot(BeNil())
-			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentLinseed.Image, "sha256:linseedhash")))
+			Expect(linseed.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s@%s", components.TigeraImagePath, components.ComponentTigeraCalico.Image, "sha256:linseedhash")))
 		})
 
 		Context("External ES mode", func() {
@@ -518,8 +514,8 @@ var _ = Describe("LogStorage Linseed controller", func() {
 				Expect(cli.Delete(ctx, es)).ShouldNot(HaveOccurred())
 
 				// Set the reconcile to run in external ES mode.
-				r.elasticExternal = true
-				r.multiTenant = true
+				r.opts.ElasticExternal = true
+				r.opts.MultiTenant = true
 
 				// Set the elasticsearch configuration for the tenant.
 				tenant.Spec.Elastic = &operatorv1.TenantElasticSpec{URL: "https://external.elastic:443"}

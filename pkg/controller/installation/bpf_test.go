@@ -288,4 +288,27 @@ var _ = Describe("BPF functional tests", func() {
 			Expect(*fc.Spec.BPFEnabled).To(Equal(false))
 		})
 	})
+
+	Context("disableBPFKubeProxyHealthz tests", func() {
+		It("should set BPFKubeProxyHealthzPort to 0", func() {
+			fc := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       v3.FelixConfigurationSpec{},
+			}
+			disableBPFKubeProxyHealthz(fc)
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).ShouldNot(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(0))
+		})
+
+		It("should overwrite an existing value", func() {
+			existing := 12345
+			fc := &v3.FelixConfiguration{
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+				Spec:       v3.FelixConfigurationSpec{BPFKubeProxyHealthzPort: &existing},
+			}
+			disableBPFKubeProxyHealthz(fc)
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).ShouldNot(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(0))
+		})
+	})
 })

@@ -45,6 +45,8 @@ const (
 
 	WebhooksName            = "calico-webhooks"
 	WebhooksSecretsRBACName = "calico-webhooks-secrets-access"
+
+	webhooksContainerPort int32 = 6443
 )
 
 var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.CalicoTierName, WebhooksName)
@@ -52,13 +54,18 @@ var WebhooksPolicyName = fmt.Sprintf("%s.%s", networkpolicy.CalicoTierName, Webh
 // Configuration is the public API used to provide information to the render code to
 // generate Kubernetes objects for installing calico/webhooks on a cluster.
 type Configuration struct {
-	PullSecrets       []*corev1.Secret
-	KeyPair           certificatemanagement.KeyPairInterface
-	Installation      *operatorv1.InstallationSpec
-	APIServer         *operatorv1.APIServerSpec
-	ManagementCluster *operatorv1.ManagementCluster
-	MultiTenant       bool
-	OpenShift         bool
+	PullSecrets  []*corev1.Secret
+	KeyPair      certificatemanagement.KeyPairInterface
+	Installation *operatorv1.InstallationSpec
+	APIServer    *operatorv1.APIServerSpec
+	OpenShift    bool
+}
+
+// WebhooksComponent is the webhooks component paired with the configuration it rendered
+// from, so extensions can layer variant-specific objects onto it.
+type WebhooksComponent interface {
+	render.Component
+	WebhooksConfig() *Configuration
 }
 
 func Component(cfg *Configuration) render.Component {
@@ -70,7 +77,11 @@ type component struct {
 	cfg *Configuration
 
 	// Images.
-	webhooksImage string
+	calicoImage string
+}
+
+func (c *component) WebhooksConfig() *Configuration {
+	return c.cfg
 }
 
 func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
@@ -79,11 +90,7 @@ func (c *component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		c.webhooksImage, err = components.GetReference(components.ComponentTigeraWebhooks, reg, path, prefix, is)
-	} else {
-		c.webhooksImage, err = components.GetReference(components.ComponentCalicoWebhooks, reg, path, prefix, is)
-	}
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 
@@ -99,13 +106,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Name:      WebhooksName,
 			Namespace: common.CalicoNamespace,
 		},
-	}
-
-	// Create the correct security context for the webhook container. By default, it should run as non-root, but in Enterprise
-	// we need to run as root to be able to write audit logs to the host filesystem.
-	securtyContext := securitycontext.NewNonRootContext()
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		securtyContext = securitycontext.NewRootContext(c.cfg.Installation.KubernetesProvider.IsOpenShift())
 	}
 
 	// Create the Deployment for the webhook with defaults, then apply overrides.
@@ -138,40 +138,38 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 					ImagePullSecrets:   secret.GetReferenceList(c.cfg.PullSecrets),
 					Containers: []corev1.Container{{
 						Name:            WebhooksName,
-						Image:           c.webhooksImage,
-						SecurityContext: securtyContext,
+						Image:           c.calicoImage,
+						Command:         []string{components.CalicoBinaryPath, "component", "webhooks"},
+						SecurityContext: securitycontext.NewNonRootContext(),
 						Args: []string{
 							"webhook",
 							fmt.Sprintf("--tls-cert-file=%s", c.cfg.KeyPair.VolumeMountCertificateFilePath()),
 							fmt.Sprintf("--tls-private-key-file=%s", c.cfg.KeyPair.VolumeMountKeyFilePath()),
 						},
 						Ports: []corev1.ContainerPort{{
-							ContainerPort: 6443,
+							ContainerPort: webhooksContainerPort,
 							Protocol:      corev1.ProtocolTCP,
 						}},
+
+						// Keep the pod out of the Service endpoints until the TLS listener is up, so a
+						// rollout doesn't reject policy writes against the FailurePolicy=Fail webhook.
+						ReadinessProbe: &corev1.Probe{
+							ProbeHandler: corev1.ProbeHandler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path:   "/readyz",
+									Port:   intstr.FromInt32(webhooksContainerPort),
+									Scheme: corev1.URISchemeHTTPS,
+								},
+							},
+							PeriodSeconds:  10,
+							TimeoutSeconds: 5,
+						},
 						VolumeMounts: []corev1.VolumeMount{
 							c.cfg.KeyPair.VolumeMount(c.SupportedOSType()),
-							{
-								Name:      "audit-logs",
-								MountPath: "/var/log/calico/audit",
-								ReadOnly:  false,
-							},
 						},
 					}},
 					Volumes: []corev1.Volume{
-						// The volume for the TLS certs.
 						c.cfg.KeyPair.Volume(),
-
-						// Host volume for audit logs to be wrriten.
-						{
-							Name: "audit-logs",
-							VolumeSource: corev1.VolumeSource{
-								HostPath: &corev1.HostPathVolumeSource{
-									Path: "/var/log/calico/audit",
-									Type: ptr.To(corev1.HostPathDirectoryOrCreate),
-								},
-							},
-						},
 					},
 				},
 			},
@@ -193,6 +191,13 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 
 	// Read the final container port from the deployment (after overrides) for use in the Service.
 	containerPort := dep.Spec.Template.Spec.Containers[0].Ports[0].ContainerPort
+	dep.Spec.Template.Spec.Containers[0].ReadinessProbe.HTTPGet.Port = intstr.FromInt32(containerPort)
+
+	// The binary picks its own listen port, so pass the final value rather than let it default.
+	dep.Spec.Template.Spec.Containers[0].Args = append(
+		dep.Spec.Template.Spec.Containers[0].Args,
+		fmt.Sprintf("--port=%d", containerPort),
+	)
 
 	// Network policy to allow traffic to/from the webhook pod. Skip if host networking is
 	// enabled, since network policy is ineffective for host-networked pods.
@@ -209,6 +214,51 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Action: v3.Pass,
 			},
 		)
+
+		// TODO: Calico policy can't match "any node" or "any tunnel IP" as a source. Such
+		// a selector would let us allow nodes explicitly and drop the fallback allow.
+		ingressRules := []v3.Rule{
+			// The apiserver source IP usually survives unmodified to the webhook pod, where it
+			// matches the endpoints of the default/kubernetes Service.
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source:   networkpolicy.KubeAPIServerEntityRule,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+			// AKS and GKE route the apiserver through konnectivity agents, so the admission call
+			// arrives with a pod source IP and would otherwise hit the deny below.
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Source:   networkpolicy.KonnectivityAgentEntityRule,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+			// Only workload endpoints carry projectcalico.org/orchestrator, so a user-created
+			// NetworkSet can't match this deny. Traffic SNAT'd to a node tunnel address comes
+			// from the node, not a pod, and falls through.
+			{
+				Action: v3.Deny,
+				Source: v3.EntityRule{
+					NamespaceSelector: "all()",
+					Selector:          "has(projectcalico.org/orchestrator)",
+				},
+			},
+			// Catches node-sourced traffic, including a hostnet apiserver SNAT'd through an IPIP
+			// or VXLAN overlay, plus cluster-external sources routed to the pod.
+			{
+				Action:   v3.Allow,
+				Protocol: &networkpolicy.TCPProtocol,
+				Destination: v3.EntityRule{
+					Ports: networkpolicy.Ports(uint16(containerPort)),
+				},
+			},
+		}
+
 		np = &v3.NetworkPolicy{
 			TypeMeta: metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
 			ObjectMeta: metav1.ObjectMeta{
@@ -220,16 +270,8 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				Tier:     networkpolicy.CalicoTierName,
 				Selector: networkpolicy.KubernetesAppSelector(WebhooksName),
 				Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-				Ingress: []v3.Rule{
-					{
-						Action:   v3.Allow,
-						Protocol: &networkpolicy.TCPProtocol,
-						Destination: v3.EntityRule{
-							Ports: networkpolicy.Ports(uint16(containerPort)),
-						},
-					},
-				},
-				Egress: egressRules,
+				Ingress:  ingressRules,
+				Egress:   egressRules,
 			},
 		}
 	}
@@ -341,83 +383,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 				TimeoutSeconds:          ptr.To(int32(5)),
 				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
 			},
-			{
-				// This webhook is for audit logging. The webhook controller will get events for all relevant Calico API types
-				// and product audit logs for them.
-				Name: "audit-logging.api.projectcalico.org",
-				Rules: []admissionregistrationv1.RuleWithOperations{
-					{
-						Operations: []admissionregistrationv1.OperationType{
-							admissionregistrationv1.Create,
-							admissionregistrationv1.Update,
-							admissionregistrationv1.Delete,
-							admissionregistrationv1.Connect,
-						},
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"projectcalico.org"},
-							APIVersions: []string{"v3"},
-							Resources:   []string{"*"},
-							Scope:       ptr.To(admissionregistrationv1.AllScopes),
-						},
-					},
-				},
-				ClientConfig: admissionregistrationv1.WebhookClientConfig{
-					Service: &admissionregistrationv1.ServiceReference{
-						Namespace: common.CalicoNamespace,
-						Name:      WebhooksName,
-						Path:      ptr.To("/audit"),
-					},
-					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
-				},
-				AdmissionReviewVersions: []string{"v1"},
-				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To(int32(5)),
-				FailurePolicy:           ptr.To(admissionregistrationv1.Ignore),
-				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
-			},
-		},
-	}
-
-	// Create a MutatingWebhookConfiguration for UISettings webhooks.
-	mwc := &admissionregistrationv1.MutatingWebhookConfiguration{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "api.projectcalico.org",
-		},
-		Webhooks: []admissionregistrationv1.MutatingWebhook{
-			{
-				// This webhook handles authorization, mutation, and validation for UISettings resources.
-				// On Create it sets ownerReferences and user fields; on all operations it performs
-				// authorization checks against the parent UISettingsGroup.
-				Name: "uisettings.api.projectcalico.org",
-				Rules: []admissionregistrationv1.RuleWithOperations{
-					{
-						Operations: []admissionregistrationv1.OperationType{
-							admissionregistrationv1.Create,
-							admissionregistrationv1.Update,
-							admissionregistrationv1.Delete,
-						},
-						Rule: admissionregistrationv1.Rule{
-							APIGroups:   []string{"projectcalico.org"},
-							APIVersions: []string{"v3"},
-							Resources:   []string{"uisettings"},
-							Scope:       ptr.To(admissionregistrationv1.AllScopes),
-						},
-					},
-				},
-				ClientConfig: admissionregistrationv1.WebhookClientConfig{
-					Service: &admissionregistrationv1.ServiceReference{
-						Namespace: common.CalicoNamespace,
-						Name:      WebhooksName,
-						Path:      ptr.To("/uisettings"),
-					},
-					CABundle: c.cfg.KeyPair.GetCertificatePEM(),
-				},
-				AdmissionReviewVersions: []string{"v1"},
-				SideEffects:             ptr.To(admissionregistrationv1.SideEffectClassNone),
-				TimeoutSeconds:          ptr.To(int32(10)),
-				FailurePolicy:           ptr.To(admissionregistrationv1.Fail),
-				MatchPolicy:             ptr.To(admissionregistrationv1.Exact),
-			},
 		},
 	}
 
@@ -435,25 +400,6 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 			Resources: []string{"tiers"},
 			Verbs:     []string{"get"},
 		},
-	}
-
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				// The ManagedCluster cleanup controller watches ManagedCluster objects and clears their
-				// installation manifest field after creation.
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"managedclusters"},
-				Verbs:     []string{"list", "watch", "update"},
-			},
-			rbacv1.PolicyRule{
-				// The UISettings webhook needs to GET UISettingsGroups to verify group existence
-				// and build owner references when creating UISettings.
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"get"},
-			},
-		)
 	}
 
 	cr := &rbacv1.ClusterRole{
@@ -487,27 +433,9 @@ func (c *component) Objects() ([]client.Object, []client.Object) {
 	if np != nil {
 		objs = append(objs, np)
 	}
-	objs = append(objs, dep, svc, vwc)
-	if c.cfg.Installation.Variant.IsEnterprise() {
-		objs = append(objs, mwc)
-	}
-	objs = append(objs, cr, crb)
+	objs = append(objs, dep, svc, vwc, cr, crb)
 
-	// Management clusters need access to the tunnel CA secret for signing managed cluster certificates.
-	var objsToDelete []client.Object
-	if c.cfg.ManagementCluster != nil {
-		objs = append(objs, render.TunnelSecretRBAC(WebhooksSecretsRBACName, WebhooksName, c.cfg.ManagementCluster, c.cfg.MultiTenant)...)
-	} else {
-		// Clean up secrets RBAC when not a management cluster.
-		objsToDelete = append(objsToDelete,
-			&rbacv1.ClusterRole{TypeMeta: metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName}},
-			&rbacv1.ClusterRoleBinding{TypeMeta: metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName}},
-			&rbacv1.Role{TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
-			&rbacv1.RoleBinding{TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"}, ObjectMeta: metav1.ObjectMeta{Name: WebhooksSecretsRBACName, Namespace: common.CalicoNamespace}},
-		)
-	}
-
-	return objs, objsToDelete
+	return objs, nil
 }
 
 func (c *component) Ready() bool {
@@ -517,7 +445,7 @@ func (c *component) Ready() bool {
 // tolerations creates the tolerations used by the webhooks deployment.
 func (c *component) tolerations() []corev1.Toleration {
 	if render.HostNetworkRequired(c.cfg.Installation) {
-		return rmeta.TolerateAll
+		return rmeta.TolerateBootstrap
 	}
 	tolerations := append(c.cfg.Installation.ControlPlaneTolerations, rmeta.TolerateControlPlane...)
 	if c.cfg.Installation.KubernetesProvider.IsGKE() {

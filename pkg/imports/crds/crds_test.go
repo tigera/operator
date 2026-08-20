@@ -63,6 +63,25 @@ var _ = Describe("test crds pkg", func() {
 			Expect(crdNames).To(HaveKey("adminnetworkpolicies.policy.networking.k8s.io"))
 			Expect(crdNames).To(HaveKey("baselineadminnetworkpolicies.policy.networking.k8s.io"))
 		})
+
+		It(fmt.Sprintf("includes applicationlayer WAF CRDs for Enterprise in both CRD modes (v3=%t)", v3), func() {
+			enterpriseCRDs = nil
+			crds := GetCRDs(opv1.CalicoEnterprise, v3)
+			crdNames := map[string]bool{}
+			for _, crd := range crds {
+				crdNames[crd.Name] = true
+			}
+			// The applicationlayer.projectcalico.org group is CRD-only (not served by the
+			// aggregated apiserver) and has a single v3 schema, so its CRDs must install in
+			// both v1-CRD and v3-CRD modes - otherwise gateway WAF is unusable on standard
+			// apiserver-backed installs.
+			Expect(crdNames).To(HaveKey("wafpolicies.applicationlayer.projectcalico.org"))
+			Expect(crdNames).To(HaveKey("globalwafpolicies.applicationlayer.projectcalico.org"))
+			Expect(crdNames).To(HaveKey("wafplugins.applicationlayer.projectcalico.org"))
+			Expect(crdNames).To(HaveKey("globalwafplugins.applicationlayer.projectcalico.org"))
+			Expect(crdNames).To(HaveKey("wafvalidationpolicies.applicationlayer.projectcalico.org"))
+			Expect(crdNames).To(HaveKey("globalwafvalidationpolicies.applicationlayer.projectcalico.org"))
+		})
 	}
 
 	It("can parse Operator CRDs used with calico", func() {

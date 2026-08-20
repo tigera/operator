@@ -38,6 +38,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
@@ -125,6 +126,27 @@ var _ = Describe("Linseed rendering tests", func() {
 			component := Linseed(cfg)
 			createResources, _ := component.Objects()
 			compareResources(createResources, expectedResources, false)
+		})
+
+		It("should render Calico Cloud network policy and deployment tweaks when Cloud is enabled", func() {
+			cfg.Cloud = true
+			component := Linseed(cfg)
+			createResources, _ := component.Objects()
+
+			Expect(rtest.GetResource(createResources, CloudPolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy")).NotTo(BeNil())
+
+			d := rtest.GetResource(createResources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			env := d.Spec.Template.Spec.Containers[0].Env
+			Expect(env).To(ContainElement(corev1.EnvVar{Name: "LINSEED_ENABLE_METRICS", Value: "true"}))
+			Expect(env).To(ContainElement(corev1.EnvVar{Name: "ELASTIC_POLICY_ACTIVITY_INDEX_REPLICAS", Value: "1"}))
+		})
+
+		It("should not render Calico Cloud resources when Cloud is disabled", func() {
+			component := Linseed(cfg)
+			createResources, _ := component.Objects()
+			Expect(rtest.GetResource(createResources, CloudPolicyName, render.ElasticsearchNamespace, "projectcalico.org", "v3", "NetworkPolicy")).To(BeNil())
+			d := rtest.GetResource(createResources, DeploymentName, render.ElasticsearchNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+			Expect(d.Spec.Template.Spec.Containers[0].Env).NotTo(ContainElement(corev1.EnvVar{Name: "LINSEED_ENABLE_METRICS", Value: "true"}))
 		})
 
 		It("should render Secrets RBAC permissions as part of ClusterRole", func() {
@@ -1028,8 +1050,8 @@ func expectedVolumes(useCSR bool) []corev1.Volume {
 func expectedContainers() []corev1.Container {
 	return []corev1.Container{
 		{
-			Name:            DeploymentName,
-			ImagePullPolicy: render.ImagePullPolicy(),
+			Name:    DeploymentName,
+			Command: []string{components.CalicoBinaryPath, "component", "linseed"},
 			SecurityContext: &corev1.SecurityContext{
 				Capabilities:             &corev1.Capabilities{Drop: []corev1.Capability{"ALL"}},
 				AllowPrivilegeEscalation: ptr.To(false),
@@ -1042,7 +1064,7 @@ func expectedContainers() []corev1.Container {
 			ReadinessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/linseed", "-ready"},
+						Command: []string{components.CalicoBinaryPath, "component", "linseed", "ready"},
 					},
 				},
 				InitialDelaySeconds: 10,
@@ -1050,7 +1072,7 @@ func expectedContainers() []corev1.Container {
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					Exec: &corev1.ExecAction{
-						Command: []string{"/linseed", "-live"},
+						Command: []string{components.CalicoBinaryPath, "component", "linseed", "live"},
 					},
 				},
 				InitialDelaySeconds: 10,

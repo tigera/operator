@@ -1316,6 +1316,14 @@ spec:
                           type: object
                       type: object
                   type: object
+                calicoLibHostPath:
+                  default: /var/lib/calico
+                  description: |-
+                    CalicoLibHostPath optionally specifies the host path mounted into calico-node containers at
+                    /var/lib/calico. Pair this with CalicoRunHostPath when Calico data lives under a non-standard
+                    host directory (for example microk8s uses /var/snap/microk8s/current/var/lib/calico).
+                  maxLength: 1024
+                  type: string
                 calicoNetwork:
                   description:
                     CalicoNetwork specifies networking configuration options
@@ -1346,13 +1354,22 @@ spec:
                       type: string
                     clusterRoutingMode:
                       description: |-
-                        ClusterRoutingMode controls how nodes get a route to a workload on another node,
-                        when that workload's IP comes from an IP Pool with vxlanMode: Never. When ClusterRoutingMode is BIRD,
-                        confd and BIRD program that route. When ClusterRoutingMode is Felix, it is expected that Felix will program that route.
-                        Felix always programs such routes for IP Pools with vxlanMode: Always or vxlanMode: CrossSubnet. [Default: BIRD]
+                        ClusterRoutingMode controls which component programs the routes that a node needs in order to reach
+                        workloads on other nodes. It only applies to IP Pools with vxlanMode: Never; the routes for IP Pools
+                        with vxlanMode: Always or vxlanMode: CrossSubnet are always programmed by Felix.
+                        In BIRD mode, confd and BIRD program the routes for both IPIP and unencapsulated IP Pools.
+                        In Felix mode, Felix programs the routes for both IPIP and unencapsulated IP Pools.
+                        In FelixIPIPOnly mode, Felix programs the routes for IPIP IP Pools, and confd and BIRD program them
+                        for unencapsulated IP Pools.
+                        If not specified, the operator writes neither FelixConfiguration.programClusterRoutes nor
+                        BGPConfiguration.programClusterRoutes, so Calico's own defaults apply; as of Calico v3.33 those
+                        defaults are equivalent to FelixIPIPOnly.
+                        Note that BIRD programming of IPIP routes, which the BIRD mode selects, is deprecated as of
+                        Calico v3.33 and is intended for removal in v3.35.
                       enum:
                         - BIRD
                         - Felix
+                        - FelixIPIPOnly
                       type: string
                     containerIPForwarding:
                       description: |-
@@ -1471,6 +1488,21 @@ spec:
                         - BPF
                         - VPP
                         - Nftables
+                      type: string
+                    linuxPodInterfaceType:
+                      description: |-
+                        LinuxPodInterfaceType selects the virtual device type the Calico CNI plugin
+                        creates for each pod's interface on Linux nodes. When set to Netkit, the CNI
+                        plugin creates a netkit L2 pair on kernels that support it (Linux 6.7+) and
+                        falls back to a veth pair on older kernels. Netkit is recommended for the BPF
+                        dataplane, where it allows BPF programs to attach via BPF_NETKIT_PRIMARY for
+                        improved throughput and tail-latency under contention; for non-BPF dataplanes
+                        it is functionally equivalent to veth. Only valid when using the Calico CNI
+                        plugin.
+                        Default: Veth
+                      enum:
+                        - Veth
+                        - Netkit
                       type: string
                     linuxPolicySetupTimeoutSeconds:
                       description: |-
@@ -2812,6 +2844,37 @@ spec:
                                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                             type: object
                                         type: object
+                                      startupProbe:
+                                        description: |-
+                                          StartupProbe allows customization of the startup probe timing parameters.
+                                          The probe handler is set by the operator.
+                                        properties:
+                                          failureThreshold:
+                                            description: |-
+                                              FailureThreshold is the minimum consecutive failures for the probe
+                                              to be considered failed after having succeeded.
+                                            format: int32
+                                            type: integer
+                                          initialDelaySeconds:
+                                            description: |-
+                                              InitialDelaySeconds is the number of seconds after the container
+                                              starts before the probe is initiated.
+                                            format: int32
+                                            type: integer
+                                          periodSeconds:
+                                            description:
+                                              PeriodSeconds is how often
+                                              (in seconds) to perform the probe.
+                                            format: int32
+                                            type: integer
+                                          timeoutSeconds:
+                                            description:
+                                              TimeoutSeconds is the number
+                                              of seconds after which the probe times
+                                              out.
+                                            format: int32
+                                            type: integer
+                                        type: object
                                     required:
                                       - name
                                     type: object
@@ -2888,9 +2951,10 @@ spec:
                                       name:
                                         description: |-
                                           Name is an enum which identifies the calico-node DaemonSet init container by name.
-                                          Supported values are: install-cni, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner, mount-bpffs (deprecated, replaced by ebpf-bootstrap)
+                                          Supported values are: install-cni, cni-plugins, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner, mount-bpffs (deprecated, replaced by ebpf-bootstrap)
                                         enum:
                                           - install-cni
+                                          - cni-plugins
                                           - hostpath-init
                                           - flexvol-driver
                                           - ebpf-bootstrap
@@ -4369,6 +4433,15 @@ spec:
                           type: object
                       type: object
                   type: object
+                calicoRunHostPath:
+                  default: /var/run/calico
+                  description: |-
+                    CalicoRunHostPath optionally specifies the host path mounted into calico-node containers at
+                    /var/run/calico. Environments such as microk8s place Calico runtime state under a non-standard
+                    host directory (for example /var/snap/microk8s/current/var/run/calico); set this field so the
+                    operator continues using that path after a manifest-to-operator migration.
+                  maxLength: 1024
+                  type: string
                 calicoWindowsUpgradeDaemonSet:
                   description: |-
                     Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
@@ -5694,6 +5767,22 @@ spec:
                         * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
                         * Otherwise, this field defaults to "/etc/cni/net.d".
                       type: string
+                    installMode:
+                      description: |-
+                        InstallMode controls which CNI plugin binaries the operator installs onto each node
+                        when CNI.Type is Calico.
+                        * All (default): the operator runs a cni-plugins init container that stages upstream
+                          CNI plugin binaries (host-local, portmap, loopback, tuning, flannel) into a shared
+                          volume, and the install-cni init container copies them onto the host alongside
+                          Calico's own binaries.
+                        * CalicoOnly: skip the cni-plugins init container. Only Calico's own binaries are
+                          installed. Use this when the host already provides the upstream plugins (e.g. kind,
+                          certain managed node images).
+                        Default: All
+                      enum:
+                        - All
+                        - CalicoOnly
+                      type: string
                     ipam:
                       description: |-
                         IPAM specifies the pod IP address management that will be used in the Calico or
@@ -5719,6 +5808,21 @@ spec:
                       required:
                         - type
                       type: object
+                    specVersion:
+                      description: |-
+                        SpecVersion configures the CNI specification version declared in the
+                        CNI configuration ("cniVersion") that the operator generates. Auto
+                        (the default) lets the operator choose an appropriate version, which
+                        may increase across operator upgrades. Pin an explicit version if a
+                        chained CNI plugin or container runtime in your environment requires
+                        one. Only relevant when using the Calico CNI plugin.
+                        Default: Auto
+                      enum:
+                        - Auto
+                        - 0.3.1
+                        - 0.4.0
+                        - 1.0.0
+                      type: string
                     type:
                       description: |-
                         Specifies the CNI plugin that will be used in the Calico or Calico Enterprise installation.
@@ -7134,9 +7238,8 @@ spec:
                   type: object
                 fipsMode:
                   description: |-
-                    FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-                    Only supported for Variant=Calico.
-                    Default: Disabled
+                    Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+                    installation degraded.
                   enum:
                     - Enabled
                     - Disabled
@@ -7168,6 +7271,17 @@ spec:
                     Image format:
                        `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                     This option allows configuring the `<imagePrefix>` portion of the above format.
+                  type: string
+                imagePullPolicy:
+                  description: |-
+                    ImagePullPolicy is the pull policy applied to containers in pods rendered by the operator
+                    that do not explicitly set their own pull policy. If unset, defaults to IfNotPresent.
+                    This is useful in air-gapped environments where images are pre-loaded onto nodes and
+                    must not be re-pulled from a remote registry.
+                  enum:
+                    - Always
+                    - IfNotPresent
+                    - Never
                   type: string
                 imagePullSecrets:
                   description: |-
@@ -7243,6 +7357,23 @@ spec:
                             - Debug
                           type: string
                       type: object
+                  type: object
+                networkPolicy:
+                  description: |-
+                    NetworkPolicy configures how the operator manages the NetworkPolicies and GlobalNetworkPolicies
+                    it installs to protect the Calico components it manages.
+                  properties:
+                    managePolicies:
+                      default: Enabled
+                      description: |-
+                        ManagePolicies controls whether the operator creates and reconciles the NetworkPolicies and
+                        GlobalNetworkPolicies it uses to protect the Calico components it installs. When set to
+                        Disabled, the operator stops creating or updating these policies and deletes any it has
+                        already created, leaving policy management to the user. Defaults to Enabled.
+                      enum:
+                        - Enabled
+                        - Disabled
+                      type: string
                   type: object
                 nodeMetricsPort:
                   description: |-
@@ -9177,11 +9308,74 @@ spec:
                     prometheus metrics on. By default, metrics are not enabled.
                   format: int32
                   type: integer
+                typhaPodDisruptionBudget:
+                  description: |-
+                    TyphaPodDisruptionBudget configures the PodDisruptionBudget for the calico-typha
+                    Deployment. Fields left unset fall back to the operator's defaults. The PDB's
+                    selector is managed by the operator and cannot be overridden.
+                  properties:
+                    metadata:
+                      description:
+                        Metadata is a subset of a Kubernetes object's metadata
+                        that is added to the PodDisruptionBudget.
+                      properties:
+                        annotations:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            Annotations is a map of arbitrary non-identifying metadata. Each of these
+                            key/value pairs are added to the object's annotations provided the key does not
+                            already exist in the object's annotations.
+                          type: object
+                        labels:
+                          additionalProperties:
+                            type: string
+                          description: |-
+                            Labels is a map of string keys and values that may match replicaset and
+                            service selectors. Each of these key/value pairs are added to the
+                            object's labels provided the key does not already exist in the object's labels.
+                          type: object
+                      type: object
+                    spec:
+                      description: Spec is the specification of the PodDisruptionBudget.
+                      properties:
+                        maxUnavailable:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            MaxUnavailable is the maximum number of pods (as an integer or percentage) that
+                            can be unavailable during a disruption. Mutually exclusive with MinAvailable.
+                            If neither MinAvailable nor MaxUnavailable is set, the operator applies its
+                            default (MaxUnavailable=1 for calico-typha).
+                          x-kubernetes-int-or-string: true
+                        minAvailable:
+                          anyOf:
+                            - type: integer
+                            - type: string
+                          description: |-
+                            MinAvailable is the minimum number of pods (as an integer or percentage) that
+                            must remain available during a disruption. Mutually exclusive with MaxUnavailable.
+                          x-kubernetes-int-or-string: true
+                        unhealthyPodEvictionPolicy:
+                          description: |-
+                            UnhealthyPodEvictionPolicy defines when unhealthy pods should be considered
+                            for eviction. Defaults to IfHealthyBudget (the Kubernetes default) when unset.
+                            See https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy.
+                          enum:
+                            - IfHealthyBudget
+                            - AlwaysAllow
+                          type: string
+                      type: object
+                      x-kubernetes-validations:
+                        - message: minAvailable and maxUnavailable are mutually exclusive
+                          rule: "!(has(self.minAvailable) && has(self.maxUnavailable))"
+                  type: object
                 variant:
                   description: |-
                     Variant is the product to install - one of Calico or CalicoEnterprise.
                     TigeraSecureEnterprise is also accepted as a deprecated alias for CalicoEnterprise.
-                    Default: Calico
+                    If left unset, the operator fills in the variant it is running as.
                   enum:
                     - Calico
                     - CalicoEnterprise
@@ -10538,6 +10732,14 @@ spec:
                               type: object
                           type: object
                       type: object
+                    calicoLibHostPath:
+                      default: /var/lib/calico
+                      description: |-
+                        CalicoLibHostPath optionally specifies the host path mounted into calico-node containers at
+                        /var/lib/calico. Pair this with CalicoRunHostPath when Calico data lives under a non-standard
+                        host directory (for example microk8s uses /var/snap/microk8s/current/var/lib/calico).
+                      maxLength: 1024
+                      type: string
                     calicoNetwork:
                       description:
                         CalicoNetwork specifies networking configuration
@@ -10568,13 +10770,22 @@ spec:
                           type: string
                         clusterRoutingMode:
                           description: |-
-                            ClusterRoutingMode controls how nodes get a route to a workload on another node,
-                            when that workload's IP comes from an IP Pool with vxlanMode: Never. When ClusterRoutingMode is BIRD,
-                            confd and BIRD program that route. When ClusterRoutingMode is Felix, it is expected that Felix will program that route.
-                            Felix always programs such routes for IP Pools with vxlanMode: Always or vxlanMode: CrossSubnet. [Default: BIRD]
+                            ClusterRoutingMode controls which component programs the routes that a node needs in order to reach
+                            workloads on other nodes. It only applies to IP Pools with vxlanMode: Never; the routes for IP Pools
+                            with vxlanMode: Always or vxlanMode: CrossSubnet are always programmed by Felix.
+                            In BIRD mode, confd and BIRD program the routes for both IPIP and unencapsulated IP Pools.
+                            In Felix mode, Felix programs the routes for both IPIP and unencapsulated IP Pools.
+                            In FelixIPIPOnly mode, Felix programs the routes for IPIP IP Pools, and confd and BIRD program them
+                            for unencapsulated IP Pools.
+                            If not specified, the operator writes neither FelixConfiguration.programClusterRoutes nor
+                            BGPConfiguration.programClusterRoutes, so Calico's own defaults apply; as of Calico v3.33 those
+                            defaults are equivalent to FelixIPIPOnly.
+                            Note that BIRD programming of IPIP routes, which the BIRD mode selects, is deprecated as of
+                            Calico v3.33 and is intended for removal in v3.35.
                           enum:
                             - BIRD
                             - Felix
+                            - FelixIPIPOnly
                           type: string
                         containerIPForwarding:
                           description: |-
@@ -10693,6 +10904,21 @@ spec:
                             - BPF
                             - VPP
                             - Nftables
+                          type: string
+                        linuxPodInterfaceType:
+                          description: |-
+                            LinuxPodInterfaceType selects the virtual device type the Calico CNI plugin
+                            creates for each pod's interface on Linux nodes. When set to Netkit, the CNI
+                            plugin creates a netkit L2 pair on kernels that support it (Linux 6.7+) and
+                            falls back to a veth pair on older kernels. Netkit is recommended for the BPF
+                            dataplane, where it allows BPF programs to attach via BPF_NETKIT_PRIMARY for
+                            improved throughput and tail-latency under contention; for non-BPF dataplanes
+                            it is functionally equivalent to veth. Only valid when using the Calico CNI
+                            plugin.
+                            Default: Veth
+                          enum:
+                            - Veth
+                            - Netkit
                           type: string
                         linuxPolicySetupTimeoutSeconds:
                           description: |-
@@ -12061,6 +12287,37 @@ spec:
                                                   More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                                                 type: object
                                             type: object
+                                          startupProbe:
+                                            description: |-
+                                              StartupProbe allows customization of the startup probe timing parameters.
+                                              The probe handler is set by the operator.
+                                            properties:
+                                              failureThreshold:
+                                                description: |-
+                                                  FailureThreshold is the minimum consecutive failures for the probe
+                                                  to be considered failed after having succeeded.
+                                                format: int32
+                                                type: integer
+                                              initialDelaySeconds:
+                                                description: |-
+                                                  InitialDelaySeconds is the number of seconds after the container
+                                                  starts before the probe is initiated.
+                                                format: int32
+                                                type: integer
+                                              periodSeconds:
+                                                description:
+                                                  PeriodSeconds is how often
+                                                  (in seconds) to perform the probe.
+                                                format: int32
+                                                type: integer
+                                              timeoutSeconds:
+                                                description:
+                                                  TimeoutSeconds is the number
+                                                  of seconds after which the probe times
+                                                  out.
+                                                format: int32
+                                                type: integer
+                                            type: object
                                         required:
                                           - name
                                         type: object
@@ -12137,9 +12394,10 @@ spec:
                                           name:
                                             description: |-
                                               Name is an enum which identifies the calico-node DaemonSet init container by name.
-                                              Supported values are: install-cni, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner, mount-bpffs (deprecated, replaced by ebpf-bootstrap)
+                                              Supported values are: install-cni, cni-plugins, hostpath-init, flexvol-driver, ebpf-bootstrap, node-certs-key-cert-provisioner, calico-node-prometheus-server-tls-key-cert-provisioner, mount-bpffs (deprecated, replaced by ebpf-bootstrap)
                                             enum:
                                               - install-cni
+                                              - cni-plugins
                                               - hostpath-init
                                               - flexvol-driver
                                               - ebpf-bootstrap
@@ -13641,6 +13899,15 @@ spec:
                               type: object
                           type: object
                       type: object
+                    calicoRunHostPath:
+                      default: /var/run/calico
+                      description: |-
+                        CalicoRunHostPath optionally specifies the host path mounted into calico-node containers at
+                        /var/run/calico. Environments such as microk8s place Calico runtime state under a non-standard
+                        host directory (for example /var/snap/microk8s/current/var/run/calico); set this field so the
+                        operator continues using that path after a manifest-to-operator migration.
+                      maxLength: 1024
+                      type: string
                     calicoWindowsUpgradeDaemonSet:
                       description: |-
                         Deprecated. The CalicoWindowsUpgradeDaemonSet is deprecated and will be removed from the API in the future.
@@ -14989,6 +15256,22 @@ spec:
                             * For KubernetesProvider OpenShift, this field defaults to "/var/run/multus/cni/net.d".
                             * Otherwise, this field defaults to "/etc/cni/net.d".
                           type: string
+                        installMode:
+                          description: |-
+                            InstallMode controls which CNI plugin binaries the operator installs onto each node
+                            when CNI.Type is Calico.
+                            * All (default): the operator runs a cni-plugins init container that stages upstream
+                              CNI plugin binaries (host-local, portmap, loopback, tuning, flannel) into a shared
+                              volume, and the install-cni init container copies them onto the host alongside
+                              Calico's own binaries.
+                            * CalicoOnly: skip the cni-plugins init container. Only Calico's own binaries are
+                              installed. Use this when the host already provides the upstream plugins (e.g. kind,
+                              certain managed node images).
+                            Default: All
+                          enum:
+                            - All
+                            - CalicoOnly
+                          type: string
                         ipam:
                           description: |-
                             IPAM specifies the pod IP address management that will be used in the Calico or
@@ -15014,6 +15297,21 @@ spec:
                           required:
                             - type
                           type: object
+                        specVersion:
+                          description: |-
+                            SpecVersion configures the CNI specification version declared in the
+                            CNI configuration ("cniVersion") that the operator generates. Auto
+                            (the default) lets the operator choose an appropriate version, which
+                            may increase across operator upgrades. Pin an explicit version if a
+                            chained CNI plugin or container runtime in your environment requires
+                            one. Only relevant when using the Calico CNI plugin.
+                            Default: Auto
+                          enum:
+                            - Auto
+                            - 0.3.1
+                            - 0.4.0
+                            - 1.0.0
+                          type: string
                         type:
                           description: |-
                             Specifies the CNI plugin that will be used in the Calico or Calico Enterprise installation.
@@ -16459,9 +16757,8 @@ spec:
                       type: object
                     fipsMode:
                       description: |-
-                        FIPSMode uses images and features only that are using FIPS 140-2 validated cryptographic modules and standards.
-                        Only supported for Variant=Calico.
-                        Default: Disabled
+                        Deprecated. FIPS mode is no longer supported. Setting fipsMode to Enabled marks the
+                        installation degraded.
                       enum:
                         - Enabled
                         - Disabled
@@ -16493,6 +16790,17 @@ spec:
                         Image format:
                            `<registry><imagePath>/<imagePrefix><imageName>:<image-tag>`
                         This option allows configuring the `<imagePrefix>` portion of the above format.
+                      type: string
+                    imagePullPolicy:
+                      description: |-
+                        ImagePullPolicy is the pull policy applied to containers in pods rendered by the operator
+                        that do not explicitly set their own pull policy. If unset, defaults to IfNotPresent.
+                        This is useful in air-gapped environments where images are pre-loaded onto nodes and
+                        must not be re-pulled from a remote registry.
+                      enum:
+                        - Always
+                        - IfNotPresent
+                        - Never
                       type: string
                     imagePullSecrets:
                       description: |-
@@ -16570,6 +16878,23 @@ spec:
                                 - Debug
                               type: string
                           type: object
+                      type: object
+                    networkPolicy:
+                      description: |-
+                        NetworkPolicy configures how the operator manages the NetworkPolicies and GlobalNetworkPolicies
+                        it installs to protect the Calico components it manages.
+                      properties:
+                        managePolicies:
+                          default: Enabled
+                          description: |-
+                            ManagePolicies controls whether the operator creates and reconciles the NetworkPolicies and
+                            GlobalNetworkPolicies it uses to protect the Calico components it installs. When set to
+                            Disabled, the operator stops creating or updating these policies and deletes any it has
+                            already created, leaving policy management to the user. Defaults to Enabled.
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
                       type: object
                     nodeMetricsPort:
                       description: |-
@@ -18529,11 +18854,74 @@ spec:
                         serves prometheus metrics on. By default, metrics are not enabled.
                       format: int32
                       type: integer
+                    typhaPodDisruptionBudget:
+                      description: |-
+                        TyphaPodDisruptionBudget configures the PodDisruptionBudget for the calico-typha
+                        Deployment. Fields left unset fall back to the operator's defaults. The PDB's
+                        selector is managed by the operator and cannot be overridden.
+                      properties:
+                        metadata:
+                          description:
+                            Metadata is a subset of a Kubernetes object's
+                            metadata that is added to the PodDisruptionBudget.
+                          properties:
+                            annotations:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                Annotations is a map of arbitrary non-identifying metadata. Each of these
+                                key/value pairs are added to the object's annotations provided the key does not
+                                already exist in the object's annotations.
+                              type: object
+                            labels:
+                              additionalProperties:
+                                type: string
+                              description: |-
+                                Labels is a map of string keys and values that may match replicaset and
+                                service selectors. Each of these key/value pairs are added to the
+                                object's labels provided the key does not already exist in the object's labels.
+                              type: object
+                          type: object
+                        spec:
+                          description: Spec is the specification of the PodDisruptionBudget.
+                          properties:
+                            maxUnavailable:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              description: |-
+                                MaxUnavailable is the maximum number of pods (as an integer or percentage) that
+                                can be unavailable during a disruption. Mutually exclusive with MinAvailable.
+                                If neither MinAvailable nor MaxUnavailable is set, the operator applies its
+                                default (MaxUnavailable=1 for calico-typha).
+                              x-kubernetes-int-or-string: true
+                            minAvailable:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              description: |-
+                                MinAvailable is the minimum number of pods (as an integer or percentage) that
+                                must remain available during a disruption. Mutually exclusive with MaxUnavailable.
+                              x-kubernetes-int-or-string: true
+                            unhealthyPodEvictionPolicy:
+                              description: |-
+                                UnhealthyPodEvictionPolicy defines when unhealthy pods should be considered
+                                for eviction. Defaults to IfHealthyBudget (the Kubernetes default) when unset.
+                                See https://kubernetes.io/docs/tasks/run-application/configure-pdb/#unhealthy-pod-eviction-policy.
+                              enum:
+                                - IfHealthyBudget
+                                - AlwaysAllow
+                              type: string
+                          type: object
+                          x-kubernetes-validations:
+                            - message: minAvailable and maxUnavailable are mutually exclusive
+                              rule: "!(has(self.minAvailable) && has(self.maxUnavailable))"
+                      type: object
                     variant:
                       description: |-
                         Variant is the product to install - one of Calico or CalicoEnterprise.
                         TigeraSecureEnterprise is also accepted as a deprecated alias for CalicoEnterprise.
-                        Default: Calico
+                        If left unset, the operator fills in the variant it is running as.
                       enum:
                         - Calico
                         - CalicoEnterprise

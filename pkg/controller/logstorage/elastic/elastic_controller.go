@@ -16,6 +16,7 @@ package elastic
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 
@@ -44,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -51,6 +53,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -76,14 +79,16 @@ type ElasticSubController struct {
 	scheme         *runtime.Scheme
 	status         status.StatusManager
 	provider       operatorv1.Provider
-	esCliCreator   utils.ElasticsearchClientCreator
+	esCliCreator   esutils.ElasticsearchClientCreator
 	clusterDomain  string
+	variant        operatorv1.ProductVariant
 	tierWatchReady *utils.ReadyFlag
 	multiTenant    bool
+	cloud          bool
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 	if opts.ElasticExternal {
@@ -96,12 +101,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ElasticSubController{
 		client:         mgr.GetClient(),
 		scheme:         mgr.GetScheme(),
-		esCliCreator:   utils.NewElasticClient,
+		esCliCreator:   esutils.NewElasticClient,
 		tierWatchReady: &utils.ReadyFlag{},
 		status:         status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageElastic, opts.KubernetesVersion),
 		clusterDomain:  opts.ClusterDomain,
+		variant:        opts.Variant,
 		provider:       opts.DetectedProvider,
 		multiTenant:    opts.MultiTenant,
+		cloud:          opts.Cloud,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -281,7 +288,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Get Installation resource.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -289,10 +296,6 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred while querying Installation", err, reqLogger)
 		return reconcile.Result{}, err
-	}
-	if !variant.IsEnterprise() {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for network to be an enterprise variant", nil, reqLogger)
-		return reconcile.Result{}, nil
 	}
 
 	// Validate that the tier watch is ready before querying the tier to ensure we utilize the cache.
@@ -312,7 +315,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -323,6 +326,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementClusterConnection", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
 	if managementClusterConnection != nil {
 		// LogStorage is not support on a managed cluster.
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "LogStorage is not supported on a managed cluster", nil, reqLogger)
@@ -335,7 +339,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	authentication, err := utils.GetAuthentication(ctx, r.client)
+	authentication, err := eutils.GetAuthentication(ctx, r.client)
 	if err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error while fetching Authentication", err, reqLogger)
 		return reconcile.Result{}, err
@@ -347,6 +351,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
 	cm.AddToStatusManager(r.status, render.ElasticsearchNamespace)
 
 	esDNSNames := dns.GetServiceDNSNames(render.ElasticsearchServiceName, render.ElasticsearchNamespace, r.clusterDomain)
@@ -355,6 +360,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to create Elasticsearch secrets", err, log)
 		return reconcile.Result{}, err
 	}
+
 	kbDNSNames := dns.GetServiceDNSNames(kibana.ServiceName, kibana.Namespace, r.clusterDomain)
 	kibanaKeyPair, err := cm.GetKeyPair(r.client, kibana.TigeraKibanaCertSecret, common.OperatorNamespace(), kbDNSNames)
 	if err != nil {
@@ -363,7 +369,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, err
 	}
 
-	kibanaEnabled := !r.multiTenant
+	kibanaEnabled := logstoragecommon.KibanaEnabled(ls, r.multiTenant)
 
 	// Wait for dependencies to exist.
 	if elasticKeyPair == nil {
@@ -401,11 +407,12 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to get Elasticsearch admin user secret", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
 	if esAdminUserSecret != nil {
 		esAdminUserSecret = rsecret.CopyToNamespace(common.OperatorNamespace(), esAdminUserSecret)[0]
 	}
 
-	esLicenseType, err = utils.GetElasticLicenseType(ctx, r.client, reqLogger)
+	esLicenseType, err = esutils.GetElasticLicenseType(ctx, r.client, reqLogger)
 	if err != nil {
 		// If LicenseConfigMapName is not found, it means ECK operator is not running yet, log the information and proceed
 		if errors.IsNotFound(err) {
@@ -416,7 +423,7 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 		}
 	}
 
-	elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+	elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 		return reconcile.Result{}, err
@@ -473,12 +480,28 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	var kbService *corev1.Service
+	var kibanaConfigOverrides map[string]interface{}
 	if kibanaEnabled {
 		// For now, Kibana is only supported in single tenant configurations.
 		kbService, err = r.getKibanaService(ctx)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to retrieve the Kibana service", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+
+		if r.cloud {
+			kbCm := &corev1.ConfigMap{}
+			if err = r.client.Get(ctx, types.NamespacedName{Name: "cloud-kibana-config", Namespace: common.OperatorNamespace()}, kbCm); err != nil {
+				if !errors.IsNotFound(err) {
+					return reconcile.Result{}, fmt.Errorf("failed to read cloud-kibana-config ConfigMap: %w", err)
+				}
+			} else {
+				kibanaConfigOverrides = map[string]interface{}{}
+				if err = json.Unmarshal([]byte(kbCm.Data["config"]), &kibanaConfigOverrides); err != nil {
+					r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to unmarshal config in cloud-kibana-config ConfigMap", err, reqLogger)
+					return reconcile.Result{}, err
+				}
+			}
 		}
 	}
 
@@ -517,23 +540,24 @@ func (r *ElasticSubController) Reconcile(ctx context.Context, request reconcile.
 			UnusedTLSSecret:         unusedTLSSecret,
 		}),
 		kibana.Kibana(&kibana.Configuration{
-			LogStorage:      ls,
-			Installation:    installationSpec,
-			Kibana:          kibanaCR,
-			KibanaKeyPair:   kibanaKeyPair,
-			PullSecrets:     pullSecrets,
-			Provider:        r.provider,
-			KbService:       kbService,
-			ClusterDomain:   r.clusterDomain,
-			BaseURL:         baseURL,
-			TrustedBundle:   trustedBundle,
-			UnusedTLSSecret: unusedTLSSecret,
-			Enabled:         kibanaEnabled,
+			LogStorage:           ls,
+			Installation:         installationSpec,
+			Kibana:               kibanaCR,
+			KibanaKeyPair:        kibanaKeyPair,
+			PullSecrets:          pullSecrets,
+			Provider:             r.provider,
+			KbService:            kbService,
+			ClusterDomain:        r.clusterDomain,
+			BaseURL:              baseURL,
+			TrustedBundle:        trustedBundle,
+			UnusedTLSSecret:      unusedTLSSecret,
+			Enabled:              kibanaEnabled,
+			CloudConfigOverrides: kibanaConfigOverrides,
 		}),
 	}
 
 	for _, component := range components {
-		if err = imageset.ApplyImageSet(ctx, r.client, variant, component); err != nil {
+		if err = imageset.ApplyImageSet(ctx, r.client, r.variant, component); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 			return reconcile.Result{}, err
 		}
@@ -597,7 +621,7 @@ func (r *ElasticSubController) handleLogStorageFinalizer(ctx context.Context, ls
 	// instances. So, check if those have been deleted before removing the finalizer.
 	if isTerminating(ls) {
 		// The LogStorage instance is terminating. Check whether ES and Kibana CRs exist.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return err
@@ -656,7 +680,7 @@ func (r *ElasticSubController) applyILMPolicies(ls *operatorv1.LogStorage, reqLo
 		return err
 	}
 
-	if err = esClient.SetILMPolicies(ctx, ls); err != nil {
+	if err = esClient.SetILMPolicies(ctx, ls, r.cloud); err != nil {
 		return err
 	}
 	return nil

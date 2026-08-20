@@ -16,7 +16,6 @@ package render
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
 
 	cmnv1 "github.com/elastic/cloud-on-k8s/v2/pkg/apis/common/v1"
@@ -27,6 +26,7 @@ import (
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -90,9 +90,10 @@ const (
 	DefaultElasticsearchReplicas    = 0
 	DefaultElasticStorageGi         = 10
 
-	ESCuratorName           = "elastic-curator"
-	EsCuratorServiceAccount = "tigera-elastic-curator"
-	EsCuratorPolicyName     = networkpolicy.CalicoComponentPolicyPrefix + "allow-elastic-curator"
+	ESCuratorName                  = "elastic-curator"
+	EsCuratorServiceAccount        = "tigera-elastic-curator"
+	EsCuratorPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "allow-elastic-curator"
+	ElasticsearchCuratorUserSecret = "tigera-ee-curator-elasticsearch-access"
 
 	OIDCUsersConfigMapName = "tigera-known-oidc-users"
 	OIDCUsersESSecretName  = "tigera-oidc-users-elasticsearch-credentials"
@@ -127,14 +128,14 @@ const (
 var (
 	ElasticsearchSelector   = fmt.Sprintf("elasticsearch.k8s.elastic.co/cluster-name == '%s'", ElasticsearchName)
 	ElasticsearchEntityRule = v3.EntityRule{
-		NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+		NamespaceSelector: fmt.Sprintf("kubernetes.io/metadata.name == '%s'", ElasticsearchNamespace),
 		Selector:          ElasticsearchSelector,
 		Ports:             []numorstring.Port{{MinPort: ElasticsearchDefaultPort, MaxPort: ElasticsearchDefaultPort}},
 	}
 )
 
 var InternalElasticsearchEntityRule = v3.EntityRule{
-	NamespaceSelector: fmt.Sprintf("projectcalico.org/name == '%s'", ElasticsearchNamespace),
+	NamespaceSelector: fmt.Sprintf("kubernetes.io/metadata.name == '%s'", ElasticsearchNamespace),
 	Selector:          ElasticsearchSelector,
 	Ports:             []numorstring.Port{{MinPort: ElasticsearchInternalPort, MaxPort: ElasticsearchInternalPort}},
 }
@@ -402,9 +403,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	// https://www.elastic.co/guide/en/elasticsearch/reference/current/vm-max-map-count.html
 	initOSSettingsContainer := corev1.Container{
-		Name:            "elastic-internal-init-os-settings",
-		Image:           es.esImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:  "elastic-internal-init-os-settings",
+		Image: es.esImage,
 		Command: []string{
 			"/bin/sh",
 		},
@@ -417,9 +417,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 
 	initContainers := []corev1.Container{initOSSettingsContainer}
 	initFSContainer := corev1.Container{
-		Name:            "elastic-internal-init-filesystem",
-		Image:           es.esImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:  "elastic-internal-init-filesystem",
+		Image: es.esImage,
 		Resources: corev1.ResourceRequirements{
 			Limits: corev1.ResourceList{
 				"cpu":    resource.MustParse("100m"),
@@ -435,9 +434,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 	}
 
 	suspendContainer := corev1.Container{
-		Name:            "elastic-internal-suspend",
-		Image:           es.esImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Name:  "elastic-internal-suspend",
+		Image: es.esImage,
 		// Without a root context, it is not able to start.
 		SecurityContext: securitycontext.NewRootContext(true),
 	}
@@ -474,7 +472,8 @@ func (es *elasticsearchComponent) podTemplate() corev1.PodTemplateSpec {
 			"transport.tls.crt",
 			dns.GetServiceDNSNames(ElasticsearchServiceName, ElasticsearchNamespace, es.cfg.ClusterDomain),
 			ElasticsearchNamespace,
-			esContainer.SecurityContext)
+			esContainer.SecurityContext,
+		)
 		csrInitContainerTransport.Name = "key-cert-elastic-transport"
 
 		initContainers = append(
@@ -806,7 +805,7 @@ func nodeSetName(pvcTemplate corev1.PersistentVolumeClaim, currentES *esv1.Elast
 		// We assume that the VolumeClaimTemplate is the same across all NodeSets (this is how we configure it).
 		currentPVCTemplate := currentES.Spec.NodeSets[0].VolumeClaimTemplates[0]
 		storageClassNamesMatch := *pvcTemplate.Spec.StorageClassName == *currentPVCTemplate.Spec.StorageClassName
-		resourceRequirementsMatch := reflect.DeepEqual(currentPVCTemplate.Spec.Resources, pvcTemplate.Spec.Resources)
+		resourceRequirementsMatch := apiequality.Semantic.DeepEqual(currentPVCTemplate.Spec.Resources, pvcTemplate.Spec.Resources)
 		if !storageClassNamesMatch || !resourceRequirementsMatch {
 			nameMustBeGenerated = true
 		}
@@ -1373,10 +1372,6 @@ func (m *managedClusterLogStorage) deprecatedObjects() []client.Object {
 		&rbacv1.ClusterRole{
 			TypeMeta:   metav1.TypeMeta{Kind: "ClusterRole", APIVersion: "rbac.authorization.k8s.io/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed-configmap"},
-		},
-		&rbacv1.RoleBinding{
-			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: "tigera-linseed", Namespace: "calico-system"},
 		},
 
 		// Remove legacy ExternalName service pointing to Guardian for linseed

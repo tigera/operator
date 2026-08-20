@@ -28,6 +28,11 @@ type Kibana struct {
 }
 
 type KibanaSpec struct {
+	// Replicas defines the number of Kibana replicas. When set to 0, Kibana is not rendered.
+	// Default: 1
+	// +optional
+	Replicas *int32 `json:"replicas,omitempty"`
+
 	// Template describes the Kibana pod that will be created.
 	// +optional
 	Template *KibanaPodTemplateSpec `json:"template,omitempty"`

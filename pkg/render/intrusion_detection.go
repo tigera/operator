@@ -17,6 +17,7 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,7 +73,7 @@ const (
 
 // Register secret/certs that need Server and Client Key usage
 var (
-	intrusionDetectionNamespaceSelector = fmt.Sprintf("projectcalico.org/name == '%s'", IntrusionDetectionNamespace)
+	intrusionDetectionNamespaceSelector = fmt.Sprintf("kubernetes.io/metadata.name == '%s'", IntrusionDetectionNamespace)
 	IntrusionDetectionSourceEntityRule  = v3.EntityRule{
 		NamespaceSelector: intrusionDetectionNamespaceSelector,
 		Selector:          fmt.Sprintf("k8s-app == '%s'", IntrusionDetectionControllerName),
@@ -119,9 +120,9 @@ type IntrusionDetectionConfiguration struct {
 }
 
 type intrusionDetectionComponent struct {
-	cfg                    *IntrusionDetectionConfiguration
-	controllerImage        string
-	webhooksProcessorImage string
+	cfg             *IntrusionDetectionConfiguration
+	controllerImage string
+	calicoImage     string
 }
 
 func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -136,7 +137,7 @@ func (c *intrusionDetectionComponent) ResolveImages(is *operatorv1.ImageSet) err
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.webhooksProcessorImage, err = components.GetReference(components.ComponentSecurityEventWebhooksProcessor, reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -170,7 +171,8 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		c.intrusionDetectionDeployment(),
 	)
 
-	if !c.cfg.ManagedCluster {
+	if c.cfg.ManagementCluster {
+		// Only needed on management clusters.
 		objs = append(objs, c.managedClustersWatchRoleBinding())
 	}
 	if c.cfg.Tenant.MultiTenant() {
@@ -185,6 +187,36 @@ func (c *intrusionDetectionComponent) Objects() ([]client.Object, []client.Objec
 		// allow-tigera Tier was renamed to calico-system
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("intrusion-detection-controller", c.cfg.Namespace),
 		networkpolicy.DeprecatedAllowTigeraNetworkPolicyObject("default-deny", c.cfg.Namespace),
+		// Image Assurance was removed; clean up the resources that prior versions copied
+		// into the intrusion-detection namespace.
+		&corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-image-assurance-api-cert", Namespace: c.cfg.Namespace},
+		},
+		&corev1.ConfigMap{
+			TypeMeta:   metav1.TypeMeta{Kind: "ConfigMap", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "tigera-image-assurance-config", Namespace: c.cfg.Namespace},
+		},
+		&corev1.Secret{
+			TypeMeta:   metav1.TypeMeta{Kind: "Secret", APIVersion: "v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: "image-assurance-api-token", Namespace: c.cfg.Namespace},
+		},
+	}
+
+	if !c.cfg.ManagementCluster {
+		// These aren't needed unless we're a management cluster. Delete
+		// both variants in case a cluster switches from management to
+		// standalone (or to clean up bindings rendered by older versions).
+		objsToDelete = append(objsToDelete,
+			&rbacv1.RoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: IntrusionDetectionManagedClustersWatchRoleBindingName, Namespace: c.cfg.Namespace},
+			},
+			&rbacv1.ClusterRoleBinding{
+				TypeMeta:   metav1.TypeMeta{Kind: "ClusterRoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: IntrusionDetectionManagedClustersWatchRoleBindingName},
+			},
+		)
 	}
 
 	if !c.cfg.ManagedCluster && !c.cfg.Tenant.MultiTenant() {
@@ -324,7 +356,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionClusterRole() *rbacv1.Cl
 		},
 		{
 			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
-			Resources: []string{"securityeventwebhooks"},
+			Resources: []string{"securityeventwebhooks", "securityeventwebhooks/status"},
 			Verbs:     []string{"get", "list", "watch", "update"},
 		},
 		{
@@ -561,7 +593,7 @@ func (c *intrusionDetectionComponent) deploymentPodTemplate() *corev1.PodTemplat
 		c.cfg.IntrusionDetectionCertSecret.Volume(),
 	}
 	// If syslog forwarding is enabled then set the necessary hostpath volume to write
-	// logs for Fluentd to access.
+	// logs for Fluent Bit to access.
 	if c.cfg.SyslogForwardingIsEnabled {
 		dirOrCreate := corev1.HostPathDirectoryOrCreate
 		volumes = append(volumes, corev1.Volume{
@@ -668,8 +700,8 @@ func (c *intrusionDetectionComponent) webhooksControllerContainer() corev1.Conta
 
 	return corev1.Container{
 		Name:            "webhooks-processor",
-		Image:           c.webhooksProcessorImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "webhooks-processor"},
 		Env:             envVars,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		VolumeMounts:    volumeMounts,
@@ -702,6 +734,10 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 			Name:  "LINSEED_TOKEN",
 			Value: GetLinseedTokenPath(c.cfg.ManagedCluster),
 		},
+		{
+			Name:  "MANAGEMENT_CLUSTER",
+			Value: strconv.FormatBool(c.cfg.ManagementCluster),
+		},
 	}
 
 	if c.cfg.Tenant != nil {
@@ -719,7 +755,7 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	sc := securitycontext.NewNonRootContext()
 
 	// If syslog forwarding is enabled then set the necessary ENV var and volume mount to
-	// write logs for Fluentd.
+	// write logs for Fluent Bit.
 	volumeMounts := c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType())
 	volumeMounts = append(volumeMounts, c.cfg.IntrusionDetectionCertSecret.VolumeMount(c.SupportedOSType()))
 	if c.cfg.SyslogForwardingIsEnabled {
@@ -744,17 +780,18 @@ func (c *intrusionDetectionComponent) intrusionDetectionControllerContainer() co
 	}
 
 	return corev1.Container{
-		Name:            "controller",
-		Image:           c.controllerImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Env:             envs,
-		// Needed for permissions to write to the audit log
+		Name:    "controller",
+		Image:   c.controllerImage,
+		Command: []string{components.CalicoBinaryPath, "component", "intrusion-detection-controller"},
+		Env:     envs,
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
 					Command: []string{
-						"/usr/bin/healthz",
-						"liveness",
+						components.CalicoBinaryPath,
+						"health",
+						"--port=50000",
+						"--type=liveness",
 					},
 				},
 			},

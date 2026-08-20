@@ -39,6 +39,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	logstoragecommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
@@ -46,6 +47,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -59,31 +62,27 @@ import (
 var log = logf.Log.WithName("controller_logstorage_linseed")
 
 type LinseedSubController struct {
-	client          client.Client
-	scheme          *runtime.Scheme
-	status          status.StatusManager
-	clusterDomain   string
-	tierWatchReady  *utils.ReadyFlag
-	dpiAPIReady     *utils.ReadyFlag
-	multiTenant     bool
-	elasticExternal bool
+	client         client.Client
+	scheme         *runtime.Scheme
+	status         status.StatusManager
+	tierWatchReady *utils.ReadyFlag
+	dpiAPIReady    *utils.ReadyFlag
+	opts           options.ControllerOptions
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists {
+	if !opts.Variant.IsEnterprise() {
 		return nil
 	}
 
 	// Create the reconciler
 	r := &LinseedSubController{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		clusterDomain:   opts.ClusterDomain,
-		tierWatchReady:  &utils.ReadyFlag{},
-		dpiAPIReady:     &utils.ReadyFlag{},
-		multiTenant:     opts.MultiTenant,
-		status:          status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
-		elasticExternal: opts.ElasticExternal,
+		client:         mgr.GetClient(),
+		scheme:         mgr.GetScheme(),
+		tierWatchReady: &utils.ReadyFlag{},
+		dpiAPIReady:    &utils.ReadyFlag{},
+		status:         status.New(mgr.GetClient(), "log-storage-access", opts.KubernetesVersion),
+		opts:           opts,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -97,7 +96,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenatn clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -125,7 +124,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the tigera-elasticsearch namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	helper := eutils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
@@ -177,6 +176,13 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	})
 	go utils.WaitToAddResourceWatch(c, opts.K8sClientset, log, r.dpiAPIReady, []client.Object{&v3.DeepPacketInspection{TypeMeta: metav1.TypeMeta{Kind: v3.KindDeepPacketInspection}}})
 
+	if opts.Cloud && opts.ElasticExternal {
+		// This ConfigMap is needed for eutils.GetCloudConfig
+		if err = utils.AddConfigMapWatch(c, cloudconfig.CloudConfigConfigMapName, common.OperatorNamespace(), &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("log-storage-linseed-controller failed to watch the ConfigMap resource: %w", err)
+		}
+	}
+
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
 	// and also makes sure we spot when things change that might not trigger a reconciliation.
 	err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, eventHandler)
@@ -188,19 +194,19 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(r.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(r.opts.MultiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Linseed")
 
 	// We skip requests without a namespace specified in multi-tenant setups.
-	if r.multiTenant && request.Namespace == "" {
+	if r.opts.MultiTenant && request.Namespace == "" {
 		return reconcile.Result{}, nil
 	}
 
 	// When running in multi-tenant mode, we need to install Linseed in tenant Namespaces. However, the LogStorage
 	// resource is still cluster-scoped (since ES is a cluster-wide resource), so we need to look elsewhere to determine
 	// which tenant namespaces require a Linseed instance. We use the tenant API to determine the set of namespaces that should have a Linseed.
-	tenant, _, err := utils.GetTenant(ctx, r.multiTenant, r.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, r.opts.MultiTenant, r.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -237,7 +243,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Get Installation resource.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), r.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -282,7 +288,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, nil
 	}
 
-	managementCluster, err := utils.GetManagementCluster(ctx, r.client)
+	managementCluster, err := eutils.GetManagementCluster(ctx, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading ManagementCluster", err, reqLogger)
 		return reconcile.Result{}, err
@@ -298,9 +304,9 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	elasticHost := "tigera-secure-es-http.tigera-elasticsearch.svc"
 	elasticPort := "9200"
 	var esClientSecret *corev1.Secret
-	if !r.elasticExternal {
+	if !r.opts.ElasticExternal {
 		// Wait for Elasticsearch to be installed and available.
-		elasticsearch, err := utils.GetElasticsearch(ctx, r.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -310,11 +316,21 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	} else {
-		// If we're using an external ES, the Tenant resource must specify the ES endpoint.
-		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
-			reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
-			r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
-			return reconcile.Result{}, nil
+		if r.opts.MultiTenant {
+			// The Tenant resource must specify the ES endpoint.
+			if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.URL == "" {
+				reqLogger.Error(nil, "Elasticsearch URL must be specified for this tenant")
+				r.status.SetDegraded(operatorv1.ResourceValidationError, "Elasticsearch URL must be specified for this tenant", nil, reqLogger)
+				return reconcile.Result{}, nil
+			}
+		} else if r.opts.Cloud {
+			// Calico Cloud single-tenant: there is no Tenant CR, so read it from the cloud config map.
+			cloudConfig, err := eutils.GetCloudConfig(ctx, r.client)
+			if err != nil {
+				r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			tenant = eutils.TenantFromCloudConfig(cloudConfig, eutils.WithStandardIndicesIf(r.opts.UseSingleIndex))
 		}
 
 		// Determine the host and port from the URL.
@@ -340,8 +356,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
-	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
+	// For cloud systems, credentials are created by the elasticsearch users controller.
 	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.InstallNamespace()}
 	credentials := corev1.Secret{}
 	if err = r.client.Get(ctx, key, &credentials); err != nil && !errors.IsNotFound(err) {
@@ -357,12 +372,12 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		certificatemanager.WithLogger(reqLogger),
 		certificatemanager.WithTenant(tenant),
 	}
-	cm, err := certificatemanager.Create(r.client, installationSpec, r.clusterDomain, helper.TruthNamespace(), opts...)
+	cm, err := certificatemanager.Create(r.client, installationSpec, r.opts.ClusterDomain, helper.TruthNamespace(), opts...)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, helper.InstallNamespace(), r.clusterDomain)
+	linseedDNSNames := dns.GetServiceDNSNames(render.LinseedServiceName, helper.InstallNamespace(), r.opts.ClusterDomain)
 	linseedKeyPair, err := cm.GetKeyPair(r.client, render.TigeraLinseedSecret, helper.TruthNamespace(), linseedDNSNames)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting Linseed KeyPair", err, reqLogger)
@@ -397,10 +412,8 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	}
 
 	// Query the username and password this Linseed instance should use to authenticate with Elasticsearch.
-	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
+	// For cloud systems, credentials are created by the elasticsearch users controller.
 	// Delay installing Linseed until available.
-	// TODO: Switch single-tenant to using operator-provisioned users.
 	key = types.NamespacedName{Name: render.ElasticsearchLinseedUserSecret, Namespace: helper.InstallNamespace()}
 	if err = r.client.Get(ctx, key, &corev1.Secret{}); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, fmt.Sprintf("Error getting Secret %s", key), err, reqLogger)
@@ -418,7 +431,7 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 	hasDPIResource := len(dpiList.Items) != 0
 
 	// Determine the namespaces to which we must bind the linseed cluster role.
-	bindNamespaces, err := helper.TenantNamespaces(r.client)
+	bindNamespaces, err := eutils.HelperNamespaces(ctx, r.client, helper, nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -434,30 +447,32 @@ func (r *LinseedSubController) Reconcile(ctx context.Context, request reconcile.
 		Namespace:                      helper.InstallNamespace(),
 		BindNamespaces:                 bindNamespaces,
 		TrustedBundle:                  trustedBundle,
-		ClusterDomain:                  r.clusterDomain,
+		ClusterDomain:                  r.opts.ClusterDomain,
 		KeyPair:                        linseedKeyPair,
 		TokenKeyPair:                   tokenKeyPair,
 		ESClusterConfig:                esClusterConfig,
 		HasDPIResource:                 hasDPIResource,
 		ManagementCluster:              managementCluster != nil,
 		Tenant:                         tenant,
-		ExternalElastic:                r.elasticExternal,
+		ExternalElastic:                r.opts.ElasticExternal,
 		ElasticHost:                    elasticHost,
 		ElasticPort:                    elasticPort,
 		ElasticClientSecret:            esClientSecret,
 		ElasticClientCredentialsSecret: &credentials,
 		LogStorage:                     logStorage,
+		Cloud:                          r.opts.Cloud,
+		UseSingleIndex:                 r.opts.UseSingleIndex,
 	}
 	linseedComponent := linseed.Linseed(cfg)
 
-	if err := imageset.ApplyImageSet(ctx, r.client, variant, linseedComponent); err != nil {
+	if err := imageset.ApplyImageSet(ctx, r.client, r.opts.Variant, linseedComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// In standard installs, the LogStorage owns Linseed. For multi-tenant, it's owned by the Tenant instance.
 	var hdler utils.ComponentHandler
-	if r.multiTenant {
+	if r.opts.MultiTenant {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, tenant)
 	} else {
 		hdler = utils.NewComponentHandler(reqLogger, r.client, r.scheme, logStorage)

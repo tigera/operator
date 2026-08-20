@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2024 Tigera, Inc. All rights reserved.
+// Copyright (c) 2022-2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -26,7 +26,8 @@ import (
 
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/crypto"
-	"github.com/tigera/operator/pkg/render/kubecontrollers"
+	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 )
 
 const (
@@ -44,8 +45,8 @@ const (
 // are generated and stored in the user secret, a hashed version of the credentials is stored in the tigera-elasticsearch namespace for ES Gateway to retrieve and use to compare
 // the gateway credentials, and a secret containing real admin level credentials is created and stored in the tigera-elasticsearch namespace to be swapped in once
 // ES Gateway has confirmed that the gateway credentials match.
-func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client, h utils.NamespaceHelper) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
-	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersUserSecret, h.TruthNamespace())
+func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1.Secret, esAdminUserName string, cli client.Client, h eutils.NamespaceHelper) (*corev1.Secret, *corev1.Secret, *corev1.Secret, error) {
+	kubeControllersGatewaySecret, err := utils.GetSecret(ctx, cli, entkubecontrollers.ElasticsearchKubeControllersUserSecret, h.TruthNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -53,11 +54,11 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		password := crypto.GeneratePassword(16)
 		kubeControllersGatewaySecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubecontrollers.ElasticsearchKubeControllersUserSecret,
+				Name:      entkubecontrollers.ElasticsearchKubeControllersUserSecret,
 				Namespace: h.TruthNamespace(),
 			},
 			Data: map[string][]byte{
-				"username": []byte(kubecontrollers.ElasticsearchKubeControllersUserName),
+				"username": []byte(entkubecontrollers.ElasticsearchKubeControllersUserName),
 				"password": []byte(password),
 			},
 		}
@@ -67,34 +68,34 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 		return nil, nil, nil, err
 	}
 
-	kubeControllersVerificationSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, h.InstallNamespace())
+	kubeControllersVerificationSecret, err := utils.GetSecret(ctx, cli, entkubecontrollers.ElasticsearchKubeControllersVerificationUserSecret, h.InstallNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if kubeControllersVerificationSecret == nil {
 		kubeControllersVerificationSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubecontrollers.ElasticsearchKubeControllersVerificationUserSecret,
+				Name:      entkubecontrollers.ElasticsearchKubeControllersVerificationUserSecret,
 				Namespace: h.InstallNamespace(),
 				Labels: map[string]string{
 					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
 				},
 			},
 			Data: map[string][]byte{
-				"username": []byte(kubecontrollers.ElasticsearchKubeControllersUserName),
+				"username": []byte(entkubecontrollers.ElasticsearchKubeControllersUserName),
 				"password": hashedPassword,
 			},
 		}
 	}
 
-	kubeControllersSecureUserSecret, err := utils.GetSecret(ctx, cli, kubecontrollers.ElasticsearchKubeControllersSecureUserSecret, h.InstallNamespace())
+	kubeControllersSecureUserSecret, err := utils.GetSecret(ctx, cli, entkubecontrollers.ElasticsearchKubeControllersSecureUserSecret, h.InstallNamespace())
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if kubeControllersSecureUserSecret == nil {
 		kubeControllersSecureUserSecret = &corev1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      kubecontrollers.ElasticsearchKubeControllersSecureUserSecret,
+				Name:      entkubecontrollers.ElasticsearchKubeControllersSecureUserSecret,
 				Namespace: h.InstallNamespace(),
 				Labels: map[string]string{
 					ESGatewaySelectorLabel: ESGatewaySelectorLabelValue,
@@ -108,6 +109,18 @@ func CreateKubeControllersSecrets(ctx context.Context, esAdminUserSecret *corev1
 	}
 
 	return kubeControllersGatewaySecret, kubeControllersVerificationSecret, kubeControllersSecureUserSecret, nil
+}
+
+// KibanaEnabled returns true if Kibana should be enabled based on the LogStorage spec and multi-tenancy mode.
+func KibanaEnabled(ls *operatorv1.LogStorage, multiTenant bool) bool {
+	if multiTenant {
+		return false
+	}
+	if ls.Spec.Kibana != nil && ls.Spec.Kibana.Spec != nil &&
+		ls.Spec.Kibana.Spec.Replicas != nil && *ls.Spec.Kibana.Spec.Replicas == 0 {
+		return false
+	}
+	return true
 }
 
 func CalculateFlowShards(nodesSpecifications *operatorv1.Nodes, defaultShards int) int {

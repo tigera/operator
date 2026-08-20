@@ -59,9 +59,3 @@ func (v *VersionInfo) ProvidesCertV1API() bool {
 	}
 	return false
 }
-
-// ProvidesMutatingAdmissionPolicyV1Beta1 returns if admissionregistration.k8s.io/v1beta1 MutatingAdmissionPolicy
-// is supported given the current k8s version (introduced in k8s 1.32).
-func (v *VersionInfo) ProvidesMutatingAdmissionPolicyV1Beta1() bool {
-	return v != nil && (v.Major > 1 || (v.Major == 1 && v.Minor >= 32))
-}

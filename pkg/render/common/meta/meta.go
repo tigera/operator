@@ -27,6 +27,8 @@ import (
 type OSType string
 
 const (
+	DefaultCertificateDuration = 825 * 24 * time.Hour
+
 	OSTypeAny     OSType = "any"
 	OSTypeLinux   OSType = "linux"
 	OSTypeWindows OSType = "windows"
@@ -66,6 +68,42 @@ var (
 		Operator: corev1.TolerationOpEqual,
 		Value:    "arm64",
 		Effect:   corev1.TaintEffectNoSchedule,
+	}
+
+	// TolerateBootstrap is the toleration set used by host-networked Deployments
+	// that must be schedulable during cluster bootstrap (before the CNI is up and
+	// before the cloud provider has initialized the node), but which should
+	// otherwise respect node cordoning. Unlike TolerateAll, this set deliberately
+	// omits a blanket NoSchedule toleration so that the Kubernetes-added
+	// node.kubernetes.io/unschedulable taint applied by `kubectl cordon` takes
+	// effect.
+	TolerateBootstrap = []corev1.Toleration{
+		TolerateCriticalAddonsOnly,
+		{
+			Key:      "node-role.kubernetes.io/master",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+		{
+			Key:      "node-role.kubernetes.io/control-plane",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+		{
+			Key:      "node.kubernetes.io/not-ready",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+		{
+			Key:      "node.kubernetes.io/network-unavailable",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
+		{
+			Key:      "node.cloudprovider.kubernetes.io/uninitialized",
+			Operator: corev1.TolerationOpExists,
+			Effect:   corev1.TaintEffectNoSchedule,
+		},
 	}
 
 	// TolerateAll returns tolerations to tolerate all taints. When used, it is not necessary

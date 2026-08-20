@@ -17,6 +17,7 @@ package render
 import (
 	"crypto/x509"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 
@@ -40,6 +41,7 @@ import (
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/podaffinity"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
@@ -75,6 +77,7 @@ const (
 	ManagerTLSSecretName         = "manager-tls"
 	ManagerInternalTLSSecretName = "internal-manager-tls"
 	ManagerPolicyName            = networkpolicy.CalicoComponentPolicyPrefix + "manager-access"
+	ManagerPortName              = "https"
 
 	// The name of the TLS certificate used by Voltron to authenticate connections from managed
 	// cluster clients talking to Linseed.
@@ -87,9 +90,6 @@ const (
 	ManagerClusterSettingsLayerTigera = "cluster-settings.layer.tigera-infrastructure"
 	ManagerClusterSettingsViewDefault = "cluster-settings.view.default"
 
-	ElasticsearchManagerUserSecret                                      = "calico-ee-manager-elasticsearch-access"
-	TlsSecretHashAnnotation                                             = "hash.operator.tigera.io/tls-secret"
-	KibanaTLSHashAnnotation                                             = "hash.operator.tigera.io/kibana-secrets"
 	ElasticsearchUserHashAnnotation                                     = "hash.operator.tigera.io/elasticsearch-user"
 	ManagerMultiTenantManagedClustersAccessClusterRoleBindingName       = "calico-manager-managed-cluster-access"
 	LegacyManagerMultiTenantManagedClustersAccessClusterRoleBindingName = "tigera-manager-managed-cluster-access"
@@ -110,6 +110,12 @@ const (
 	DashboardAPIPort         = "8444"
 	DashboardAPIHealthPort   = "8090"
 	DashboardAPIName         = "calico-dashboard-api"
+
+	// VoltronAdditionalTunnelSecretName is the name of an optional, pre-provisioned secret
+	// in the truth namespace that holds an additional CA used by Voltron for tunnel server
+	// certificates. When the secret is present the manager controller wires it into the
+	// Voltron deployment. It is managed out-of-band; the operator only consumes it.
+	VoltronAdditionalTunnelSecretName = "calico-management-additional-cluster-connection"
 )
 
 // Manager returns a component for rendering namespaced manager resources.
@@ -138,6 +144,9 @@ func Manager(cfg *ManagerConfiguration) (Component, error) {
 	tlsAnnotations[cfg.InternalTLSKeyPair.HashAnnotationKey()] = cfg.InternalTLSKeyPair.HashAnnotationValue()
 	if cfg.ManagementCluster != nil {
 		tlsAnnotations[cfg.TunnelServerCert.HashAnnotationKey()] = cfg.TunnelServerCert.HashAnnotationValue()
+		if cfg.AdditionalTunnelServerCert != nil {
+			tlsAnnotations[cfg.AdditionalTunnelServerCert.HashAnnotationKey()] = cfg.AdditionalTunnelServerCert.HashAnnotationValue()
+		}
 	}
 
 	return &managerComponent{
@@ -169,6 +178,12 @@ type ManagerConfiguration struct {
 	// KeyPair used by Voltron as the server certificate when establishing an mTLS tunnel with Guardian.
 	TunnelServerCert certificatemanagement.KeyPairInterface
 
+	// AdditionalTunnelServerCert is an optional additional CA used by Voltron for tunnel server
+	// certificates. It is populated by the manager controller when a pre-provisioned secret named
+	// VoltronAdditionalTunnelSecretName exists in the truth namespace, and is mounted into the
+	// Voltron container so Voltron can serve TLS from it.
+	AdditionalTunnelServerCert certificatemanagement.KeyPairInterface
+
 	// TLS KeyPair used by both Voltron and ui-apis, presented by each as part of the mTLS handshake with
 	// other services within the cluster. This is used in both management and standalone clusters.
 	InternalTLSKeyPair certificatemanagement.KeyPairInterface
@@ -177,12 +192,9 @@ type ManagerConfiguration struct {
 	// by clients as part of mTLS authentication.
 	TrustedCertBundle certificatemanagement.TrustedBundleRO
 
-	ClusterDomain           string
-	ESLicenseType           ElasticsearchLicenseType
-	Replicas                *int32
-	Compliance              *operatorv1.Compliance
-	ComplianceLicenseActive bool
-	ComplianceNamespace     string
+	ClusterDomain string
+	ESLicenseType ElasticsearchLicenseType
+	Replicas      *int32
 
 	Namespace      string
 	TruthNamespace string
@@ -198,7 +210,25 @@ type ManagerConfiguration struct {
 	Tenant          *operatorv1.Tenant
 	ExternalElastic bool
 
-	Manager *operatorv1.Manager
+	Manager        *operatorv1.Manager
+	Authentication *operatorv1.Authentication
+	KibanaEnabled  bool
+
+	// RBACManagementEnabled reports whether to render the RBAC management UI access.
+	// The controller has already applied the variant, the admin's gate and tenancy.
+	RBACManagementEnabled bool
+
+	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
+	// Passed to Voltron so it can identify the correct CA issuer public key.
+	CACertCommonName string
+
+	// Cloud indicates the manager is being rendered for a Calico Cloud install. When false (regular
+	// Calico/Calico Enterprise) all cloud decorations below are inert and CloudResources is ignored.
+	Cloud bool
+
+	// CloudResources holds Calico Cloud specific manager/voltron customizations. Only consumed when
+	// Cloud is true.
+	CloudResources ManagerCloudResources
 }
 
 type managerComponent struct {
@@ -206,8 +236,7 @@ type managerComponent struct {
 	tlsSecrets     []*corev1.Secret
 	tlsAnnotations map[string]string
 	managerImage   string
-	voltronImage   string
-	uiAPIsImage    string
+	calicoImage    string
 }
 
 func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
@@ -215,18 +244,14 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
 	errMsgs := []string{}
+
+	c.managerImage, err = components.GetReference(components.ComponentManager, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.voltronImage, err = components.GetReference(components.ComponentManagerProxy, reg, path, prefix, is)
-	if err != nil {
-		errMsgs = append(errMsgs, err.Error())
-	}
-
-	c.uiAPIsImage, err = components.GetReference(components.ComponentUIAPIs, reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -234,6 +259,10 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	if len(errMsgs) != 0 {
 		return fmt.Errorf("%s", strings.Join(errMsgs, ","))
 	}
+
+	// run cloud image customizations (no-op when not in cloud mode)
+	c.resolveCloudImages()
+
 	return nil
 }
 
@@ -249,10 +278,10 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 		// For multi-tenant environments, the management cluster itself isn't shown in the UI so we only need to create these
 		// when there is no tenant.
 		objsToCreate = append(objsToCreate,
-			managerClusterWideSettingsGroup(),
-			managerUserSpecificSettingsGroup(),
-			managerClusterWideTigeraLayer(),
-			managerClusterWideDefaultView(),
+			ManagerClusterWideSettingsGroup(),
+			ManagerUserSpecificSettingsGroup(),
+			ManagerClusterWideTigeraLayer(),
+			ManagerClusterWideDefaultView(),
 		)
 		// Continue to create the legacy namespace so that we can create our external name service that points to the new
 		// manager service. This will help ease transition for customers and avoid outages caused by the name and namespace
@@ -264,19 +293,31 @@ func (c *managerComponent) Objects() ([]client.Object, []client.Object) {
 
 	objsToCreate = append(objsToCreate,
 		managerClusterRoleBinding(c.cfg.Tenant, c.cfg.BindingNamespaces, c.cfg.OSSTenantNamespaces),
-		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant),
+		managerClusterRole(false, c.cfg.Installation.KubernetesProvider, c.cfg.Tenant, c.cfg.RBACManagementEnabled),
 		c.managedClustersWatchRoleBinding(),
 	)
 	objsToCreate = append(objsToCreate, c.managedClustersUpdateRBAC()...)
+	if c.cfg.RBACManagementEnabled {
+		objsToCreate = append(objsToCreate, c.rbacManagementUINamespacedRole()...)
+	}
 	if c.cfg.Tenant.MultiTenant() {
 		objsToCreate = append(objsToCreate, c.multiTenantManagedClustersAccess()...)
 	}
 
 	objsToCreate = append(objsToCreate,
 		c.managerCalicoSystemNetworkPolicy(),
-		networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace),
 		managerServiceAccount(c.cfg.Namespace),
 	)
+	// The default-deny policy in calico-system is owned by the Installation
+	// controller, which uses a selector that excludes calico-apiserver so the
+	// API server remains reachable. Skip rendering it here when the Manager is
+	// being installed into calico-system (single-tenant), otherwise the two
+	// controllers fight over the policy's selector. In multi-tenant mode the
+	// Manager lives in a tenant namespace that Installation doesn't manage, so
+	// the Manager is responsible for the default-deny there.
+	if c.cfg.Namespace != common.CalicoNamespace {
+		objsToCreate = append(objsToCreate, networkpolicy.CalicoSystemDefaultDeny(c.cfg.Namespace))
+	}
 	objsToCreate = append(objsToCreate, c.getTLSObjects()...)
 	objsToCreate = append(objsToCreate, c.managerService())
 	objsToCreate = append(objsToCreate, c.managerExternalNameService())
@@ -322,7 +363,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 		initContainers = append(initContainers, c.cfg.VoltronLinseedKeyPair.InitContainer(ManagerNamespace, securitycontext.NewNonRootContext()))
 	}
 
-	managerPodContainers := []corev1.Container{c.managerUIAPIsContainer(), c.voltronContainer()}
+	managerPodContainers := []corev1.Container{c.decorateCloudUIAPIsContainer(c.managerUIAPIsContainer()), c.decorateCloudVoltronContainer(c.voltronContainer())}
 	if c.cfg.Tenant == nil {
 		managerPodContainers = append(managerPodContainers, c.dashboardContainer(), c.managerContainer())
 	}
@@ -365,7 +406,7 @@ func (c *managerComponent) managerDeployment() *appsv1.Deployment {
 			Strategy: appsv1.DeploymentStrategy{
 				Type: appsv1.RecreateDeploymentStrategyType,
 			},
-			Template: *podTemplate,
+			Template: c.decorateCloudDeploymentSpec(*podTemplate),
 		},
 	}
 
@@ -397,6 +438,9 @@ func (c *managerComponent) managerVolumes() []corev1.Volume {
 			c.cfg.TunnelServerCert.Volume(),
 			c.cfg.VoltronLinseedKeyPair.Volume(),
 		)
+		if c.cfg.AdditionalTunnelServerCert != nil {
+			v = append(v, c.cfg.AdditionalTunnelServerCert.Volume())
+		}
 	}
 	if c.cfg.KeyValidatorConfig != nil {
 		v = append(v, c.cfg.KeyValidatorConfig.RequiredVolumes()...)
@@ -456,7 +500,6 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 	envs := []corev1.EnvVar{
 		// TODO: Prometheus URL will need to change.
 		{Name: "CNX_PROMETHEUS_API_URL", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/calico-node-prometheus:9090/proxy/api/v1", common.TigeraPrometheusNamespace)},
-		{Name: "CNX_COMPLIANCE_REPORTS_API_URL", Value: "/compliance/reports"},
 		{Name: "CNX_QUERY_API_URL", Value: "/api/v1/namespaces/calico-system/services/https:calico-api:8080/proxy"},
 		{Name: "DASHBOARD_API_URL", Value: "/dashboards"},
 		{Name: "CNX_ELASTICSEARCH_API_URL", Value: "/tigera-elasticsearch"},
@@ -466,10 +509,11 @@ func (c *managerComponent) managerEnvVars() []corev1.EnvVar {
 		{Name: "CNX_CLUSTER_NAME", Value: "cluster"},
 		{Name: "CNX_POLICY_RECOMMENDATION_SUPPORT", Value: "true"},
 		{Name: "ENABLE_MULTI_CLUSTER_MANAGEMENT", Value: strconv.FormatBool(c.cfg.ManagementCluster != nil)},
-		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(!c.cfg.Tenant.MultiTenant())},
+		{Name: "ENABLE_KIBANA", Value: strconv.FormatBool(c.cfg.KibanaEnabled)},
 	}
 
 	envs = append(envs, c.managerOAuth2EnvVars()...)
+	envs = c.setManagerCloudEnvs(envs)
 	return envs
 }
 
@@ -478,7 +522,6 @@ func (c *managerComponent) managerContainer() corev1.Container {
 	return corev1.Container{
 		Name:            ManagerName,
 		Image:           c.managerImage,
-		ImagePullPolicy: ImagePullPolicy(),
 		Env:             c.managerEnvVars(),
 		LivenessProbe:   c.managerProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
@@ -504,6 +547,9 @@ func (c *managerComponent) managerOAuth2EnvVars() []corev1.EnvVar {
 		case *tigerakvc.KeyValidatorConfig:
 			envs = append(envs, corev1.EnvVar{Name: "CNX_WEB_OIDC_AUTHORITY", Value: ""})
 		}
+
+		// Apply cloud-only OIDC workarounds (no-op for non-cloud installs).
+		envs = c.decorateCloudOAuth2EnvVars(envs)
 	}
 	return envs
 }
@@ -533,15 +579,18 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	env := []corev1.EnvVar{
 		{Name: "VOLTRON_PORT", Value: defaultVoltronPort},
-		{Name: "VOLTRON_COMPLIANCE_ENDPOINT", Value: fmt.Sprintf("https://compliance.%s.svc.%s", c.cfg.ComplianceNamespace, c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_LOGLEVEL", Value: "Info"},
 		{Name: "VOLTRON_KIBANA_ENDPOINT", Value: rkibana.HTTPSEndpoint(c.SupportedOSType(), c.cfg.ClusterDomain)},
 		{Name: "VOLTRON_KIBANA_BASE_PATH", Value: fmt.Sprintf("/%s/", KibanaBasePath)},
 		{Name: "VOLTRON_KIBANA_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PACKET_CAPTURE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_PROMETHEUS_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
-		{Name: "VOLTRON_COMPLIANCE_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_DEX_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
+		// Voltron verifies the in-cluster fluent-bit http input (non-cluster-host
+		// log ingestion) against the same trusted bundle. Without this the config
+		// default (/etc/pki/tls/certs/ca.crt) is used, which is not mounted, so the
+		// mTLS handshake to calico-fluent-bit-http-input fails.
+		{Name: "VOLTRON_LOG_COLLECTOR_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
 		{Name: "VOLTRON_QUERYSERVER_ENDPOINT", Value: fmt.Sprintf("https://%s.%s.svc:%d", QueryserverServiceName, QueryserverNamespace, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_BASE_PATH", Value: fmt.Sprintf("/api/v1/namespaces/%s/services/https:%s:%d/proxy/", QueryserverNamespace, QueryserverServiceName, QueryServerPort)},
 		{Name: "VOLTRON_QUERYSERVER_CA_BUNDLE_PATH", Value: c.cfg.TrustedCertBundle.MountPath()},
@@ -555,7 +604,6 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		{Name: "VOLTRON_ENABLE_NONCLUSTER_HOST", Value: strconv.FormatBool(c.cfg.NonClusterHost != nil)},
 		{Name: "VOLTRON_TUNNEL_PORT", Value: defaultTunnelVoltronPort},
 		{Name: "VOLTRON_DEFAULT_FORWARD_SERVER", Value: defaultForwardServer},
-		{Name: "VOLTRON_ENABLE_COMPLIANCE", Value: strconv.FormatBool(c.cfg.ComplianceLicenseActive)},
 	}
 
 	if c.cfg.VoltronRouteConfig != nil {
@@ -566,6 +614,19 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_USE_HTTPS_CERT_ON_TUNNEL", Value: strconv.FormatBool(c.cfg.ManagementCluster.Spec.TLS != nil && c.cfg.ManagementCluster.Spec.TLS.SecretName == ManagerTLSSecretName)})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_KEY", Value: linseedKeyPath})
 		env = append(env, corev1.EnvVar{Name: "VOLTRON_LINSEED_SERVER_CERT", Value: linseedCertPath})
+		if c.cfg.AdditionalTunnelServerCert != nil {
+			// Voltron scans a single parent directory for additional cert/key pairs. Each
+			// cert/key pair is mounted into its own subdirectory so multiple can coexist.
+			// The tls.crt from each pair is also used as an additional CA to verify
+			// client (guardian) connections.
+			env = append(env,
+				corev1.EnvVar{Name: "VOLTRON_ADDITIONAL_CERT_KEY_PAIRS_PATH", Value: "/additional-tunnel-certificates"},
+			)
+		}
+	}
+
+	if c.cfg.CACertCommonName != "" {
+		env = append(env, corev1.EnvVar{Name: "VOLTRON_CA_SIGNER_NAME", Value: c.cfg.CACertCommonName})
 	}
 
 	if c.cfg.KeyValidatorConfig != nil {
@@ -582,6 +643,13 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 		if c.cfg.ManagementCluster != nil {
 			mounts = append(mounts, c.cfg.TunnelServerCert.VolumeMount(c.SupportedOSType()))
 			mounts = append(mounts, c.cfg.VoltronLinseedKeyPair.VolumeMount(c.SupportedOSType()))
+			if c.cfg.AdditionalTunnelServerCert != nil {
+				mounts = append(mounts, corev1.VolumeMount{
+					Name:      c.cfg.AdditionalTunnelServerCert.GetName(),
+					MountPath: fmt.Sprintf("/additional-tunnel-certificates/%s", c.cfg.AdditionalTunnelServerCert.GetName()),
+					ReadOnly:  true,
+				})
+			}
 		}
 	}
 
@@ -618,8 +686,8 @@ func (c *managerComponent) voltronContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            VoltronName,
-		Image:           c.voltronImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "voltron"},
 		Env:             env,
 		VolumeMounts:    mounts,
 		LivenessProbe:   c.managerProxyProbe(),
@@ -645,6 +713,10 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 		{Name: "HEALTH_PORT", Value: DashboardAPIHealthPort},
 	}
 
+	if c.cfg.KeyValidatorConfig != nil {
+		env = append(env, c.cfg.KeyValidatorConfig.RequiredEnv("")...)
+	}
+
 	mounts := append(
 		c.cfg.TrustedCertBundle.VolumeMounts(c.SupportedOSType()),
 		c.cfg.InternalTLSKeyPair.VolumeMount(c.SupportedOSType()),
@@ -652,16 +724,15 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            DashboardAPIName,
-		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
-		Command:         []string{"/usr/bin/dashboard-api"},
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "dashboards"},
 		Env:             env,
 		VolumeMounts:    mounts,
 		SecurityContext: securitycontext.NewNonRootContext(),
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+					Command: []string{components.CalicoBinaryPath, "component", "dashboards", "ready"},
 				},
 			},
 			FailureThreshold:    3,
@@ -673,7 +744,7 @@ func (c *managerComponent) dashboardContainer() corev1.Container {
 		LivenessProbe: &corev1.Probe{
 			ProbeHandler: corev1.ProbeHandler{
 				Exec: &corev1.ExecAction{
-					Command: []string{"/usr/bin/dashboard-api", "-ready"},
+					Command: []string{components.CalicoBinaryPath, "component", "dashboards", "ready"},
 				},
 			},
 			FailureThreshold: 3,
@@ -743,8 +814,8 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 
 	return corev1.Container{
 		Name:            UIAPIsName,
-		Image:           c.uiAPIsImage,
-		ImagePullPolicy: ImagePullPolicy(),
+		Image:           c.calicoImage,
+		Command:         []string{components.CalicoBinaryPath, "component", "ui-apis"},
 		LivenessProbe:   c.managerUIAPIsProbe(),
 		SecurityContext: securitycontext.NewNonRootContext(),
 		Env:             env,
@@ -772,6 +843,8 @@ func (c *managerComponent) managerService() *corev1.Service {
 		Spec: corev1.ServiceSpec{
 			Ports: []corev1.ServicePort{
 				{
+					// OpenShift's Ingress→Route conversion requires a named target port.
+					Name:       ManagerPortName,
 					Port:       ManagerPort,
 					Protocol:   corev1.ProtocolTCP,
 					TargetPort: intstr.FromInt(managerTargetPort),
@@ -850,7 +923,7 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 				Rules: []rbacv1.PolicyRule{
 					{
 						APIGroups: []string{"projectcalico.org"},
-						Resources: []string{"managedclusters"},
+						Resources: []string{"managedclusters", "managedclusters/status"},
 						Verbs:     []string{"update"},
 					},
 				},
@@ -881,7 +954,7 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 			Rules: []rbacv1.PolicyRule{
 				{
 					APIGroups: []string{"projectcalico.org"},
-					Resources: []string{"managedclusters"},
+					Resources: []string{"managedclusters", "managedclusters/status"},
 					Verbs:     []string{"update"},
 				},
 			},
@@ -906,7 +979,8 @@ func (c *managerComponent) managedClustersUpdateRBAC() []client.Object {
 }
 
 // managerClusterRole returns a clusterrole that allows authn/authz review requests.
-func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant) *rbacv1.ClusterRole {
+// When rbacManagementEnabled is true it also carries the RBAC management UI rules.
+func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provider, tenant *operatorv1.Tenant, rbacManagementEnabled bool) *rbacv1.ClusterRole {
 	// Different tenant types use different permission sets.
 	name := ManagerClusterRole
 	if tenant.ManagedClusterIsCalico() {
@@ -941,10 +1015,38 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
 					"stagedkubernetesnetworkpolicies",
-					"uisettings",
-					"uisettingsgroups",
 				},
 				Verbs: []string{"list"},
+			},
+			{
+				// ui-apis needs read access to UISettings and UISettingsGroups to serve
+				// requests on behalf of users. It performs SubjectAccessReviews to enforce
+				// per-group RBAC before returning results.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{
+					"uisettings",
+					"uisettingsgroups",
+					"uisettingsgroups/data",
+				},
+				Verbs: []string{"get", "list", "watch"},
+			},
+			{
+				// Delete is granted on the leaf UISettings resource (the ui-apis DELETE
+				// handler issues this call with its own SA token after the cloud security
+				// fix moved writes off user impersonation). The aggregated apiserver
+				// gates leaf writes on the uisettingsgroups/data subresource RBAC, so
+				// delete is granted there too. The bare uisettingsgroups resource is
+				// intentionally omitted — ui-apis never deletes groups themselves.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"uisettings", "uisettingsgroups/data"},
+				Verbs:     []string{"delete"},
+			},
+			{
+				// ClusterInformation read: surfaces the management-cluster version in the UI.
+				// Served by the ui-apis ClusterInformation handler using its own SA token.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"clusterinformations"},
+				Verbs:     []string{"get", "list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -968,11 +1070,14 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				},
 				Verbs: []string{"list"},
 			},
-			// Allow Enterprise Custom Dashboards to access managed clusters
+			// Allow Enterprise Custom Dashboards to access managed clusters. Create/delete
+			// were added when the ui-apis ManagedCluster handler took over CRUD with its
+			// own SA token (replacing the impersonated /apis/.../managedclusters proxy).
+			// Update is granted separately via managedClustersUpdateRBAC().
 			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"managedclusters"},
-				Verbs:     []string{"get", "list", "watch"},
+				Verbs:     []string{"get", "list", "watch", "create", "delete"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
@@ -1057,8 +1162,11 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 					"l7flows",
 					"l7logs",
 					"l7logs-multi-cluster",
+					"waflogs",
+					"waflogs-multi-cluster",
 					"events",
 					"processes",
+					"policyactivity",
 				},
 				Verbs: []string{"get"},
 			},
@@ -1077,14 +1185,12 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Resources: []string{"clusterroles", "clusterrolebindings", "roles", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch"},
 			},
-			{
-				// Required by the AuthorizationReview calculator in ui-apis to evaluate
-				// RBAC permissions for UISettingsGroups.
-				APIGroups: []string{"projectcalico.org"},
-				Resources: []string{"uisettingsgroups"},
-				Verbs:     []string{"list"},
-			},
 		},
+	}
+
+	// Keep in sync with the rbacManagementUINamespacedRole gate.
+	if rbacManagementEnabled {
+		cr.Rules = append(cr.Rules, rbacManagementUIRules()...)
 	}
 
 	if tenant.MultiTenant() {
@@ -1119,6 +1225,78 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 	}
 
 	return cr
+}
+
+// rbacManagementUIRules returns the cluster-scoped rules the RBAC management
+// UI adds to calico-manager-role. Named-resource access is scoped separately
+// on rbacManagementUINamespacedRole.
+func rbacManagementUIRules() []rbacv1.PolicyRule {
+	return []rbacv1.PolicyRule{
+		{
+			// Lets ui-apis read the Compliance CR (the operator singleton) so the
+			// UI can tell whether compliance is installed before offering
+			// compliance-scoped RBAC.
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"compliances"},
+			Verbs:     []string{"get"},
+		},
+	}
+}
+
+// rbacManagementUINamespacedRole returns the Role + RoleBinding that scopes
+// the RBAC management UI's Secret/ConfigMap access to calico-system, where
+// tigera-idp-groups and tigera-idp-ldap-config live.
+func (c *managerComponent) rbacManagementUINamespacedRole() []client.Object {
+	return []client.Object{
+		&rbacv1.Role{
+			TypeMeta:   metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
+			Rules: []rbacv1.PolicyRule{
+				{
+					// create cannot be restricted by resource name, so it is scoped to
+					// this namespace instead.
+					APIGroups: []string{""},
+					Resources: []string{"configmaps", "secrets"},
+					Verbs:     []string{"create"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"secrets"},
+					ResourceNames: []string{rbacmanagement.LDAPConfigSecretName},
+					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+				},
+				{
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{rbacmanagement.GroupsConfigMapName},
+					Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+				},
+				{
+					// The gate ui-apis watches; read-only, the value is the admin's.
+					APIGroups:     []string{""},
+					Resources:     []string{"configmaps"},
+					ResourceNames: []string{rbacmanagement.ConfigMapName},
+					Verbs:         []string{"get", "list", "watch"},
+				},
+			},
+		},
+		&rbacv1.RoleBinding{
+			TypeMeta:   metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+			ObjectMeta: metav1.ObjectMeta{Name: ManagerClusterRole, Namespace: common.CalicoNamespace},
+			RoleRef: rbacv1.RoleRef{
+				APIGroup: "rbac.authorization.k8s.io",
+				Kind:     "Role",
+				Name:     ManagerClusterRole,
+			},
+			Subjects: []rbacv1.Subject{
+				{
+					Kind:      "ServiceAccount",
+					Name:      ManagerServiceAccount,
+					Namespace: c.cfg.Namespace,
+				},
+			},
+		},
+	}
 }
 
 func (c *managerComponent) getTLSObjects() []client.Object {
@@ -1159,11 +1337,6 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,
-			Destination: networkpolicyHelper.ComplianceServerEntityRule(),
-		},
-		{
-			Action:      v3.Allow,
-			Protocol:    &networkpolicy.TCPProtocol,
 			Destination: DexEntityRule,
 		},
 		{
@@ -1185,9 +1358,36 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 			Destination: v3.EntityRule{
 				Services: &v3.ServiceMatch{
 					Namespace: LogCollectorNamespace,
-					Name:      FluentdInputService,
+					Name:      FluentBitInputService,
 				},
 			},
+		})
+	}
+
+	if c.cfg.RBACManagementEnabled &&
+		c.cfg.Authentication != nil && c.cfg.Authentication.Spec.LDAP != nil {
+		// LDAP/AD egress (389, 636) for the RBAC-UI directory sync, gated on LDAP
+		// being configured on the Authentication CR. The destination is scoped to
+		// Authentication.spec.ldap.host — a domain match for a hostname or a
+		// /32/128 for a literal IP. Both standard ports stay open (the host may
+		// specify a non-standard port; scoping the port too would risk denying a
+		// valid config), so only the host is narrowed.
+		dest := v3.EntityRule{Ports: networkpolicy.Ports(389, 636)}
+		if host := ldapEgressHost(c.cfg.Authentication.Spec.LDAP.Host); host != "" {
+			if ip := net.ParseIP(host); ip != nil {
+				suffix := "/32"
+				if ip.To4() == nil {
+					suffix = "/128"
+				}
+				dest.Nets = []string{ip.String() + suffix}
+			} else {
+				dest.Domains = []string{host}
+			}
+		}
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: dest,
 		})
 	}
 
@@ -1255,6 +1455,18 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 	}
 }
 
+// ldapEgressHost returns the host (without port) from an
+// Authentication.spec.ldap.host value, used to scope the manager's LDAP egress
+// policy. The value carries an optional port (e.g. "ad.example.com:636"); when
+// no port is present the value is already the host. IPv6 literals are returned
+// unbracketed so the caller can parse them with net.ParseIP.
+func ldapEgressHost(host string) string {
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		return h
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+}
+
 func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 	var objects []client.Object
 
@@ -1284,10 +1496,10 @@ func (c *managerComponent) multiTenantManagedClustersAccess() []client.Object {
 	return objects
 }
 
-// managerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"
+// ManagerClusterWideSettingsGroup returns a UISettingsGroup with the description "cluster-wide settings"
 //
 // Calico Enterprise only
-func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
+func ManagerClusterWideSettingsGroup() *v3.UISettingsGroup {
 	return &v3.UISettingsGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1299,10 +1511,10 @@ func managerClusterWideSettingsGroup() *v3.UISettingsGroup {
 	}
 }
 
-// managerUserSpecificSettingsGroup returns a UISettingsGroup with the description "user settings"
+// ManagerUserSpecificSettingsGroup returns a UISettingsGroup with the description "user settings"
 //
 // Calico Enterprise only
-func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
+func ManagerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 	return &v3.UISettingsGroup{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettingsGroup", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{
@@ -1315,18 +1527,16 @@ func managerUserSpecificSettingsGroup() *v3.UISettingsGroup {
 	}
 }
 
-// managerClusterWideTigeraLayer returns a UISettings layer belonging to the cluster-wide settings group that contains
+// ManagerClusterWideTigeraLayer returns a UISettings layer belonging to the cluster-wide settings group that contains
 // all of the tigera namespaces.
 //
 // Calico Enterprise only
-func managerClusterWideTigeraLayer() *v3.UISettings {
+func ManagerClusterWideTigeraLayer() *v3.UISettings {
 	namespaces := []string{
-		"tigera-compliance",
 		"tigera-dex",
 		"tigera-dpi",
 		"tigera-eck-operator",
 		"tigera-elasticsearch",
-		"tigera-fluentd",
 		"tigera-intrusion-detection",
 		"tigera-kibana",
 		"tigera-manager",
@@ -1365,11 +1575,11 @@ func managerClusterWideTigeraLayer() *v3.UISettings {
 	}
 }
 
-// managerClusterWideDefaultView returns a UISettings view belonging to the cluster-wide settings group that shows
+// ManagerClusterWideDefaultView returns a UISettings view belonging to the cluster-wide settings group that shows
 // everything and uses the tigera-infrastructure layer.
 //
 // Calico Enterprise only
-func managerClusterWideDefaultView() *v3.UISettings {
+func ManagerClusterWideDefaultView() *v3.UISettings {
 	return &v3.UISettings{
 		TypeMeta: metav1.TypeMeta{Kind: "UISettings", APIVersion: "projectcalico.org/v3"},
 		ObjectMeta: metav1.ObjectMeta{

@@ -623,7 +623,7 @@ var _ = Describe("dex rendering tests", func() {
 	})
 })
 
-// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.45.0/cmd/dex/config.go
+// ConfigYAML is a slimmed down version of https://github.com/dexidp/dex/blob/v2.45.1/cmd/dex/config.go
 type ConfigYAML struct {
 	Web           Web             `yaml:"web"`
 	StaticClients []StaticClients `yaml:"staticClients"`

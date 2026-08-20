@@ -58,6 +58,7 @@ func NewTestInitializer(
 		DetectedProvider: provider,
 		ClusterDomain:    clusterDomain,
 		ShutdownContext:  context.TODO(),
+		Variant:          operatorv1.CalicoEnterprise,
 	}
 
 	r := &LogStorageInitializer{
@@ -121,6 +122,8 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			Expect(cli.Create(ctx, &corev1.Secret{ObjectMeta: metav1.ObjectMeta{Name: "tigera-pull-secret", Namespace: common.OperatorNamespace()}})).NotTo(HaveOccurred())
 
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run")
 			mockStatus.On("OnCRFound")
 			mockStatus.On("SetMetaData", mock.Anything)
@@ -508,6 +511,7 @@ var _ = Describe("LogStorage Initializing controller", func() {
 			var dlr int32 = 8
 			var bgp int32 = 8
 			var replicas int32 = render.DefaultElasticsearchReplicas
+			var kibanaReplicas int32 = 1
 			limits := corev1.ResourceList{}
 			requests := corev1.ResourceList{}
 			limits[corev1.ResourceMemory] = resource.MustParse(defaultEckOperatorMemorySetting)
@@ -525,6 +529,11 @@ var _ = Describe("LogStorage Initializing controller", func() {
 				},
 				Indices: &operatorv1.Indices{
 					Replicas: &replicas,
+				},
+				Kibana: &operatorv1.Kibana{
+					Spec: &operatorv1.KibanaSpec{
+						Replicas: &kibanaReplicas,
+					},
 				},
 				StorageClassName: DefaultElasticsearchStorageClass,
 				ComponentResources: []operatorv1.LogStorageComponentResource{

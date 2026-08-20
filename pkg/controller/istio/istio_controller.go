@@ -34,11 +34,13 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/istio/waypoint"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/render/istio"
@@ -88,6 +90,24 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if err = utils.AddPeriodicReconcile(c, utils.PeriodicReconcileTime, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
+	}
+
+	// The waypoint controller reconciles the per-Gateway state the Istio
+	// feature needs beyond istiod's own rendering. It creates a
+	// tigera-operator-secrets RoleBinding in namespaces that contain
+	// istio-waypoint Gateways — granting the operator permission to manage
+	// secrets there on clusters where its ClusterRole doesn't allow
+	// cluster-wide secret writes — and replicates the Installation pull
+	// secrets into those namespaces, so waypoint pods can pull the Istio proxy
+	// image from a private registry (the imagePullSecrets reference injected
+	// via istiod's global config is namespace-scoped and the secret must exist
+	// in the user namespace). It also deletes the per-class resource sets that istiod
+	// strands when a Gateway's spec.gatewayClassName changes: istiod only
+	// applies the set for the current class and never deletes the previous
+	// class's set, and owner-reference GC only fires when the Gateway itself
+	// is deleted.
+	if err := waypoint.Add(mgr, opts); err != nil {
+		return fmt.Errorf("failed to add waypoint controller: %w", err)
 	}
 
 	return nil
@@ -167,7 +187,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Installation, for k8s provider info.
-	variant, installationSpec, err := utils.GetInstallationSpec(ctx, r)
+	installationSpec, err := utils.GetInstallationSpec(ctx, r)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -177,11 +197,6 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
-	if variant == "" {
-		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for Installation Variant to be set", nil, reqLogger)
-		return reconcile.Result{}, nil
-	}
-
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
@@ -189,7 +204,11 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Kubernetes Gateway API CRDs.
-	essentialCRDs, optionalCRDs := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider)
+	essentialCRDs, optionalCRDs, err := gatewayapi.K8SGatewayAPICRDs(installationSpec.KubernetesProvider, r.scheme)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error rendering gateway API CRDs", err, log)
+		return reconcile.Result{}, err
+	}
 
 	// Check CRDs are present and only create it if not
 	handler := utils.NewComponentHandler(log, r, r.scheme, nil)
@@ -260,20 +279,22 @@ func updateDefaults(istio *operatorv1.Istio) {
 }
 
 func (r *ReconcileIstio) setIstioFelixConfiguration(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
-	// Handle Istio Ambient Mode configuration
-	if err := r.configureIstioAmbientMode(fc, remove); err != nil {
+	ambientChanged, err := r.configureIstioAmbientMode(fc, remove)
+	if err != nil {
 		return false, err
 	}
-
-	// Handle Istio DSCP Mark configuration
-	if err := r.configureIstioDSCPMark(instance, fc, remove); err != nil {
+	dscpChanged, err := r.configureIstioDSCPMark(instance, fc, remove)
+	if err != nil {
 		return false, err
 	}
-
-	return true, nil
+	policySyncChanged, err := r.configurePolicySyncPathPrefix(ctx, instance, fc, remove)
+	if err != nil {
+		return false, err
+	}
+	return ambientChanged || dscpChanged || policySyncChanged, nil
 }
 
-func (r *ReconcileIstio) configureIstioAmbientMode(fc *v3.FelixConfiguration, remove bool) error {
+func (r *ReconcileIstio) configureIstioAmbientMode(fc *v3.FelixConfiguration, remove bool) (bool, error) {
 	var annotationMode *string
 	if fc.Annotations[istio.IstioOperatorAnnotationMode] != "" {
 		value := fc.Annotations[istio.IstioOperatorAnnotationMode]
@@ -285,30 +306,37 @@ func (r *ReconcileIstio) configureIstioAmbientMode(fc *v3.FelixConfiguration, re
 		annotationMode != nil && fc.Spec.IstioAmbientMode != nil && *annotationMode == string(*fc.Spec.IstioAmbientMode)
 
 	if !match {
-		return fmt.Errorf("felixconfig IstioAmbientMode modified by user")
+		return false, fmt.Errorf("felixconfig IstioAmbientMode modified by user")
 	}
 
 	if remove {
+		if annotationMode == nil && fc.Spec.IstioAmbientMode == nil {
+			return false, nil
+		}
 		delete(fc.Annotations, istio.IstioOperatorAnnotationMode)
 		fc.Spec.IstioAmbientMode = nil
-	} else {
-		istioModeDesired := v3.IstioAmbientModeEnabled
-		fc.Spec.IstioAmbientMode = &istioModeDesired
-		if fc.Annotations == nil {
-			fc.Annotations = make(map[string]string)
-		}
-		fc.Annotations[istio.IstioOperatorAnnotationMode] = string(istioModeDesired)
+		return true, nil
 	}
 
-	return nil
+	istioModeDesired := v3.IstioAmbientModeEnabled
+	if fc.Spec.IstioAmbientMode != nil && *fc.Spec.IstioAmbientMode == istioModeDesired &&
+		annotationMode != nil && *annotationMode == string(istioModeDesired) {
+		return false, nil
+	}
+	fc.Spec.IstioAmbientMode = &istioModeDesired
+	if fc.Annotations == nil {
+		fc.Annotations = make(map[string]string)
+	}
+	fc.Annotations[istio.IstioOperatorAnnotationMode] = string(istioModeDesired)
+	return true, nil
 }
 
-func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) error {
+func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
 	var annotationDSCP *numorstring.DSCP
 	if fc.Annotations[istio.IstioOperatorAnnotationDSCP] != "" {
 		value, err := strconv.ParseUint(fc.Annotations[istio.IstioOperatorAnnotationDSCP], 10, 6)
 		if err != nil {
-			return err
+			return false, err
 		}
 		dscp := numorstring.DSCPFromInt(uint8(value))
 		annotationDSCP = &dscp
@@ -319,19 +347,69 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *
 		annotationDSCP != nil && fc.Spec.IstioDSCPMark != nil && annotationDSCP.ToUint8() == fc.Spec.IstioDSCPMark.ToUint8()
 
 	if !match {
-		return fmt.Errorf("felixconfig IstioDSCPMark modified by user")
+		return false, fmt.Errorf("felixconfig IstioDSCPMark modified by user")
 	}
 
 	if remove || instance.Spec.DSCPMark == nil {
+		if annotationDSCP == nil && fc.Spec.IstioDSCPMark == nil {
+			return false, nil
+		}
 		delete(fc.Annotations, istio.IstioOperatorAnnotationDSCP)
 		fc.Spec.IstioDSCPMark = nil
-	} else {
-		istioDSCPMarkDesired := *instance.Spec.DSCPMark
-		fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
-		fc.Annotations[istio.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
+		return true, nil
 	}
 
-	return nil
+	istioDSCPMarkDesired := *instance.Spec.DSCPMark
+	if fc.Spec.IstioDSCPMark != nil && annotationDSCP != nil &&
+		fc.Spec.IstioDSCPMark.ToUint8() == istioDSCPMarkDesired.ToUint8() &&
+		annotationDSCP.ToUint8() == istioDSCPMarkDesired.ToUint8() {
+		return false, nil
+	}
+	fc.Spec.IstioDSCPMark = &istioDSCPMarkDesired
+	if fc.Annotations == nil {
+		fc.Annotations = make(map[string]string)
+	}
+	fc.Annotations[istio.IstioOperatorAnnotationDSCP] = strconv.FormatUint(uint64(istioDSCPMarkDesired.ToUint8()), 10)
+	return true, nil
+}
+
+// configurePolicySyncPathPrefix reconciles FelixConfiguration.policySyncPathPrefix
+// for the Istio side. The L7 ambient waypoint pod's l7-collector sidecar
+// dials Felix's nodeagent socket, which Felix only opens when this field
+// is set. The applicationlayer controller writes this same field for the
+// Dikastes/sidecar/WAF flow; both controllers consult each other's state
+// (via utils.{ApplicationLayerRequiresPolicySync,IstioRequiresPolicySync})
+// so that deleting one CR does not strand the other.
+func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
+	var istioNeeds bool
+	if !remove {
+		// Mirror the renderer gate at pkg/render/istio/istio.go: it reads
+		// installationSpec.Variant (i.e. Installation.Spec.Variant), so the
+		// policy-sync field tracks the renderer's decision to ship the L7
+		// waypoint sidecar even before Status.Variant catches up.
+		installationSpec, err := utils.GetInstallationSpec(ctx, r.Client)
+		if err != nil && !errors.IsNotFound(err) {
+			return false, err
+		}
+		var variant operatorv1.ProductVariant
+		if installationSpec != nil {
+			variant = installationSpec.Variant
+		}
+		istioNeeds = utils.IstioRequiresPolicySync(instance, variant)
+	}
+
+	al, err := eutils.GetApplicationLayer(ctx, r.Client)
+	if err != nil {
+		return false, err
+	}
+	alNeeds := utils.ApplicationLayerRequiresPolicySync(al)
+
+	desired := utils.DesiredPolicySyncPathPrefix(fc.Spec.PolicySyncPathPrefix, alNeeds, istioNeeds)
+	if fc.Spec.PolicySyncPathPrefix == desired {
+		return false, nil
+	}
+	fc.Spec.PolicySyncPathPrefix = desired
+	return true, nil
 }
 
 func (r *ReconcileIstio) maintainFinalizer(ctx context.Context, instance *operatorv1.Istio, reqLogger logr.Logger) (res reconcile.Result, err error, finalized bool) {

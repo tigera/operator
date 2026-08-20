@@ -37,10 +37,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
+	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/logstorage/initializer"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/logstorage/kibana"
@@ -62,13 +65,15 @@ type DashboardsSubController struct {
 	status          status.StatusManager
 	provider        operatorv1.Provider
 	clusterDomain   string
+	variant         operatorv1.ProductVariant
 	multiTenant     bool
 	elasticExternal bool
+	cloud           bool
 	tierWatchReady  *utils.ReadyFlag
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
-	if !opts.EnterpriseCRDExists || opts.MultiTenant {
+	if !opts.Variant.IsEnterprise() || opts.MultiTenant {
 		return nil
 	}
 
@@ -77,10 +82,12 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		scheme:          mgr.GetScheme(),
 		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageDashboards, opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
 		provider:        opts.DetectedProvider,
 		tierWatchReady:  &utils.ReadyFlag{},
 		multiTenant:     opts.MultiTenant,
 		elasticExternal: opts.ElasticExternal,
+		cloud:           opts.Cloud,
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -94,7 +101,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// we should update all tenants whenever one changes. For single-tenant clusters, we can just queue the object.
 	var eventHandler handler.EventHandler = &handler.EnqueueRequestForObject{}
 	if opts.MultiTenant {
-		eventHandler = utils.EnqueueAllTenants(mgr.GetClient())
+		eventHandler = eutils.EnqueueAllTenants(mgr.GetClient())
 	}
 
 	// Configure watches for operator.tigera.io APIs this controller cares about.
@@ -119,7 +126,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	// The namespace(s) we need to monitor depend upon what tenancy mode we're running in.
 	// For single-tenant, everything is installed in the tigera-manager namespace.
 	// Make a helper for determining which namespaces to use based on tenancy mode.
-	helper := utils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
+	helper := eutils.NewNamespaceHelper(opts.MultiTenant, render.ElasticsearchNamespace, "")
 
 	// Watch secrets this controller cares about.
 	secretsToWatch := []string{
@@ -172,7 +179,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 }
 
 func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	helper := utils.NewNamespaceHelper(d.multiTenant, render.ElasticsearchNamespace, request.Namespace)
+	helper := eutils.NewNamespaceHelper(d.multiTenant, render.ElasticsearchNamespace, request.Namespace)
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name, "installNS", helper.InstallNamespace(), "truthNS", helper.TruthNamespace())
 	reqLogger.Info("Reconciling LogStorage - Dashboards")
 
@@ -183,7 +190,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 
 	// When running in multi-tenant mode, we need to install Dashboards in tenant Namespaces.
 	// We use the tenant API to determine the set of namespaces that should have a K8S job that installs dashboards.
-	tenant, _, err := utils.GetTenant(ctx, d.multiTenant, d.client, request.Namespace)
+	tenant, _, err := eutils.GetTenant(ctx, d.multiTenant, d.client, request.Namespace)
 	if errors.IsNotFound(err) {
 		reqLogger.Info("No Tenant in this Namespace, skip")
 		return reconcile.Result{}, nil
@@ -193,7 +200,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Get Installation resource.
-	variant, installationSpec, err := utils.GetInstallationSpec(context.Background(), d.client)
+	installationSpec, err := utils.GetInstallationSpec(context.Background(), d.client)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			d.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -261,7 +268,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	var externalKibanaSecret *corev1.Secret
 	if !d.elasticExternal {
 		// Wait for Elasticsearch to be installed and available.
-		elasticsearch, err := utils.GetElasticsearch(ctx, d.client)
+		elasticsearch, err := esutils.GetElasticsearch(ctx, d.client)
 		if err != nil {
 			d.status.SetDegraded(operatorv1.ResourceReadError, "An error occurred trying to retrieve Elasticsearch", err, reqLogger)
 			return reconcile.Result{}, err
@@ -271,11 +278,21 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	} else {
-		// If we're using an external ES and Kibana, the Tenant resource must specify the Kibana endpoint.
-		if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.KibanaURL == "" {
-			reqLogger.Error(nil, "Kibana URL must be specified for this tenant")
-			d.status.SetDegraded(operatorv1.ResourceValidationError, "Kibana URL must be specified for this tenant", nil, reqLogger)
-			return reconcile.Result{}, nil
+		if d.multiTenant {
+			// The Tenant resource must specify the Kibana endpoint.
+			if tenant == nil || tenant.Spec.Elastic == nil || tenant.Spec.Elastic.KibanaURL == "" {
+				reqLogger.Error(nil, "Kibana URL must be specified for this tenant")
+				d.status.SetDegraded(operatorv1.ResourceValidationError, "Kibana URL must be specified for this tenant", nil, reqLogger)
+				return reconcile.Result{}, nil
+			}
+		} else if d.cloud {
+			// Calico Cloud single-tenant: there is no Tenant CR, so read it from the cloud config map.
+			cloudConfig, err := eutils.GetCloudConfig(ctx, d.client)
+			if err != nil {
+				d.status.SetDegraded(operatorv1.ResourceReadError, "Failed to read cloud config", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+			tenant = eutils.TenantFromCloudConfig(cloudConfig)
 		}
 
 		// Determine the host and port from the URL.
@@ -307,8 +324,7 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// Query the username and password this Dashboards Installer instance should use to authenticate with Elasticsearch.
-	// For multi-tenant systems, credentials are created by the elasticsearch users controller.
-	// For single-tenant system, these are created by es-kube-controllers.
+	// For cloud, credentials are created by the elasticsearch users controller.
 	key = types.NamespacedName{Name: dashboards.ElasticCredentialsSecret, Namespace: helper.InstallNamespace()}
 	credentials := corev1.Secret{}
 	if err = d.client.Get(ctx, key, &credentials); err != nil && !errors.IsNotFound(err) {
@@ -349,10 +365,11 @@ func (d DashboardsSubController) Reconcile(ctx context.Context, request reconcil
 		KibanaPort:                 kibanaPort,
 		ExternalKibanaClientSecret: externalKibanaSecret,
 		Credentials:                []*corev1.Secret{&credentials},
+		KibanaEnabled:              lscommon.KibanaEnabled(logStorage, d.multiTenant),
 	}
 	dashboardsComponent := dashboards.Dashboards(cfg)
 
-	if err := imageset.ApplyImageSet(ctx, d.client, variant, dashboardsComponent); err != nil {
+	if err := imageset.ApplyImageSet(ctx, d.client, d.variant, dashboardsComponent); err != nil {
 		d.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
 	}

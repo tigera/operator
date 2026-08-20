@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/secret"
@@ -181,13 +182,13 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", operatorv1.CalicoEnterprise, readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetAuthentication(ctx, r.client)
+			instance, err := eutils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(1))
@@ -206,13 +207,13 @@ var _ = Describe("authentication controller tests", func() {
 
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
 
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", operatorv1.CalicoEnterprise, readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetAuthentication(ctx, r.client)
+			instance, err := eutils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 			Expect(instance.Status.Conditions).To(HaveLen(0))
 		})
@@ -247,13 +248,13 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", operatorv1.CalicoEnterprise, readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetAuthentication(ctx, r.client)
+			instance, err := eutils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -307,13 +308,13 @@ var _ = Describe("authentication controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, ts)).NotTo(HaveOccurred())
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", operatorv1.CalicoEnterprise, readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{
 				Name:      "authentication",
 				Namespace: "",
 			}})
 			Expect(err).ShouldNot(HaveOccurred())
-			instance, err := utils.GetAuthentication(ctx, r.client)
+			instance, err := eutils.GetAuthentication(ctx, r.client)
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Status.Conditions).To(HaveLen(3))
@@ -352,10 +353,10 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
+			r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", operatorv1.CalicoEnterprise, readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
-			authentication, err := utils.GetAuthentication(ctx, cli)
+			authentication, err := eutils.GetAuthentication(ctx, cli)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Verify all the expected defaults.
@@ -379,7 +380,7 @@ var _ = Describe("authentication controller tests", func() {
 			Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
 
 			// Reconcile
-			r := &ReconcileAuthentication{client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, tierWatchReady: readyFlag, multiTenant: true}
+			r := &ReconcileAuthentication{client: cli, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus, variant: operatorv1.CalicoEnterprise, tierWatchReady: readyFlag, multiTenant: true}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).Should(HaveOccurred())
 		})
@@ -409,6 +410,7 @@ var _ = Describe("authentication controller tests", func() {
 				scheme:         scheme,
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
+				variant:        operatorv1.CalicoEnterprise,
 				tierWatchReady: readyFlag,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -437,7 +439,7 @@ var _ = Describe("authentication controller tests", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/dex", Digest: "sha256:dexhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -447,6 +449,7 @@ var _ = Describe("authentication controller tests", func() {
 				scheme:         scheme,
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
+				variant:        operatorv1.CalicoEnterprise,
 				tierWatchReady: readyFlag,
 			}
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -498,6 +501,7 @@ var _ = Describe("authentication controller tests", func() {
 				scheme:         scheme,
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
+				variant:        operatorv1.CalicoEnterprise,
 				tierWatchReady: readyFlag,
 			}
 		})
@@ -685,6 +689,7 @@ var _ = Describe("authentication controller tests", func() {
 				scheme:         scheme,
 				provider:       operatorv1.ProviderNone,
 				status:         mockStatus,
+				variant:        operatorv1.CalicoEnterprise,
 				tierWatchReady: readyFlag,
 			}
 			_, err = r.Reconcile(ctx, reconcile.Request{})
@@ -769,7 +774,7 @@ var _ = Describe("authentication controller tests", func() {
 		}
 		Expect(cli.Create(ctx, idpSecret)).ToNot(HaveOccurred())
 		Expect(cli.Create(ctx, auth)).ToNot(HaveOccurred())
-		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
+		r := &ReconcileAuthentication{cli, scheme, operatorv1.ProviderNone, mockStatus, "", operatorv1.CalicoEnterprise, readyFlag, false, []*httpproxy.Config{}, metav1.Now()}
 		_, err := r.Reconcile(ctx, reconcile.Request{})
 		if expectReconcilePass {
 			Expect(err).ToNot(HaveOccurred())

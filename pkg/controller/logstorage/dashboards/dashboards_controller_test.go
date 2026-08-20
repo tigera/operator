@@ -72,6 +72,7 @@ func NewDashboardsControllerWithShims(
 		ShutdownContext:  context.TODO(),
 		MultiTenant:      multiTenant,
 		ElasticExternal:  externalElastic,
+		Variant:          operatorv1.CalicoEnterprise,
 	}
 
 	r := &DashboardsSubController{
@@ -79,6 +80,7 @@ func NewDashboardsControllerWithShims(
 		scheme:          scheme,
 		status:          status,
 		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
 		multiTenant:     opts.MultiTenant,
 		elasticExternal: opts.ElasticExternal,
 		tierWatchReady:  &utils.ReadyFlag{},
@@ -151,6 +153,8 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 	Context("Zero tenant", func() {
 		BeforeEach(func() {
 			mockStatus = &status.MockStatus{}
+			mockStatus.On("SetWarning", mock.Anything, mock.Anything).Return().Maybe()
+			mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
 			mockStatus.On("Run").Return()
 			mockStatus.On("AddDaemonsets", mock.Anything)
 			mockStatus.On("AddDeployments", mock.Anything)
@@ -244,7 +248,7 @@ var _ = Describe("LogStorage Dashboards controller", func() {
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
 						{Image: "tigera/intrusion-detection-job-installer", Digest: "sha256:dashboardhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())

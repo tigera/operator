@@ -44,6 +44,13 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		return fmt.Errorf("spec.cni must be defined")
 	}
 
+	// The CNI spec version only applies to the CNI config that the operator
+	// generates, which only exists when using the Calico CNI plugin.
+	if instance.Spec.CNI.SpecVersion != nil && instance.Spec.CNI.Type != operatorv1.PluginCalico {
+		return fmt.Errorf("spec.cni.specVersion is only valid when spec.cni.type is Calico, not %s",
+			instance.Spec.CNI.Type)
+	}
+
 	// Perform validation based on the chosen CNI plugin.
 	// For example, make sure the plugin is supported on the specified k8s provider.
 	switch instance.Spec.CNI.Type {
@@ -139,7 +146,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 	// Verify Calico settings, if specified.
 	if instance.Spec.CalicoNetwork != nil {
 		bpfDataplane := instance.Spec.CalicoNetwork.LinuxDataplane != nil && *instance.Spec.CalicoNetwork.LinuxDataplane == operatorv1.LinuxDataplaneBPF
-		felixClusterRoutingMode := felixProgramsClusterRoutes(instance)
+		felixOwnsIPIPRoutes := felixProgramsIPIPClusterRoutes(instance)
+		felixOwnsNoEncapRoutes := felixProgramsNoEncapClusterRoutes(instance)
 
 		// Perform validation on non-IPPool fields that rely on IP pool configuration. Validation of the IP pools themselves
 		// happens in the IP pool controller.
@@ -168,15 +176,17 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 					// Verify the specified encapsulation type is valid.
 					switch pool.Encapsulation {
 					case operatorv1.EncapsulationIPIP, operatorv1.EncapsulationIPIPCrossSubnet:
-						// In BIRD cluster routing mode, IPIP currently requires BGP to be running in order to program routes.
-						if !felixClusterRoutingMode &&
+						// Unless Felix is the configured owner of the IPIP cluster routes, they are
+						// BIRD's to program, which requires BGP to be running.
+						if !felixOwnsIPIPRoutes &&
 							(instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled) {
 							return fmt.Errorf("with BIRD cluster routing mode, IPIP encapsulation requires that BGP is enabled")
 						}
 					case operatorv1.EncapsulationVXLAN, operatorv1.EncapsulationVXLANCrossSubnet:
 					case operatorv1.EncapsulationNone:
-						// In BIRD cluster routing mode, Unencapsulated currently requires BGP to be running in order to program routes.
-						if !felixClusterRoutingMode &&
+						// Likewise for unencapsulated pools.  Note that clusterRoutingMode
+						// FelixIPIPOnly leaves these with BIRD, so it still needs BGP.
+						if !felixOwnsNoEncapRoutes &&
 							(instance.Spec.CalicoNetwork.BGP == nil || *instance.Spec.CalicoNetwork.BGP == operatorv1.BGPDisabled) {
 							return fmt.Errorf("with BIRD cluster routing mode, unencapsulated IP pools require that BGP is enabled")
 						}
@@ -261,6 +271,12 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		if instance.Spec.CalicoNetwork.ContainerIPForwarding != nil {
 			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
 				return fmt.Errorf("spec.calicoNetwork.containerIPForwarding is supported only for Calico CNI")
+			}
+		}
+
+		if instance.Spec.CalicoNetwork.LinuxPodInterfaceType != nil {
+			if instance.Spec.CNI.Type != operatorv1.PluginCalico {
+				return fmt.Errorf("spec.calicoNetwork.linuxPodInterfaceType is supported only for Calico CNI")
 			}
 		}
 
@@ -408,8 +424,8 @@ func validateCustomResource(instance *operatorv1.Installation) error {
 		}
 	}
 
-	if operatorv1.IsFIPSModeEnabled(instance.Spec.FIPSMode) && instance.Spec.Variant.IsEnterprise() {
-		return fmt.Errorf("installation spec.FIPSMode=%v combined with spec.Variant=%s is not supported", *instance.Spec.FIPSMode, instance.Spec.Variant)
+	if operatorv1.IsFIPSModeEnabled(instance.Spec.FIPSMode) {
+		return fmt.Errorf("installation spec.FIPSMode=%v is not supported; FIPS mode has been removed", *instance.Spec.FIPSMode)
 	}
 
 	if instance.Spec.KubernetesProvider != operatorv1.ProviderAKS && instance.Spec.Azure != nil {

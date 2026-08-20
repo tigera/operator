@@ -509,7 +509,7 @@ var _ = Describe("Test CertificateManagement suite", func() {
 			imageSet, err := imageset.GetImageSet(context.Background(), cli, installation.Variant)
 			Expect(err).NotTo(HaveOccurred())
 			expectedImage, err := components.GetReference(
-				components.ComponentCalicoCSRInitContainer,
+				components.ComponentCalico,
 				installation.Registry,
 				installation.ImagePath,
 				installation.ImagePrefix,

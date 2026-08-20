@@ -24,11 +24,13 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operator "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
@@ -119,12 +121,16 @@ var _ = Describe("windows-controller installation tests", func() {
 
 			// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 			r = ReconcileWindows{
+				ext: testExtensions.Windows(),
+				opts: options.ControllerOptions{
+					Extensions:       testExtensions,
+					DetectedProvider: operator.ProviderNone,
+					Variant:          operator.CalicoEnterprise,
+				},
 				config:               nil, // there is no fake for config
 				client:               c,
 				scheme:               scheme,
-				autoDetectedProvider: operator.ProviderNone,
 				status:               mockStatus,
-				enterpriseCRDsExist:  true,
 				ipamConfigWatchReady: &utils.ReadyFlag{},
 			}
 			r.ipamConfigWatchReady.MarkAsReady()
@@ -155,7 +161,7 @@ var _ = Describe("windows-controller installation tests", func() {
 					},
 				},
 			}
-			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
+			Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.opts.DetectedProvider, r.opts.Variant)).NotTo(HaveOccurred())
 			certificateManager, err := certificatemanager.Create(c, nil, "", common.OperatorNamespace(), certificatemanager.AllowCACreation())
 			Expect(err).NotTo(HaveOccurred())
 			prometheusTLS, err := certificateManager.GetOrCreateKeyPair(c, monitor.PrometheusClientTLSSecretName, common.OperatorNamespace(), []string{monitor.PrometheusClientTLSSecretName})
@@ -194,7 +200,7 @@ var _ = Describe("windows-controller installation tests", func() {
 				cr.Status = operator.InstallationStatus{
 					Variant: operator.Calico,
 				}
-				Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.autoDetectedProvider)).NotTo(HaveOccurred())
+				Expect(updateInstallationWithDefaults(ctx, r.client, cr, r.opts.DetectedProvider, r.opts.Variant)).NotTo(HaveOccurred())
 
 				// Set serviceCIDRs in the installation (required for Calico for Windows)
 				cr.Spec.ServiceCIDRs = []string{"10.96.0.0/12"}
@@ -609,12 +615,16 @@ var _ = Describe("windows-controller installation tests", func() {
 
 					// As the parameters in the client changes, we expect the outcomes of the reconcile loops to change.
 					r = ReconcileWindows{
+						ext: testExtensions.Windows(),
+						opts: options.ControllerOptions{
+							Extensions:       testExtensions,
+							DetectedProvider: operator.ProviderNone,
+							Variant:          operator.CalicoEnterprise,
+						},
 						config:               nil, // there is no fake for config
 						client:               c,
 						scheme:               scheme,
-						autoDetectedProvider: operator.ProviderNone,
 						status:               mockStatus,
-						enterpriseCRDsExist:  true,
 						ipamConfigWatchReady: &utils.ReadyFlag{},
 					}
 					r.ipamConfigWatchReady.MarkAsReady()
@@ -663,7 +673,7 @@ var _ = Describe("windows-controller installation tests", func() {
 							},
 						},
 					}
-					Expect(updateInstallationWithDefaults(ctx, r.client, instance, r.autoDetectedProvider)).NotTo(HaveOccurred())
+					Expect(updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider, r.opts.Variant)).NotTo(HaveOccurred())
 					Expect(c.Create(ctx, instance)).NotTo(HaveOccurred())
 				})
 				AfterEach(func() {
@@ -729,14 +739,8 @@ var _ = Describe("windows-controller installation tests", func() {
 						ObjectMeta: metav1.ObjectMeta{Name: "calico-" + components.CalicoRelease},
 						Spec: operator.ImageSetSpec{
 							Images: []operator.Image{
-								{Image: "calico/kube-controllers", Digest: "sha256:tigerakubecontrollerhash"},
-								{Image: "calico/typha", Digest: "sha256:tigeratyphahash"},
+								{Image: "calico/calico", Digest: "sha256:calicocombinedhash"},
 								{Image: "calico/node", Digest: "sha256:tigeranodehash"},
-								{Image: "calico/cni", Digest: "sha256:tigeracnihash"},
-								{Image: "calico/pod2daemon-flexvol", Digest: "sha256:calicoflexvolhash"},
-								{Image: "calico/key-cert-provisioner", Digest: "sha256:calicocsrinithash"},
-								{Image: "calico/csi", Digest: "sha256:calicocsihash"},
-								{Image: "calico/node-driver-registrar", Digest: "sha256:caliconodedriverregistrarhash"},
 							},
 						},
 					}

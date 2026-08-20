@@ -36,6 +36,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
@@ -88,6 +89,63 @@ var _ = Describe("Component handler tests", func() {
 			ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"},
 		}
 		handler = NewComponentHandler(logf.Log, c, scheme, instance)
+	})
+
+	It("respects NetworkPolicy.ManagePolicies setting in Installation", func() {
+		// Create an Installation resource with networkPolicy.managePolicies: Disabled.
+		disabled := operatorv1.NetworkPolicyManagementDisabled
+		install := &operatorv1.Installation{
+			ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			Spec: operatorv1.InstallationSpec{
+				NetworkPolicy: &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled},
+			},
+		}
+		Expect(c.Create(ctx, install)).To(BeNil())
+
+		// Create a component that returns a NetworkPolicy and a Deployment.
+		np := &v3.NetworkPolicy{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-policy", Namespace: "default"},
+		}
+		dep := &apps.Deployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test-dep", Namespace: "default"},
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{np, dep},
+		}
+
+		// Reconcile the component.
+		err := handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Verify that the Deployment was created, but the NetworkPolicy was not.
+		err = c.Get(ctx, client.ObjectKey{Name: "test-dep", Namespace: "default"}, &apps.Deployment{})
+		Expect(err).To(BeNil())
+
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(errors.IsNotFound(err)).To(BeTrue())
+
+		// Now enable management and reconcile again.
+		enabled := operatorv1.NetworkPolicyManagementEnabled
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &enabled}
+		Expect(c.Update(ctx, install)).To(BeNil())
+
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		// Verify that the NetworkPolicy was created.
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(err).To(BeNil())
+
+		// Now disable management again and verify that the policy is deleted.
+		install.Spec.NetworkPolicy = &operatorv1.NetworkPolicySpec{ManagePolicies: &disabled}
+		Expect(c.Update(ctx, install)).To(BeNil())
+
+		err = handler.CreateOrUpdateOrDelete(ctx, fc, sm)
+		Expect(err).To(BeNil())
+
+		err = c.Get(ctx, client.ObjectKey{Name: "test-policy", Namespace: "default"}, &v3.NetworkPolicy{})
+		Expect(errors.IsNotFound(err)).To(BeTrue())
 	})
 
 	It("adds Owner references when Custom Resource is provided", func() {
@@ -584,6 +642,54 @@ var _ = Describe("Component handler tests", func() {
 		Expect(ns.GetLabels()).To(Equal(expectedLabels))
 	})
 
+	It("skips the per-owner instance and component labels on objects shared by multiple owners", func() {
+		// A shared object is written by more than one controller, each passing its own CR.
+		// The instance and component labels identify the writing CR, so stamping them would
+		// flip the values with every writer and the object would be rewritten on every
+		// reconcile. The writer-independent labels are still applied.
+		sharedRoleBinding := func() *rbacv1.RoleBinding {
+			return &rbacv1.RoleBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "shared-rolebinding",
+					Namespace: "test-namespace",
+					Labels:    map[string]string{common.MultipleOwnersLabel: "true"},
+				},
+			}
+		}
+		fc := &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{sharedRoleBinding()},
+		}
+
+		Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+		rbKey := client.ObjectKey{Namespace: "test-namespace", Name: "shared-rolebinding"}
+		rb := &rbacv1.RoleBinding{}
+		Expect(c.Get(ctx, rbKey, rb)).To(BeNil())
+		Expect(rb.GetLabels()).To(Equal(map[string]string{
+			"app.kubernetes.io/managed-by": "tigera-operator",
+			"app.kubernetes.io/name":       "shared-rolebinding",
+			"app.kubernetes.io/part-of":    "Calico",
+			"k8s-app":                      "shared-rolebinding",
+		}))
+
+		By("leaving an instance label stamped by an earlier writer as it is")
+		rb.Labels["app.kubernetes.io/instance"] = "some-other-owner"
+		Expect(c.Update(ctx, rb)).NotTo(HaveOccurred())
+
+		fc = &fakeComponent{
+			supportedOSType: rmeta.OSTypeLinux,
+			objs:            []client.Object{sharedRoleBinding()},
+		}
+		Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+		rb = &rbacv1.RoleBinding{}
+		Expect(c.Get(ctx, rbKey, rb)).To(BeNil())
+		Expect(rb.GetLabels()).To(HaveKeyWithValue("app.kubernetes.io/instance", "some-other-owner"))
+		Expect(rb.GetLabels()).NotTo(HaveKey("app.kubernetes.io/component"))
+		Expect(rb.GetLabels()).NotTo(HaveKey(common.MultipleOwnersLabel))
+	})
+
 	Context("ensureTLSCiphers", func() {
 		cipher1 := operatorv1.TLS_AES_128_GCM_SHA256
 		cipher2 := operatorv1.TLS_AES_256_GCM_SHA384
@@ -604,7 +710,7 @@ var _ = Describe("Component handler tests", func() {
 					},
 				}
 				Expect(c.Create(ctx, installation)).To(BeNil())
-				Expect(ensureTLSCiphers(ctx, obj, c)).To(BeNil())
+				Expect(ensureTLSCiphers(obj, &installation.Spec)).To(BeNil())
 
 				var containers []corev1.Container
 				switch o := obj.(type) {
@@ -694,7 +800,7 @@ var _ = Describe("Component handler tests", func() {
 		)
 	})
 	DescribeTable("ensuring ImagePullPolicy is set", func(obj client.Object) {
-		modifyPodSpec(obj, setImagePullPolicy)
+		modifyPodSpec(obj, func(p *corev1.PodSpec) { setImagePullPolicy(p, nil) })
 
 		switch o := obj.(type) {
 		case *apps.Deployment:
@@ -742,6 +848,30 @@ var _ = Describe("Component handler tests", func() {
 			},
 		),
 	)
+
+	Describe("setImagePullPolicy", func() {
+		It("fills missing policies with IfNotPresent and leaves explicit policies alone when no policy is configured", func() {
+			ps := &corev1.PodSpec{
+				Containers:     []corev1.Container{{Image: "a"}, {Image: "b", ImagePullPolicy: corev1.PullAlways}},
+				InitContainers: []corev1.Container{{Image: "init"}},
+			}
+			setImagePullPolicy(ps, nil)
+			Expect(ps.Containers[0].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
+			Expect(ps.Containers[1].ImagePullPolicy).To(Equal(corev1.PullAlways), "should not override an explicitly set policy")
+			Expect(ps.InitContainers[0].ImagePullPolicy).To(Equal(corev1.PullIfNotPresent))
+		})
+
+		It("overrides every container's policy when a policy is configured on the Installation", func() {
+			ps := &corev1.PodSpec{
+				Containers:     []corev1.Container{{Image: "a"}, {Image: "b", ImagePullPolicy: corev1.PullAlways}},
+				InitContainers: []corev1.Container{{Image: "init", ImagePullPolicy: corev1.PullAlways}},
+			}
+			setImagePullPolicy(ps, ptr.To(corev1.PullNever))
+			Expect(ps.Containers[0].ImagePullPolicy).To(Equal(corev1.PullNever))
+			Expect(ps.Containers[1].ImagePullPolicy).To(Equal(corev1.PullNever), "configured policy must win over renderer defaults")
+			Expect(ps.InitContainers[0].ImagePullPolicy).To(Equal(corev1.PullNever))
+		})
+	})
 
 	DescribeTable("ensuring os node selectors", func(component render.Component, key client.ObjectKey, obj client.Object, expectedNodeSelectors map[string]string) {
 		Expect(handler.CreateOrUpdateOrDelete(ctx, component, sm)).ShouldNot(HaveOccurred())
@@ -1879,6 +2009,96 @@ var _ = Describe("Component handler tests", func() {
 			Expect(d.Spec.Template.GetLabels()).To(Equal(expectedLabels))
 			Expect(*d.Spec.Selector).To(Equal(expectedSelector))
 		})
+		It("adds the host-networked label to a hostNetwork Deployment pod template", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{HostNetwork: true},
+						},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.GetLabels()).To(HaveKeyWithValue(common.HostNetworkedPodLabel, "true"))
+		})
+		It("does not add the host-networked label to a pod-networked Deployment", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.GetLabels()).NotTo(HaveKey(common.HostNetworkedPodLabel))
+		})
+		It("adds the host-networked label to a hostNetwork DaemonSet pod template", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.DaemonSet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-daemonset",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DaemonSetSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{HostNetwork: true},
+						},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			ds := &apps.DaemonSet{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-daemonset", Namespace: "test-namespace"}, ds)).NotTo(HaveOccurred())
+			Expect(ds.Spec.Template.GetLabels()).To(HaveKeyWithValue(common.HostNetworkedPodLabel, "true"))
+		})
+		It("preserves existing pod template labels alongside the host-networked label", func() {
+			fc := &fakeComponent{
+				supportedOSType: rmeta.OSTypeLinux,
+				objs: []client.Object{&apps.Deployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-deployment",
+						Namespace: "test-namespace",
+					},
+					Spec: apps.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							ObjectMeta: metav1.ObjectMeta{
+								Labels: map[string]string{"existing": "value"},
+							},
+							Spec: corev1.PodSpec{HostNetwork: true},
+						},
+					},
+				}},
+			}
+
+			Expect(handler.CreateOrUpdateOrDelete(ctx, fc, sm)).To(BeNil())
+
+			d := &apps.Deployment{}
+			Expect(c.Get(ctx, client.ObjectKey{Name: "test-deployment", Namespace: "test-namespace"}, d)).NotTo(HaveOccurred())
+			Expect(d.Spec.Template.GetLabels()).To(HaveKeyWithValue("existing", "value"))
+			Expect(d.Spec.Template.GetLabels()).To(HaveKeyWithValue(common.HostNetworkedPodLabel, "true"))
+		})
 		DescribeTable("should sanitize common labels so that they pass regexp validation", func(in string) {
 			Expect(sanitizeLabel(in)).To(MatchRegexp(`(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?`))
 		},
@@ -2042,7 +2262,7 @@ var _ = Describe("Component handler tests", func() {
 			rendered := ds.DeepCopy()
 			rendered.Annotations = nil
 			rendered.SetGroupVersionKind(apps.SchemeGroupVersion.WithKind("DaemonSet"))
-			err := handler.(*componentHandler).createOrUpdateObject(ctx, rendered, rmeta.OSTypeLinux)
+			err := handler.(*componentHandler).createOrUpdateObject(ctx, rendered, rmeta.OSTypeLinux, nil)
 			Expect(stderrors.Is(err, errObjectIgnored)).To(BeTrue())
 		})
 
@@ -2121,16 +2341,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 		}
 
 		It("if Updating a resource conflicts try the update again (retry OK))", func() {
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
+			// Two Get calls are issued up-front to load the InstallationSpec (one for the
+			// Installation, one for the overlay). The conflict retry re-runs the object update
+			// but reuses the already-loaded spec, so it does not refetch it.
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2141,16 +2357,6 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message")),
 			})
 
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2165,20 +2371,16 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
 
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(6))
 		})
 
 		It("if Updating a resource conflicts try the update again (retry fails)", func() {
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
+			// Two Get calls are issued up-front to load the InstallationSpec (one for the
+			// Installation, one for the overlay). The conflict retry re-runs the object update
+			// but reuses the already-loaded spec, so it does not refetch it.
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2195,22 +2397,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				InputMutator: setToDS,
 			})
 			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
-				Method:       "Get",
-				Return:       nil,
-				InputMutator: setToDS,
-			})
-			mc.Info = append(mc.Info, mockReturn{
 				Method: "Update",
 				Return: errors.NewConflict(schema.GroupResource{}, "error name", fmt.Errorf("test error message 2")),
 			})
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
-			Expect(mc.Index).To(Equal(8))
+			Expect(mc.Index).To(Equal(6))
 			Expect(err).NotTo(BeNil())
 		})
 	})
@@ -2246,7 +2438,15 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{baseNP},
 		}
 
+		// Two Get calls are issued up-front to load the InstallationSpec
+		// (one for the Installation, one for the overlay).
+		installationGets := func() {
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+		}
+
 		It("NetworkPolicy updates are omitted if there is no change", func() {
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2255,7 +2455,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(1))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("NetworkPolicy updates are applied if there is a change", func() {
@@ -2267,12 +2467,12 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
 				InputMutator: setToModifiedNP,
 			})
-
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Update",
 				Return:       nil,
@@ -2281,7 +2481,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 
@@ -2302,7 +2502,15 @@ var _ = Describe("Mocked client Component handler tests", func() {
 			objs:            []client.Object{baseTier},
 		}
 
+		// Two Get calls are issued up-front to load the InstallationSpec
+		// (one for the Installation, one for the overlay).
+		installationGets := func() {
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+			mc.Info = append(mc.Info, mockReturn{Method: "Get", Return: nil})
+		}
+
 		It("Tier updates are omitted if there is no change", func() {
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2311,7 +2519,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(1))
+			Expect(mc.Index).To(Equal(3))
 		})
 
 		It("Tier updates are applied if there is a change", func() {
@@ -2324,6 +2532,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 				}
 			}
 
+			installationGets()
 			mc.Info = append(mc.Info, mockReturn{
 				Method:       "Get",
 				Return:       nil,
@@ -2338,7 +2547,7 @@ var _ = Describe("Mocked client Component handler tests", func() {
 
 			err := handler.CreateOrUpdateOrDelete(ctx, fc, nil)
 			Expect(err).To(BeNil())
-			Expect(mc.Index).To(Equal(2))
+			Expect(mc.Index).To(Equal(4))
 		})
 	})
 })

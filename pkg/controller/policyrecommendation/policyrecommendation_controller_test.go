@@ -106,6 +106,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			policyRecScopeWatchReady: &utils.ReadyFlag{},
 			opts: options.ControllerOptions{
 				DetectedProvider: operatorv1.ProviderNone,
+				Variant:          operatorv1.CalicoEnterprise,
 			},
 		}
 
@@ -194,8 +195,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(controller).ToNot(BeNil())
 			Expect(controller.Image).To(Equal(fmt.Sprintf("some.registry.org/%s%s:%s",
 				components.TigeraImagePath,
-				components.ComponentPolicyRecommendation.Image,
-				components.ComponentPolicyRecommendation.Version)))
+				components.ComponentTigeraCalico.Image,
+				components.ComponentTigeraCalico.Version)))
 		})
 
 		It("should use images from imageset", func() {
@@ -203,8 +204,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "enterprise-" + components.EnterpriseRelease},
 				Spec: operatorv1.ImageSetSpec{
 					Images: []operatorv1.Image{
-						{Image: "tigera/policy-recommendation", Digest: "sha256:policyrecommendationcontrollerhash"},
-						{Image: "tigera/key-cert-provisioner", Digest: "sha256:deadbeef0123456789"},
+						{Image: "tigera/calico", Digest: "sha256:policyrecommendationcontrollerhash"},
+						{Image: "tigera/calico", Digest: "sha256:deadbeef0123456789"},
 					},
 				},
 			})).ToNot(HaveOccurred())
@@ -226,7 +227,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(controller.Image).To(Equal(
 				fmt.Sprintf("some.registry.org/%s%s@%s",
 					components.TigeraImagePath,
-					components.ComponentPolicyRecommendation.Image,
+					components.ComponentTigeraCalico.Image,
 					"sha256:policyrecommendationcontrollerhash")))
 		})
 	})
@@ -250,6 +251,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				policyRecScopeWatchReady: readyFlag,
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 		})
@@ -520,6 +522,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				policyRecScopeWatchReady: &utils.ReadyFlag{},
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderNone,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 
@@ -541,8 +544,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(prs.ObjectMeta.Name).To(Equal("default"))
 
 			// Verify the values of the created PolicyRecommendationScope object.
-			Expect(prs.Spec.NamespaceSpec.RecStatus).To(Equal(v3.PolicyRecommendationScopeDisabled))
-			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-')"))
+			Expect(prs.Spec.NamespaceSpec.RecStatus).To(Equal(v3.PolicyRecommendationDisabled))
+			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(kubernetes.io/metadata.name starts with 'tigera-') && !(kubernetes.io/metadata.name starts with 'calico-') && !(kubernetes.io/metadata.name starts with 'kube-')"))
 		})
 
 		It("should create default PolicyRecommendationScope for openshift", func() {
@@ -558,6 +561,7 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 				// Set the provider to OpenShift.
 				opts: options.ControllerOptions{
 					DetectedProvider: operatorv1.ProviderOpenShift,
+					Variant:          operatorv1.CalicoEnterprise,
 				},
 			}
 
@@ -579,8 +583,8 @@ var _ = Describe("PolicyRecommendation controller tests", func() {
 			Expect(prs.ObjectMeta.Name).To(Equal("default"))
 
 			// Verify the values of the created PolicyRecommendationScope object.
-			Expect(prs.Spec.NamespaceSpec.RecStatus).To(Equal(v3.PolicyRecommendationScopeDisabled))
-			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(projectcalico.org/name starts with 'tigera-') && !(projectcalico.org/name starts with 'calico-') && !(projectcalico.org/name starts with 'kube-') && !(projectcalico.org/name starts with 'openshift-')"))
+			Expect(prs.Spec.NamespaceSpec.RecStatus).To(Equal(v3.PolicyRecommendationDisabled))
+			Expect(prs.Spec.NamespaceSpec.Selector).To(Equal("!(kubernetes.io/metadata.name starts with 'tigera-') && !(kubernetes.io/metadata.name starts with 'calico-') && !(kubernetes.io/metadata.name starts with 'kube-') && !(kubernetes.io/metadata.name starts with 'openshift-')"))
 		})
 	})
 })

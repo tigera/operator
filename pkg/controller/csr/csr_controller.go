@@ -37,6 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rmonitor "github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
@@ -102,7 +103,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return err
 	}
 
-	if opts.EnterpriseCRDExists {
+	if opts.Variant.IsEnterprise() {
 		if err = c.WatchObject(&operatorv1.Monitor{}, &handler.EnqueueRequestForObject{}); err != nil {
 			return fmt.Errorf("monitor-controller failed to watch primary resource: %w", err)
 		}
@@ -128,14 +129,14 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) (reconci
 	}
 
 	return &reconcileCSR{
-		client:              mgr.GetClient(),
-		clientset:           opts.K8sClientset,
-		calicoClient:        calicoClient,
-		scheme:              mgr.GetScheme(),
-		provider:            opts.DetectedProvider,
-		clusterDomain:       opts.ClusterDomain,
-		allowedTLSAssets:    allowedAssets(opts.ClusterDomain),
-		enterpriseCRDExists: opts.EnterpriseCRDExists,
+		client:           mgr.GetClient(),
+		clientset:        opts.K8sClientset,
+		calicoClient:     calicoClient,
+		scheme:           mgr.GetScheme(),
+		provider:         opts.DetectedProvider,
+		clusterDomain:    opts.ClusterDomain,
+		allowedTLSAssets: allowedAssets(opts.ClusterDomain),
+		variant:          opts.Variant,
 	}, nil
 }
 
@@ -170,14 +171,14 @@ var _ reconcile.Reconciler = &reconcileCSR{}
 // conditions for signer name "tigera.io/operator-signer". This is the controller that monitors, approves and signs
 // these CSRs. It will only sign requests that are pre-defined and reject others in order to avoid malicious requests.
 type reconcileCSR struct {
-	client              client.Client
-	clientset           kubernetes.Interface
-	calicoClient        calicoclient.Interface
-	scheme              *runtime.Scheme
-	provider            operatorv1.Provider
-	clusterDomain       string
-	allowedTLSAssets    map[string]tlsAsset
-	enterpriseCRDExists bool
+	client           client.Client
+	clientset        kubernetes.Interface
+	calicoClient     calicoclient.Interface
+	scheme           *runtime.Scheme
+	provider         operatorv1.Provider
+	clusterDomain    string
+	allowedTLSAssets map[string]tlsAsset
+	variant          operatorv1.ProductVariant
 }
 
 func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -194,7 +195,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	}
 
 	needsCSRRole := instance.Spec.CertificateManagement != nil
-	if !needsCSRRole && r.enterpriseCRDExists {
+	if !needsCSRRole && r.variant.IsEnterprise() {
 		monitorCR := &operatorv1.Monitor{}
 		if err := r.client.Get(ctx, utils.DefaultEnterpriseInstanceKey, monitorCR); err != nil {
 			if apierrors.IsNotFound(err) {
@@ -207,7 +208,7 @@ func (r *reconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		// Check whether the non-cluster host feature is enabled.
 		// Non-cluster hosts generate CSRs to establish mTLS connections with the cluster.
 		if !needsCSRRole {
-			nonclusterhost, err := utils.GetNonClusterHost(ctx, r.client)
+			nonclusterhost, err := eutils.GetNonClusterHost(ctx, r.client)
 			if err != nil {
 				return reconcile.Result{}, err
 			}

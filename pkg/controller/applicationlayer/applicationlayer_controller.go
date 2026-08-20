@@ -508,52 +508,40 @@ func (r *ReconcileApplicationLayer) getTProxyMode(al *operatorv1.ApplicationLaye
 // applicationLayerFieldManager owns the FelixConfiguration fields the application layer sets.
 const applicationLayerFieldManager = "application-layer"
 
-// declareWAFEventLogsFile declares the WAF event log toggle, driven by the ApplicationLayer WAF
-// and the gateway data plane.
-func declareWAFEventLogsFile(al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) sharedconfig.DeclareFelixConfiguration {
+// declareApplicationLayerFields declares the fields the application layer drives: the WAF event log
+// toggle it shares with the gateway data plane, and Felix's tproxy mode.
+func (r *ReconcileApplicationLayer) declareApplicationLayerFields(al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) sharedconfig.DeclareFelixConfiguration {
 	return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
 		d := &sharedconfig.FelixConfigurationDeclaration{
 			Manager: applicationLayerFieldManager,
 			Owned:   &v3.FelixConfiguration{},
 			Policies: map[string]sharedconfig.ConflictPolicy{
 				"spec.wafEventLogsFileEnabled": sharedconfig.ConflictOverride,
+				"spec.tproxyMode":              sharedconfig.ConflictOverride,
 			},
 		}
-		// Declared without a value when nothing needs it, rather than written as false: an
-		// upgrade from before the field existed restarts every node over a value Felix cannot read.
+		// Both fields are declared without a value when nothing asks for them, which clears them
+		// rather than pinning Felix to the disabled setting.
 		if enabled := wafEventLogsFileRequired(al, gatewayWAFEnabled); enabled {
 			d.Owned.Spec.WAFEventLogsFileEnabled = &enabled
+		}
+		if ok, mode := r.getTProxyMode(al); ok {
+			d.Owned.Spec.TPROXYMode = mode
 		}
 		return d, nil
 	}
 }
 
-// patchFelixConfiguration writes the fields the application layer drives. TPROXYMode stays on the
-// update path for the upgrade workaround below.
+// patchFelixConfiguration writes the fields the application layer drives.
 func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context, al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) error {
 	writer := sharedconfig.NewWriter(r.client, r.useV3CRDs)
 
-	if _, err := writer.ApplyFelixConfiguration(ctx, declareWAFEventLogsFile(al, gatewayWAFEnabled)); err != nil {
+	if _, err := writer.ApplyFelixConfiguration(ctx, r.declareApplicationLayerFields(al, gatewayWAFEnabled)); err != nil {
 		return err
 	}
-	if _, err := writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client)); err != nil {
-		return err
-	}
-
-	_, err := writer.UpdateFelixConfiguration(ctx, func(fc *v3.FelixConfiguration) (bool, error) {
-		ok, tproxyMode := r.getTProxyMode(al)
-		if !ok && fc.Spec.TPROXYMode == "" {
-			// Setting this during an upgrade from before the field existed makes Felix restart,
-			// so rely on the default.
-			return false, nil
-		}
-		if fc.Spec.TPROXYMode == tproxyMode {
-			return false, nil
-		}
-		fc.Spec.TPROXYMode = tproxyMode
-		log.Info("Patching FelixConfiguration: ", "tproxyMode", tproxyMode)
-		return true, nil
-	})
+	// TODO(CORE-13394): drop the client here by having each feature apply the path under its own
+	// field manager, so no declaration has to read the other features' resources.
+	_, err := writer.ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
 	return err
 }
 
@@ -566,8 +554,8 @@ func wafEventLogsFileRequired(al *operatorv1.ApplicationLayer, gatewayWAFEnabled
 }
 
 // isGatewayWAFEnabled reports whether the GatewayAPI WAF data-plane extension is enabled. A missing
-// GatewayAPI CR is treated as disabled (no error); any other read error is returned so the caller can
-// requeue rather than spuriously treating WAF as disabled and flapping FelixConfiguration.
+// GatewayAPI CR reads as disabled; any other read error goes back to the caller, which requeues
+// rather than flapping FelixConfiguration.
 func (r *ReconcileApplicationLayer) isGatewayWAFEnabled(ctx context.Context) (bool, error) {
 	gw, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
 	if err != nil {

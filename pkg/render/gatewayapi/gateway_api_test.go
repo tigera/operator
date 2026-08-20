@@ -160,9 +160,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 		&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: GatewayClassName}},
 	}
 
-	// V3 policies under the calico-system default-deny tier: the controller in
-	// calico-system, and a cluster-scoped policy for the data-plane proxies that
-	// now run in each Gateway's own namespace (deploy.type=GatewayNamespace).
 	bootstrapExpected := []client.Object{
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: common.CalicoNamespace}},
 		&v3.GlobalNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName}},
@@ -365,8 +362,6 @@ var _ = Describe("Gateway API rendering tests", func() {
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, GatewayClassName, common.CalicoNamespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("g-rural", "urban"))
-		// Our Calico-owned label is stamped alongside any user-supplied pod labels, so the
-		// calico-system-tier proxy policy can select the proxy pods by a label we control.
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("k8s-app", GatewayProxyLabel))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations).To(HaveKeyWithValue("g-haste", "speed"))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity).To(Equal(affinity))
@@ -1681,9 +1676,6 @@ value:
 		Expect(policy.Spec.Tier).To(Equal("calico-system"))
 		Expect(policy.Spec.Selector).To(Equal(EnvoyGatewayPolicySelector))
 
-		// The data-plane proxies run in their own Gateway namespaces, so a cluster-scoped
-		// GlobalNetworkPolicy covers them. It selects by our Calico-owned label rather than
-		// Envoy Gateway's owning-gateway-name label, which we do not control.
 		proxyPolicy, err := rtest.GetResourceOfType[*v3.GlobalNetworkPolicy](objsToCreate, ProxyPolicyName, "")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxyPolicy.Spec.Tier).To(Equal("calico-system"))

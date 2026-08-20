@@ -76,12 +76,8 @@ const (
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
 	EnvoyGatewayPolicySelector = "k8s-app == '" + GatewayControllerLabel + "' || k8s-app == '" + GatewayCertgenLabel + "'"
 
-	// Data-plane proxies run in each Gateway's own namespace (deploy.type=GatewayNamespace),
-	// not calico-system, so they need their own policy in the calico-system tier. We stamp a
-	// Calico-owned k8s-app label on every proxy pod (via the EnvoyProxy pod spec, see
-	// envoyProxyConfig) and select on that, rather than Envoy Gateway's
-	// gateway.envoyproxy.io/owning-gateway-name label which we do not own and which could
-	// change upstream without notice.
+	// Selects on a label we own, rather than Envoy Gateway's
+	// gateway.envoyproxy.io/owning-gateway-name, which upstream is free to change.
 	ProxyPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway-proxy"
 	EnvoyProxyPolicySelector = "k8s-app == '" + GatewayProxyLabel + "'"
 )
@@ -492,12 +488,10 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	var objs, objsToDelete []client.Object
 	openShift := pr.cfg.Installation.KubernetesProvider.IsOpenShift()
 
-	// Allow policy for the controller in calico-system to punch through the core
-	// Installation's default-deny.
+	// Allow policies for the controller and the data-plane proxies, to punch through the
+	// core Installation's default-deny.
 	if pr.cfg.IncludeV3NetworkPolicy {
 		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
-		// Data-plane proxies live in each Gateway's own namespace; a GlobalNetworkPolicy
-		// covers them all and auto-extends to new Gateway namespaces without a re-render.
 		objs = append(objs, gatewayAPIProxyPolicy(openShift))
 	}
 
@@ -866,20 +860,6 @@ func ensureExtraArg(args []string, flag, value string) []string {
 	return append(out, args[sep:]...)
 }
 
-// The envoy-gateway components each carry a Calico-owned k8s-app label so the
-// calico-system-tier policies can select them by a label we control (rather than a
-// chart- or Envoy-Gateway-supplied label that could change upstream). The controller
-// and certgen pods are operator-rendered, so we stamp the label on their pod templates
-// directly (setGatewayComponentLabel). The proxy pods are created by the envoy-gateway
-// controller at runtime, so the operator never renders them; the only operator-owned
-// hook is the EnvoyProxy pod spec (ensureGatewayProxyLabel). This is why the label is
-// set here in the gateway render rather than through the standard labeler in
-// pkg/controller/utils/component.go, which keys off the object name and cannot reach a
-// runtime-created pod.
-
-// setGatewayComponentLabel stamps the Calico-owned k8s-app label on an operator-rendered
-// envoy-gateway component's pod template (controller, certgen). Existing template labels
-// are preserved.
 func setGatewayComponentLabel(template *corev1.PodTemplateSpec, label string) {
 	if template.Labels == nil {
 		template.Labels = map[string]string{}
@@ -887,9 +867,8 @@ func setGatewayComponentLabel(template *corev1.PodTemplateSpec, label string) {
 	template.Labels["k8s-app"] = label
 }
 
-// ensureGatewayProxyLabel stamps the same Calico-owned k8s-app label on the data-plane
-// proxy pods, via the EnvoyProxy pod spec, so gatewayAPIProxyPolicy can select them.
-// Any user-supplied pod labels carried over from a custom EnvoyProxy are preserved.
+// Proxy pods are created by the envoy-gateway controller at runtime, so the EnvoyProxy
+// pod spec is the only place the operator gets to label them.
 func ensureGatewayProxyLabel(pod *envoyapi.KubernetesPodSpec) {
 	if pod.Labels == nil {
 		pod.Labels = map[string]string{}
@@ -1441,20 +1420,13 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 	}
 }
 
-// gatewayAPIProxyPolicy lets the data-plane envoy proxies — which run in each
-// Gateway's own namespace (deploy.type=GatewayNamespace), not calico-system —
-// punch through any default-deny in those namespaces. It is a GlobalNetworkPolicy
-// rather than a per-namespace NetworkPolicy fanned out over GatewayNamespaces so
-// that it automatically covers new Gateway namespaces with no re-render.
+// gatewayAPIProxyPolicy lets the data-plane envoy proxies punch through any default-deny
+// in the Gateway namespaces they run in (deploy.type=GatewayNamespace).
 func gatewayAPIProxyPolicy(openShift bool) *v3.GlobalNetworkPolicy {
 	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
 	egress = append(egress,
-		// xDS config (18000) and Wasm module fetch (18002) from the envoy-gateway
-		// controller in calico-system. The proxy dials the controller — see
-		// envoyproxy/gateway internal/infrastructure/kubernetes/proxy/resource.go
-		// (XdsServerHost = <svc>.<controllerNamespace>.svc) and internal/xds/bootstrap
-		// (DefaultXdsServerPort=18000, wasmHTTPServicePort=18002). 18001 is the
-		// ratelimit→controller SotW path, not a proxy path, so it is omitted here.
+		// xDS config (18000) and Wasm module fetch (18002) on the envoy-gateway controller.
+		// 18001 is the ratelimit->controller path, which no proxy dials.
 		v3.Rule{
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
@@ -1464,9 +1436,8 @@ func gatewayAPIProxyPolicy(openShift bool) *v3.GlobalNetworkPolicy {
 				Ports:             networkpolicy.Ports(18000, 18002),
 			},
 		},
-		// Backend/application egress is left to the user. Under a default-deny tier
-		// the user must allow proxy->backend themselves; until they do, the proxy is
-		// reachable and configured but returns 503 on the upstream connection.
+		// Pass, not an end-of-tier deny: proxy->backend egress is the user's call, so hand
+		// it down to their tier. Until they allow it the proxy answers 503.
 		v3.Rule{Action: v3.Pass},
 	)
 
@@ -1478,15 +1449,10 @@ func gatewayAPIProxyPolicy(openShift bool) *v3.GlobalNetworkPolicy {
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: EnvoyProxyPolicySelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			// Allow all inbound TCP from any source (this also covers the 19001 metrics
-			// scrape). Gateway listener ports are user-defined and dynamic, so a managed
-			// Gateway has to accept arbitrary ports to serve traffic out of the box,
-			// including under a default-deny tier. Verified on a cluster: the narrower
-			// alternative (allow only 19001, then Pass) lets listener ingress fall
-			// through to the user's default-deny and silently breaks every Gateway in a
-			// default-deny namespace. The cost of allowing all TCP is that an Allow is
-			// terminal in this tier, so a user cannot narrow ingress to the proxy with
-			// their own policy.
+			// Listener ports are user-defined and dynamic, so the proxy has to accept
+			// arbitrary inbound TCP to serve traffic at all (this also covers the 19001
+			// metrics scrape). The Allow is terminal in this tier, so a user cannot
+			// narrow proxy ingress with a policy of their own.
 			Ingress: []v3.Rule{
 				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"0.0.0.0/0"}}},
 				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"::/0"}}},

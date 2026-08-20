@@ -756,7 +756,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	instanceStatus := instance.Status
 	if !r.migrationChecked {
 		// update Installation resource with existing install if it exists.
 		nc, err := convert.NeedsConversion(ctx, r.client)
@@ -801,7 +800,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	recordedDefaults, err := utils.MergeRecordedDefaults(nil, instance.Spec, defaulted.Spec)
+	// The IP pool controller records its own defaults, so leave that subtree alone.
+	recordedDefaults, err := utils.MergeRecordedDefaults(instance.Status.Defaults, instance.Spec, defaulted.Spec,
+		utils.DefaultsScope{Foreign: []string{utils.PoolDefaultsPath}})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to determine installation defaults", err, reqLogger)
 		return reconcile.Result{}, err
@@ -863,17 +864,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
-	if err = r.updateCRDs(ctx, r.opts.Variant, reqLogger); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Write finalizers and migrated manifest config. Defaults are recorded in the status
-	// instead, since writing them to the spec steals ownership from whoever manages the CR.
-	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Update Installation with 'overlay'
 	overlay := operatorv1.Installation{}
 	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
@@ -893,6 +883,37 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// Update the CRDs before either write below. Defaulting can produce a value only this
+	// operator version's CRD accepts, autodetected kubernetesProvider: Kind being the case
+	// that bit us, and the status write is fully schema-validated.
+	if err = r.updateCRDs(ctx, r.opts.Variant, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// Publish the effective config before anything below can return early, since every other
+	// controller reads it instead of the spec and stalls until it lands.
+	computed := defaulted.Spec.DeepCopy()
+	if !reflect.DeepEqual(instance.Status.Defaults, recordedDefaults) || !reflect.DeepEqual(instance.Status.Computed, computed) {
+		// Write a copy, so the response can't drop the finalizers the patch below carries.
+		written := instance.DeepCopy()
+		written.Status.Defaults = recordedDefaults
+		written.Status.Computed = computed
+		if err := r.client.Status().Update(ctx, written); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation defaults", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		// Carry the new resourceVersion, so the patch below isn't rejected as stale.
+		instance.ResourceVersion = written.ResourceVersion
+		instance.Status = written.Status
+	}
+
+	// Write finalizers and migrated manifest config. Defaults are recorded in the status
+	// instead, since writing them to the spec steals ownership from whoever manages the CR.
+	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	if err = r.updateMutatingAdmissionPolicies(ctx, defaulted, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -904,30 +925,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
 	r.migrationChecked = true
-
-	// A status is needed at this point for operator scorecard tests.
-	// status.variant is written later but for some tests the reconciliation
-	// does not get to that point.
-	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
-		instance.Status = operatorv1.InstallationStatus{}
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write default status", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
-
-	// Publish the effective config before the IP pool gate below, since other
-	// controllers read it instead of the spec. Once status.Computed is present, other
-	// controllers will kick in.
-	computed := defaulted.Spec.DeepCopy()
-	if !reflect.DeepEqual(instance.Status.Defaults, recordedDefaults) || !reflect.DeepEqual(instance.Status.Computed, computed) {
-		instance.Status.Defaults = recordedDefaults
-		instance.Status.Computed = computed
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation defaults", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
 
 	// Wait for IP pools to be programmed. This may be done out-of-band by the user, or by the operator's IP pool controller.
 	currentPools, err := GetActivePools(ctx, r.client)

@@ -418,7 +418,7 @@ var _ = Describe("Egress Gateway controller tests", func() {
 			mockStatus.On("ReadyToMonitor")
 			Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
 
-			r.provider = operatorv1.ProviderOpenShift
+			r.opts.DetectedProvider = operatorv1.ProviderOpenShift
 			logSeverity := operatorv1.LogSeverityInfo
 			egw_red := &operatorv1.EgressGateway{
 				ObjectMeta: metav1.ObjectMeta{Name: "calico-red", Namespace: "calico-egress"},

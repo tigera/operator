@@ -91,27 +91,4 @@ var _ = Describe("policySyncPathPrefix coordination predicates", func() {
 			}, operatorv1.CalicoEnterprise)).To(BeFalse())
 		})
 	})
-
-	Describe("DesiredPolicySyncPathPrefix", func() {
-		It("preserves a customer override regardless of need flags", func() {
-			Expect(utils.DesiredPolicySyncPathPrefix("/var/run/customer", false, false)).To(Equal("/var/run/customer"))
-			Expect(utils.DesiredPolicySyncPathPrefix("/var/run/customer", true, true)).To(Equal("/var/run/customer"))
-		})
-
-		It("returns the operator default when either side needs it", func() {
-			Expect(utils.DesiredPolicySyncPathPrefix("", true, false)).To(Equal("/var/run/nodeagent"))
-			Expect(utils.DesiredPolicySyncPathPrefix("", false, true)).To(Equal("/var/run/nodeagent"))
-		})
-
-		It("leaves the field empty when nothing is set and neither side needs it", func() {
-			Expect(utils.DesiredPolicySyncPathPrefix("", false, false)).To(Equal(""))
-		})
-
-		It("preserves the operator default even when neither side needs it", func() {
-			// egressgateway and Gateway API set the same default and never clear
-			// it, so the applicationlayer/istio path must not clear a value it
-			// may not own.
-			Expect(utils.DesiredPolicySyncPathPrefix("/var/run/nodeagent", false, false)).To(Equal("/var/run/nodeagent"))
-		})
-	})
 })

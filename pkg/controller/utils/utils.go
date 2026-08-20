@@ -31,6 +31,7 @@ import (
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -443,6 +444,35 @@ func GetIstio(ctx context.Context, c client.Client) (*operatorv1.Istio, error) {
 	}
 
 	return istio, nil
+}
+
+// GetGatewayAPI returns the CR under its default or legacy name. Duplicate detection is
+// left to the gatewayapi controller.
+func GetGatewayAPI(ctx context.Context, c client.Client) (*operatorv1.GatewayAPI, error) {
+	for _, key := range []client.ObjectKey{DefaultInstanceKey, DefaultEnterpriseInstanceKey} {
+		gw := &operatorv1.GatewayAPI{}
+		err := c.Get(ctx, key, gw)
+		if err == nil {
+			return gw, nil
+		}
+		if !errors.IsNotFound(err) && !meta.IsNoMatchError(err) {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+// ListEgressGateways returns every EgressGateway in the cluster. A cluster without the CRD
+// registered has none.
+func ListEgressGateways(ctx context.Context, c client.Client) ([]operatorv1.EgressGateway, error) {
+	egws := &operatorv1.EgressGatewayList{}
+	if err := c.List(ctx, egws); err != nil {
+		if meta.IsNoMatchError(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return egws.Items, nil
 }
 
 // Return the ManagementClusterConnection CR if present. No error is returned if it was not found.

@@ -40,6 +40,7 @@ import (
 
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -81,10 +82,8 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseA
 	r := &ReconcileEgressGateway{
 		client:          mgr.GetClient(),
 		scheme:          mgr.GetScheme(),
-		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
-		clusterDomain:   opts.ClusterDomain,
-		variant:         opts.Variant,
+		opts:            opts,
 		licenseAPIReady: licenseAPIReady,
 	}
 	r.status.Run(opts.ShutdownContext)
@@ -130,10 +129,8 @@ type ReconcileEgressGateway struct {
 	// that reads objects from the cache and writes to the apiserver.
 	client          client.Client
 	scheme          *runtime.Scheme
-	provider        operatorv1.Provider
 	status          status.StatusManager
-	clusterDomain   string
-	variant         operatorv1.ProductVariant
+	opts            options.ControllerOptions
 	licenseAPIReady *utils.ReadyFlag
 }
 
@@ -151,11 +148,23 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	// Ahead of every early return below, because the last egress gateway going away is what
+	// clears the policy sync path.
+	fc, err := sharedconfig.NewWriter(r.client, r.opts.UseV3CRDs).ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
+	if err != nil {
+		reqLogger.Error(err, "Error patching felix configuration")
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		for _, egw := range egws {
+			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
+		}
+		return reconcile.Result{}, err
+	}
+
 	// If there are no Egress Gateway resources, return.
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if len(egws) == 0 {
 		var objects []client.Object
-		if r.provider.IsOpenShift() {
+		if r.opts.DetectedProvider.IsOpenShift() {
 			objects = append(objects, egressgateway.SecurityContextConstraints())
 		}
 		err := ch.CreateOrUpdateOrDelete(ctx, render.NewDeletionPassthrough(objects...), r.status)
@@ -194,7 +203,7 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 			// In the case of OpenShift, we are using a single SCC.
 			// Whenever a EGW resource is deleted, remove the corresponding user from the SCC
 			// and update the resource.
-			if r.provider.IsOpenShift() {
+			if r.opts.DetectedProvider.IsOpenShift() {
 				scc, err := getOpenShiftSCC(ctx, r.client)
 				if err != nil {
 					reqLogger.Error(err, "Error querying SecurityContextConstraints")
@@ -287,27 +296,10 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// patch and get the felix configuration
-	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		if fc.Spec.PolicySyncPathPrefix != "" {
-			return false, nil // don't proceed with the patch
-		}
-		fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
-		return true, nil // proceed with this patch
-	})
-	if err != nil {
-		reqLogger.Error(err, "Error patching felix configuration")
-		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
-		for _, egw := range egwsToReconcile {
-			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
-		}
-		return reconcile.Result{}, err
-	}
-
 	// Reconcile all the EGWs
 	var errMsgs []string
 	for _, egw := range egwsToReconcile {
-		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, r.variant, fc, pullSecrets, installationSpec, namespaceAndNames)
+		err = r.reconcileEgressGateway(ctx, &egw, reqLogger, r.opts.Variant, fc, pullSecrets, installationSpec, namespaceAndNames)
 		if err != nil {
 			reqLogger.Error(err, "Error reconciling egress gateway")
 			errMsgs = append(errMsgs, err.Error())
@@ -382,7 +374,7 @@ func (r *ReconcileEgressGateway) reconcileEgressGateway(ctx context.Context, egw
 		VXLANPort:         egwVXLANPort,
 		VXLANVNI:          egwVXLANVNI,
 		IptablesBackend:   ipTablesBackend,
-		OpenShift:         r.provider.IsOpenShift(),
+		OpenShift:         r.opts.DetectedProvider.IsOpenShift(),
 		NamespaceAndNames: namespaceAndNames,
 	}
 

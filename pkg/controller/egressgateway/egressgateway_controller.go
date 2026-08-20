@@ -40,6 +40,7 @@ import (
 
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/options"
+	"github.com/tigera/operator/pkg/controller/sharedconfig"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
@@ -84,6 +85,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions, licenseA
 		provider:        opts.DetectedProvider,
 		status:          status.New(mgr.GetClient(), "egressgateway", opts.KubernetesVersion),
 		clusterDomain:   opts.ClusterDomain,
+		useV3CRDs:       opts.UseV3CRDs,
 		variant:         opts.Variant,
 		licenseAPIReady: licenseAPIReady,
 	}
@@ -133,6 +135,7 @@ type ReconcileEgressGateway struct {
 	provider        operatorv1.Provider
 	status          status.StatusManager
 	clusterDomain   string
+	useV3CRDs       bool
 	variant         operatorv1.ProductVariant
 	licenseAPIReady *utils.ReadyFlag
 }
@@ -148,6 +151,18 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 	if err != nil {
 		reqLogger.Error(err, "Error querying for Egress Gateway")
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Egress Gateway", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	// Ahead of every early return below, because the last egress gateway going away is what
+	// clears the policy sync path.
+	fc, err := sharedconfig.NewWriter(r.client, r.useV3CRDs).ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
+	if err != nil {
+		reqLogger.Error(err, "Error patching felix configuration")
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		for _, egw := range egws {
+			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
+		}
 		return reconcile.Result{}, err
 	}
 
@@ -283,23 +298,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		for _, egw := range egwsToReconcile {
 			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error retrieving pull secrets err = %s", err.Error()))
-		}
-		return reconcile.Result{}, err
-	}
-
-	// patch and get the felix configuration
-	fc, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		if fc.Spec.PolicySyncPathPrefix != "" {
-			return false, nil // don't proceed with the patch
-		}
-		fc.Spec.PolicySyncPathPrefix = "/var/run/nodeagent"
-		return true, nil // proceed with this patch
-	})
-	if err != nil {
-		reqLogger.Error(err, "Error patching felix configuration")
-		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
-		for _, egw := range egwsToReconcile {
-			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
 		}
 		return reconcile.Result{}, err
 	}

@@ -18,19 +18,16 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 )
 
-// DefaultPolicySyncPrefix is the operator-managed value for
-// FelixConfiguration.policySyncPathPrefix. The applicationlayer and istio
-// controllers both write this value when their respective features need a
-// running policy-sync gRPC server on the host (Dikastes sidecar, Istio
-// ambient waypoint l7-collector, EGW).
+// DefaultPolicySyncPrefix is where Felix opens the gRPC socket the Dikastes sidecar,
+// the Istio waypoint l7-collector, and egress gateways dial.
 const DefaultPolicySyncPrefix = "/var/run/nodeagent"
 
 // ApplicationLayerRequiresPolicySync reports whether the given
 // ApplicationLayer CR has any feature enabled that requires
-// policySyncPathPrefix to be set on FelixConfiguration. A nil receiver
-// returns false (the AL CR is absent or being deleted).
+// policySyncPathPrefix to be set on FelixConfiguration. A CR that is absent
+// or being deleted returns false.
 func ApplicationLayerRequiresPolicySync(al *operatorv1.ApplicationLayer) bool {
-	if al == nil {
+	if al == nil || !al.DeletionTimestamp.IsZero() {
 		return false
 	}
 	spec := &al.Spec
@@ -61,31 +58,14 @@ func ApplicationLayerRequiresPolicySync(al *operatorv1.ApplicationLayer) bool {
 // so the FelixConfiguration field tracks the renderer — including when
 // waypoint logging is explicitly Disabled.
 func IstioRequiresPolicySync(istio *operatorv1.Istio, variant operatorv1.ProductVariant) bool {
-	return istio != nil && variant.IsEnterprise() && istio.WaypointLoggingEnabled()
+	if istio == nil || !istio.DeletionTimestamp.IsZero() {
+		return false
+	}
+	return variant.IsEnterprise() && istio.WaypointLoggingEnabled()
 }
 
-// DesiredPolicySyncPathPrefix returns the value FelixConfiguration's
-// policySyncPathPrefix should hold given the currently set value and
-// whether either the applicationlayer or istio controllers need it.
-//
-//   - Any non-empty existing value is preserved. This covers both a customer
-//     override and the operator-managed default claimed by another controller
-//     that shares this field (egressgateway, Gateway API) and never clears it.
-//     Those controllers only ever set the default or leave it; clearing it here
-//     would break them, so the applicationlayer and istio controllers likewise
-//     never clear a value they may not own.
-//   - When the field is empty and either controller needs it, the
-//     operator-managed default is returned.
-//   - Otherwise the field stays empty.
-//
-// Both the applicationlayer and istio controllers call this from their set and
-// cleanup paths to keep coordination explicit and symmetric.
-func DesiredPolicySyncPathPrefix(existing string, alNeeds, istioNeeds bool) string {
-	if existing != "" {
-		return existing
-	}
-	if alNeeds || istioNeeds {
-		return DefaultPolicySyncPrefix
-	}
-	return ""
+// GatewayAPIRequiresPolicySync reports whether a GatewayAPI CR is present, which is when
+// the gateway data plane needs Felix's policy-sync socket.
+func GatewayAPIRequiresPolicySync(gw *operatorv1.GatewayAPI) bool {
+	return gw != nil && gw.DeletionTimestamp.IsZero()
 }

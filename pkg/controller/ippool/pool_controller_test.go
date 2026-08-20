@@ -197,8 +197,9 @@ var _ = Describe("IP Pool controller tests", func() {
 		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Should be no IP pools defaulted.
-		Expect(installation.Status.Defaults).To(BeNil())
+		// An explicitly empty pool list is the recorded default, meaning pools are managed out-of-band.
+		Expect(installation.Status.Defaults).NotTo(BeNil())
+		Expect(installation.Status.Defaults.CalicoNetwork.IPPools).To(Equal([]operator.IPPool{}))
 
 		// No new IP pools should exist.
 		ipPools := v3.IPPoolList{}

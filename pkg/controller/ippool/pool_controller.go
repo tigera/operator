@@ -145,7 +145,8 @@ func hasOwnerLabel(pool *v3.IPPool) bool {
 
 // recordDefaults adds the pool defaults to the Installation status, leaving the spec untouched.
 func (r *Reconciler) recordDefaults(ctx context.Context, installation *operatorv1.Installation, declared, computed operatorv1.InstallationSpec) error {
-	recorded, err := utils.MergeRecordedDefaults(installation.Status.Defaults, declared, computed, poolDefaultsPath)
+	recorded, err := utils.MergeRecordedDefaults(installation.Status.Defaults, declared, computed,
+		utils.DefaultsScope{Owned: []string{utils.PoolDefaultsPath}})
 	if err != nil {
 		return err
 	}
@@ -204,6 +205,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	declared := *installation.Spec.DeepCopy()
 	computed := installation.Status.Computed.DeepCopy()
 
+	// The computed config has the overlay merged in, so count the overlay as declared. Recording
+	// its pools as ours would leave them behind in status.defaults once the overlay is deleted.
+	overlay, err := utils.GetOverlayInstallationSpec(ctx, r.client)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying the 'overlay' Installation resource", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	if overlay != nil {
+		declared = utils.OverrideInstallationSpec(declared, *overlay)
+	}
+
 	if computed.CNI == nil || computed.CNI.Type == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -211,8 +223,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 	// Get all IP pools currently in the cluster.
 	currentPools := &v3.IPPoolList{}
-	err := r.client.List(ctx, currentPools)
-	if err != nil && !errors.IsNotFound(err) {
+	if err := r.client.List(ctx, currentPools); err != nil && !errors.IsNotFound(err) {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error querying IP pools", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -263,7 +274,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if hasOwnerLabel(&p) {
 			// This pool is owned by the Installation object, so consider it ours.
 			reqLogger.V(1).Info("IP pool is owned by operator", "name", p.Name, "cidr", p.Spec.CIDR)
-			ourPools[normalizeCIDR(p.Spec.CIDR)] = p
+			ourPools[utils.NormalizeCIDR(p.Spec.CIDR)] = p
 		} else {
 			// The IP pool may have been created by the operator, but it may not have the managed-by label set if it was created
 			// before the operator started setting the label. The following logic allows opt-in ownership of IP pools created prior to
@@ -281,8 +292,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 				// non-canonical form. Only the CIDR field can differ textually while being semantically
 				// equal, so we normalize that field on copies before comparing the full structs.
 				cnpNorm := cnp
-				cnpNorm.CIDR = normalizeCIDR(cnp.CIDR)
-				v1p.CIDR = normalizeCIDR(v1p.CIDR)
+				cnpNorm.CIDR = utils.NormalizeCIDR(cnp.CIDR)
+				v1p.CIDR = utils.NormalizeCIDR(v1p.CIDR)
 				if !reflect.DeepEqual(cnpNorm, v1p) {
 					// The IP pool in the cluster doesn't match the IP pool in the Installation - ignore it.
 					reqLogger.V(1).Info("IP pool doesn't match", "clusterPool", v1p, "installationPool", cnp)
@@ -291,14 +302,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 				// Consider this IP pool to be owned by the operator.
 				reqLogger.V(1).Info("Assuming ownership of IP pool", "name", p.Name, "cidr", p.Spec.CIDR)
-				ourPools[normalizeCIDR(p.Spec.CIDR)] = p
+				ourPools[utils.NormalizeCIDR(p.Spec.CIDR)] = p
 			}
-			if _, ok := ourPools[normalizeCIDR(p.Spec.CIDR)]; !ok {
+			if _, ok := ourPools[utils.NormalizeCIDR(p.Spec.CIDR)]; !ok {
 				// This IP pool exists in the cluster, but is not owned by us - mark it down so that
 				// we can refuse to update any pool with this CIDR if it exists in the Installation.
 				// This branch is only hit if the pool does not have the managed-by label, and does
 				// not exactly match any pool in the Installation.
-				notOurs[normalizeCIDR(p.Spec.CIDR)] = true
+				notOurs[utils.NormalizeCIDR(p.Spec.CIDR)] = true
 			}
 		}
 	}
@@ -320,7 +331,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		// If there is an existing IP pool in the cluster with the same CIDR, but it is not owned by us, then we cannot
 		// take action on it.
-		if _, ok := notOurs[normalizeCIDR(p.CIDR)]; ok {
+		if _, ok := notOurs[utils.NormalizeCIDR(p.CIDR)]; ok {
 			r.status.SetDegraded(operatorv1.ResourceValidationError, "Cannot update an IP pool not owned by the operator", nil, reqLogger)
 			continue
 		}
@@ -334,7 +345,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		// We'll only actually send the update if the API server is available or there are no IP pools in the cluster. We
 		// are careful here to only generate a degraded status if the API server is unavailable and we determine that an IP pool needs
 		// to be updated after initial IP pool creation.
-		if pool, ok := ourPools[normalizeCIDR(p.CIDR)]; apiAvailable || !ok || !reflect.DeepEqual(pool.Spec, v1res.Spec) {
+		if pool, ok := ourPools[utils.NormalizeCIDR(p.CIDR)]; apiAvailable || !ok || !reflect.DeepEqual(pool.Spec, v1res.Spec) {
 			if len(currentPools.Items) == 0 {
 				// There are no pools in the cluster. Create them using the v1 API, as they are needed for bootstrapping and the API server is non-functional
 				// if there are no IP pools in the cluster!
@@ -368,7 +379,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		for _, p := range computed.CalicoNetwork.IPPools {
 			// cidr is a normalized map key; normalize the Installation CIDR before comparing so that a
 			// non-canonical CIDR in the Installation still matches the canonical CIDR stored on the pool.
-			if normalizeCIDR(p.CIDR) == cidr {
+			if utils.NormalizeCIDR(p.CIDR) == cidr {
 				found = true
 				break
 			}
@@ -443,7 +454,7 @@ func ToProjectCalico(p operatorv1.IPPool) (*v3.IPPool, error) {
 		// CIDRs, so emitting the canonical form here keeps the pool we create/update byte-for-byte
 		// consistent with what is stored, avoiding needless updates and rejection by API server versions
 		// that refuse to persist non-canonical CIDRs.
-		Spec: v3.IPPoolSpec{CIDR: normalizeCIDR(p.CIDR)},
+		Spec: v3.IPPoolSpec{CIDR: utils.NormalizeCIDR(p.CIDR)},
 	}
 
 	// Set encap.

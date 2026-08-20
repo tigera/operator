@@ -27,7 +27,7 @@ var _ = Describe("Installation defaults recording", func() {
 	It("should return nothing when defaulting added nothing", func() {
 		spec := operator.InstallationSpec{Variant: operator.Calico}
 
-		defaults, err := MergeRecordedDefaults(nil, spec, spec)
+		defaults, err := MergeRecordedDefaults(nil, spec, spec, DefaultsScope{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
 	})
@@ -39,7 +39,7 @@ var _ = Describe("Installation defaults recording", func() {
 		defaulted.KubernetesProvider = operator.ProviderEKS
 		defaulted.CalicoLibHostPath = "/var/lib/calico"
 
-		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted, DefaultsScope{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(Equal(&operator.InstallationSpec{
 			KubernetesProvider: operator.ProviderEKS,
@@ -56,7 +56,7 @@ var _ = Describe("Installation defaults recording", func() {
 		defaulted := declared
 		defaulted.CalicoLibHostPath = "/var/lib/calico"
 
-		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted, DefaultsScope{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.KubernetesProvider).To(BeEmpty())
 		Expect(defaults.CalicoLibHostPath).To(Equal("/var/lib/calico"))
@@ -76,7 +76,7 @@ var _ = Describe("Installation defaults recording", func() {
 			},
 		}
 
-		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted, DefaultsScope{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.CalicoNetwork).NotTo(BeNil())
 		Expect(defaults.CalicoNetwork.MTU).To(BeNil())
@@ -89,7 +89,7 @@ var _ = Describe("Installation defaults recording", func() {
 			ImagePullSecrets: []v1.LocalObjectReference{{Name: "pull-secret"}},
 		}
 
-		defaults, err := MergeRecordedDefaults(nil, declared, defaulted)
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted, DefaultsScope{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults.ImagePullSecrets).To(HaveLen(1))
 		Expect(defaults.ImagePullSecrets[0].Name).To(Equal("pull-secret"))
@@ -111,7 +111,7 @@ var _ = Describe("Installation defaults recording", func() {
 		seeded := OverrideInstallationSpec(recorded, declared)
 		Expect(seeded.KubernetesProvider).To(Equal(operator.ProviderGKE))
 
-		defaults, err := MergeRecordedDefaults(nil, declared, seeded)
+		defaults, err := MergeRecordedDefaults(nil, declared, seeded, DefaultsScope{})
 		Expect(err).NotTo(HaveOccurred())
 		Expect(defaults).To(BeNil())
 	})
@@ -161,5 +161,103 @@ var _ = Describe("Installation defaults recording", func() {
 
 		Expect(LayerPoolDefaults(&seeded, &recorded)).NotTo(HaveOccurred())
 		Expect(seeded.CalicoNetwork.IPPools[0].Name).To(BeEmpty())
+	})
+
+	It("should record only the fields defaulting added to a declared pool", func() {
+		declared := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{CIDR: "192.168.0.0/24"}},
+			},
+		}
+		defaulted := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{
+					Name:         "default-ipv4-ippool",
+					CIDR:         "192.168.0.0/24",
+					NodeSelector: "all()",
+					BlockSize:    ptr.To[int32](26),
+				}},
+			},
+		}
+
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted, DefaultsScope{Owned: []string{PoolDefaultsPath}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defaults.CalicoNetwork.IPPools).To(Equal([]operator.IPPool{{
+			Name:         "default-ipv4-ippool",
+			CIDR:         "192.168.0.0/24",
+			NodeSelector: "all()",
+			BlockSize:    ptr.To[int32](26),
+		}}))
+	})
+
+	It("should record an explicitly empty pool list", func() {
+		declared := operator.InstallationSpec{}
+		defaulted := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{IPPools: []operator.IPPool{}},
+		}
+
+		defaults, err := MergeRecordedDefaults(nil, declared, defaulted, DefaultsScope{Owned: []string{PoolDefaultsPath}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defaults.CalicoNetwork).NotTo(BeNil())
+		Expect(defaults.CalicoNetwork.IPPools).To(Equal([]operator.IPPool{}))
+	})
+
+	It("should leave a foreign path as another controller recorded it", func() {
+		recorded := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{Name: "default-ipv4-ippool", CIDR: "192.168.0.0/24"}},
+			},
+		}
+		declared := operator.InstallationSpec{Variant: operator.Calico}
+		defaulted := declared
+		defaulted.KubernetesProvider = operator.ProviderEKS
+
+		defaults, err := MergeRecordedDefaults(&recorded, declared, defaulted, DefaultsScope{Foreign: []string{PoolDefaultsPath}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defaults.KubernetesProvider).To(Equal(operator.ProviderEKS))
+		Expect(defaults.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(defaults.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv4-ippool"))
+	})
+
+	It("should rewrite an owned path without touching what another controller recorded", func() {
+		recorded := operator.InstallationSpec{
+			KubernetesProvider: operator.ProviderEKS,
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{Name: "stale", CIDR: "10.0.0.0/16"}},
+			},
+		}
+		declared := operator.InstallationSpec{}
+		defaulted := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{Name: "default-ipv4-ippool", CIDR: "192.168.0.0/24"}},
+			},
+		}
+
+		defaults, err := MergeRecordedDefaults(&recorded, declared, defaulted, DefaultsScope{Owned: []string{PoolDefaultsPath}})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(defaults.KubernetesProvider).To(Equal(operator.ProviderEKS))
+		Expect(defaults.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(defaults.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/24"))
+	})
+
+	It("should layer per-pool defaults under a non-canonical declared CIDR", func() {
+		recorded := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{
+					Name:      "default-ipv6-ippool",
+					CIDR:      "fd20:5213:94f6:1e9:1f::/96",
+					BlockSize: ptr.To[int32](122),
+				}},
+			},
+		}
+		seeded := operator.InstallationSpec{
+			CalicoNetwork: &operator.CalicoNetworkSpec{
+				IPPools: []operator.IPPool{{CIDR: "fd20:5213:94f6:01e9:001f::/96"}},
+			},
+		}
+
+		Expect(LayerPoolDefaults(&seeded, &recorded)).NotTo(HaveOccurred())
+		Expect(seeded.CalicoNetwork.IPPools[0].Name).To(Equal("default-ipv6-ippool"))
+		Expect(seeded.CalicoNetwork.IPPools[0].BlockSize).To(Equal(ptr.To[int32](122)))
 	})
 })

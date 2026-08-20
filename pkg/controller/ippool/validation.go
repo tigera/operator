@@ -32,7 +32,7 @@ func ValidatePools(spec *operator.InstallationSpec) error {
 			return fmt.Errorf("IP pool CIDR (%s) is invalid: %s", pool.CIDR, err)
 		}
 
-		// Validate that there is only a single spec of each CIDR and Name.
+		// Validate that there is only a single instance of each CIDR and Name.
 		if cidrs[pool.CIDR] {
 			return fmt.Errorf("IP pool %v is specified more than once", pool.CIDR)
 		}

@@ -24,6 +24,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operator "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/utils"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,9 +37,6 @@ var (
 	defaultPoolName   = "default-ipv4-ippool"
 	defaultV6PoolName = "default-ipv6-ippool"
 )
-
-// poolDefaultsPath is the part of the Installation spec this controller defaults.
-const poolDefaultsPath = "calicoNetwork.ipPools"
 
 // cidrToName returns a valid Kubernetes resource name given a CIDR. Kubernetes names must be valid DNS
 // names. We do the following:
@@ -66,21 +64,6 @@ func cidrToName(cidr string) (string, error) {
 	name += fmt.Sprintf("-%d", pre.Bits())
 
 	return name, nil
-}
-
-// normalizeCIDR returns the canonical string form of the given CIDR, as produced by net.IPNet.String().
-// This allows semantically-equal CIDRs that differ only in textual representation (for example IPv6
-// addresses with leading zeros or differing "::" compression, such as "fd20:5213:94f6:01e9:001f::/96"
-// versus "fd20:5213:94f6:1e9:1f::/96") to compare as equal. The Calico API server normalizes CIDRs when
-// it stores IP pools, so without this the operator can mistake an existing pool for a missing one and
-// enter an infinite delete/recreate loop. If the CIDR cannot be parsed, the original string is returned
-// unchanged so callers fall back to an exact string comparison.
-func normalizeCIDR(cidr string) string {
-	_, nw, err := net.ParseCIDR(cidr)
-	if err != nil {
-		return cidr
-	}
-	return nw.String()
 }
 
 // fillDefaults fills in IP pool defaults on the Installation object. Defaulting of fields other than IP pools occurs
@@ -172,7 +155,7 @@ func fillDefaults(ctx context.Context, client client.Client, spec *operator.Inst
 	currentPoolLookup := map[string]string{}
 	if currentPools != nil {
 		for _, cur := range currentPools.Items {
-			currentPoolLookup[normalizeCIDR(cur.Spec.CIDR)] = cur.Name
+			currentPoolLookup[utils.NormalizeCIDR(cur.Spec.CIDR)] = cur.Name
 		}
 	}
 
@@ -226,7 +209,7 @@ func fillDefaults(ctx context.Context, client client.Client, spec *operator.Inst
 
 		// Default the name if it's not set.
 		if pool.Name == "" {
-			if name, ok := currentPoolLookup[normalizeCIDR(pool.CIDR)]; ok {
+			if name, ok := currentPoolLookup[utils.NormalizeCIDR(pool.CIDR)]; ok {
 				// There's an existing IP pool with the same CIDR - use that. This allows us to
 				// assume control of IP pools that are already in the cluster.
 				pool.Name = name

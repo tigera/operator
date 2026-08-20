@@ -160,9 +160,9 @@ var _ = Describe("Gateway API rendering tests", func() {
 		&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: GatewayClassName}},
 	}
 
-	// V3 NetworkPolicy allowing the controller under the calico-system default-deny tier.
 	bootstrapExpected := []client.Object{
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: common.CalicoNamespace}},
+		&v3.GlobalNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName}},
 	}
 
 	It("should render Gateway API resources from helm chart", func() {
@@ -362,6 +362,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, GatewayClassName, common.CalicoNamespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("g-rural", "urban"))
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("k8s-app", GatewayProxyLabel))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations).To(HaveKeyWithValue("g-haste", "speed"))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity).To(Equal(affinity))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector).To(HaveKeyWithValue("g-fast", "slow"))
@@ -1674,6 +1675,14 @@ value:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(policy.Spec.Tier).To(Equal("calico-system"))
 		Expect(policy.Spec.Selector).To(Equal(EnvoyGatewayPolicySelector))
+
+		proxyPolicy, err := rtest.GetResourceOfType[*v3.GlobalNetworkPolicy](objsToCreate, ProxyPolicyName, "")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proxyPolicy.Spec.Tier).To(Equal("calico-system"))
+		Expect(proxyPolicy.Spec.Selector).To(Equal(EnvoyProxyPolicySelector))
+		Expect(proxyPolicy.Spec.Selector).NotTo(ContainSubstring("owning-gateway-name"),
+			"proxy policy must select by our Calico label, not Envoy Gateway's owning-gateway-name")
+
 		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", common.CalicoNamespace)
 		Expect(err).To(HaveOccurred(), "must not render default-deny in calico-system")
 	})

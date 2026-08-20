@@ -281,6 +281,10 @@ type statusManager struct {
 	// get/delete calls to the API server.
 	crExists bool
 
+	// lastMessage is the Status.Message we last wrote successfully. An older CRD without
+	// the message field prunes it on write, so the read-back can't tell us what we set.
+	lastMessage string
+
 	observedGeneration int64
 }
 
@@ -838,6 +842,7 @@ func (m *statusManager) removeTigeraStatus() {
 	} else {
 		// CR no longer exists.
 		m.crExists = false
+		m.lastMessage = ""
 	}
 }
 
@@ -1195,7 +1200,7 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	ts.Status.Message = m.statusMessage(ts.Status.Conditions)
 
 	// If nothing has changed, we don't need to update in the API.
-	if reflect.DeepEqual(ts.Status.Conditions, old.Status.Conditions) && ts.Status.Message == old.Status.Message {
+	if reflect.DeepEqual(ts.Status.Conditions, old.Status.Conditions) && ts.Status.Message == m.lastMessage {
 		return
 	}
 
@@ -1203,6 +1208,8 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 	if isNotFound {
 		if err = m.client.Create(context.TODO(), &ts); err != nil {
 			log.WithValues("reason", err).Info("Failed to create tigera status")
+		} else {
+			m.lastMessage = ts.Status.Message
 		}
 	} else {
 		err = m.client.Status().Update(context.TODO(), &ts)
@@ -1213,6 +1220,8 @@ func (m *statusManager) set(retry bool, conditions ...operator.TigeraStatusCondi
 			} else {
 				log.WithValues("reason", err).Info("Failed to update tigera status")
 			}
+		} else {
+			m.lastMessage = ts.Status.Message
 		}
 	}
 	m.crExists = true
@@ -1308,18 +1317,21 @@ func (m *statusManager) degradedMessage() string {
 func (m *statusManager) statusMessage(conditions []operator.TigeraStatusCondition) string {
 	for _, c := range conditions {
 		if c.Type == operator.ComponentDegraded && c.Status == operator.ConditionTrue {
-			return c.Message
+			return singleLine(c.Message)
 		}
 	}
 	for _, c := range conditions {
 		if c.Type == operator.ComponentProgressing && c.Status == operator.ConditionTrue {
-			return c.Message
+			return singleLine(c.Message)
 		}
 	}
-	if w := m.warningMessageLocked(); w != "" {
-		return w
-	}
-	return ""
+	return m.warningMessageLocked()
+}
+
+// singleLine collapses the newlines used to join per-resource messages, so the
+// message survives as one line in a kubectl print column.
+func singleLine(msg string) string {
+	return strings.ReplaceAll(msg, "\n", "; ")
 }
 
 // This function should only be called if we are in a degraded state.

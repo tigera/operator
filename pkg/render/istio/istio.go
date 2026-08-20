@@ -69,8 +69,6 @@ const (
 	IstioCNIDaemonSetName             = "istio-cni-node"
 	IstioZTunnelDaemonSetName         = "ztunnel"
 	IstioSidecarInjectorConfigMapName = "istio-sidecar-injector"
-	IstioOperatorAnnotationMode       = "operator.tigera.io/istioAmbientMode"
-	IstioOperatorAnnotationDSCP       = "operator.tigera.io/istioDSCPMark"
 	IstioFinalizer                    = "operator.tigera.io/calico-istio"
 	IstioIstiodPolicyName             = networkpolicy.CalicoComponentPolicyPrefix + IstioIstiodDeploymentName
 	IstioCNIPolicyName                = networkpolicy.CalicoComponentPolicyPrefix + IstioCNIDaemonSetName

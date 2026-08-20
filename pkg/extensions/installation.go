@@ -38,9 +38,9 @@ type InstallationExtension interface {
 	// Watches registers the watches the extension needs.
 	Watches(c ctrlruntime.Controller) error
 
-	// DefaultFelixConfiguration defaults FelixConfiguration fields, reporting whether
-	// it changed fc. It runs before Felix defaulting persists.
-	DefaultFelixConfiguration(install *operatorv1.InstallationSpec, fc *v3.FelixConfiguration) (bool, error)
+	// DeclareFelixConfiguration writes the variant's defaults into owned, merging with current
+	// where needed, and returns the paths it declared.
+	DeclareFelixConfiguration(install *operatorv1.InstallationSpec, current, owned *v3.FelixConfiguration) ([]string, error)
 
 	// ProductVersion is the version the operator writes to the Installation status.
 	ProductVersion() string
@@ -63,8 +63,8 @@ func (noopInstallation) Watches(ctrlruntime.Controller) error {
 	return nil
 }
 
-func (noopInstallation) DefaultFelixConfiguration(*operatorv1.InstallationSpec, *v3.FelixConfiguration) (bool, error) {
-	return false, nil
+func (noopInstallation) DeclareFelixConfiguration(*operatorv1.InstallationSpec, *v3.FelixConfiguration, *v3.FelixConfiguration) ([]string, error) {
+	return nil, nil
 }
 
 func (noopInstallation) ProductVersion() string {

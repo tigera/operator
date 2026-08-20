@@ -150,17 +150,15 @@ var _ = Describe("Application layer controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("ensuring that felix configuration PolicySyncPathPrefix is left as is, even after ALP deletion")
+			By("ensuring that felix configuration PolicySyncPathPrefix is cleared after ALP deletion")
 			f2 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
 			}
 			Expect(test.GetResource(c, &f2)).To(BeNil())
-			// The operator-managed default is shared with egressgateway and
-			// Gateway API, which never clear it; the AL controller must not
-			// clear a value it may not own, so it is preserved here.
-			Expect(f2.Spec.PolicySyncPathPrefix).To(Equal("/var/run/nodeagent"))
+			// One field manager owns the path for every consumer, so the last one going away clears it.
+			Expect(f2.Spec.PolicySyncPathPrefix).To(BeEmpty())
 		})
 
 		It("should leave PolicySyncPathPrefix set on AL deletion when Istio CR still needs it", func() {
@@ -246,7 +244,7 @@ var _ = Describe("Application layer controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("ensuring that felix configuration PolicySyncPathPrefix is left as is, even after ALP deletion")
+			By("ensuring that a user's own PolicySyncPathPrefix survives ALP deletion")
 			f2 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
@@ -257,9 +255,8 @@ var _ = Describe("Application layer controller tests", func() {
 		})
 
 		It("should leave TPROXYMode unset if log collection is disabled", func() {
-			// This test verifies a workaround for upgrade from versions that don't support TPROXY to versions
-			// that do.  Setting an unknown felix config field causes older versions of felix to cyclicly restart,
-			// which causes a disruptive upgrade.
+			// With no ApplicationLayer resource, the field is declared without a value, so Felix
+			// falls back to its own default rather than reading one the operator picked.
 			By("reconciling before without an app layer resource")
 			mockStatus.On("OnCRNotFound").Return()
 			_, err := r.Reconcile(ctx, reconcile.Request{})
@@ -276,9 +273,8 @@ var _ = Describe("Application layer controller tests", func() {
 		})
 
 		It("should enable WAFEventLogsFileEnabled when the GatewayAPI WAF extension is enabled (no ApplicationLayer CR)", func() {
-			// The gateway data-plane WAF (design-25) emits audit events that flow through Felix's WAF event
-			// log, so it requires the same FelixConfiguration toggle as the legacy ApplicationLayer WAF — even
-			// when no ApplicationLayer CR is present.
+			// The gateway data-plane WAF emits audit events through Felix's WAF event log, so it needs
+			// the same toggle as the legacy ApplicationLayer WAF, with no ApplicationLayer CR present.
 			mockStatus.On("OnCRNotFound").Return()
 
 			By("creating a GatewayAPI CR with the WAF extension enabled")
@@ -369,14 +365,14 @@ var _ = Describe("Application layer controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("ensuring that felix configuration updated to disabled")
+			By("ensuring that felix configuration cleared the mode")
 			fc = v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",
 				},
 			}
 			Expect(test.GetResource(c, &fc)).To(BeNil())
-			Expect(fc.Spec.TPROXYMode).To(Equal("Disabled"))
+			Expect(fc.Spec.TPROXYMode).To(Equal(""))
 		})
 
 		It("should render proper SidecarWebhook status", func() {

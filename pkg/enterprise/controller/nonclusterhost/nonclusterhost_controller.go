@@ -110,6 +110,19 @@ func (r *ReconcileNonClusterHost) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
+	if instance.Spec.IngestionCompression == nil {
+		// Hosts read this CR directly and treat an unset field as None, and
+		// the CRD default only applies on write, so materialize the default
+		// for CRs created before the field existed.
+		preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
+		compression := operatorv1.IngestionCompressionZstd
+		instance.Spec.IngestionCompression = &compression
+		if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+			r.status.SetDegraded(operatorv1.ResourcePatchError, "Failed to set default IngestionCompression", err, logc)
+			return reconcile.Result{}, err
+		}
+	}
+
 	config := &nonclusterhost.Config{
 		NonClusterHost: instance.Spec,
 	}

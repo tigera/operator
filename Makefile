@@ -118,7 +118,7 @@ REPO?=tigera/operator
 PACKAGE_NAME?=github.com/tigera/operator
 LOCAL_USER_ID?=$(shell id -u $$USER)
 # The project Go version.
-GO_VERSION?=1.25.13
+GO_VERSION?=1.25.14
 # Version of Kubernetes to use for dependencies, tests, and kubectl.
 K8S_VERSION?=v1.35.7
 # The version of LLVM to use for the go-build image.

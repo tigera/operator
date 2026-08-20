@@ -24,6 +24,7 @@ type Set struct {
 	Tiers             TiersExtension
 	CSR               CSRExtension
 	Istio             IstioExtension
+	GatewayAPI        GatewayAPIExtension
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -85,4 +86,11 @@ func (e Extensions) Istio() IstioExtension {
 		return noopIstio{}
 	}
 	return e.set.Istio
+}
+
+func (e Extensions) GatewayAPI() GatewayAPIExtension {
+	if e.set.GatewayAPI == nil {
+		return noopGatewayAPI{}
+	}
+	return e.set.GatewayAPI
 }

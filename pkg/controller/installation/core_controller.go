@@ -1033,7 +1033,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Set any non-default FelixConfiguration values that we need.
 	felixWriter := sharedconfig.NewWriter(r.client, r.opts.UseV3CRDs)
-	_, err = felixWriter.ApplyFelixConfiguration(ctx, r.declareFelixConfiguration(instance))
+	defaulted, err := felixWriter.ApplyFelixConfiguration(ctx, r.declareFelixConfiguration(instance))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating FelixConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1042,6 +1042,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating FelixConfiguration", err, reqLogger)
 		return reconcile.Result{}, err
+	}
+
+	// spec.healthPort comes from the write above, which a user is free to defer, so take the port
+	// from that write rather than from a read that may not have caught up with it.
+	felixHealthPort := defaultFelixHealthPort(instance)
+	if defaulted.Spec.HealthPort != nil {
+		felixHealthPort = *defaulted.Spec.HealthPort
 	}
 
 	// Set any non-default BGPConfiguration values that we need.
@@ -1191,7 +1198,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		TLS:               typhaNodeTLS,
 		MigrateNamespaces: needsNamespaceMigration,
 		ClusterDomain:     r.opts.ClusterDomain,
-		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
+		FelixHealthPort:   felixHealthPort,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1316,7 +1323,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		NodeAppArmorProfile:   nodeAppArmorProfile,
 		MigrateNamespaces:     needsNamespaceMigration,
 		CanRemoveCNIFinalizer: canRemoveCNI,
-		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
+		FelixHealthPort:       felixHealthPort,
 		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
 		V3CRDs:                r.opts.UseV3CRDs,
 		ImageOverrides:        r.ext.Images(),

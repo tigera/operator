@@ -41,9 +41,14 @@ func declaredPayload(owned *v3.FelixConfiguration) (*unstructured.Unstructured, 
 
 	u := &unstructured.Unstructured{Object: content}
 	unstructured.RemoveNestedField(u.Object, "metadata")
-	unstructured.RemoveNestedField(u.Object, "status")
 	u.SetName(defaultFelixConfigName)
 	return u, nil
+}
+
+// declaresSpec reports whether the payload sets any field at all.
+func declaresSpec(payload *unstructured.Unstructured) bool {
+	spec, found, err := unstructured.NestedMap(payload.Object, "spec")
+	return err == nil && found && len(spec) > 0
 }
 
 // pathSet reports whether path holds a value in obj.

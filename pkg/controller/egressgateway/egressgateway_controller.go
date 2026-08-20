@@ -154,6 +154,18 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	// Ahead of every early return below, because the last egress gateway going away is what
+	// clears the policy sync path.
+	fc, err := sharedconfig.NewWriter(r.client, r.useV3CRDs).ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
+	if err != nil {
+		reqLogger.Error(err, "Error patching felix configuration")
+		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
+		for _, egw := range egws {
+			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
+		}
+		return reconcile.Result{}, err
+	}
+
 	// If there are no Egress Gateway resources, return.
 	ch := utils.NewComponentHandler(log, r.client, r.scheme, nil)
 	if len(egws) == 0 {
@@ -286,18 +298,6 @@ func (r *ReconcileEgressGateway) Reconcile(ctx context.Context, request reconcil
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		for _, egw := range egwsToReconcile {
 			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error retrieving pull secrets err = %s", err.Error()))
-		}
-		return reconcile.Result{}, err
-	}
-
-	// Write and read back the felix configuration, which carries the policy sync path the
-	// egress gateway pods mount.
-	fc, err := sharedconfig.NewWriter(r.client, r.useV3CRDs).ApplyFelixConfiguration(ctx, sharedconfig.DeclarePolicySyncPathPrefix(ctx, r.client))
-	if err != nil {
-		reqLogger.Error(err, "Error patching felix configuration")
-		r.status.SetDegraded(operatorv1.ResourcePatchError, "Error patching felix configuration", err, reqLogger)
-		for _, egw := range egwsToReconcile {
-			setDegraded(r.client, ctx, &egw, reconcileErr, fmt.Sprintf("Error patching felix configuration err = %s", err.Error()))
 		}
 		return reconcile.Result{}, err
 	}

@@ -50,10 +50,11 @@ func (w *crdV1Writer) ApplyFelixConfiguration(ctx context.Context, declare Decla
 	if err != nil {
 		return nil, err
 	}
-	patchFrom := client.MergeFrom(current.DeepCopy())
 	if err := utils.RestoreV3Metadata(current); err != nil {
 		return nil, err
 	}
+	// Diff against the restored object, so the patch leaves the v3 metadata stash alone.
+	patchFrom := client.MergeFrom(current.DeepCopy())
 
 	declaration, err := declare(current)
 	if err != nil {
@@ -67,7 +68,13 @@ func (w *crdV1Writer) ApplyFelixConfiguration(ctx context.Context, declare Decla
 	if err != nil {
 		return nil, err
 	}
-	deferred, err := resolveTrackedConflicts(current, declaration, payload)
+	// Fields the operator's pre-apply manager still owns are its own, whether or not it kept a
+	// record of writing them.
+	legacyOwned, _, err := updateOwnedPaths(current)
+	if err != nil {
+		return nil, err
+	}
+	deferred, err := resolveTrackedConflicts(current, declaration, payload, legacyOwned)
 	if err != nil {
 		return nil, err
 	}
@@ -76,7 +83,7 @@ func (w *crdV1Writer) ApplyFelixConfiguration(ctx context.Context, declare Decla
 	if err := mergeInto(merged, payload); err != nil {
 		return nil, err
 	}
-	removed, err := removeUndeclared(merged, current, declaration, payload)
+	removed, err := removeUndeclared(merged, current, declaration, payload, legacyOwned)
 	if err != nil {
 		return nil, err
 	}
@@ -86,11 +93,15 @@ func (w *crdV1Writer) ApplyFelixConfiguration(ctx context.Context, declare Decla
 	if equality.Semantic.DeepEqual(current, merged) {
 		return current, nil
 	}
+	if current.ResourceVersion == "" && !declaresSpec(payload) {
+		// The declaration holds nothing to write, so don't create an object carrying only a record.
+		return current, nil
+	}
 	return w.persist(ctx, merged, patchFrom)
 }
 
 // resolveTrackedConflicts drops deferred fields from payload and returns the paths it dropped.
-func resolveTrackedConflicts(current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured) ([]string, error) {
+func resolveTrackedConflicts(current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured, legacyOwned map[string]bool) ([]string, error) {
 	currentContent, err := runtime.DefaultUnstructuredConverter.ToUnstructured(current)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read FelixConfiguration fields: %w", err)
@@ -114,7 +125,7 @@ func resolveTrackedConflicts(current *v3.FelixConfiguration, d *FelixConfigurati
 			continue
 		}
 
-		changed, err := changedByOther(currentContent, lastWritten, path)
+		changed, err := changedByOther(currentContent, lastWritten, legacyOwned, path)
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +152,7 @@ func resolveTrackedConflicts(current *v3.FelixConfiguration, d *FelixConfigurati
 
 // removeUndeclared deletes governed fields the declaration left out, matching the way a sole
 // apply owner drops them.
-func removeUndeclared(merged, current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured) ([]string, error) {
+func removeUndeclared(merged, current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured, legacyOwned map[string]bool) ([]string, error) {
 	currentContent, err := runtime.DefaultUnstructuredConverter.ToUnstructured(current)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read FelixConfiguration fields: %w", err)
@@ -156,11 +167,11 @@ func removeUndeclared(merged, current *v3.FelixConfiguration, d *FelixConfigurat
 		if pathSet(payload.Object, path) || !pathSet(currentContent, path) {
 			continue
 		}
-		if _, recorded := lastWritten[path]; !recorded {
-			// The operator has no record of writing this, so it belongs to someone else.
+		if _, recorded := lastWritten[path]; !recorded && !legacyOwned[path] {
+			// The operator has no sign of writing this, so it belongs to someone else.
 			continue
 		}
-		changed, err := changedByOther(currentContent, lastWritten, path)
+		changed, err := changedByOther(currentContent, lastWritten, legacyOwned, path)
 		if err != nil {
 			return nil, err
 		}
@@ -221,12 +232,13 @@ func (w *crdV1Writer) UpdateFelixConfiguration(ctx context.Context, updateFn fun
 		return nil, fmt.Errorf("unable to read FelixConfiguration: %w", err)
 	}
 
-	// Create a base state for the upcoming patch operation.
-	patchFrom := client.MergeFrom(fc.DeepCopy())
-
 	if err = utils.RestoreV3Metadata(fc); err != nil {
 		return nil, err
 	}
+
+	// Create a base state for the upcoming patch operation, diffing against the restored object so
+	// the patch leaves the v3 metadata stash alone.
+	patchFrom := client.MergeFrom(fc.DeepCopy())
 
 	// Apply desired changes to the FelixConfiguration.
 	updated, err := updateFn(fc)

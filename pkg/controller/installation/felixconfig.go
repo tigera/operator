@@ -37,13 +37,23 @@ const (
 )
 
 // declareFelixConfiguration declares the fields defaulted from the Installation spec, always
-// declaring every one so the field set stays stable.
+// declaring every one so the field set stays stable. A field the spec stops asking for is
+// declared without a value, which clears whatever the operator wrote there.
 func (r *ReconcileInstallation) declareFelixConfiguration(install *operatorv1.Installation) sharedconfig.DeclareFelixConfiguration {
 	return func(current *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
 		d := &sharedconfig.FelixConfigurationDeclaration{
-			Manager:  felixConfigFieldManager,
-			Owned:    &v3.FelixConfiguration{},
-			Policies: map[string]sharedconfig.ConflictPolicy{},
+			Manager: felixConfigFieldManager,
+			Owned:   &v3.FelixConfiguration{},
+			Policies: map[string]sharedconfig.ConflictPolicy{
+				"spec.routeTableRange":         sharedconfig.ConflictDefer,
+				"spec.healthPort":              sharedconfig.ConflictDefer,
+				"spec.vxlanVNI":                sharedconfig.ConflictDefer,
+				"spec.vxlanPort":               sharedconfig.ConflictDefer,
+				"spec.bpfHostConntrackBypass":  sharedconfig.ConflictDefer,
+				"spec.bpfKubeProxyHealthzPort": sharedconfig.ConflictDefer,
+				"spec.nftablesMode":            sharedconfig.ConflictOverride,
+				"spec.programClusterRoutes":    sharedconfig.ConflictOverride,
+			},
 		}
 		owned := &d.Owned.Spec
 
@@ -52,18 +62,11 @@ func (r *ReconcileInstallation) declareFelixConfiguration(install *operatorv1.In
 		case operatorv1.PluginAmazonVPC:
 			// AWS uses the ENI device number + 1, and the VLAN table ID + 100.
 			owned.RouteTableRange = &v3.RouteTableRange{Min: 65, Max: 99}
-			d.Policies["spec.routeTableRange"] = sharedconfig.ConflictDefer
 		case operatorv1.PluginGKE:
 			owned.RouteTableRange = &v3.RouteTableRange{Min: 10, Max: 250}
-			d.Policies["spec.routeTableRange"] = sharedconfig.ConflictDefer
 		}
 
-		healthPort := 9099
-		if install.Spec.KubernetesProvider.IsOpenShift() {
-			healthPort = 9199
-		}
-		owned.HealthPort = &healthPort
-		d.Policies["spec.healthPort"] = sharedconfig.ConflictDefer
+		owned.HealthPort = ptr.To(defaultFelixHealthPort(install))
 
 		vxlanVNI, vxlanPort := 4096, 4789
 		if install.Spec.KubernetesProvider == operatorv1.ProviderDockerEE {
@@ -76,23 +79,18 @@ func (r *ReconcileInstallation) declareFelixConfiguration(install *operatorv1.In
 
 				// The eBPF dataplane only works with MKE when conntrack bypass is off.
 				owned.BPFHostConntrackBypass = ptr.To(false)
-				d.Policies["spec.bpfHostConntrackBypass"] = sharedconfig.ConflictDefer
 			}
 		}
 		owned.VXLANVNI = &vxlanVNI
 		owned.VXLANPort = &vxlanPort
-		d.Policies["spec.vxlanVNI"] = sharedconfig.ConflictDefer
-		d.Policies["spec.vxlanPort"] = sharedconfig.ConflictDefer
 
 		if install.Spec.BPFEnabled() && !install.Spec.KubeProxyManagementEnabled() {
 			// The platform's kube-proxy holds 10256, so Felix's healthz server would fail to bind.
 			owned.BPFKubeProxyHealthzPort = ptr.To(0)
-			d.Policies["spec.bpfKubeProxyHealthzPort"] = sharedconfig.ConflictDefer
 		}
 
 		if install.Spec.CalicoNetwork != nil && install.Spec.CalicoNetwork.LinuxDataplane != nil {
 			owned.NFTablesMode = ptr.To(nftablesMode(install))
-			d.Policies["spec.nftablesMode"] = sharedconfig.ConflictOverride
 		}
 
 		// Gated on the field being set, so leaving it unset keeps meaning "whatever Calico
@@ -100,7 +98,6 @@ func (r *ReconcileInstallation) declareFelixConfiguration(install *operatorv1.In
 		if install.Spec.CalicoNetwork != nil && install.Spec.CalicoNetwork.ClusterRoutingMode != nil {
 			mode := *install.Spec.CalicoNetwork.ClusterRoutingMode
 			owned.ProgramClusterRoutes = ptr.To(felixProgramClusterRoutesValue(mode))
-			d.Policies["spec.programClusterRoutes"] = sharedconfig.ConflictOverride
 		}
 
 		extPaths, err := r.ext.DeclareFelixConfiguration(&install.Spec, current, d.Owned)
@@ -113,6 +110,14 @@ func (r *ReconcileInstallation) declareFelixConfiguration(install *operatorv1.In
 
 		return d, nil
 	}
+}
+
+// defaultFelixHealthPort is the port the operator defaults Felix's health server to.
+func defaultFelixHealthPort(install *operatorv1.Installation) int {
+	if install.Spec.KubernetesProvider.IsOpenShift() {
+		return 9199
+	}
+	return 9099
 }
 
 // nftablesMode is the dataplane mode Felix should run in. The operator has always owned it,

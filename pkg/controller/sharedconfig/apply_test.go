@@ -52,6 +52,17 @@ func declare(healthPolicy, vxlanPolicy sharedconfig.ConflictPolicy) sharedconfig
 	}
 }
 
+// declarePolicySync governs spec.policySyncPathPrefix, declaring a value only when prefix is set.
+func declarePolicySync(prefix string) sharedconfig.DeclareFelixConfiguration {
+	return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
+		return &sharedconfig.FelixConfigurationDeclaration{
+			Manager:  "policy-sync",
+			Owned:    &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{PolicySyncPathPrefix: prefix}},
+			Policies: map[string]sharedconfig.ConflictPolicy{"spec.policySyncPathPrefix": sharedconfig.ConflictDefer},
+		}, nil
+	}
+}
+
 var _ = Describe("Applying declared FelixConfiguration fields", func() {
 	var c client.Client
 	var ctx context.Context
@@ -136,6 +147,18 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 			Expect(getFelixConfig().Spec.HealthPort).To(Equal(ptr.To(9100)))
 		})
 
+		It("should take a field that already holds the declared value, without arbitrating", func() {
+			applyAs("kubectl", 9099)
+
+			fc, err := w.ApplyFelixConfiguration(ctx, declare(sharedconfig.ConflictError, sharedconfig.ConflictDefer))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fc.Spec.HealthPort).To(Equal(ptr.To(9099)))
+			Expect(getFelixConfig().ManagedFields).To(ContainElement(SatisfyAll(
+				HaveField("Manager", "tigera-operator/installation"),
+				HaveField("Operation", metav1.ManagedFieldsOperationApply),
+			)))
+		})
+
 		It("should delete a field it stops declaring, so the declared set has to stay stable", func() {
 			_, err := w.ApplyFelixConfiguration(ctx, declare(sharedconfig.ConflictDefer, sharedconfig.ConflictDefer))
 			Expect(err).NotTo(HaveOccurred())
@@ -162,8 +185,8 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				}
 			}
 
-			// createAsManager writes the way the operator's merge patch used to, against a manager
-			// that never applied.
+			// createAsManager writes the way a plain update does, under a manager with no apply
+			// of its own.
 			createAsManager := func(manager string, annotations map[string]string, spec v3.FelixConfigurationSpec) {
 				Expect(c.Create(ctx, &v3.FelixConfiguration{
 					ObjectMeta: metav1.ObjectMeta{Name: "default", Annotations: annotations},
@@ -204,7 +227,7 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
 				Expect(err).NotTo(HaveOccurred())
 
-				// The stale annotation still reads "true", which is what a user now applies.
+				// The stale annotation still reads "true", matching the value the user applies.
 				other := &unstructured.Unstructured{Object: map[string]any{
 					"apiVersion": "projectcalico.org/v3",
 					"kind":       "FelixConfiguration",
@@ -240,6 +263,39 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(fc.Spec.HealthPort).To(Equal(ptr.To(9100)))
 				Expect(fc.Spec.VXLANPort).To(Equal(ptr.To(4789)))
+			})
+
+			It("should clear a field its legacy manager holds that the declaration dropped", func() {
+				createAsManager("operator", nil, v3.FelixConfigurationSpec{PolicySyncPathPrefix: "/var/run/nodeagent"})
+
+				_, err := w.ApplyFelixConfiguration(ctx, declarePolicySync(""))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getFelixConfig().Spec.PolicySyncPathPrefix).To(BeEmpty())
+			})
+
+			It("should leave a dropped field alone when someone else wrote it", func() {
+				createByUpdate(nil, v3.FelixConfigurationSpec{PolicySyncPathPrefix: "/var/run/customer"})
+
+				_, err := w.ApplyFelixConfiguration(ctx, declarePolicySync(""))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getFelixConfig().Spec.PolicySyncPathPrefix).To(Equal("/var/run/customer"))
+			})
+
+			It("should stop using its record once it has applied the field itself", func() {
+				createByUpdate(map[string]string{render.BPFOperatorAnnotation: "true"},
+					v3.FelixConfigurationSpec{BPFEnabled: ptr.To(true)})
+				_, err := w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(false)))
+
+				// A user turns it back on by hand, to the value the stale annotation still names.
+				fc := getFelixConfig()
+				fc.Spec.BPFEnabled = ptr.To(true)
+				Expect(c.Update(ctx, fc, client.FieldOwner("kubectl"))).NotTo(HaveOccurred())
+
+				_, err = w.ApplyFelixConfiguration(ctx, declareBPF(sharedconfig.ConflictError))
+				Expect(err).To(BeAssignableToTypeOf(&sharedconfig.ConflictingFieldsError{}))
+				Expect(getFelixConfig().Spec.BPFEnabled).To(Equal(ptr.To(true)))
 			})
 		})
 	})
@@ -326,6 +382,47 @@ var _ = Describe("Applying declared FelixConfiguration fields", func() {
 
 			_, err := w.ApplyFelixConfiguration(ctx, declare(sharedconfig.ConflictError, sharedconfig.ConflictDefer))
 			Expect(err).To(BeAssignableToTypeOf(&sharedconfig.ConflictingFieldsError{}))
+		})
+
+		Context("a cluster the operator wrote before it recorded its writes", func() {
+			BeforeEach(func() {
+				scheme := runtime.NewScheme()
+				Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+				c = ctrlrfake.DefaultFakeClientBuilder(scheme).WithReturnManagedFields().Build()
+				ctx = context.Background()
+				w = sharedconfig.NewWriter(c, false)
+			})
+
+			createAsManager := func(manager string, spec v3.FelixConfigurationSpec) {
+				Expect(c.Create(ctx, &v3.FelixConfiguration{
+					ObjectMeta: metav1.ObjectMeta{Name: "default"},
+					Spec:       spec,
+				}, client.FieldOwner(manager))).NotTo(HaveOccurred())
+			}
+
+			It("should take over a field its own legacy manager holds", func() {
+				createAsManager("operator", v3.FelixConfigurationSpec{HealthPort: ptr.To(9100)})
+
+				fc, err := w.ApplyFelixConfiguration(ctx, declare(sharedconfig.ConflictError, sharedconfig.ConflictDefer))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(fc.Spec.HealthPort).To(Equal(ptr.To(9099)))
+			})
+
+			It("should clear a field its legacy manager holds that the declaration dropped", func() {
+				createAsManager("operator", v3.FelixConfigurationSpec{PolicySyncPathPrefix: "/var/run/nodeagent"})
+
+				_, err := w.ApplyFelixConfiguration(ctx, declarePolicySync(""))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getFelixConfig().Spec.PolicySyncPathPrefix).To(BeEmpty())
+			})
+
+			It("should leave a dropped field alone when someone else wrote it", func() {
+				createAsManager("someone-else", v3.FelixConfigurationSpec{PolicySyncPathPrefix: "/var/run/customer"})
+
+				_, err := w.ApplyFelixConfiguration(ctx, declarePolicySync(""))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(getFelixConfig().Spec.PolicySyncPathPrefix).To(Equal("/var/run/customer"))
+			})
 		})
 
 		Context("bpfEnabled, which older operators recorded in their own annotation", func() {

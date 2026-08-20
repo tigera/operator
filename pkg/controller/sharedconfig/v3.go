@@ -16,12 +16,16 @@ package sharedconfig
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -56,6 +60,9 @@ func (w *v3Writer) ApplyFelixConfiguration(ctx context.Context, declare DeclareF
 	if err != nil {
 		return nil, err
 	}
+	if err := w.clearLegacyOwned(ctx, current, declaration, payload); err != nil {
+		return nil, err
+	}
 
 	applied, err := w.apply(ctx, payload, declaration.Manager, false)
 	if err == nil {
@@ -79,7 +86,11 @@ func (w *v3Writer) resolveConflicts(applyErr error, current *v3.FelixConfigurati
 		return false, applyErr
 	}
 
-	reclaimable, err := reclaimablePaths(current)
+	currentContent, err := runtime.DefaultUnstructuredConverter.ToUnstructured(current)
+	if err != nil {
+		return false, fmt.Errorf("unable to read FelixConfiguration fields: %w", err)
+	}
+	reclaimable, err := reclaimablePaths(current, fieldManagerPrefix+d.Manager)
 	if err != nil {
 		return false, err
 	}
@@ -90,6 +101,16 @@ func (w *v3Writer) resolveConflicts(applyErr error, current *v3.FelixConfigurati
 		declared, policy, ok := d.policyFor(path)
 		if !ok {
 			undeclared = append(undeclared, path)
+			continue
+		}
+		// An apply conflicts on ownership, not on value. Taking a field that already holds the
+		// declared value changes nothing, so there is nothing to arbitrate.
+		agree, err := valuesAgree(currentContent, payload.Object, declared)
+		if err != nil {
+			return false, err
+		}
+		if agree {
+			force = true
 			continue
 		}
 		if reclaimable[declared] || reclaimable[path] {
@@ -114,6 +135,35 @@ func (w *v3Writer) resolveConflicts(applyErr error, current *v3.FelixConfigurati
 		return false, &ConflictingFieldsError{Paths: refused}
 	}
 	return force, nil
+}
+
+// clearLegacyOwned deletes governed fields the operator's pre-apply field manager still holds and
+// the declaration does not set. An apply cannot drop a field it does not own.
+func (w *v3Writer) clearLegacyOwned(ctx context.Context, current *v3.FelixConfiguration, d *FelixConfigurationDeclaration, payload *unstructured.Unstructured) error {
+	legacyOwned, _, err := updateOwnedPaths(current)
+	if err != nil || len(legacyOwned) == 0 {
+		return err
+	}
+
+	remove := map[string]any{}
+	for path := range d.Policies {
+		if !legacyOwned[path] || pathSet(payload.Object, path) {
+			continue
+		}
+		if err := unstructured.SetNestedField(remove, nil, strings.Split(path, ".")...); err != nil {
+			return err
+		}
+	}
+	if len(remove) == 0 {
+		return nil
+	}
+
+	encoded, err := json.Marshal(remove)
+	if err != nil {
+		return fmt.Errorf("unable to render the fields to clear: %w", err)
+	}
+	fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: defaultFelixConfigName}}
+	return w.client.Patch(ctx, fc, client.RawPatch(types.MergePatchType, encoded))
 }
 
 func (w *v3Writer) apply(ctx context.Context, payload *unstructured.Unstructured, manager string, force bool) (*v3.FelixConfiguration, error) {

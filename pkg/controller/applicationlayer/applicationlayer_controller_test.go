@@ -244,7 +244,7 @@ var _ = Describe("Application layer controller tests", func() {
 			_, err = r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).ShouldNot(HaveOccurred())
 
-			By("ensuring that felix configuration PolicySyncPathPrefix is cleared after ALP deletion")
+			By("ensuring that a user's own PolicySyncPathPrefix survives ALP deletion")
 			f2 := v3.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "default",

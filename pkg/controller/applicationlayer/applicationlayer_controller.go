@@ -512,16 +512,19 @@ const applicationLayerFieldManager = "application-layer"
 // and the gateway data plane.
 func declareWAFEventLogsFile(al *operatorv1.ApplicationLayer, gatewayWAFEnabled bool) sharedconfig.DeclareFelixConfiguration {
 	return func(_ *v3.FelixConfiguration) (*sharedconfig.FelixConfigurationDeclaration, error) {
-		enabled := wafEventLogsFileRequired(al, gatewayWAFEnabled)
-		return &sharedconfig.FelixConfigurationDeclaration{
+		d := &sharedconfig.FelixConfigurationDeclaration{
 			Manager: applicationLayerFieldManager,
-			Owned: &v3.FelixConfiguration{
-				Spec: v3.FelixConfigurationSpec{WAFEventLogsFileEnabled: &enabled},
-			},
+			Owned:   &v3.FelixConfiguration{},
 			Policies: map[string]sharedconfig.ConflictPolicy{
 				"spec.wafEventLogsFileEnabled": sharedconfig.ConflictOverride,
 			},
-		}, nil
+		}
+		// Declared without a value when nothing needs it, rather than written as false: an
+		// upgrade from before the field existed restarts every node over a value Felix cannot read.
+		if enabled := wafEventLogsFileRequired(al, gatewayWAFEnabled); enabled {
+			d.Owned.Spec.WAFEventLogsFileEnabled = &enabled
+		}
+		return d, nil
 	}
 }
 
@@ -544,10 +547,6 @@ func (r *ReconcileApplicationLayer) patchFelixConfiguration(ctx context.Context,
 			// so rely on the default.
 			return false, nil
 		}
-		if !ok {
-			tproxyMode = "Disabled"
-		}
-
 		if fc.Spec.TPROXYMode == tproxyMode {
 			return false, nil
 		}

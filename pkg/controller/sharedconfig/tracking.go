@@ -50,8 +50,9 @@ func lastWrittenValues(fc *v3.FelixConfiguration) (map[string]any, error) {
 	return values, nil
 }
 
-// changedByOther reports whether path holds a value the operator did not write.
-func changedByOther(currentContent map[string]any, lastWritten map[string]any, path string) (bool, error) {
+// changedByOther reports whether path holds a value the operator did not write. Fields the
+// operator wrote before it kept records are still its own, marked by its pre-apply field manager.
+func changedByOther(currentContent map[string]any, lastWritten map[string]any, legacyOwned map[string]bool, path string) (bool, error) {
 	current, found, err := unstructured.NestedFieldNoCopy(currentContent, strings.Split(path, ".")...)
 	if err != nil {
 		return false, fmt.Errorf("unable to read %s: %w", path, err)
@@ -62,7 +63,7 @@ func changedByOther(currentContent map[string]any, lastWritten map[string]any, p
 
 	written, recorded := lastWritten[path]
 	if !recorded {
-		return true, nil
+		return !legacyOwned[path], nil
 	}
 	canonical, err := canonicalize(current)
 	if err != nil {
@@ -149,23 +150,15 @@ func mergeInto(fc *v3.FelixConfiguration, payload *unstructured.Unstructured) er
 	if spec == nil {
 		spec = map[string]any{}
 	}
-	mergeMaps(spec, declared)
+	// Overlay whole fields rather than merging into them, so a struct field lands the way an
+	// apply would place it.
+	for field, value := range declared {
+		spec[field] = value
+	}
 	if err := unstructured.SetNestedMap(content, spec, "spec"); err != nil {
 		return err
 	}
 	return runtime.DefaultUnstructuredConverter.FromUnstructured(content, fc)
-}
-
-func mergeMaps(dst, src map[string]any) {
-	for key, value := range src {
-		if srcMap, ok := value.(map[string]any); ok {
-			if dstMap, ok := dst[key].(map[string]any); ok {
-				mergeMaps(dstMap, srcMap)
-				continue
-			}
-		}
-		dst[key] = value
-	}
 }
 
 // canonicalize renders a value the way it will read back out of the annotation.

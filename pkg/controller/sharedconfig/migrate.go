@@ -30,9 +30,9 @@ const legacyFieldManager = "operator"
 
 // reclaimablePaths lists fields a plain update owns that the operator wrote itself.
 // An apply must force ownership across once.
-func reclaimablePaths(fc *v3.FelixConfiguration) (map[string]bool, error) {
+func reclaimablePaths(fc *v3.FelixConfiguration, manager string) (map[string]bool, error) {
 	reclaimable, others, err := updateOwnedPaths(fc)
-	if err != nil || len(others) == 0 {
+	if err != nil || len(others) == 0 || appliedBy(fc, manager) {
 		return reclaimable, err
 	}
 
@@ -49,7 +49,8 @@ func reclaimablePaths(fc *v3.FelixConfiguration) (map[string]bool, error) {
 		if !others[path] {
 			continue
 		}
-		changed, err := changedByOther(content, lastWritten, path)
+		// Legacy ownership is beside the point here: these paths belong to another manager.
+		changed, err := changedByOther(content, lastWritten, nil, path)
 		if err != nil {
 			return nil, err
 		}
@@ -58,6 +59,17 @@ func reclaimablePaths(fc *v3.FelixConfiguration) (map[string]bool, error) {
 		}
 	}
 	return reclaimable, nil
+}
+
+// appliedBy reports whether manager has already applied to fc. The operator's records only speak
+// for the writes that came before its first apply, so they stop counting once it has one.
+func appliedBy(fc *v3.FelixConfiguration, manager string) bool {
+	for _, entry := range fc.ManagedFields {
+		if entry.Operation == metav1.ManagedFieldsOperationApply && entry.Manager == manager {
+			return true
+		}
+	}
+	return false
 }
 
 // updateOwnedPaths splits the fields owned through a plain update by whether the operator's own

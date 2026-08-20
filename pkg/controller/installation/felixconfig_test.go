@@ -53,14 +53,19 @@ var _ = Describe("FelixConfiguration declarations", func() {
 		return paths
 	}
 
+	governed := []string{
+		"spec.routeTableRange",
+		"spec.healthPort",
+		"spec.vxlanVNI",
+		"spec.vxlanPort",
+		"spec.bpfHostConntrackBypass",
+		"spec.bpfKubeProxyHealthzPort",
+		"spec.nftablesMode",
+		"spec.programClusterRoutes",
+	}
+
 	It("declares the same fields no matter what the current object holds", func() {
-		empty := declaredPaths(install(), &v3.FelixConfiguration{})
-		Expect(empty).To(ConsistOf(
-			"spec.healthPort",
-			"spec.vxlanVNI",
-			"spec.vxlanPort",
-			"spec.nftablesMode",
-		))
+		Expect(declaredPaths(install(), &v3.FelixConfiguration{})).To(ConsistOf(governed))
 
 		// Every field the operator defaults is already set, by the operator or by anyone else.
 		populated := declaredPaths(install(), &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{
@@ -69,7 +74,54 @@ var _ = Describe("FelixConfiguration declarations", func() {
 			VXLANPort:    ptr.To(1111),
 			NFTablesMode: ptr.To(v3.NFTablesModeDisabled),
 		}})
-		Expect(populated).To(ConsistOf(empty))
+		Expect(populated).To(ConsistOf(governed))
+	})
+
+	It("declares the same fields no matter what the Installation asks for", func() {
+		bpf := operatorv1.LinuxDataplaneBPF
+		specs := []struct {
+			name    string
+			install *operatorv1.Installation
+			// extra holds the paths the extension declares for this provider, on top of the
+			// fields the installation controller governs itself.
+			extra []string
+		}{
+			{name: "the default install", install: install()},
+			{name: "iptables on AWS", install: &operatorv1.Installation{Spec: operatorv1.InstallationSpec{
+				CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginAmazonVPC},
+				KubernetesProvider: operatorv1.ProviderEKS,
+			}}},
+			{name: "eBPF on MKE", install: &operatorv1.Installation{Spec: operatorv1.InstallationSpec{
+				CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
+				KubernetesProvider: operatorv1.ProviderDockerEE,
+				CalicoNetwork:      &operatorv1.CalicoNetworkSpec{LinuxDataplane: &bpf},
+			}}},
+			{name: "OpenShift with cluster routing set", install: &operatorv1.Installation{Spec: operatorv1.InstallationSpec{
+				CNI:                &operatorv1.CNISpec{Type: operatorv1.PluginCalico},
+				KubernetesProvider: operatorv1.ProviderOpenShift,
+				CalicoNetwork: &operatorv1.CalicoNetworkSpec{
+					LinuxDataplane:     &nftables,
+					ClusterRoutingMode: ptr.To(operatorv1.ClusterRoutingModeFelix),
+				},
+			}}, extra: []string{"spec.dnsTrustedServers"}},
+		}
+		for _, spec := range specs {
+			Expect(declaredPaths(spec.install, &v3.FelixConfiguration{})).To(ConsistOf(append(spec.extra, governed...)), spec.name)
+		}
+	})
+
+	It("clears a field the Installation stops asking for", func() {
+		i := install()
+		i.Spec.CalicoNetwork.ClusterRoutingMode = ptr.To(operatorv1.ClusterRoutingModeFelix)
+		d, err := r.declareFelixConfiguration(i)(&v3.FelixConfiguration{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(d.Owned.Spec.ProgramClusterRoutes).NotTo(BeNil())
+
+		// Declared with no value, which is what clears whatever the operator wrote there.
+		d, err = r.declareFelixConfiguration(install())(&v3.FelixConfiguration{})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(d.Owned.Spec.ProgramClusterRoutes).To(BeNil())
+		Expect(d.Policies).To(HaveKey("spec.programClusterRoutes"))
 	})
 
 	It("declares the values it wants, not the values already there", func() {

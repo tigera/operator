@@ -726,7 +726,7 @@ type CalicoNetworkSpec struct {
 
 	// MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for Calico Enterprise installations
 	// using the Calico CNI plugin.
-	// Default: None
+	// Default: Multus
 	// +optional
 	// +kubebuilder:validation:Enum=None;Multus
 	MultiInterfaceMode *MultiInterfaceMode `json:"multiInterfaceMode,omitempty"`

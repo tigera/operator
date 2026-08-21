@@ -227,7 +227,7 @@ func GetLogCollector(ctx context.Context, cli client.Client) (*operatorv1.LogCol
 	return instance, nil
 }
 
-// fillDefaults sets the default value of CollectProcessPath, syslog LogTypes, if not set.
+// fillDefaults sets the default value of CollectProcessPath, IngestionCompression, syslog LogTypes, if not set.
 // This function returns the fields which were set to a default value in the logcollector instance.
 func fillDefaults(instance *operatorv1.LogCollector) []string {
 	// Keep track of whether we changed the LogCollector instance during reconcile, so that we know to save it.
@@ -238,6 +238,13 @@ func fillDefaults(instance *operatorv1.LogCollector) []string {
 		collectProcessPath := operatorv1.CollectProcessPathEnable
 		instance.Spec.CollectProcessPath = &collectProcessPath
 		modifiedFields = append(modifiedFields, "CollectProcessPath")
+	}
+	if instance.Spec.IngestionCompression == nil {
+		// The CRD default only applies on write, so materialize it for CRs
+		// created before the field existed.
+		compression := operatorv1.IngestionCompressionZstd
+		instance.Spec.IngestionCompression = &compression
+		modifiedFields = append(modifiedFields, "IngestionCompression")
 	}
 	if instance.Spec.AdditionalStores != nil {
 		if instance.Spec.AdditionalStores.Syslog != nil {

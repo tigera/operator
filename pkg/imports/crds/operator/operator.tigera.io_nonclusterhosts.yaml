@@ -48,6 +48,20 @@ spec:
                     hosts. For example: https://1.2.3.4:443"
                   pattern: ^https://.+$
                   type: string
+                ingestionCompression:
+                  default: Zstd
+                  description: |-
+                    IngestionCompression selects the compression applied to log batches in
+                    transit from non-cluster hosts to the log ingestion endpoint. Hosts
+                    treat an unset field as None, so hosts newer than the cluster never
+                    send an encoding the cluster cannot decode; the operator fills in the
+                    default on reconcile.
+                    Default: Zstd
+                  enum:
+                    - None
+                    - Gzip
+                    - Zstd
+                  type: string
                 typhaEndpoint:
                   description:
                     "Location of the Typha endpoint for non-cluster host

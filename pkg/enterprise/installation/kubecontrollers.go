@@ -462,11 +462,18 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 		},
 		// Webhooks, view and modify: securityeventwebhooks is reachable under
 		// both the aggregated API group and the CRD group behind it, and the
-		// managed role grants both. Mirrors calico-ui-webhooks-{view,mod}.
+		// managed role grants reads on both. Writes go through the aggregated
+		// group only, so that is the only group needing the write verbs here.
+		// Mirrors calico-ui-webhooks-{view,mod}.
 		{
-			APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+			APIGroups: []string{"projectcalico.org"},
 			Resources: []string{"securityeventwebhooks"},
 			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "watch"},
 		},
 		// Admin Network Policies, view and modify: the Kubernetes admin network
 		// policy API is tierless, so it is granted outside the tier rules above.

@@ -434,6 +434,37 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 			)))
 		})
 
+		It("keeps the webhooks CRD group read-only", func() {
+			// The managed role writes securityeventwebhooks through the
+			// aggregated group only, so the escalation guard needs write here
+			// on that group and reads on the CRD group behind it. Write on the
+			// CRD group would be privilege the catalogue never hands out.
+			create, _ := renderWith(ext, gate("true"))
+			role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, kubecontrollers.KubeControllerRole)
+			Expect(ok).To(BeTrue())
+
+			for _, rule := range role.Rules {
+				for _, group := range rule.APIGroups {
+					if group != "crd.projectcalico.org" {
+						continue
+					}
+					for _, resource := range rule.Resources {
+						if resource != "securityeventwebhooks" {
+							continue
+						}
+						Expect(rule.Verbs).NotTo(ContainElements("create", "update", "patch", "delete"),
+							"the CRD group must stay read-only for securityeventwebhooks")
+					}
+				}
+			}
+
+			Expect(role.Rules).To(ContainElement(SatisfyAll(
+				HaveField("APIGroups", ContainElement("projectcalico.org")),
+				HaveField("Resources", ContainElement("securityeventwebhooks")),
+				HaveField("Verbs", ContainElements("create", "update", "patch", "delete")),
+			)), "the aggregated group must carry the write verbs")
+		})
+
 		It("withholds the rbacsync-only grants when the feature is off", func() {
 			// policy.networking.k8s.io is granted by nothing else in the
 			// kube-controllers role, so it tracks the gate exactly.

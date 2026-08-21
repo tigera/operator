@@ -17,12 +17,10 @@ package render
 
 import (
 	"fmt"
-	"net"
 	"net/url"
 	"strings"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 	"golang.org/x/net/http/httpproxy"
 	"gopkg.in/yaml.v2"
 	appsv1 "k8s.io/api/apps/v1"
@@ -43,6 +41,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	operatorurl "github.com/tigera/operator/pkg/url"
 )
 
 const (
@@ -523,13 +522,7 @@ func (c *dexComponent) resolveEgressRulesByDestination() map[string]v3.Rule {
 	egressRulesByDestination := make(map[string]v3.Rule)
 	processedPodProxies := ProcessPodProxies(c.cfg.PodProxies)
 	for i, podProxy := range processedPodProxies {
-		egressDestinations, err := resolveEgressDestinationsForPod(podProxy)
-		if err != nil {
-			log.Error(err, fmt.Sprintf("failed to resolve egress destinations for pod %d, skipping for policy rendering", i))
-			continue
-		}
-
-		for _, egressDestination := range egressDestinations {
+		for _, egressDestination := range resolveEgressDestinationsForPod(podProxy) {
 			egressRule, err := resolveEgressRuleForDestination(egressDestination)
 			if err != nil {
 				log.Error(err, fmt.Sprintf("failed to resolve egress rule for pod %d, skipping for policy rendering", i))
@@ -546,7 +539,7 @@ func (c *dexComponent) resolveEgressRulesByDestination() map[string]v3.Rule {
 // resolveEgressDestinationsForPod collects all possible http proxy destinations and all possible IdP destinations.
 // In the future, this function may return only the specific destinations it expects Dex pods to connect to given the
 // current issuer configuration (in the Authentication CR) and the HTTP proxy configuration.
-func resolveEgressDestinationsForPod(podProxy *httpproxy.Config) ([]string, error) {
+func resolveEgressDestinationsForPod(podProxy *httpproxy.Config) []string {
 	var egressDestinations []string
 
 	if podProxy == nil {
@@ -557,38 +550,31 @@ func resolveEgressDestinationsForPod(podProxy *httpproxy.Config) ([]string, erro
 	// an IdP could live at any IP.
 	// idp-resolution: In the future, we could resolve a single destination by resolving our expected IdP
 	// issuer URL and using podProxy.ProxyFunc to resolve a single expected destination URL.
-	if podProxy.HTTPProxy != "" {
-		httpProxyURL, err := url.Parse(podProxy.HTTPProxy)
-		if err != nil {
-			return nil, err
+	//
+	// An unparseable proxy value costs only its own rule: the catch-alls below are
+	// appended regardless, so a bad proxy string cannot remove a pod's IdP egress.
+	for _, proxy := range []string{podProxy.HTTPProxy, podProxy.HTTPSProxy} {
+		if proxy == "" {
+			continue
 		}
-
-		httpProxyDestination, err := parseHostPortFromURL(httpProxyURL)
+		proxyURL, err := url.Parse(proxy)
 		if err != nil {
-			return nil, err
+			log.Error(err, fmt.Sprintf("ignoring unparseable proxy %q when rendering Dex egress", proxy))
+			continue
 		}
-
-		egressDestinations = append(egressDestinations, httpProxyDestination)
+		destination, err := operatorurl.ParseHostPortFromHTTPProxyURL(proxyURL)
+		if err != nil {
+			log.Error(err, fmt.Sprintf("ignoring proxy %q when rendering Dex egress", proxy))
+			continue
+		}
+		egressDestinations = append(egressDestinations, destination)
 	}
 
-	if podProxy.HTTPSProxy != "" {
-		httpsProxyURL, err := url.Parse(podProxy.HTTPSProxy)
-		if err != nil {
-			return nil, err
-		}
-
-		httpsProxyDestination, err := parseHostPortFromURL(httpsProxyURL)
-		if err != nil {
-			return nil, err
-		}
-
-		egressDestinations = append(egressDestinations, httpsProxyDestination)
-	}
-
+	// Always allowed: an IdP could live at any address.
 	egressDestinations = append(egressDestinations, "0.0.0.0/0")
 	egressDestinations = append(egressDestinations, "::/0")
 
-	return egressDestinations, nil
+	return egressDestinations
 }
 
 func resolveEgressRuleForDestination(destination string) (v3.Rule, error) {
@@ -615,60 +601,15 @@ func resolveEgressRuleForDestination(destination string) (v3.Rule, error) {
 		}, nil
 	}
 
-	// Process specific destinations.
-	var egressRule v3.Rule
-	host, port, err := net.SplitHostPort(destination)
+	// Everything else is a concrete host:port: an exact net for a literal IP,
+	// otherwise the domain.
+	dest, err := networkpolicy.EntityRuleForDestination(destination, "")
 	if err != nil {
 		return v3.Rule{}, err
 	}
-	parsedPort, err := numorstring.PortFromString(port)
-	if err != nil {
-		return v3.Rule{}, err
-	}
-	parsedIp := net.ParseIP(host)
-	if parsedIp == nil {
-		// Assume host is a valid hostname.
-		egressRule = v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Domains: []string{host},
-				Ports:   []numorstring.Port{parsedPort},
-			},
-		}
-	} else {
-		var netSuffix string
-		if parsedIp.To4() != nil {
-			netSuffix = "/32"
-		} else {
-			netSuffix = "/128"
-		}
-
-		egressRule = v3.Rule{
-			Action:   v3.Allow,
-			Protocol: &networkpolicy.TCPProtocol,
-			Destination: v3.EntityRule{
-				Nets:  []string{parsedIp.String() + netSuffix},
-				Ports: []numorstring.Port{parsedPort},
-			},
-		}
-	}
-
-	return egressRule, nil
-}
-
-func parseHostPortFromURL(url *url.URL) (string, error) {
-	if url.Port() != "" {
-		// Host is already in host:port form.
-		return url.Host, nil
-	}
-
-	switch url.Scheme {
-	case "http":
-		return net.JoinHostPort(url.Host, "80"), nil
-	case "https":
-		return net.JoinHostPort(url.Host, "443"), nil
-	default:
-		return "", fmt.Errorf("unexpected scheme for URL: %s", url.Scheme)
-	}
+	return v3.Rule{
+		Action:      v3.Allow,
+		Protocol:    &networkpolicy.TCPProtocol,
+		Destination: dest,
+	}, nil
 }

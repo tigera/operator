@@ -15,7 +15,6 @@
 package clusterconnection
 
 import (
-	"net"
 	"net/url"
 
 	"github.com/sirupsen/logrus"
@@ -27,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -131,44 +129,29 @@ func enterpriseGuardianPolicySpec(gpc *render.GuardianConfiguration) (v3.Network
 			continue
 		}
 
-		host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
+		// No cluster domain: the tunnel destination is the management cluster, an
+		// address outside this cluster. gpc.URL is documented as host:port, so parse
+		// it strictly: a URL here is a
+		// misconfiguration and should fail the render rather than quietly become the
+		// scheme's default port.
+		dest, err := networkpolicy.EntityRuleForDestination(tunnelDestinationHostPort, "")
 		if err != nil {
 			return v3.NetworkPolicySpec{}, err
 		}
-		parsedPort, err := numorstring.PortFromString(port)
-		if err != nil {
-			return v3.NetworkPolicySpec{}, err
+
+		// Only a domain destination needs the EgressAccessControl feature. Without
+		// it, drop the rule -- the Pass below already governs the tunnel, and a
+		// broad allow is not this component's call to make.
+		if len(dest.Domains) > 0 && !gpc.IncludeEgressNetworkPolicy {
+			continue
 		}
-		parsedIP := net.ParseIP(host)
-		if parsedIP == nil {
-			// Domain-based egress rules require the EgressAccessControl license feature.
-			if !gpc.IncludeEgressNetworkPolicy {
-				continue
-			}
-			egressRules = append(egressRules, v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					Domains: []string{host},
-					Ports:   []numorstring.Port{parsedPort},
-				},
-			})
-			allowedDestinations[tunnelDestinationHostPort] = true
-		} else {
-			netSuffix := "/32"
-			if parsedIP.To4() == nil {
-				netSuffix = "/128"
-			}
-			egressRules = append(egressRules, v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					Nets:  []string{parsedIP.String() + netSuffix},
-					Ports: []numorstring.Port{parsedPort},
-				},
-			})
-			allowedDestinations[tunnelDestinationHostPort] = true
-		}
+
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: dest,
+		})
+		allowedDestinations[tunnelDestinationHostPort] = true
 	}
 
 	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})

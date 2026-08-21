@@ -1525,7 +1525,7 @@ spec:
                       description: |-
                         MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for Calico Enterprise installations
                         using the Calico CNI plugin.
-                        Default: None
+                        Default: Multus
                       enum:
                         - None
                         - Multus
@@ -10941,7 +10941,7 @@ spec:
                           description: |-
                             MultiInterfaceMode configures what will configure multiple interface per pod. Only valid for Calico Enterprise installations
                             using the Calico CNI plugin.
-                            Default: None
+                            Default: Multus
                           enum:
                             - None
                             - Multus

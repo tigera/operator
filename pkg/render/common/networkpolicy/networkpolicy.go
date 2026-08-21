@@ -354,8 +354,12 @@ func ParseHostPort(destination string) (string, numorstring.Port, error) {
 }
 
 // EntityRuleForHostPort builds the tightest destination rule for a host that is
-// already parsed: an exact net for a literal IP, a Services match for an
-// in-cluster Service name, otherwise the domain.
+// already parsed: an exact net for a literal IP, otherwise the domain.
+//
+// Service matching is opt-in via clusterDomain. A Services match cannot carry
+// ports, so turning it on for a caller that passes some changes the rule shape;
+// callers whose destination is never in-cluster, or who need their ports
+// preserved, pass an empty clusterDomain and get IP-or-domain only.
 //
 // It never returns a rule with no destination constraint. A rule carrying only
 // ports allows every host on those ports, and whether that is acceptable is the
@@ -366,8 +370,10 @@ func EntityRuleForHostPort(host, clusterDomain string, ports ...numorstring.Port
 	// Domains rules from observed DNS answers, which does not cover a ClusterIP
 	// reached through the cluster domain. A service match carries the Service's
 	// own ports; Calico rejects a rule that sets both.
-	if ns, name, ok := ClusterServiceWithDomain(host, clusterDomain); ok {
-		return CreateServiceSelectorEntityRule(ns, name)
+	if clusterDomain != "" {
+		if ns, name, ok := ClusterServiceWithDomain(host, clusterDomain); ok {
+			return CreateServiceSelectorEntityRule(ns, name)
+		}
 	}
 
 	rule := v3.EntityRule{Ports: ports}

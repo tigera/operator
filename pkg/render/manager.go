@@ -1374,15 +1374,10 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		// valid config), so only the host is narrowed.
 		dest := v3.EntityRule{Ports: networkpolicy.Ports(389, 636)}
 		if host := ldapEgressHost(c.cfg.Authentication.Spec.LDAP.Host); host != "" {
-			if ip := net.ParseIP(host); ip != nil {
-				suffix := "/32"
-				if ip.To4() == nil {
-					suffix = "/128"
-				}
-				dest.Nets = []string{ip.String() + suffix}
-			} else {
-				dest.Domains = []string{host}
-			}
+			// No cluster domain: an LDAP host is an external service, and a Services
+			// match cannot carry the two standard ports this rule deliberately keeps
+			// open.
+			dest = networkpolicy.EntityRuleForHostPort(host, "", networkpolicy.Ports(389, 636)...)
 		}
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

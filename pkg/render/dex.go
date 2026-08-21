@@ -523,7 +523,7 @@ func (c *dexComponent) resolveEgressRulesByDestination() map[string]v3.Rule {
 	processedPodProxies := ProcessPodProxies(c.cfg.PodProxies)
 	for i, podProxy := range processedPodProxies {
 		for _, egressDestination := range resolveEgressDestinationsForPod(podProxy) {
-			egressRule, err := resolveEgressRuleForDestination(egressDestination, c.cfg.ClusterDomain)
+			egressRule, err := resolveEgressRuleForDestination(egressDestination)
 			if err != nil {
 				log.Error(err, fmt.Sprintf("failed to resolve egress rule for pod %d, skipping for policy rendering", i))
 				continue
@@ -578,7 +578,7 @@ func resolveEgressDestinationsForPod(podProxy *httpproxy.Config) []string {
 	return egressDestinations
 }
 
-func resolveEgressRuleForDestination(destination, clusterDomain string) (v3.Rule, error) {
+func resolveEgressRuleForDestination(destination string) (v3.Rule, error) {
 	// Support "any" destinations that signify any potential IdP destination IP.
 	// idp-resolution: These cases can be removed if we are able to resolve specific IdP destinations based on the Authentication config.
 	if destination == "0.0.0.0/0" {
@@ -605,7 +605,7 @@ func resolveEgressRuleForDestination(destination, clusterDomain string) (v3.Rule
 	// Everything else is a concrete host:port. The shared helper picks the
 	// tightest rule it can: an exact net for a literal IP, a Services match for an
 	// in-cluster name, otherwise the domain.
-	dest, err := networkpolicy.EntityRuleForDestination(destination, clusterDomain)
+	dest, err := networkpolicy.EntityRuleForDestination(destination, "")
 	if err != nil {
 		return v3.Rule{}, err
 	}

@@ -30,25 +30,26 @@ import (
 // New builds the Calico Enterprise extensions. After the monorepo split this is what
 // calico-private's main constructs instead.
 func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Extensions {
+	// Startup is registered whatever the variant, since the namespaces Enterprise
+	// manages are off limits to a Calico install too.
+	set := extensions.Set{Startup: startup{variant: variant}}
+
 	// Enterprise has two spellings, so match on the product rather than the constant:
 	// an Installation asking for the deprecated TigeraSecureEnterprise still gets the
 	// Enterprise extensions.
-	if variant.IsEnterprise() {
-		return extensions.New(extensions.Set{
-			Installation:      installation.New(variant, o),
-			Windows:           windows.New(variant),
-			APIServer:         apiserver.New(variant, o),
-			ClusterConnection: clusterconnection.New(variant),
-			Tiers:             tiers.New(o),
-			CSR:               csr.New(),
-			Istio:             istio.New(),
-		})
-	}
-
-	if variant == operatorv1.Calico {
+	switch {
+	case variant.IsEnterprise():
+		set.Installation = installation.New(variant, o)
+		set.Windows = windows.New(variant)
+		set.APIServer = apiserver.New(variant, o)
+		set.ClusterConnection = clusterconnection.New(variant)
+		set.Tiers = tiers.New(o)
+		set.CSR = csr.New()
+		set.Istio = istio.New()
+	case variant == operatorv1.Calico:
 		// Clean up what a prior Enterprise installation left behind.
-		return extensions.New(extensions.Set{APIServer: apiserver.CalicoCleanup{}})
+		set.APIServer = apiserver.CalicoCleanup{}
 	}
 
-	return extensions.Extensions{}
+	return extensions.New(set)
 }

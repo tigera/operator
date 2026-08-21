@@ -31,9 +31,16 @@ import (
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 )
 
+// startup is the Enterprise hook into operator startup. It registers for every variant,
+// since the namespaces Enterprise manages are off limits to a Calico install too, and
+// no-ops the checks that only apply to Enterprise.
+type startup struct {
+	variant operatorv1.ProductVariant
+}
+
 // VerifyAPIsExist reports whether the Enterprise CRDs the extension controllers need are installed.
-func VerifyAPIsExist(variant operatorv1.ProductVariant, cs kubernetes.Interface) error {
-	if !variant.IsEnterprise() {
+func (s startup) VerifyAPIsExist(cs kubernetes.Interface) error {
+	if !s.variant.IsEnterprise() {
 		return nil
 	}
 
@@ -47,10 +54,10 @@ func VerifyAPIsExist(variant operatorv1.ProductVariant, cs kubernetes.Interface)
 	return nil
 }
 
-// VerifyElasticsearch rejects a cluster whose Elasticsearch certificates contradict the
+// VerifyClusterState rejects a cluster whose Elasticsearch certificates contradict the
 // internal or external mode the operator is configured for.
-func VerifyElasticsearch(ctx context.Context, cs kubernetes.Interface, variant operatorv1.ProductVariant, migrating, external bool) error {
-	if !variant.IsEnterprise() {
+func (s startup) VerifyClusterState(ctx context.Context, cs kubernetes.Interface, migrating, external bool) error {
+	if !s.variant.IsEnterprise() {
 		return nil
 	}
 
@@ -80,7 +87,7 @@ func VerifyElasticsearch(ctx context.Context, cs kubernetes.Interface, variant o
 
 // ProtectedNamespaces returns the Enterprise namespaces the operator manages and so
 // must not run in itself.
-func ProtectedNamespaces() []string {
+func (s startup) ProtectedNamespaces() []string {
 	return []string{
 		render.ElasticsearchNamespace,
 		render.IntrusionDetectionNamespace,

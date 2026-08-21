@@ -606,7 +606,7 @@ func fillDefaults(instance *operatorv1.Installation, currentPools *v3.IPPoolList
 		}
 
 		if instance.Spec.CalicoNetwork.MultiInterfaceMode == nil {
-			mm := operatorv1.MultiInterfaceModeNone
+			mm := operatorv1.MultiInterfaceModeMultus
 			instance.Spec.CalicoNetwork.MultiInterfaceMode = &mm
 		}
 

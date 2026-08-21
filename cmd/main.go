@@ -425,6 +425,40 @@ admission policy installation; once an Installation exists it is the authority o
 		}
 	}
 
+	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
+	if err != nil {
+		log.Error(err, "Failed to get Kubernetes clientset")
+		os.Exit(1)
+	}
+
+	// Attempt to auto discover the provider
+	provider, err := discovery.AutoDiscoverProvider(ctx, clientset)
+	if err != nil {
+		setupLog.Error(err, "Auto discovery of Provider failed")
+		os.Exit(1)
+	}
+	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
+
+	// Determine if we're running in single or multi-tenant mode.
+	multiTenant, err := discovery.MultiTenant(ctx, clientset)
+	if err != nil {
+		log.Error(err, "Failed to discovery tenancy mode")
+		os.Exit(1)
+	}
+	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
+
+	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
+	if err != nil {
+		clusterDomain = dns.DefaultClusterDomain
+		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
+	}
+
+	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
+	if err != nil {
+		log.Error(err, "Unable to resolve Kubernetes version, defaulting to v1.18")
+		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
+	}
+
 	// Resolve the variant now that the operator CRDs exist.
 	variant := waitForVariant(ctx, c, setupLog)
 	setupLog.WithValues("variant", variant).Info("Resolved product variant")
@@ -439,9 +473,17 @@ admission policy installation; once an Installation exists it is the authority o
 		}
 	}
 
+	// Build the extensions for the variant we resolved above.
+	extensionRegistry := enterprise.New(variant, eoptions.Options{
+		MultiTenant: multiTenant,
+		Cloud:       isCloudBuild(),
+		ManageCRDs:  manageCRDs,
+		UseV3CRDs:   v3CRDs,
+	})
+
 	// The variant's controllers can't register without their APIs. Exiting lets the kubelet
 	// retry us once the CRDs are installed.
-	if err := enterprise.VerifyAPIsExist(variant, cs); err != nil {
+	if err := extensionRegistry.Startup().VerifyAPIsExist(cs); err != nil {
 		setupLog.Error(err, "Cannot run as the configured variant")
 		os.Exit(1)
 	}
@@ -508,45 +550,11 @@ admission policy installation; once an Installation exists it is the authority o
 		}
 	}()
 
-	clientset, err := kubernetes.NewForConfig(mgr.GetConfig())
-	if err != nil {
-		log.Error(err, "Failed to get Kubernetes clientset")
-		os.Exit(1)
-	}
-
-	// Attempt to auto discover the provider
-	provider, err := discovery.AutoDiscoverProvider(ctx, clientset)
-	if err != nil {
-		setupLog.Error(err, "Auto discovery of Provider failed")
-		os.Exit(1)
-	}
-	setupLog.WithValues("provider", provider).Info("Checking type of cluster")
-
-	// Determine if we're running in single or multi-tenant mode.
-	multiTenant, err := discovery.MultiTenant(ctx, clientset)
-	if err != nil {
-		log.Error(err, "Failed to discovery tenancy mode")
-		os.Exit(1)
-	}
-	setupLog.WithValues("tenancy", multiTenant).Info("Checking tenancy mode")
-
-	clusterDomain, err := dns.GetClusterDomain(dns.DefaultResolveConfPath)
-	if err != nil {
-		clusterDomain = dns.DefaultClusterDomain
-		log.Error(err, fmt.Sprintf("Couldn't find the cluster domain from the resolv.conf, defaulting to %s", clusterDomain))
-	}
-
-	kubernetesVersion, err := common.GetKubernetesVersion(clientset)
-	if err != nil {
-		log.Error(err, "Unable to resolve Kubernetes version, defaulting to v1.18")
-		kubernetesVersion = &common.VersionInfo{Major: 1, Minor: 18}
-	}
-
 	// The operator MUST not run within one of the Namespaces that it itself manages. Perform an early check here
 	// to make sure that we're not doing so, and exit if we are.
 	// Components share namespaces, so dedupe before the error lists them.
 	badNamespaces := sets.New(common.CalicoNamespace, render.CSIDaemonSetNamespace).
-		Insert(enterprise.ProtectedNamespaces()...).
+		Insert(extensionRegistry.Startup().ProtectedNamespaces()...).
 		UnsortedList()
 	for _, ns := range badNamespaces {
 		if common.OperatorNamespace() == ns {
@@ -572,8 +580,8 @@ admission policy installation; once an Installation exists it is the authority o
 	if isCloudBuild() {
 		elasticIsMigrating = discovery.ElasticIsMigrating(bootConfig)
 		useSingleIndex = discovery.UseSingleIndex(bootConfig)
-		if err := enterprise.VerifyElasticsearch(ctx, cs, variant, elasticIsMigrating, useExternalElastic); err != nil {
-			setupLog.Error(err, "Elasticsearch configuration verification failed")
+		if err := extensionRegistry.Startup().VerifyClusterState(ctx, cs, elasticIsMigrating, useExternalElastic); err != nil {
+			setupLog.Error(err, "Cluster state verification failed")
 			os.Exit(1)
 		}
 	}
@@ -589,14 +597,6 @@ admission policy installation; once an Installation exists it is the authority o
 		log.Error(err, "Failed to monitor the product variant")
 		os.Exit(1)
 	}
-
-	// Build the extensions for the variant we resolved above.
-	extensionRegistry := enterprise.New(variant, eoptions.Options{
-		MultiTenant: multiTenant,
-		Cloud:       isCloudBuild(),
-		ManageCRDs:  manageCRDs,
-		UseV3CRDs:   v3CRDs,
-	})
 
 	options := options.ControllerOptions{
 		DetectedProvider:  provider,

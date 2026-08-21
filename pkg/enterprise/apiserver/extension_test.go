@@ -49,6 +49,7 @@ import (
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -406,6 +407,41 @@ var _ = Describe("API server enterprise modifier", func() {
 		Entry("enabled", rbacManagementGate("true"), true),
 		Entry("disabled", rbacManagementGate("false"), false),
 		Entry("no ConfigMap", nil, false),
+	)
+
+	// The rule that lets a network admin turn the feature on cannot itself be gated on
+	// the feature, or the admin would need cluster-admin to reach the switch.
+	DescribeTable("grants tigera-network-admin write access to the gate ConfigMap whatever the gate says",
+		func(gate *corev1.ConfigMap) {
+			var objs []client.Object
+			if gate != nil {
+				objs = append(objs, gate)
+			}
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, objs...)
+			eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			rendered, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](rendered, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+
+			// create cannot be restricted by resource name, so it admits any ConfigMap
+			// in the namespace.
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create"},
+			}))
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+			}))
+		},
+		Entry("enabled", rbacManagementGate("true")),
+		Entry("disabled", rbacManagementGate("false")),
+		Entry("no ConfigMap", nil),
 	)
 
 	It("reads the gate on a managed cluster, which carries tigera-network-admin too", func() {

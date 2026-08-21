@@ -1026,9 +1026,7 @@ var _ = Describe("OpenTelemetry rendering", func() {
 		})
 
 		It("should never emit a rule that allows any host", func() {
-			// The shared helper always constrains the destination. A ports-only rule
-			// would let the collector reach anything on that port, and that is not a
-			// default this component gets to choose.
+			// A ports-only rule would let the collector reach anything on that port.
 			cfg := &otelcollector.Configuration{
 				Installation: defaultInstallation,
 				OpenTelemetry: &operatorv1.OpenTelemetrySpec{

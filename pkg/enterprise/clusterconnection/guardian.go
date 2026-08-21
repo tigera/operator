@@ -129,19 +129,17 @@ func enterpriseGuardianPolicySpec(gpc *render.GuardianConfiguration) (v3.Network
 			continue
 		}
 
-		// No cluster domain: the tunnel destination is the management cluster, an
-		// address outside this cluster. gpc.URL is documented as host:port, so parse
-		// it strictly: a URL here is a
-		// misconfiguration and should fail the render rather than quietly become the
-		// scheme's default port.
+		// gpc.URL is host:port, so a URL fails the render rather than becoming the
+		// scheme's default port. No cluster domain: the tunnel destination is the
+		// management cluster, outside this one.
 		dest, err := networkpolicy.EntityRuleForDestination(tunnelDestinationHostPort, "")
 		if err != nil {
 			return v3.NetworkPolicySpec{}, err
 		}
 
-		// Only a domain destination needs the EgressAccessControl feature. Without
-		// it, drop the rule -- the Pass below already governs the tunnel, and a
-		// broad allow is not this component's call to make.
+		// A domain destination needs the EgressAccessControl feature; an IP does not.
+		// Without the feature the rule is dropped and the Pass below governs the
+		// tunnel.
 		if len(dest.Domains) > 0 && !gpc.IncludeEgressNetworkPolicy {
 			continue
 		}

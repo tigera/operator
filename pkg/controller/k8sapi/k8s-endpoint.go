@@ -16,12 +16,12 @@ package k8sapi
 
 import (
 	"fmt"
-	"net"
 	"os"
 	"strings"
 
 	calicov3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -74,22 +74,10 @@ func (k8s ServiceEndpoint) DestinationEntityRule() (*calicov3.EntityRule, error)
 		return nil, err
 	}
 
-	rule := calicov3.EntityRule{
-		Ports: []numorstring.Port{p},
-	}
-
-	ip := net.ParseIP(k8s.Host)
-	if ip == nil {
-		rule.Domains = []string{k8s.Host}
-	} else {
-		var netSuffix string
-		if ip.To4() != nil {
-			netSuffix = "/32"
-		} else {
-			netSuffix = "/128"
-		}
-		rule.Nets = []string{ip.String() + netSuffix}
-	}
+	// Shared with the components that build egress rules for an external
+	// destination. No cluster domain: this host is the apiserver, reached outside
+	// the cluster network, and a Services match could not carry its port.
+	rule := networkpolicy.EntityRuleForHostPort(k8s.Host, "", p)
 
 	return &rule, nil
 }

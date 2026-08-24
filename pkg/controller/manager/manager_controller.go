@@ -571,15 +571,9 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var tunnelSecretPassthrough render.Component
 
 	if managementCluster != nil {
-		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
+		// The CRD schema carries these defaults now. This covers a cluster whose CRDs the
+		// operator doesn't manage.
 		fillDefaults(managementCluster)
-
-		// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-		// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-		if err := r.client.Patch(ctx, managementCluster, preDefaultPatchFrom); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "", err, logc)
-			return reconcile.Result{}, err
-		}
 
 		// Create a certificate for Voltron to use when serving TLS connections from managed clusters destined
 		// to Linseed. This certificate is used only for connections received over Voltron's mTLS tunnel targeting tigera-linseed.

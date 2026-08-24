@@ -215,19 +215,13 @@ func (r *ReconcileApplicationLayer) Reconcile(ctx context.Context, request recon
 		}
 	}
 
-	preDefaultPatchFrom := client.MergeFrom(instance.DeepCopy())
-
+	// The CRD schema carries the spec defaults now. This covers a cluster whose CRDs the
+	// operator doesn't manage.
 	updateApplicationLayerWithDefaults(instance)
 
 	if err = validateApplicationLayer(instance); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "", err, reqLogger)
 		return reconcile.Result{}, nil
-	}
-
-	// Write the application layer back to the datastore, so the controllers depending on this can reconcile.
-	if err = r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults to applicationLayer", err, reqLogger)
-		return reconcile.Result{}, err
 	}
 
 	installationSpec, err := utils.GetComputedInstallationSpec(ctx, r.client)

@@ -30,6 +30,7 @@ type ManagementClusterSpec struct {
 
 	// TLS provides options for configuring how Managed Clusters can establish an mTLS connection with the Management Cluster.
 	// +optional
+	// +kubebuilder:default={}
 	TLS *TLS `json:"tls,omitempty"`
 }
 
@@ -51,6 +52,7 @@ type TLS struct {
 	// Default: calico-management-cluster-connection
 	//
 	// +kubebuilder:validation:Enum=calico-management-cluster-connection;manager-tls;tigera-management-cluster-connection
+	// +kubebuilder:default=calico-management-cluster-connection
 	// +optional
 	SecretName string `json:"secretName,omitempty"`
 }

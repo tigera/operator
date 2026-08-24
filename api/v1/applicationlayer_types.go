@@ -24,13 +24,17 @@ import (
 type ApplicationLayerSpec struct {
 	// WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
 	// When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.
+	// +kubebuilder:default=Disabled
 	WebApplicationFirewall *WAFStatusType `json:"webApplicationFirewall,omitempty"`
 	// Specification for application layer (L7) log collection.
+	// +kubebuilder:default={}
 	LogCollection *LogCollectionSpec `json:"logCollection,omitempty"`
 	// Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
 	// When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
+	// +kubebuilder:default=Disabled
 	ApplicationLayerPolicy *ApplicationLayerPolicyStatusType `json:"applicationLayerPolicy,omitempty"`
 	// User-configurable settings for the Envoy proxy.
+	// +kubebuilder:default={}
 	EnvoySettings *EnvoySettings `json:"envoy,omitempty"`
 
 	// L7LogCollectorDaemonSet configures the L7LogCollector DaemonSet.
@@ -43,6 +47,7 @@ type ApplicationLayerSpec struct {
 	// such as WAF and ALP implemented using an injected sidecar instead of a per-host proxy.
 	// The per-host proxy will continue to be used for pods without this label.
 	// +optional
+	// +kubebuilder:default=Disabled
 	SidecarInjection *SidecarStatusType `json:"sidecarInjection,omitempty"`
 }
 
@@ -95,11 +100,13 @@ type LogCollectionSpec struct {
 	// This setting enables or disable log collection.
 	// Allowed values are Enabled or Disabled.
 	// +optional
+	// +kubebuilder:default=Disabled
 	CollectLogs *LogCollectionStatusType `json:"collectLogs,omitempty"`
 
 	// Interval in seconds for sending L7 log information for processing.
 	// +optional
 	// Default: 5 sec
+	// +kubebuilder:default=5
 	LogIntervalSeconds *int64 `json:"logIntervalSeconds,omitempty"`
 
 	// Maximum number of unique L7 logs that are sent LogIntervalSeconds.
@@ -107,6 +114,7 @@ type LogCollectionSpec struct {
 	// to felix for further processing, use negative number to ignore limits.
 	// +optional
 	// Default: -1
+	// +kubebuilder:default=-1
 	LogRequestsPerInterval *int64 `json:"logRequestsPerInterval,omitempty"`
 }
 

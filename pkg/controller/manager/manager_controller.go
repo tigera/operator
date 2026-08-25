@@ -766,7 +766,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		BackendPort:                  render.ManagerPort,
 		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
 		ExtraProxyObjects:            euigateway.ProxyObjects(helper.InstallNamespace()),
-		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+		Provider:                     r.opts.DetectedProvider,
 	})
 	if r.opts.MultiTenant {
 		// Multi-tenant CIG is not supported: resource names and the cleanup

@@ -16,6 +16,7 @@ package gateway_test
 
 import (
 	"fmt"
+	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,6 +30,7 @@ import (
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	"github.com/tigera/operator/pkg/common"
+	euigateway "github.com/tigera/operator/pkg/enterprise/uigateway"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -68,7 +70,7 @@ var _ = Describe("Gateway component render", func() {
 			BackendCABundleConfigMapName: caBundleCM,
 			TLSKeyPair:                   kp,
 			ResourcePrefix:               prefix,
-			Enterprise:                   true,
+			ExtraProxyObjects:            euigateway.ProxyObjects(bkNS),
 			OpenShift:                    false,
 		}
 	})
@@ -135,13 +137,13 @@ var _ = Describe("Gateway component render", func() {
 		})
 	})
 
-	Context("Enterprise resources", func() {
+	Context("extra proxy objects", func() {
 		JustBeforeEach(func() {
 			comp := gateway.Component(cfg)
 			toCreate, toDelete = comp.Objects()
 		})
 
-		It("renders SA, RoleBinding, and NetworkPolicy when Enterprise is true", func() {
+		It("renders the supplied objects and the proxy NetworkPolicy", func() {
 			sa := findObject[*corev1.ServiceAccount](toCreate, "waf-http-filter", gwNS)
 			Expect(sa).NotTo(BeNil())
 			np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -158,18 +160,18 @@ var _ = Describe("Gateway component render", func() {
 			Expect(np.Spec.Ingress[1].Destination.Ports).To(Equal(networkpolicy.Ports(10443)))
 		})
 
-		Context("when Enterprise is false", func() {
+		Context("when the caller supplies none", func() {
 			BeforeEach(func() {
-				cfg.Enterprise = false
+				cfg.ExtraProxyObjects = nil
 			})
 
-			It("skips SA and RoleBinding but keeps the proxy NetworkPolicy", func() {
+			It("renders only the proxy NetworkPolicy", func() {
 				for _, obj := range toCreate {
 					if _, ok := obj.(*corev1.ServiceAccount); ok {
-						Fail("ServiceAccount should not be rendered when Enterprise is false")
+						Fail("no ServiceAccount should be rendered without extra proxy objects")
 					}
 					if rb, ok := obj.(*rbacv1.RoleBinding); ok && !isAccessBinding(prefix, rb.Name) {
-						Fail("only the access RoleBindings should be rendered when Enterprise is false")
+						Fail("only the access RoleBindings should be rendered without extra proxy objects")
 					}
 				}
 				np := findObject[*v3.NetworkPolicy](toCreate, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -224,14 +226,7 @@ var _ = Describe("Gateway component render", func() {
 				"the backend grant has no business in the gateway namespace")
 		})
 
-		It("removes the pre-split Role left in the backend namespace", func() {
-			// One Role named for the gateway used to cover both namespaces.
-			gone := findObject[*rbacv1.Role](toDelete, prefix+"-ingressgateway-access", bkNS)
-			Expect(gone).NotTo(BeNil(), "the leftover combined Role should be deleted on upgrade")
-			Expect(findObject[*rbacv1.RoleBinding](toDelete, prefix+"-ingressgateway-access", bkNS)).NotTo(BeNil())
-		})
-
-		It("leaves SA, RoleBinding, and NetworkPolicy to the GatewayAPI controller even when Enterprise is true", func() {
+		It("leaves SA, RoleBinding, and NetworkPolicy to the GatewayAPI controller in a custom namespace", func() {
 			for _, obj := range toCreate {
 				switch o := obj.(type) {
 				case *corev1.ServiceAccount:
@@ -388,11 +383,11 @@ var _ = Describe("Gateway deletion component", func() {
 
 	BeforeEach(func() {
 		delCfg = &gateway.DeletionConfiguration{
-			ResourcePrefix:   prefix,
-			StaleNamespace:   gwNS,
-			BackendNamespace: bkNS,
-			TLSSecretName:    tlsSecret,
-			Enterprise:       true,
+			ResourcePrefix:    prefix,
+			StaleNamespace:    gwNS,
+			BackendNamespace:  bkNS,
+			TLSSecretName:     tlsSecret,
+			ExtraProxyObjects: euigateway.ProxyObjects(gwNS),
 		}
 	})
 
@@ -402,6 +397,43 @@ var _ = Describe("Gateway deletion component", func() {
 	})
 
 	Context("same namespace", func() {
+		// The deletion component is written by hand rather than derived from the
+		// render, so this is what keeps the two from drifting: every object the
+		// render creates must have a matching delete. The delete set may hold
+		// more (a ReferenceGrant tolerated as NotFound); never less.
+		It("deletes every object the render creates", func() {
+			secret, err := certificatemanagement.CreateSelfSignedSecret(tlsSecret, common.OperatorNamespace(), tlsSecret, nil)
+			Expect(err).NotTo(HaveOccurred())
+			renderCfg := &gateway.Configuration{
+				Hostname:                     "manager.example.com",
+				GatewayNamespace:             gwNS,
+				GatewayClassName:             "calico-gateway",
+				BackendServiceName:           "calico-manager",
+				BackendPort:                  9443,
+				BackendNamespace:             bkNS,
+				BackendCABundleConfigMapName: "tigera-ca-bundle",
+				TLSKeyPair:                   certificatemanagement.NewKeyPair(secret, []string{""}, ""),
+				ResourcePrefix:               prefix,
+				ExtraProxyObjects:            euigateway.ProxyObjects(bkNS),
+			}
+			created, _ := gateway.Component(renderCfg).Objects()
+
+			for _, want := range created {
+				found := false
+				for _, got := range toDelete {
+					if reflect.TypeOf(got) == reflect.TypeOf(want) &&
+						got.GetName() == want.GetName() &&
+						got.GetNamespace() == want.GetNamespace() {
+						found = true
+						break
+					}
+				}
+				Expect(found).To(BeTrue(), fmt.Sprintf(
+					"rendered %T %s/%s has no matching delete — add it to the deletion component or it leaks on teardown",
+					want, want.GetNamespace(), want.GetName()))
+			}
+		})
+
 		It("returns everything in objsToDelete and nothing in objsToCreate", func() {
 			Expect(toCreate).To(BeNil())
 			Expect(toDelete).NotTo(BeEmpty())
@@ -449,7 +481,7 @@ var _ = Describe("Gateway deletion component", func() {
 			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 		})
 
-		It("includes Enterprise resources", func() {
+		It("includes the supplied extra proxy objects", func() {
 			sa := findObject[*corev1.ServiceAccount](toDelete, "waf-http-filter", gwNS)
 			Expect(sa).NotTo(BeNil())
 			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -457,18 +489,18 @@ var _ = Describe("Gateway deletion component", func() {
 		})
 	})
 
-	Context("Enterprise false", func() {
+	Context("no extra proxy objects supplied", func() {
 		BeforeEach(func() {
-			delCfg.Enterprise = false
+			delCfg.ExtraProxyObjects = nil
 		})
 
-		It("skips SA and RoleBinding but keeps the proxy NetworkPolicy", func() {
+		It("deletes only the proxy NetworkPolicy beside the access grants", func() {
 			for _, obj := range toDelete {
 				if _, ok := obj.(*corev1.ServiceAccount); ok {
-					Fail("ServiceAccount should not appear when Enterprise is false")
+					Fail("no ServiceAccount should be deleted without extra proxy objects")
 				}
 				if rb, ok := obj.(*rbacv1.RoleBinding); ok && !isAccessBinding(prefix, rb.Name) {
-					Fail("only the access RoleBindings should appear when Enterprise is false")
+					Fail("only the access RoleBindings should appear without extra proxy objects")
 				}
 			}
 			np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", gwNS)
@@ -498,7 +530,7 @@ var _ = Describe("Gateway deletion component", func() {
 			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
-		It("does not delete GatewayAPI-controller-owned resources even when Enterprise is true", func() {
+		It("does not delete GatewayAPI-controller-owned resources in a custom namespace", func() {
 			for _, obj := range toDelete {
 				switch o := obj.(type) {
 				case *corev1.ServiceAccount:
@@ -516,7 +548,7 @@ var _ = Describe("Gateway deletion component", func() {
 	Context("namespace move cleanup", func() {
 		BeforeEach(func() {
 			delCfg.StaleNamespace = "old-ns"
-			delCfg.MoveTargetNamespace = "new-ns"
+			delCfg.TargetNamespace = "new-ns"
 		})
 
 		It("deletes the gateway-namespace objects", func() {
@@ -555,7 +587,7 @@ var _ = Describe("Gateway deletion component", func() {
 				// Whisker's default: gateway and backend share a namespace, and
 				// the gateway is the thing leaving.
 				delCfg.StaleNamespace = bkNS
-				delCfg.MoveTargetNamespace = "new-ns"
+				delCfg.TargetNamespace = "new-ns"
 			})
 
 			It("keeps the backend grant even though the namespace is the one being cleaned", func() {
@@ -571,7 +603,7 @@ var _ = Describe("Gateway deletion component", func() {
 
 		Context("moving into the backend namespace", func() {
 			BeforeEach(func() {
-				delCfg.MoveTargetNamespace = bkNS
+				delCfg.TargetNamespace = bkNS
 			})
 
 			It("deletes the ReferenceGrant, which is no longer rendered", func() {
@@ -590,10 +622,10 @@ var _ = Describe("Gateway deletion component", func() {
 		Context("moving out of the backend namespace", func() {
 			BeforeEach(func() {
 				delCfg.StaleNamespace = bkNS
-				delCfg.MoveTargetNamespace = "new-ns"
+				delCfg.TargetNamespace = "new-ns"
 			})
 
-			It("deletes the Enterprise SA, RoleBinding, and NetworkPolicy from the backend namespace", func() {
+			It("deletes the supplied proxy objects and NetworkPolicy from the backend namespace", func() {
 				Expect(findObject[*corev1.ServiceAccount](toDelete, "waf-http-filter", bkNS)).NotTo(BeNil())
 				np := findObject[*v3.NetworkPolicy](toDelete, networkpolicy.CalicoComponentPolicyPrefix+prefix+"-gateway-proxy", bkNS)
 				Expect(np).NotTo(BeNil())

@@ -16,7 +16,6 @@ package whisker
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 
 	v1 "k8s.io/api/apps/v1"
@@ -310,14 +309,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 
 		gatewayComponents, err = gwHelper.Components(ctx, gw, gatewayTLSKeyPair)
 		if err != nil {
-			var gwErr *uigateway.Error
-			if stderrors.As(err, &gwErr) {
-				// A gateway Error reports a configuration problem only the user
-				// can fix. The CRs that fix one are watched, so the next reconcile
-				// follows the user's edit; no requeue is needed.
-				r.status.SetDegraded(gwErr.Reason, gwErr.Msg, gwErr.Err, reqLogger)
-				return reconcile.Result{}, nil
-			}
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to render gateway resources", err, reqLogger)
 			return reconcile.Result{}, err
 		}

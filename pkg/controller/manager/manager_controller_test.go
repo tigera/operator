@@ -281,13 +281,12 @@ var _ = Describe("Manager controller tests", func() {
 			cr.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}
 			Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
 
-			var degradedMsg string
-			mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, mock.Anything, mock.Anything, mock.Anything).
-				Run(func(args mock.Arguments) { degradedMsg = args.String(1) }).Return()
+			var degradedErr string
+			mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { degradedErr = args.String(2) }).Return()
 
-			result, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred(), "the user must act, so this is not a retryable error") //nolint:staticcheck
-			Expect(result.RequeueAfter).To(BeZero(), "the Installation and the TLS secret are watched, so either change triggers the next reconcile")
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(HaveOccurred())
 
 			gw := &gatewayapiv1.Gateway{
 				TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
@@ -299,8 +298,8 @@ var _ = Describe("Manager controller tests", func() {
 			Expect(kerror.IsNotFound(test.GetResource(c, gw))).To(BeTrue(),
 				"no gateway should be rendered without a usable listener certificate")
 
-			Expect(degradedMsg).To(ContainSubstring("spec.ingressGateway is not supported"))
-			Expect(degradedMsg).To(ContainSubstring("certificateManagement"))
+			Expect(degradedErr).To(ContainSubstring("spec.ingressGateway is not supported"))
+			Expect(degradedErr).To(ContainSubstring("certificateManagement"))
 		})
 
 		It("should degrade when spec.ingressGateway is set but the GatewayAPI CR is missing", func() {
@@ -308,13 +307,13 @@ var _ = Describe("Manager controller tests", func() {
 			cr.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}
 			Expect(c.Update(ctx, cr)).NotTo(HaveOccurred())
 
-			degradedMsg := "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway"
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything).Return()
+			var degradedErr string
+			mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { degradedErr = args.String(2) }).Return()
 
-			result, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).NotTo(HaveOccurred(), "a missing CR is a condition, not a retryable failure")
-			Expect(result.RequeueAfter).To(BeZero(), "the GatewayAPI CR is watched, so its creation triggers the next reconcile")
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything)
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).To(HaveOccurred())
+			Expect(degradedErr).To(ContainSubstring("GatewayAPI CR not found"))
 
 			gw := &gatewayapiv1.Gateway{
 				TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},

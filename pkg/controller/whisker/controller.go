@@ -16,10 +16,10 @@ package whisker
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 
 	v1 "k8s.io/api/apps/v1"
-	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/utils/ptr"
@@ -34,10 +34,8 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/uigateway"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -45,10 +43,10 @@ import (
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
-	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/uigateway"
 )
 
 const (
@@ -287,80 +285,43 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		cfg.ClusterID = clusterInfo.Spec.ClusterGUID
 	}
 
-	gwHelper := &uigateway.Config{
-		Client:           r.cli,
-		ResourcePrefix:   whisker.GatewayResourcePrefix,
-		TLSSecretName:    whisker.GatewayTLSSecretName,
-		BackendNamespace: whisker.WhiskerNamespace,
-		// false on Calico, where the gateway is rendered; the WAF ServiceAccount
-		// is Enterprise-only and Whisker's gateway never creates it.
-		Enterprise: installationSpec.Variant.IsEnterprise(),
-	}
+	gwHelper := uigateway.NewHelper(r.cli, uigateway.Config{
+		ResourcePrefix:               whisker.GatewayResourcePrefix,
+		TLSSecretName:                whisker.GatewayTLSSecretName,
+		BackendNamespace:             whisker.WhiskerNamespace,
+		BackendServiceName:           whisker.WhiskerName,
+		BackendPort:                  int32(whisker.WhiskerServicePort),
+		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
+		// Whisker streams flow logs as server-sent events; Envoy Gateway's
+		// default 15s route timeout would drop the stream.
+		RouteRequestTimeout: ptr.To("0s"),
+		OpenShift:           r.provider.IsOpenShift(),
+	})
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
-	// Whisker only runs on Calico; other variants delete it, so a gateway there
-	// would point at a Service this reconcile is deleting. Tear it down instead.
-	// The health check below reuses this flag so the two cannot disagree.
 	gatewayEnabled := whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant == operatorv1.Calico
 	if gw := whiskerCR.Spec.IngressGateway; gatewayEnabled {
-		gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.cli)
-		if err != nil {
-			if kerrors.IsNotFound(err) {
-				r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway", err, reqLogger)
-				return reconcile.Result{}, err
-			}
-			r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		gatewayClassName, err := uigateway.ResolveClassName(gw, gatewayAPI)
-		if err != nil {
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to resolve gateway class", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-
-		gwNS := gw.NamespaceOrDefault()
-		if gwNS != whisker.WhiskerNamespace {
-			if err := uigateway.EnsureNamespace(ctx, r.cli, gwNS); err != nil {
-				r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, reqLogger)
-				return reconcile.Result{}, err
-			}
-		}
-
+		var err error
 		gatewayTLSKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.GatewayTLSSecretName, common.OperatorNamespace(), []string{gw.Hostname})
 		if err != nil {
 			r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		if msg := uigateway.UnsupportedCertificateManagement(gatewayTLSKeyPair); msg != "" {
-			// Render nothing: the key pair carries no private key, so writing it
-			// would leave Envoy with a certificate it cannot serve.
-			r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, nil, reqLogger)
-			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
-		}
 
-		strays, err := gwHelper.MoveCleanup(ctx, gwNS)
+		gatewayComponents, err = gwHelper.Components(ctx, gw, gatewayTLSKeyPair)
 		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, reqLogger)
+			var gwErr *uigateway.Error
+			if stderrors.As(err, &gwErr) {
+				// A gateway Error reports a configuration problem only the user
+				// can fix. The CRs that fix one are watched, so the next reconcile
+				// follows the user's edit; no requeue is needed.
+				r.status.SetDegraded(gwErr.Reason, gwErr.Msg, gwErr.Err, reqLogger)
+				return reconcile.Result{}, nil
+			}
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to render gateway resources", err, reqLogger)
 			return reconcile.Result{}, err
 		}
-		gatewayComponents = append(strays, rgateway.Component(&rgateway.Configuration{
-			Hostname:                     gw.Hostname,
-			GatewayNamespace:             gwNS,
-			GatewayClassName:             gatewayClassName,
-			BackendServiceName:           whisker.WhiskerName,
-			BackendPort:                  int32(whisker.WhiskerServicePort),
-			BackendNamespace:             whisker.WhiskerNamespace,
-			BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
-			TLSKeyPair:                   gatewayTLSKeyPair,
-			ResourcePrefix:               whisker.GatewayResourcePrefix,
-			Enterprise:                   installationSpec.Variant.IsEnterprise(),
-			OpenShift:                    r.provider.IsOpenShift(),
-			// Whisker streams flow logs as server-sent events; Envoy
-			// Gateway's default 15s route timeout would drop the stream.
-			RouteRequestTimeout: ptr.To("0s"),
-		}))
-		cfg.IngressGatewayNamespace = gwNS
+		cfg.IngressGatewayNamespace = gw.NamespaceOrDefault()
 	} else {
 		var err error
 		gatewayComponents, err = gwHelper.Teardown(ctx)

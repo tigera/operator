@@ -25,6 +25,9 @@ type Set struct {
 	CSR               CSRExtension
 	Istio             IstioExtension
 	Goldmane          GoldmaneExtension
+
+	// Startup is the variant's hook into operator startup rather than into a controller.
+	Startup StartupExtension
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -93,4 +96,11 @@ func (e Extensions) Goldmane() GoldmaneExtension {
 		return noopGoldmane{}
 	}
 	return e.set.Goldmane
+}
+
+func (e Extensions) Startup() StartupExtension {
+	if e.set.Startup == nil {
+		return noopStartup{}
+	}
+	return e.set.Startup
 }

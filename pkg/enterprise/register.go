@@ -15,7 +15,11 @@
 package enterprise
 
 import (
+	"context"
+	"fmt"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/csr"
@@ -26,31 +30,63 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/tiers"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/version"
 )
 
-// New builds the Calico Enterprise extensions. After the monorepo split this is what
-// calico-private's main constructs instead.
+// Build satisfies the operator's extensions factory.
+var _ extensions.Factory = Build
+
+// Build is the extensions factory the operator calls once the variant is resolved.
+// Tenancy and the cloud build flag are resolved here rather than passed in, since each
+// only ever describes an Enterprise install.
+func Build(ctx context.Context, in extensions.FactoryInputs) (extensions.Extensions, error) {
+	o := eoptions.Options{
+		ManageCRDs: in.ManageCRDs,
+		UseV3CRDs:  in.UseV3CRDs,
+		Cloud:      isCloudBuild(),
+	}
+
+	if in.Variant.IsEnterprise() {
+		// Tenancy shows up as a namespaced Manager, a CRD only Enterprise installs.
+		multiTenant, err := discovery.MultiTenant(ctx, in.Clientset)
+		if err != nil {
+			return extensions.Extensions{}, fmt.Errorf("failed to determine the tenancy mode: %w", err)
+		}
+		o.MultiTenant = multiTenant
+	}
+
+	return New(in.Variant, o), nil
+}
+
+// New builds the Calico Enterprise extensions from options already resolved.
 func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Extensions {
+	// Startup is registered whatever the variant, since the namespaces Enterprise
+	// manages are off limits to a Calico install too.
+	set := extensions.Set{Startup: startup{variant: variant, opts: o}}
+
 	// Enterprise has two spellings, so match on the product rather than the constant:
 	// an Installation asking for the deprecated TigeraSecureEnterprise still gets the
 	// Enterprise extensions.
-	if variant.IsEnterprise() {
-		return extensions.New(extensions.Set{
-			Installation:      installation.New(variant, o),
-			Windows:           windows.New(variant),
-			APIServer:         apiserver.New(variant, o),
-			ClusterConnection: clusterconnection.New(variant),
-			Tiers:             tiers.New(o),
-			CSR:               csr.New(),
-			Istio:             istio.New(),
-			Goldmane:          goldmane.New(variant),
-		})
-	}
-
-	if variant == operatorv1.Calico {
+	switch {
+	case variant.IsEnterprise():
+		set.Installation = installation.New(variant, o)
+		set.Windows = windows.New(variant)
+		set.APIServer = apiserver.New(variant, o)
+		set.ClusterConnection = clusterconnection.New(variant)
+		set.Tiers = tiers.New(o)
+		set.CSR = csr.New()
+		set.Istio = istio.New()
+		set.Goldmane = goldmane.New(variant)
+	case variant == operatorv1.Calico:
 		// Clean up what a prior Enterprise installation left behind.
-		return extensions.New(extensions.Set{APIServer: apiserver.CalicoCleanup{}})
+		set.APIServer = apiserver.CalicoCleanup{}
 	}
 
-	return extensions.Extensions{}
+	return extensions.New(set)
+}
+
+// isCloudBuild reports whether the binary was built for Calico Cloud. The Makefile bakes
+// the answer in through CLOUD_LDFLAGS so it cannot be flipped at runtime.
+func isCloudBuild() bool {
+	return version.BuildVariant == "cloud"
 }

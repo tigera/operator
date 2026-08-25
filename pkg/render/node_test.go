@@ -3114,6 +3114,17 @@ var _ = Describe("Node rendering tests", func() {
 					},
 				}
 
+				It("should default to the node's own DNS resolver", func() {
+					component := render.Node(&cfg)
+					resources, _ := component.Objects()
+					dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+					Expect(dsResource).ToNot(BeNil())
+
+					ds := dsResource.(*appsv1.DaemonSet)
+					Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSDefault))
+					Expect(ds.Spec.Template.Spec.DNSConfig).To(BeNil())
+				})
+
 				It("should handle calicoNodeDaemonSet overrides", func() {
 					var minReadySeconds int32 = 20
 

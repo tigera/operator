@@ -157,7 +157,7 @@ type NodeConfiguration struct {
 func Node(cfg *NodeConfiguration) Component {
 	// Configure default values for any fields that might not be set.
 	if cfg.DefaultDNSPolicy == "" {
-		cfg.DefaultDNSPolicy = corev1.DNSClusterFirstWithHostNet
+		cfg.DefaultDNSPolicy = corev1.DNSDefault
 	}
 	return &nodeComponent{cfg: cfg}
 }

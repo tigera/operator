@@ -98,11 +98,7 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 	var objs []client.Object
 
 	// Both grants come first because they carry the write permissions the
-	// resources below need. The first reconcile may still be denied while the
-	// authorizer catches up; the requeue will retry, as with the TLS Secret
-	// below. They are rendered unconditionally: when the gateway and backend
-	// namespaces coincide both land in the same namespace, which keeps each
-	// grant tied to one purpose and one lifetime.
+	// resources below need.
 	gwRole, gwBinding := c.gatewayAccess()
 	bkRole, bkBinding := c.backendAccess()
 	objs = append(objs, gwRole, gwBinding, bkRole, bkBinding)

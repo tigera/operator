@@ -25,8 +25,8 @@ import (
 )
 
 // ProxyObjects returns the Enterprise-only objects that run beside a UI
-// gateway's Envoy proxy: the WAF HTTP filter's ServiceAccount and the
-// RoleBinding giving it Gateway API reads.
+// gateway's Envoy proxy in the backend namespace: the WAF HTTP filter's
+// ServiceAccount and the RoleBinding giving it Gateway API reads.
 func ProxyObjects(namespace string) []client.Object {
 	return []client.Object{
 		rgatewayapi.GatewayNamespaceServiceAccount(namespace),

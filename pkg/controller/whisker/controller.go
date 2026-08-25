@@ -316,6 +316,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to render gateway resources", err, reqLogger)
 			return reconcile.Result{}, err
 		}
+		// Whisker's NetworkPolicy admits the gateway's Envoy proxy from this namespace.
 		cfg.IngressGatewayNamespace = gw.NamespaceOrDefault()
 	} else {
 		var err error

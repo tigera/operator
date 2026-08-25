@@ -209,6 +209,7 @@ var _ = Describe("whisker controller tests", func() {
 				scheme:   scheme,
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
+				ext:      extensions.Extensions{}.Whisker(),
 			}
 		})
 
@@ -301,8 +302,8 @@ var _ = Describe("whisker controller tests", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.Anything, mock.Anything, mock.Anything).
 				Run(func(args mock.Arguments) { degradedErr = args.String(2) }).Return()
 			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
-			installation.Spec.CertificateManagement = certificateManagement
-			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+			installation.Status.Computed.CertificateManagement = certificateManagement
+			Expect(cli.Status().Update(ctx, installation)).NotTo(HaveOccurred())
 
 			createGatewayAPI()
 			setIngressGateway(nil)
@@ -329,8 +330,8 @@ var _ = Describe("whisker controller tests", func() {
 			setIngressGateway(nil)
 
 			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
-			installation.Spec.Variant = operatorv1.CalicoEnterprise
-			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+			installation.Status.Computed.Variant = operatorv1.CalicoEnterprise
+			Expect(cli.Status().Update(ctx, installation)).NotTo(HaveOccurred())
 
 			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
 				Name:      gatewayName,

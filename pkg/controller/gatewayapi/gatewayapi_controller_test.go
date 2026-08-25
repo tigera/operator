@@ -48,6 +48,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
 	egatewayapi "github.com/tigera/operator/pkg/enterprise/gatewayapi"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -749,12 +750,13 @@ var _ = Describe("Gateway API controller tests", func() {
 
 	It("writes the bundle and operator-secrets RoleBinding, but not WAF resources, on Calico", func() {
 		r.newComponentHandler = utils.NewComponentHandler
+		r.ext = extensions.Extensions{}.GatewayAPI()
 		bundle, err := certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(nil)
 		Expect(err).NotTo(HaveOccurred())
 		gateways := []gapi.Gateway{
 			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1", UID: "u1"}, Spec: gapi.GatewaySpec{GatewayClassName: gatewayapi.GatewayClassName}},
 		}
-		Expect(r.reconcileGatewayNamespaceResources(ctx, bundle, nil, false, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
+		Expect(r.reconcileGatewayNamespaceResources(ctx, bundle, nil, gateways, map[string]bool{gatewayapi.GatewayClassName: true})).NotTo(HaveOccurred())
 
 		// The operator needs secret CRUD for the UI gateway TLS secret on
 		// both variants; the WAF SA/RoleBinding are Enterprise-only.

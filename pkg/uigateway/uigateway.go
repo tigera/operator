@@ -69,8 +69,7 @@ type Config struct {
 	// it for a component that streams, where the default would cut the stream.
 	RouteRequestTimeout *string
 
-	// ExtraProxyObjects are the variant's additions beside the proxy in the
-	// backend namespace, or nil; see pkg/enterprise/uigateway.
+	// ExtraProxyObjects are the variant's additions beside the proxy, or nil.
 	ExtraProxyObjects []client.Object
 
 	OpenShift bool
@@ -298,9 +297,9 @@ func (h *Helper) ownsNamespace(ctx context.Context, name string) (bool, error) {
 	return ns.Labels[rgateway.GatewayLabel] == h.cfg.ResourcePrefix, nil
 }
 
-// EnsureNamespace creates the gateway namespace if it does not exist.
-// The namespace is created without an owner reference and is never deleted by
-// the operator: a user-provided namespace may hold other workloads.
+// ensureNamespace creates the gateway namespace if it does not exist, stamped
+// with the gateway label so teardown deletes only a namespace the operator
+// created; a namespace the user already had is never touched.
 func (h *Helper) ensureNamespace(ctx context.Context, name string) error {
 	err := h.cli.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
 	if err == nil || !errors.IsNotFound(err) {
@@ -324,9 +323,9 @@ func (h *Helper) ensureNamespace(ctx context.Context, name string) error {
 	return nil
 }
 
-// ResolveClassName determines the GatewayClass name to use based on the
-// user's spec.ingressGateway.gatewayClassName or the GatewayAPI CR's
-// configured classes.
+// resolveClassName returns the GatewayClass to use: the one named by
+// spec.ingressGateway.gatewayClassName, or the GatewayAPI CR's single
+// configured class.
 func (h *Helper) resolveClassName(gw *operatorv1.IngressGatewaySpec, gatewayAPI *operatorv1.GatewayAPI) (string, error) {
 	if gw.GatewayClassName != nil && *gw.GatewayClassName != "" {
 		name := *gw.GatewayClassName

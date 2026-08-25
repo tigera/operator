@@ -274,8 +274,8 @@ var _ = Describe("Manager controller tests", func() {
 
 			install := &operatorv1.Installation{}
 			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, install)).NotTo(HaveOccurred())
-			install.Spec.CertificateManagement = &operatorv1.CertificateManagement{CACert: caPEM}
-			Expect(c.Update(ctx, install)).NotTo(HaveOccurred())
+			install.Status.Computed.CertificateManagement = &operatorv1.CertificateManagement{CACert: caPEM}
+			Expect(c.Status().Update(ctx, install)).NotTo(HaveOccurred())
 
 			Expect(c.Get(ctx, types.NamespacedName{Name: "tigera-secure"}, cr)).NotTo(HaveOccurred())
 			cr.Spec.IngressGateway = &operatorv1.IngressGatewaySpec{Hostname: "manager.example.com"}

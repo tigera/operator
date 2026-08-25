@@ -88,7 +88,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 	// The l7-collector runs as a subcommand of the combined calico binary, so waypoint
 	// pods resolve it from the node cache that calico-node already populated and need no
 	// pull secret in their namespace.
-	image, err := components.GetReference(components.CombinedCalicoImage(in), in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
+	image, err := components.GetReference(components.ComponentTigeraCalico, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 	if err != nil {
 		return ci, extensions.Degradedf(operatorv1.ResourceUpdateError, "error with images from ImageSet: %w", err)
 	}

@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/csr"
@@ -29,6 +30,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/render"
 )
 
 // New builds the Calico Enterprise extensions. After the monorepo split this is what
@@ -64,6 +66,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 // images is every component whose image differs for Enterprise.
 func images(variant operatorv1.ProductVariant, o eoptions.Options) *imageoverride.Overrides {
 	set := imageoverride.New()
+	set.Register(variant, render.ComponentNameCalico, components.ComponentTigeraCalico)
 	installation.RegisterImages(set, variant, o)
 	windows.RegisterImages(set, variant)
 	gatewayapi.RegisterImages(set, variant)

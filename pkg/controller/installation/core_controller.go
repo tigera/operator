@@ -1232,6 +1232,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		MigrateNamespaces:  needsNamespaceMigration,
 		ClusterDomain:      r.opts.ClusterDomain,
 		FelixConfiguration: felixConfiguration,
+		ImageOverrides:     r.images,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1396,9 +1397,10 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{
-		Installation: &defaulted.Spec,
-		Terminating:  installationMarkedForDeletion,
-		OpenShift:    defaulted.Spec.KubernetesProvider.IsOpenShift(),
+		Installation:   &defaulted.Spec,
+		Terminating:    installationMarkedForDeletion,
+		OpenShift:      defaulted.Spec.KubernetesProvider.IsOpenShift(),
+		ImageOverrides: r.images,
 	}
 	components = append(components, render.CSI(&csiCfg))
 

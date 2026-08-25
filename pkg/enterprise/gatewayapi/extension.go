@@ -162,7 +162,6 @@ func (e *Extension) GatewayNamespaceObjects(namespace string, pullSecrets []*cor
 	objs := []client.Object{
 		gatewayapi.GatewayNamespaceServiceAccount(namespace),
 		gatewayapi.GatewayNamespaceRoleBinding(namespace),
-		render.CreateOperatorSecretsRoleBinding(namespace),
 	}
 	return append(objs, secret.ToRuntimeObjects(secret.CopyToNamespace(namespace, pullSecrets...)...)...)
 }

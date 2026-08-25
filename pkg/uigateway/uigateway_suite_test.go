@@ -25,5 +25,5 @@ func TestUIGateway(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)
 	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
 	reporterConfig.JUnitReport = "../../../report/ut/uigateway_suite.xml"
-	ginkgo.RunSpecs(t, "pkg/controller/uigateway Suite", suiteConfig, reporterConfig)
+	ginkgo.RunSpecs(t, "pkg/uigateway Suite", suiteConfig, reporterConfig)
 }

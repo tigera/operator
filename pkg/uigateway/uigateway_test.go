@@ -16,7 +16,6 @@ package uigateway_test
 
 import (
 	"context"
-	stderrors "errors"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -377,31 +376,26 @@ var _ = Describe("Cleanup helpers", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: backendNS}, &corev1.Namespace{})).To(HaveOccurred())
 		})
 
-		It("reports a missing GatewayAPI CR as a condition, not a plain error", func() {
+		It("reports a missing GatewayAPI CR with a message naming the prerequisite", func() {
 			build()
 			_, err := h.Components(ctx, spec("ns-a"), keyPair())
-			var gwErr *uigateway.Error
-			Expect(stderrors.As(err, &gwErr)).To(BeTrue())
-			Expect(gwErr.Reason).To(Equal(operatorv1.ResourceNotFound))
-			Expect(gwErr.Msg).To(ContainSubstring("GatewayAPI CR not found"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("GatewayAPI CR not found"))
 		})
 
-		It("reports an ambiguous GatewayClass as a condition", func() {
+		It("reports an ambiguous GatewayClass", func() {
 			build(gatewayAPI("class-a", "class-b"))
 			_, err := h.Components(ctx, spec("ns-a"), keyPair())
-			var gwErr *uigateway.Error
-			Expect(stderrors.As(err, &gwErr)).To(BeTrue())
-			Expect(gwErr.Reason).To(Equal(operatorv1.InvalidConfigurationError))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("multiple GatewayClasses"))
 		})
 
 		It("refuses to render under certificateManagement", func() {
 			build(gatewayAPI("tigera-gateway-class"))
 			cmKeyPair := &certificatemanagement.KeyPair{CertificateManagement: &operatorv1.CertificateManagement{}}
 			_, err := h.Components(ctx, spec("ns-a"), cmKeyPair)
-			var gwErr *uigateway.Error
-			Expect(stderrors.As(err, &gwErr)).To(BeTrue())
-			Expect(gwErr.Reason).To(Equal(operatorv1.InvalidConfigurationError))
-			Expect(gwErr.Msg).To(ContainSubstring("certificateManagement"))
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("certificateManagement"))
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, &corev1.Namespace{})).To(HaveOccurred(),
 				"nothing should be created when the render is refused")
 		})

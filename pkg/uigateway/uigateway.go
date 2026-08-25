@@ -88,9 +88,7 @@ func NewHelper(cli client.Client, cfg Config) *Helper {
 }
 
 // Components renders the component's gateway resources, plus deletion
-// components for any namespace the Gateway has left behind. An *Error is a
-// condition the caller reports on its own status; any other error is a
-// cluster failure to return for backoff.
+// components for any namespace the Gateway has left behind.
 func (h *Helper) Components(
 	ctx context.Context,
 	spec *operatorv1.IngressGatewaySpec,
@@ -99,24 +97,20 @@ func (h *Helper) Components(
 	// Under certificateManagement, keys are minted in-pod as files, but Envoy
 	// Gateway reads the listener key from a Secret, so there is nothing to serve.
 	if keyPair != nil && keyPair.UseCertificateManagement() {
-		return nil, &Error{Reason: operatorv1.InvalidConfigurationError,
-			Msg: "spec.ingressGateway is not supported when certificateManagement is enabled"}
+		return nil, stderrors.New("spec.ingressGateway is not supported when certificateManagement is enabled")
 	}
 
 	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, h.cli)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return nil, &Error{Reason: operatorv1.ResourceNotFound,
-				Msg: "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway", Err: err}
+			return nil, fmt.Errorf("GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway: %w", err)
 		}
-		// A read failure may be transient, so it goes back as a plain error
-		// for backoff rather than a condition that waits on a watch.
 		return nil, fmt.Errorf("%s: %w", msg, err)
 	}
 
 	className, err := h.resolveClassName(spec, gatewayAPI)
 	if err != nil {
-		return nil, &Error{Reason: operatorv1.InvalidConfigurationError, Msg: "Failed to resolve gateway class", Err: err}
+		return nil, fmt.Errorf("failed to resolve gateway class: %w", err)
 	}
 
 	// The backend namespace already exists and belongs to another controller,
@@ -380,22 +374,3 @@ func AddWatches(c ctrlruntime.Controller, k8sClientset kubernetes.Interface, log
 	}, gatewayWatchPredicate)
 	return nil
 }
-
-// Error is a gateway condition the caller reports on its own status rather
-// than returning: the reason and wording live here so both UI controllers
-// report it identically. Detect it with errors.As; anything else is a cluster
-// failure the caller returns for backoff.
-type Error struct {
-	Reason operatorv1.TigeraStatusReason
-	Msg    string
-	Err    error
-}
-
-func (e *Error) Error() string {
-	if e.Err != nil {
-		return e.Msg + ": " + e.Err.Error()
-	}
-	return e.Msg
-}
-
-func (e *Error) Unwrap() error { return e.Err }

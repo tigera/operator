@@ -357,9 +357,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if gatewayEnabled {
-		// An unhealthy gateway degrades the component without tearing down
-		// deployed resources. The requeue re-checks until Envoy converges;
-		// the degraded state then clears on the pass below.
 		if msg := gwHelper.UnhealthyReason(ctx, whiskerCR.Spec.IngressGateway.NamespaceOrDefault()); msg != "" {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil

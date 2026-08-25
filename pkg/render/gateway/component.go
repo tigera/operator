@@ -62,9 +62,7 @@ type Configuration struct {
 	ResourcePrefix string
 
 	// RouteRequestTimeout, when set, becomes the HTTPRoute rule's request
-	// timeout. Whisker sets "0s" to disable Envoy Gateway's 15-second
-	// default — its flow-log stream is server-sent events and must stay
-	// open. Nil keeps the Envoy Gateway default.
+	// timeout; nil keeps the Envoy Gateway default.
 	RouteRequestTimeout *string
 
 	// ExtraProxyObjects are variant-specific objects rendered beside the

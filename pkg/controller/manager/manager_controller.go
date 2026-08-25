@@ -16,6 +16,7 @@ package manager
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"net"
 	"strings"
@@ -37,17 +38,16 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
-	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	lscommon "github.com/tigera/operator/pkg/controller/logstorage/common"
 	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
-	"github.com/tigera/operator/pkg/controller/uigateway"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	entcertificatemanager "github.com/tigera/operator/pkg/enterprise/certificatemanager"
+	euigateway "github.com/tigera/operator/pkg/enterprise/uigateway"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
@@ -55,11 +55,11 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
-	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/render/logstorage/eck"
 	rmanager "github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/uigateway"
 	"github.com/tigera/operator/pkg/url"
 )
 
@@ -759,13 +759,16 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// observed on the cluster.
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
-	gwHelper := &uigateway.Config{
-		Client:           r.client,
-		ResourcePrefix:   ManagerGatewayResourcePrefix,
-		TLSSecretName:    ManagerGatewayTLSSecretName,
-		BackendNamespace: helper.InstallNamespace(),
-		Enterprise:       installationSpec.Variant.IsEnterprise(),
-	}
+	gwHelper := uigateway.NewHelper(r.client, uigateway.Config{
+		ResourcePrefix:               ManagerGatewayResourcePrefix,
+		TLSSecretName:                ManagerGatewayTLSSecretName,
+		BackendNamespace:             helper.InstallNamespace(),
+		BackendServiceName:           render.ManagerServiceName,
+		BackendPort:                  render.ManagerPort,
+		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
+		ExtraProxyObjects:            euigateway.ProxyObjects(helper.InstallNamespace()),
+		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+	})
 	if r.opts.MultiTenant {
 		// Multi-tenant CIG is not supported: resource names and the cleanup
 		// label carry no tenant identity, so tenants would fight over the
@@ -777,21 +780,15 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 			return reconcile.Result{}, nil
 		}
 	} else if instance.Spec.IngressGateway != nil {
-		gwComp, gwKeyPair, result, err := r.resolveGateway(ctx, instance, installationSpec, authenticationCR, certificateManager, helper, logc)
+		var err error
+		gatewayComponents, gatewayTLSKeyPair, err = r.resolveGateway(ctx, gwHelper, instance, authenticationCR, certificateManager, helper, logc)
 		if err != nil {
-			return result, err
-		}
-		if gwComp == nil {
-			return result, nil
-		}
-		gatewayTLSKeyPair = gwKeyPair
-
-		strays, err := gwHelper.MoveCleanup(ctx, instance.Spec.IngressGateway.NamespaceOrDefault())
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, logc)
 			return reconcile.Result{}, err
 		}
-		gatewayComponents = append(strays, gwComp)
+		if gatewayComponents == nil {
+			// resolveGateway has set Degraded; a watched CR edit triggers the next reconcile.
+			return reconcile.Result{}, nil
+		}
 	} else {
 		var err error
 		gatewayComponents, err = gwHelper.Teardown(ctx)
@@ -963,32 +960,14 @@ const (
 // GatewayClass, provisions the TLS keypair, and returns a gateway render component.
 func (r *ReconcileManager) resolveGateway(
 	ctx context.Context,
+	gwHelper *uigateway.Helper,
 	instance *operatorv1.Manager,
-	installationSpec *operatorv1.InstallationSpec,
 	authenticationCR *operatorv1.Authentication,
 	certManager certificatemanager.CertificateManager,
 	helper eutils.NamespaceHelper,
 	logc logr.Logger,
-) (render.Component, certificatemanagement.KeyPairInterface, reconcile.Result, error) {
+) ([]render.Component, certificatemanagement.KeyPairInterface, error) {
 	gw := instance.Spec.IngressGateway
-
-	// Fetch GatewayAPI CR.
-	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, r.client)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			r.status.SetDegraded(operatorv1.ResourceNotFound, "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway", err, logc)
-			return nil, nil, reconcile.Result{}, err
-		}
-		r.status.SetDegraded(operatorv1.ResourceReadError, msg, err, logc)
-		return nil, nil, reconcile.Result{}, err
-	}
-
-	// Resolve gatewayClassName.
-	gatewayClassName, err := uigateway.ResolveClassName(gw, gatewayAPI)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Failed to resolve gateway class", err, logc)
-		return nil, nil, reconcile.Result{}, err
-	}
 
 	// OIDC hostname check. managerDomain is a base URL (https://host[:port]);
 	// only the host must match spec.ingressGateway.hostname — scheme and port are
@@ -998,20 +977,10 @@ func (r *ReconcileManager) resolveGateway(
 			err := fmt.Errorf("Authentication.spec.managerDomain %q does not match spec.ingressGateway.hostname %q — OIDC redirects will fail",
 				authenticationCR.Spec.ManagerDomain, gw.Hostname)
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Gateway hostname mismatch", err, logc)
-			return nil, nil, reconcile.Result{}, err
+			return nil, nil, err
 		}
 	}
 
-	// Create the gateway namespace if it does not exist. calico-system is
-	// skipped: the Installation controller owns it.
-	if gwNS := gw.NamespaceOrDefault(); gwNS != common.CalicoNamespace {
-		if err := uigateway.EnsureNamespace(ctx, r.client, gwNS); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, fmt.Sprintf("Failed to create gateway namespace %q", gwNS), err, logc)
-			return nil, nil, reconcile.Result{}, err
-		}
-	}
-
-	// Provision TLS keypair for the gateway listener.
 	gwTLSKeyPair, err := certManager.GetOrCreateKeyPair(
 		r.client,
 		ManagerGatewayTLSSecretName,
@@ -1019,30 +988,24 @@ func (r *ReconcileManager) resolveGateway(
 		[]string{gw.Hostname})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, logc)
-		return nil, nil, reconcile.Result{}, err
-	}
-	if msg := uigateway.UnsupportedCertificateManagement(gwTLSKeyPair); msg != "" {
-		// Render nothing: the key pair carries no private key, so writing it
-		// would leave Envoy with a certificate it cannot serve.
-		r.status.SetDegraded(operatorv1.InvalidConfigurationError, msg, nil, logc)
-		return nil, nil, reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+		return nil, nil, err
 	}
 
-	gwCfg := &rgateway.Configuration{
-		Hostname:                     gw.Hostname,
-		GatewayNamespace:             gw.NamespaceOrDefault(),
-		GatewayClassName:             gatewayClassName,
-		BackendServiceName:           render.ManagerServiceName,
-		BackendPort:                  render.ManagerPort,
-		BackendNamespace:             helper.InstallNamespace(),
-		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
-		TLSKeyPair:                   gwTLSKeyPair,
-		ResourcePrefix:               ManagerGatewayResourcePrefix,
-		Enterprise:                   installationSpec.Variant.IsEnterprise(),
-		OpenShift:                    r.opts.DetectedProvider.IsOpenShift(),
+	comps, err := gwHelper.Components(ctx, gw, gwTLSKeyPair)
+	if err != nil {
+		var gwErr *uigateway.Error
+		if stderrors.As(err, &gwErr) {
+			// A gateway Error reports a configuration problem only the user
+			// can fix. The CRs that fix one are watched, so the next reconcile
+			// follows the user's edit; no requeue is needed.
+			r.status.SetDegraded(gwErr.Reason, gwErr.Msg, gwErr.Err, logc)
+			return nil, nil, nil
+		}
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to render gateway resources", err, logc)
+		return nil, nil, err
 	}
 
-	return rgateway.Component(gwCfg), gwTLSKeyPair, reconcile.Result{}, nil
+	return comps, gwTLSKeyPair, nil
 }
 
 // managerDomainHost extracts the host from a managerDomain-style value —

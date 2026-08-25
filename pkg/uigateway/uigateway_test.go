@@ -16,6 +16,7 @@ package uigateway_test
 
 import (
 	"context"
+	stderrors "errors"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -30,11 +31,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
+	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/apis"
-	"github.com/tigera/operator/pkg/controller/uigateway"
+	"github.com/tigera/operator/pkg/common"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/render"
 	rgateway "github.com/tigera/operator/pkg/render/gateway"
+	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/uigateway"
 )
 
 var _ = Describe("UnhealthyReason", func() {
@@ -42,7 +46,7 @@ var _ = Describe("UnhealthyReason", func() {
 
 	var (
 		ctx context.Context
-		h   *uigateway.Config
+		h   *uigateway.Helper
 	)
 
 	cond := func(t string, status metav1.ConditionStatus, msg string) metav1.Condition {
@@ -77,7 +81,7 @@ var _ = Describe("UnhealthyReason", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli := ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(objs...).Build()
-		h = &uigateway.Config{Client: cli, ResourcePrefix: "calico-manager"}
+		h = uigateway.NewHelper(cli, uigateway.Config{ResourcePrefix: "calico-manager"})
 	}
 
 	BeforeEach(func() {
@@ -144,7 +148,8 @@ var _ = Describe("Cleanup helpers", func() {
 	var (
 		ctx context.Context
 		cli client.Client
-		h   *uigateway.Config
+		h   *uigateway.Helper
+		cfg uigateway.Config
 	)
 
 	labeledGateway := func(name, ns string) *gapi.Gateway {
@@ -159,12 +164,12 @@ var _ = Describe("Cleanup helpers", func() {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(objs...).Build()
-		h = &uigateway.Config{
-			Client:           cli,
+		cfg = uigateway.Config{
 			ResourcePrefix:   prefix,
 			TLSSecretName:    prefix + "-gateway-tls",
 			BackendNamespace: backendNS,
 		}
+		h = uigateway.NewHelper(cli, cfg)
 	}
 
 	// deletionNamespaces collects, per object type, the namespaces the given
@@ -213,20 +218,20 @@ var _ = Describe("Cleanup helpers", func() {
 
 		It("returns empty, not an error, when the Gateway kind is not served", func() {
 			build()
-			h.Client = noGatewayKindClient{cli}
+			h = uigateway.NewHelper(noGatewayKindClient{cli}, cfg)
 			namespaces, err := h.Namespaces(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(namespaces).To(BeEmpty())
 		})
 	})
 
-	Describe("MoveCleanup", func() {
+	Describe("StaleComponents", func() {
 		It("returns deletion components only for namespaces outside the desired one", func() {
 			build(
 				labeledGateway(prefix+"-gateway", "ns-a"),
 				labeledGateway(prefix+"-gateway", backendNS),
 			)
-			components, err := h.MoveCleanup(ctx, backendNS)
+			components, err := h.StaleComponents(ctx, backendNS)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(components).To(HaveLen(1))
 
@@ -239,7 +244,7 @@ var _ = Describe("Cleanup helpers", func() {
 
 		It("returns nothing when every labeled Gateway is in the desired namespace", func() {
 			build(labeledGateway(prefix+"-gateway", backendNS))
-			components, err := h.MoveCleanup(ctx, backendNS)
+			components, err := h.StaleComponents(ctx, backendNS)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(components).To(BeEmpty())
 		})
@@ -271,36 +276,134 @@ var _ = Describe("Cleanup helpers", func() {
 
 		It("returns nothing when the gateway CRDs are absent", func() {
 			build()
-			h.Client = noGatewayKindClient{cli}
+			h = uigateway.NewHelper(noGatewayKindClient{cli}, cfg)
 			components, err := h.Teardown(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(components).To(BeEmpty())
 		})
+
+		// deletedNamespaces collects the Namespace objects the components delete.
+		deletedNamespaces := func(components []render.Component) []string {
+			var names []string
+			for _, c := range components {
+				_, toDelete := c.Objects()
+				for _, obj := range toDelete {
+					if _, ok := obj.(*corev1.Namespace); ok {
+						names = append(names, obj.GetName())
+					}
+				}
+			}
+			return names
+		}
+
+		It("deletes a namespace the operator created, and only that one", func() {
+			build(
+				labeledGateway(prefix+"-gateway", "ns-ours"),
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+					Name:   "ns-ours",
+					Labels: map[string]string{rgateway.GatewayLabel: prefix},
+				}},
+			)
+			components, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deletedNamespaces(components)).To(ConsistOf("ns-ours"),
+				"the backend namespace belongs to another controller and must survive")
+		})
+
+		It("never deletes a namespace the user created", func() {
+			build(
+				labeledGateway(prefix+"-gateway", "ns-theirs"),
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+					Name:   "ns-theirs",
+					Labels: map[string]string{"team": "netsec"},
+				}},
+			)
+			components, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deletedNamespaces(components)).To(BeEmpty(),
+				"an unlabeled namespace may hold user workloads")
+		})
 	})
 
-	Describe("EnsureNamespace", func() {
-		It("creates the namespace when it does not exist", func() {
-			build()
-			Expect(uigateway.EnsureNamespace(ctx, cli, "ns-a")).NotTo(HaveOccurred())
+	Describe("Components", func() {
+		gatewayAPI := func(classes ...string) *operatorv1.GatewayAPI {
+			gwapi := &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			for _, c := range classes {
+				gwapi.Spec.GatewayClasses = append(gwapi.Spec.GatewayClasses, operatorv1.GatewayClassSpec{Name: c})
+			}
+			return gwapi
+		}
+		spec := func(gwNS string) *operatorv1.IngressGatewaySpec {
+			return &operatorv1.IngressGatewaySpec{Hostname: "ui.example.com", GatewayNamespace: &gwNS}
+		}
+		keyPair := func() certificatemanagement.KeyPairInterface {
+			secret, err := certificatemanagement.CreateSelfSignedSecret(prefix+"-gateway-tls", common.OperatorNamespace(), prefix, nil)
+			Expect(err).NotTo(HaveOccurred())
+			return certificatemanagement.NewKeyPair(secret, []string{""}, "")
+		}
+
+		It("creates the gateway namespace stamped with the ownership label", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			Expect(err).NotTo(HaveOccurred())
 
 			ns := &corev1.Namespace{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(HaveKeyWithValue("name", "ns-a"))
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix),
+				"the label is what lets teardown delete only a namespace the operator created")
 			Expect(ns.OwnerReferences).To(BeEmpty())
 		})
 
-		It("leaves an existing namespace untouched", func() {
-			build(&corev1.Namespace{
+		It("leaves an existing namespace untouched and unlabeled", func() {
+			build(gatewayAPI("tigera-gateway-class"), &corev1.Namespace{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "ns-a",
 					Labels: map[string]string{"team": "netsec"},
 				},
 			})
-			Expect(uigateway.EnsureNamespace(ctx, cli, "ns-a")).NotTo(HaveOccurred())
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			Expect(err).NotTo(HaveOccurred())
 
 			ns := &corev1.Namespace{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(Equal(map[string]string{"team": "netsec"}))
+			Expect(ns.Labels).To(Equal(map[string]string{"team": "netsec"}),
+				"a user namespace must never gain the ownership label, or teardown would delete it")
+		})
+
+		It("does not create the backend namespace, which another controller owns", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			_, err := h.Components(ctx, spec(backendNS), keyPair())
+			Expect(err).NotTo(HaveOccurred())
+			Expect(cli.Get(ctx, types.NamespacedName{Name: backendNS}, &corev1.Namespace{})).To(HaveOccurred())
+		})
+
+		It("reports a missing GatewayAPI CR as a condition, not a plain error", func() {
+			build()
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			var gwErr *uigateway.Error
+			Expect(stderrors.As(err, &gwErr)).To(BeTrue())
+			Expect(gwErr.Reason).To(Equal(operatorv1.ResourceNotFound))
+			Expect(gwErr.Msg).To(ContainSubstring("GatewayAPI CR not found"))
+		})
+
+		It("reports an ambiguous GatewayClass as a condition", func() {
+			build(gatewayAPI("class-a", "class-b"))
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			var gwErr *uigateway.Error
+			Expect(stderrors.As(err, &gwErr)).To(BeTrue())
+			Expect(gwErr.Reason).To(Equal(operatorv1.InvalidConfigurationError))
+		})
+
+		It("refuses to render under certificateManagement", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			cmKeyPair := &certificatemanagement.KeyPair{CertificateManagement: &operatorv1.CertificateManagement{}}
+			_, err := h.Components(ctx, spec("ns-a"), cmKeyPair)
+			var gwErr *uigateway.Error
+			Expect(stderrors.As(err, &gwErr)).To(BeTrue())
+			Expect(gwErr.Reason).To(Equal(operatorv1.InvalidConfigurationError))
+			Expect(gwErr.Msg).To(ContainSubstring("certificateManagement"))
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, &corev1.Namespace{})).To(HaveOccurred(),
+				"nothing should be created when the render is refused")
 		})
 	})
 })

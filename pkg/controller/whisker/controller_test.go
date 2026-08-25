@@ -213,13 +213,14 @@ var _ = Describe("whisker controller tests", func() {
 		})
 
 		It("degrades when spec.ingressGateway is set but the GatewayAPI CR is missing", func() {
-			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.Anything, mock.Anything, mock.Anything).Return()
+			var degradedErr string
+			mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { degradedErr = args.String(2) }).Return()
 			setIngressGateway(nil)
 
-			result, err := doReconcile()
-			Expect(err).NotTo(HaveOccurred(), "a missing CR is a condition, not a retryable failure")
-			Expect(result.RequeueAfter).To(BeZero(), "the GatewayAPI CR is watched, so its creation triggers the next reconcile")
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotFound, mock.Anything, mock.Anything, mock.Anything)
+			_, err := doReconcile()
+			Expect(err).To(HaveOccurred())
+			Expect(degradedErr).To(ContainSubstring("GatewayAPI CR not found"))
 
 			gw := &gapi.Gateway{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred())
@@ -296,9 +297,9 @@ var _ = Describe("whisker controller tests", func() {
 			// key pair, and the placeholder it gets back carries no private key.
 			// Rendering it would give Envoy a certificate it cannot serve, so the
 			// reconcile must stop and report the combination as unsupported.
-			var degradedMsg string
-			mockStatus.On("SetDegraded", operatorv1.InvalidConfigurationError, mock.Anything, mock.Anything, mock.Anything).
-				Run(func(args mock.Arguments) { degradedMsg = args.String(1) }).Return()
+			var degradedErr string
+			mockStatus.On("SetDegraded", operatorv1.ResourceCreateError, mock.Anything, mock.Anything, mock.Anything).
+				Run(func(args mock.Arguments) { degradedErr = args.String(2) }).Return()
 			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
 			installation.Spec.CertificateManagement = certificateManagement
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
@@ -306,9 +307,8 @@ var _ = Describe("whisker controller tests", func() {
 			createGatewayAPI()
 			setIngressGateway(nil)
 
-			result, err := doReconcile()
-			Expect(err).NotTo(HaveOccurred(), "the user must act, so this is not a retryable error")
-			Expect(result.RequeueAfter).To(BeZero(), "the Installation and the TLS secret are watched, so either change triggers the next reconcile")
+			_, err := doReconcile()
+			Expect(err).To(HaveOccurred())
 
 			gw := &gapi.Gateway{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred(),
@@ -318,8 +318,8 @@ var _ = Describe("whisker controller tests", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: whisker.GatewayTLSSecretName, Namespace: whisker.WhiskerNamespace}, secret)).To(HaveOccurred(),
 				"a keyless TLS secret must not be written")
 
-			Expect(degradedMsg).To(ContainSubstring("spec.ingressGateway is not supported"))
-			Expect(degradedMsg).To(ContainSubstring("certificateManagement"))
+			Expect(degradedErr).To(ContainSubstring("spec.ingressGateway is not supported"))
+			Expect(degradedErr).To(ContainSubstring("certificateManagement"))
 		})
 
 		It("renders no gateway and tears down leftovers on a non-Calico variant", func() {

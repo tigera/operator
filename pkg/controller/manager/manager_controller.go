@@ -16,7 +16,6 @@ package manager
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"net"
 	"strings"
@@ -785,10 +784,6 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		if gatewayComponents == nil {
-			// resolveGateway has set Degraded; a watched CR edit triggers the next reconcile.
-			return reconcile.Result{}, nil
-		}
 	} else {
 		var err error
 		gatewayComponents, err = gwHelper.Teardown(ctx)
@@ -993,14 +988,6 @@ func (r *ReconcileManager) resolveGateway(
 
 	comps, err := gwHelper.Components(ctx, gw, gwTLSKeyPair)
 	if err != nil {
-		var gwErr *uigateway.Error
-		if stderrors.As(err, &gwErr) {
-			// A gateway Error reports a configuration problem only the user
-			// can fix. The CRs that fix one are watched, so the next reconcile
-			// follows the user's edit; no requeue is needed.
-			r.status.SetDegraded(gwErr.Reason, gwErr.Msg, gwErr.Err, logc)
-			return nil, nil, nil
-		}
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to render gateway resources", err, logc)
 		return nil, nil, err
 	}

@@ -216,8 +216,9 @@ var _ = Describe("whisker controller tests", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, mock.Anything, mock.Anything, mock.Anything).Return()
 			setIngressGateway(nil)
 
-			_, err := doReconcile()
-			Expect(err).To(HaveOccurred())
+			result, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred(), "a missing CR is a condition, not a retryable failure")
+			Expect(result.RequeueAfter).To(BeZero(), "the GatewayAPI CR is watched, so its creation triggers the next reconcile")
 			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotFound, mock.Anything, mock.Anything, mock.Anything)
 
 			gw := &gapi.Gateway{}
@@ -307,7 +308,7 @@ var _ = Describe("whisker controller tests", func() {
 
 			result, err := doReconcile()
 			Expect(err).NotTo(HaveOccurred(), "the user must act, so this is not a retryable error")
-			Expect(result.RequeueAfter).NotTo(BeZero(), "reconcile should requeue so a user-supplied secret is picked up")
+			Expect(result.RequeueAfter).To(BeZero(), "the Installation and the TLS secret are watched, so either change triggers the next reconcile")
 
 			gw := &gapi.Gateway{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred(),

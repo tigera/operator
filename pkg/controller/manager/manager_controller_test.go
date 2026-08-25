@@ -287,7 +287,7 @@ var _ = Describe("Manager controller tests", func() {
 
 			result, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).NotTo(HaveOccurred(), "the user must act, so this is not a retryable error") //nolint:staticcheck
-			Expect(result.RequeueAfter).NotTo(BeZero(), "reconcile should requeue so a user-supplied secret is picked up")
+			Expect(result.RequeueAfter).To(BeZero(), "the Installation and the TLS secret are watched, so either change triggers the next reconcile")
 
 			gw := &gatewayapiv1.Gateway{
 				TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
@@ -311,8 +311,9 @@ var _ = Describe("Manager controller tests", func() {
 			degradedMsg := "GatewayAPI CR not found; GatewayAPI is a prerequisite for spec.ingressGateway"
 			mockStatus.On("SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything).Return()
 
-			_, err := r.Reconcile(ctx, reconcile.Request{})
-			Expect(err).To(HaveOccurred())
+			result, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred(), "a missing CR is a condition, not a retryable failure")
+			Expect(result.RequeueAfter).To(BeZero(), "the GatewayAPI CR is watched, so its creation triggers the next reconcile")
 			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotFound, degradedMsg, mock.Anything, mock.Anything)
 
 			gw := &gatewayapiv1.Gateway{

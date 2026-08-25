@@ -26,6 +26,9 @@ type Set struct {
 	Istio             IstioExtension
 	Goldmane          GoldmaneExtension
 	Whisker           WhiskerExtension
+
+	// Startup is the variant's hook into operator startup rather than into a controller.
+	Startup StartupExtension
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -101,4 +104,11 @@ func (e Extensions) Whisker() WhiskerExtension {
 		return noopWhisker{}
 	}
 	return e.set.Whisker
+}
+
+func (e Extensions) Startup() StartupExtension {
+	if e.set.Startup == nil {
+		return noopStartup{}
+	}
+	return e.set.Startup
 }

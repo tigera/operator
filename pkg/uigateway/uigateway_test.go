@@ -341,6 +341,21 @@ var _ = Describe("Cleanup helpers", func() {
 			return certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		}
 
+		It("creates an OpenShift gateway namespace the proxy can run in", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			cfgOCP := cfg
+			cfgOCP.Provider = operatorv1.ProviderOpenShift
+			h = uigateway.NewHelper(cli, cfgOCP)
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			Expect(err).NotTo(HaveOccurred())
+
+			ns := &corev1.Namespace{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			Expect(ns.Labels).To(HaveKeyWithValue("openshift.io/run-level", "0"),
+				"without this the Envoy proxy pod fails SCC admission in a fresh namespace")
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix))
+		})
+
 		It("creates the gateway namespace stamped with the ownership label", func() {
 			build(gatewayAPI("tigera-gateway-class"))
 			_, err := h.Components(ctx, spec("ns-a"), keyPair())

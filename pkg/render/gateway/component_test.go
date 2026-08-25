@@ -28,6 +28,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
+	gapiv1b1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	"github.com/tigera/operator/pkg/common"
 	euigateway "github.com/tigera/operator/pkg/enterprise/uigateway"
@@ -88,7 +89,7 @@ var _ = Describe("Gateway component render", func() {
 
 		It("does not include cross-namespace resources", func() {
 			for _, obj := range toCreate {
-				if _, ok := obj.(*gapi.ReferenceGrant); ok {
+				if _, ok := obj.(*gapiv1b1.ReferenceGrant); ok {
 					Fail("ReferenceGrant should not be rendered when gateway and backend share a namespace")
 				}
 			}
@@ -191,7 +192,7 @@ var _ = Describe("Gateway component render", func() {
 		})
 
 		It("includes ReferenceGrant in the backend namespace", func() {
-			rg := findObject[*gapi.ReferenceGrant](toCreate, prefix+"-allow-gateway", bkNS)
+			rg := findObject[*gapiv1b1.ReferenceGrant](toCreate, prefix+"-allow-gateway", bkNS)
 			Expect(rg).NotTo(BeNil())
 			Expect(rg.Spec.From).To(HaveLen(1))
 			Expect(string(rg.Spec.From[0].Namespace)).To(Equal("custom-gateway-ns"))
@@ -267,7 +268,7 @@ var _ = Describe("Gateway component render", func() {
 			grantIdx, routeIdx := -1, -1
 			for i, obj := range toCreate {
 				switch obj.(type) {
-				case *gapi.ReferenceGrant:
+				case *gapiv1b1.ReferenceGrant:
 					grantIdx = i
 				case *gapi.HTTPRoute:
 					routeIdx = i
@@ -478,7 +479,7 @@ var _ = Describe("Gateway deletion component", func() {
 			// install did, and from here the two are indistinguishable — so the delete
 			// is emitted either way and tolerated as NotFound.
 			Expect(findObject[*envoyapi.Backend](toDelete, prefix+"-backend", bkNS)).NotTo(BeNil())
-			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
+			Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 		})
 
 		It("includes the supplied extra proxy objects", func() {
@@ -527,7 +528,7 @@ var _ = Describe("Gateway deletion component", func() {
 
 		It("leaves the Backend and ReferenceGrant to the backend namespace's own component", func() {
 			Expect(findObject[*envoyapi.Backend](toDelete, prefix+"-backend", bkNS)).To(BeNil())
-			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
+			Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
 		It("does not delete GatewayAPI-controller-owned resources in a custom namespace", func() {
@@ -566,7 +567,7 @@ var _ = Describe("Gateway deletion component", func() {
 		})
 
 		It("keeps the ReferenceGrant when moving between custom namespaces", func() {
-			Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
+			Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 		})
 
 		It("keeps the backend grant, and drops the old namespace's gateway grant", func() {
@@ -607,7 +608,7 @@ var _ = Describe("Gateway deletion component", func() {
 			})
 
 			It("deletes the ReferenceGrant, which is no longer rendered", func() {
-				Expect(findObject[*gapi.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
+				Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 			})
 
 			It("still keeps the backend grant", func() {

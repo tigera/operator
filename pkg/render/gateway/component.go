@@ -25,6 +25,7 @@ import (
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
+	gapiv1b1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -330,24 +331,26 @@ func (c *gatewayComponent) backend() *envoyapi.Backend {
 	}
 }
 
-func (c *gatewayComponent) referenceGrant() *gapi.ReferenceGrant {
+// The ReferenceGrant is v1beta1: the standard has not promoted it to v1, so a
+// cluster serving pre-installed Gateway API CRDs (OpenShift 4.19+) has no v1.
+func (c *gatewayComponent) referenceGrant() *gapiv1b1.ReferenceGrant {
 	backendName := gapi.ObjectName(c.cfg.ResourcePrefix + "-backend")
 
-	return &gapi.ReferenceGrant{
-		TypeMeta: metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1"},
+	return &gapiv1b1.ReferenceGrant{
+		TypeMeta: metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1beta1"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.cfg.ResourcePrefix + "-allow-gateway",
 			Namespace: c.cfg.BackendNamespace,
 		},
-		Spec: gapi.ReferenceGrantSpec{
-			From: []gapi.ReferenceGrantFrom{
+		Spec: gapiv1b1.ReferenceGrantSpec{
+			From: []gapiv1b1.ReferenceGrantFrom{
 				{
 					Group:     gapi.GroupName,
 					Kind:      "HTTPRoute",
 					Namespace: gapi.Namespace(c.cfg.GatewayNamespace),
 				},
 			},
-			To: []gapi.ReferenceGrantTo{
+			To: []gapiv1b1.ReferenceGrantTo{
 				{
 					Group: gapi.Group(EnvoyGatewayGroup),
 					Kind:  BackendKind,
@@ -486,8 +489,8 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 	// The gateway component moving into the backend namespace needs no ReferenceGrant, so clean it up.
 	if (staleNS == bkNS && c.cfg.TargetNamespace == "") || c.cfg.TargetNamespace == bkNS {
 		objs = append(objs,
-			&gapi.ReferenceGrant{
-				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1"},
+			&gapiv1b1.ReferenceGrant{
+				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1beta1"},
 				ObjectMeta: metav1.ObjectMeta{Name: prefix + "-allow-gateway", Namespace: bkNS},
 			},
 		)

@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -71,9 +72,60 @@ import (
 const (
 	ResourceName        = "manager"
 	TrustedBundlePrefix = render.ManagerName
+
+	// ExternalTunnelCAAnnotation marks installs whose voltron tunnel CA is created outside the operator (on Tenant in
+	// multi-tenant mode, or on ManagementCluster in single-tenant mode). The tunnel CA doubles as voltron's tunnel
+	// server certificate, so its DNS SAN is the SNI every managed cluster in the tenant dials; delivering it externally
+	// lets that SAN be chosen up front rather than defaulted here. When enabled, the operator consumes the tunnel
+	// secret but never creates or updates it, and waits if it is not there yet.
+	ExternalTunnelCAAnnotation = "calicocloud.io/external-tunnel-ca"
 )
 
 var log = logf.Log.WithName("controller_manager")
+
+// externallyManagedTunnelCA reports whether this installation's tunnel CA is delivered from outside the operator.
+//
+// Which resource carries the annotation depends on the mode. A multi-tenant install has a Tenant per tenant and the
+// annotation belongs on it. A single-tenant install has no Tenant CR -- the tenant it reconciles with is synthesised
+// from cloud config and carries no annotations of its own -- so the ManagementCluster is the only resource that can hold
+// it. Both modes reach the tunnel branch below, so this one gate covers them.
+func externallyManagedTunnelCA(
+	multiTenant bool,
+	tenant *operatorv1.Tenant,
+	managementCluster *operatorv1.ManagementCluster,
+	logc logr.Logger,
+) bool {
+	var holder client.Object
+	var kind string
+	if multiTenant {
+		if tenant == nil {
+			return false
+		}
+		holder, kind = tenant, "Tenant"
+	} else {
+		if managementCluster == nil {
+			return false
+		}
+		holder, kind = managementCluster, "ManagementCluster"
+	}
+
+	value, ok := holder.GetAnnotations()[ExternalTunnelCAAnnotation]
+	if !ok || value == "" {
+		return false
+	}
+
+	// The annotation is written by hand or by tooling, so accept anything strconv understands ("true", "True", "1",
+	// ...) rather than the single literal "true". An unparseable value is treated as absent: the operator keeps
+	// signing the tunnel CA itself, which is the behaviour that existed before the annotation.
+	enabled, err := strconv.ParseBool(value)
+	if err != nil {
+		logc.Error(err, "Ignoring unparseable annotation value, the operator will sign the tunnel CA itself",
+			"annotation", ExternalTunnelCAAnnotation, "value", value,
+			"kind", kind, "name", holder.GetName())
+		return false
+	}
+	return enabled
+}
 
 // Add creates a new Manager Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -570,6 +622,10 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	var tunnelServerCert certificatemanagement.KeyPairInterface
 	var tunnelSecretPassthrough render.Component
 
+	// Whether this tenant's tunnel CA is delivered from outside the operator. When it is, the operator reads the
+	// tunnel secret but must not write it anywhere: it is owned by whoever delivered it.
+	externalTunnelCA := externallyManagedTunnelCA(r.opts.MultiTenant, tenant, managementCluster, logc)
+
 	if managementCluster != nil {
 		preDefaultPatchFrom := client.MergeFrom(managementCluster.DeepCopy())
 		fillDefaults(managementCluster)
@@ -615,6 +671,14 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 
 		if tunnelCASecret == nil {
+			if externalTunnelCA {
+				// Wait for the secret instead of self-signing one. The CA for this tenant is delivered out of band and
+				// carries a DNS SAN that its managed clusters are already configured to dial; a CA minted here would
+				// win the race against that delivery and leave the tenant serving a SAN nobody dials.
+				r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for the externally managed tunnel secret %s/%s to be created", helper.TruthNamespace(), tunnelSecretName), nil, logc)
+				return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
+			}
+
 			tunnelCASecret, err = certificatemanagement.CreateSelfSignedSecret(tunnelSecretName, helper.TruthNamespace(), "tigera-voltron", []string{serverName})
 			if err != nil {
 				r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the tunnel secret", err, logc)
@@ -635,7 +699,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 
 		// We use the CA as the server cert.
 		tunnelServerCert = certificatemanagement.NewKeyPair(tunnelCASecret, nil, "")
-		tunnelSecretPassthrough = render.NewCreationPassthrough(tunnelCASecret)
+
+		// Only write the secret back when it is ours. An externally managed CA is owned by whoever delivered it, and
+		// re-applying it here would fight that owner over the secret's owner references and TLS metadata on every
+		// reconcile. We still consume it above as the tunnel server cert.
+		if !externalTunnelCA {
+			tunnelSecretPassthrough = render.NewCreationPassthrough(tunnelCASecret)
+		}
 	}
 
 	keyValidatorConfig, err := eutils.GetKeyValidatorConfig(ctx, r.client, authenticationCR, r.opts.ClusterDomain, r.opts.Cloud && !r.opts.MultiTenant)
@@ -851,12 +921,28 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		}
 	}
 
+	// An externally managed tunnel CA is still copied into the install namespace on a single-tenant install, because
+	// there the truth namespace and the install namespace differ and voltron mounts from the latter. On a multi-tenant
+	// install they are the same namespace, so copying would only re-apply -- and take ownership of -- the delivered
+	// secret.
+	copyTunnelCA := !externalTunnelCA || !r.opts.MultiTenant
+
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
 		rcertificatemanagement.NewKeyPairOption(tlsSecret, true, true),
 		rcertificatemanagement.NewKeyPairOption(linseedVoltronServerCert, true, true),
 		rcertificatemanagement.NewKeyPairOption(internalTrafficSecret, true, true),
-		rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, true),
-		rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, true),
+		// The tunnel CA is copied into the install namespace so voltron can mount it, and never created in
+		// the truth namespace when it is externally managed -- that secret belongs to whoever delivered it,
+		// and writing it back would fight them over owner references and TLS metadata every reconcile.
+		//
+		// Whether the copy still happens depends on the mode, and the difference is load-bearing. A
+		// multi-tenant install's truth namespace *is* its install namespace, so the copy is redundant and
+		// doing it would take ownership of the delivered secret. A single-tenant install is delivered into
+		// tigera-operator while voltron mounts from tigera-manager, so dropping the copy would leave voltron
+		// with nothing to mount.
+		rcertificatemanagement.NewKeyPairOption(tunnelServerCert, false, copyTunnelCA),
+		// The additional CA follows the tunnel CA: when one is externally managed so is the other.
+		rcertificatemanagement.NewKeyPairOption(additionalTunnelServerCert, false, copyTunnelCA),
 	}
 	if gatewayTLSKeyPair != nil {
 		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(gatewayTLSKeyPair, true, false))

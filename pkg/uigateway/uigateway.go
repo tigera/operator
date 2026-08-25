@@ -72,7 +72,7 @@ type Config struct {
 	// ExtraProxyObjects are the variant's additions beside the proxy, or nil.
 	ExtraProxyObjects []client.Object
 
-	OpenShift bool
+	Provider operatorv1.Provider
 }
 
 // Helper renders and cleans up one UI component's gateway resources.
@@ -138,7 +138,7 @@ func (h *Helper) Components(
 		TLSKeyPair:                   keyPair,
 		ResourcePrefix:               h.cfg.ResourcePrefix,
 		ExtraProxyObjects:            h.cfg.ExtraProxyObjects,
-		OpenShift:                    h.cfg.OpenShift,
+		OpenShift:                    h.cfg.Provider.IsOpenShift(),
 		RouteRequestTimeout:          h.cfg.RouteRequestTimeout,
 	})), nil
 }
@@ -299,24 +299,18 @@ func (h *Helper) ownsNamespace(ctx context.Context, name string) (bool, error) {
 
 // ensureNamespace creates the gateway namespace if it does not exist, stamped
 // with the gateway label so teardown deletes only a namespace the operator
-// created; a namespace the user already had is never touched.
+// created; a namespace the user already had is never touched. The namespace
+// is built like the install namespace, so on OpenShift it carries the labels
+// that let the Envoy proxy pod pass admission.
 func (h *Helper) ensureNamespace(ctx context.Context, name string) error {
 	err := h.cli.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
 	if err == nil || !errors.IsNotFound(err) {
 		return err
 	}
+	ns := render.CreateNamespace(name, h.cfg.Provider, render.PSSPrivileged, nil)
 	// The gateway label marks the namespace as ours, so teardown can tell a
 	// namespace the operator created from one the user already had.
-	ns := &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: name,
-			Labels: map[string]string{
-				"name":                name,
-				rgateway.GatewayLabel: h.cfg.ResourcePrefix,
-			},
-		},
-	}
+	ns.Labels[rgateway.GatewayLabel] = h.cfg.ResourcePrefix
 	if err := h.cli.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}

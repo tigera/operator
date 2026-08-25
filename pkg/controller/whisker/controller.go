@@ -294,7 +294,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		// Whisker streams flow logs as server-sent events; Envoy Gateway's
 		// default 15s route timeout would drop the stream.
 		RouteRequestTimeout: ptr.To("0s"),
-		OpenShift:           r.provider.IsOpenShift(),
+		Provider:            r.provider,
 	})
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface

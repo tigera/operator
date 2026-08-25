@@ -28,6 +28,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/whisker"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
+	"github.com/tigera/operator/pkg/imageoverride"
 )
 
 // New builds the Calico Enterprise extensions. After the monorepo split this is what
@@ -48,6 +49,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 			Goldmane:          goldmane.New(variant),
 			Whisker:           whisker.New(variant),
 			GatewayAPI:        gatewayapi.New(variant),
+			Images:            images(variant, o),
 		})
 	}
 
@@ -57,4 +59,15 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 	}
 
 	return extensions.Extensions{}
+}
+
+// images is every component whose image differs for Enterprise. One set for the whole
+// operator, since the variant cannot change without restarting the process.
+func images(variant operatorv1.ProductVariant, o eoptions.Options) *imageoverride.Overrides {
+	set := imageoverride.New()
+	installation.RegisterImages(set, variant, o)
+	windows.RegisterImages(set, variant)
+	gatewayapi.RegisterImages(set, variant)
+	istio.RegisterImages(set, variant)
+	return set
 }

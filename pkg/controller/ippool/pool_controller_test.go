@@ -157,6 +157,60 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(ipPools.Items[0].Spec.CIDR).To(Equal(pool.CIDR))
 	})
 
+	It("should keep its own default pool when it reconciles again before the computed config is republished", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		createInstallation(ctx, c, instance)
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		// Allowed so that a reconcile deciding to delete the pool reaches the assertions below
+		// rather than panicking on an unexpected call.
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
+
+		// The first reconcile defaults the pool and creates it.
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// The pool it just created triggers another reconcile, and the core controller hasn't
+		// republished the computed config yet, so it still carries no pools.
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		installation := &operator.Installation{}
+		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// The recorded default still holds the pool, rather than the empty list that means
+		// pools are managed out-of-band.
+		Expect(installation.Status.Defaults.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(installation.Status.Defaults.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+
+		// And the pool is still in the cluster.
+		ipPools := v3.IPPoolList{}
+		err = c.List(ctx, &ipPools)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/16"))
+	})
+
 	It("should not create a default IP pool if one already exists", func() {
 		instance := &operator.Installation{
 			ObjectMeta: metav1.ObjectMeta{

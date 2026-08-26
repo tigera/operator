@@ -395,13 +395,12 @@ func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, creat
 
 	c.layerDeployment(extensions.MustFindObject[*appsv1.Deployment](create, render.APIServerName))
 	c.addServicePorts(extensions.MustFindObject[*corev1.Service](create, render.APIServerServiceName))
-	// Enterprise serves staged policies through the tiered-policy passthrough role, which
-	// the base only creates when running an aggregation API server.
-	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, render.TieredPolicyPassthruClusterRoleName); ok {
-		for i := range role.Rules {
-			if slices.Contains(role.Rules[i].Resources, "networkpolicies") {
-				role.Rules[i].Resources = append(role.Rules[i].Resources, "stagednetworkpolicies", "stagedglobalnetworkpolicies")
-			}
+	// Staged policies are tiered too, so they need the same passthrough as their non-staged
+	// counterparts. They are Enterprise-only, so the base role does not list them.
+	passthru := extensions.MustFindObject[*rbacv1.ClusterRole](create, render.TieredPolicyPassthruClusterRoleName)
+	for i := range passthru.Rules {
+		if slices.Contains(passthru.Rules[i].Resources, "networkpolicies") {
+			passthru.Rules[i].Resources = append(passthru.Rules[i].Resources, "stagednetworkpolicies", "stagedglobalnetworkpolicies")
 		}
 	}
 

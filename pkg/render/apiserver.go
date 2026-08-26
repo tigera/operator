@@ -1124,7 +1124,7 @@ func (c *apiServerComponent) kubeControllerMgrTierGetterClusterRoleBinding() *rb
 // calicoPolicyPassthruClusterRole creates a clusterrole that is used to control the RBAC
 // mechanism for Calico tiered policy.
 func (c *apiServerComponent) calicoPolicyPassthruClusterRole() *rbacv1.ClusterRole {
-	resources := []string{"networkpolicies", "globalnetworkpolicies"}
+	resources := []string{"networkpolicies", "globalnetworkpolicies", "stagednetworkpolicies", "stagedglobalnetworkpolicies"}
 
 	// The aggregation API server authorizes reads against the tier.xxx resource type, so it can
 	// pass every verb through. In v3-CRD mode only writes reach the admission webhook, so reads

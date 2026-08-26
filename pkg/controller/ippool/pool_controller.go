@@ -143,7 +143,17 @@ func hasOwnerLabel(pool *v3.IPPool) bool {
 	return false
 }
 
-// recordDefaults adds the pool defaults to the Installation status, leaving the spec untouched.
+// writePoolMembership writes the pools this controller chose into the Installation spec, which is the
+// one default this controller does not send to the status.
+func (r *Reconciler) writePoolMembership(ctx context.Context, installation *operatorv1.Installation, pools []operatorv1.IPPool) error {
+	if installation.Spec.CalicoNetwork == nil {
+		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+	}
+	installation.Spec.CalicoNetwork.IPPools = pools
+	return r.client.Update(ctx, installation)
+}
+
+// recordDefaults adds per-pool field defaults to the Installation status, leaving the spec untouched.
 func (r *Reconciler) recordDefaults(ctx context.Context, installation *operatorv1.Installation, declared, computed operatorv1.InstallationSpec) error {
 	recorded, err := utils.MergeRecordedDefaults(installation.Status.Defaults, declared, computed,
 		utils.DefaultsScope{Owned: []string{utils.PoolDefaultsPath}})
@@ -216,6 +226,15 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		declared = utils.OverrideInstallationSpec(declared, *overlay)
 	}
 
+	poolsDeclared := declared.CalicoNetwork != nil && declared.CalicoNetwork.IPPools != nil
+	if poolsDeclared {
+		// Pool membership comes from the spec, since the computed config lags a write-back by a reconcile.
+		if computed.CalicoNetwork == nil {
+			computed.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+		}
+		computed.CalicoNetwork.IPPools = declared.CalicoNetwork.DeepCopy().IPPools
+	}
+
 	if computed.CNI == nil || computed.CNI.Type == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -242,6 +261,19 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "error validating IP pool configuration", err, reqLogger)
 		return reconcile.Result{}, err
 	}
+
+	if !poolsDeclared && computed.CalicoNetwork != nil && computed.CalicoNetwork.IPPools != nil {
+		// Nobody declared pools, so the chosen list goes on the spec, where whoever edits it next can see it.
+		if err := r.writePoolMembership(ctx, installation, computed.CalicoNetwork.DeepCopy().IPPools); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write IP pools to the Installation", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		if declared.CalicoNetwork == nil {
+			declared.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+		}
+		declared.CalicoNetwork.IPPools = installation.Spec.CalicoNetwork.DeepCopy().IPPools
+	}
+
 	if err := r.recordDefaults(ctx, installation, declared, *computed); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
 		return reconcile.Result{}, err

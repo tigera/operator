@@ -66,19 +66,6 @@ func cidrToName(cidr string) (string, error) {
 	return name, nil
 }
 
-// hasUnownedPools reports whether the cluster has any IP pool the operator did not create.
-func hasUnownedPools(pools *v3.IPPoolList) bool {
-	if pools == nil {
-		return false
-	}
-	for i := range pools.Items {
-		if !hasOwnerLabel(&pools.Items[i]) {
-			return true
-		}
-	}
-	return false
-}
-
 // fillDefaults fills in IP pool defaults on the Installation object. Defaulting of fields other than IP pools occurs
 // in pkg/controller/installation/
 func fillDefaults(ctx context.Context, client client.Client, spec *operator.InstallationSpec, currentPools *v3.IPPoolList) error {
@@ -88,8 +75,9 @@ func fillDefaults(ctx context.Context, client client.Client, spec *operator.Inst
 		return fmt.Errorf("cannot perform IP pool defaulting until CNI configuration is available")
 	}
 
-	// A pool the operator created is its own earlier default, not a sign that pools are managed out-of-band.
-	if !hasUnownedPools(currentPools) {
+	// Only add default CIDRs if there are no existing pools in the cluster. If there are existing pools in the cluster,
+	// then we assume that the user has configured them correctly out-of-band and we should not install any others.
+	if currentPools == nil || len(currentPools.Items) == 0 {
 		if spec.KubernetesProvider.IsOpenShift() {
 			// If configured to run in openshift, then also fetch the openshift configuration API.
 			log.V(1).Info("Fetching OpenShift network configuration")

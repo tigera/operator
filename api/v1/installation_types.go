@@ -695,10 +695,9 @@ type CalicoNetworkSpec struct {
 	// +optional
 	ClusterRoutingMode *ClusterRoutingMode `json:"clusterRoutingMode,omitempty"`
 
-	// IPPools contains a list of IP pools to manage. If nil, the operator chooses: on a cluster with no
-	// operator-managed pools it creates a single IPv4 pool, and on a cluster that already has them it keeps
-	// the pools in use. Provide an empty list to manage IP pools out-of-band; the operator then deletes the
-	// pools it owns and creates none.
+	// IPPools contains a list of IP pools to manage. If nil, the operator fills this field in: a single IPv4
+	// pool on a cluster with no IP pools, or an empty list on a cluster that already has them, which leaves
+	// those pools to whoever created them.
 	// IP pools in this list will be reconciled by the operator and should not be modified out-of-band.
 	// +optional
 	// +kubebuilder:validation:MaxItems=25

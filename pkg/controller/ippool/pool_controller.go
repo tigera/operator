@@ -33,6 +33,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/rest"
 	"k8s.io/utils/ptr"
@@ -133,6 +134,10 @@ const (
 	// with this label key/value pair is assumed to be solely managed and reconciled by this controller.
 	managedByLabel = "app.kubernetes.io/managed-by"
 	managedByValue = "tigera-operator"
+
+	// poolFieldManager owns the IP pool list this controller applies, leaving every other manager of the
+	// Installation the pools it declared.
+	poolFieldManager = "tigera-operator-ippools"
 )
 
 // hasOwnerLabel returns true if the given IP pool is owned by the tigera/operator, and false otheriwse.
@@ -143,14 +148,52 @@ func hasOwnerLabel(pool *v3.IPPool) bool {
 	return false
 }
 
-// writePoolMembership writes the pools this controller chose into the Installation spec, which is the
+// writePoolMembership applies the pools this controller chose to the Installation spec, which is the
 // one default this controller does not send to the status.
 func (r *Reconciler) writePoolMembership(ctx context.Context, installation *operatorv1.Installation, pools []operatorv1.IPPool) error {
+	content, err := poolListContent(pools)
+	if err != nil {
+		return err
+	}
+
+	// Apply just the pool list, so this field manager owns those pools and nothing else on the Installation.
+	desired := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": operatorv1.GroupVersion.String(),
+		"kind":       "Installation",
+		"metadata": map[string]any{
+			"name": installation.Name,
+		},
+		"spec": map[string]any{
+			"calicoNetwork": map[string]any{
+				"ipPools": content,
+			},
+		},
+	}}
+	if err := r.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(desired), client.FieldOwner(poolFieldManager)); err != nil {
+		return err
+	}
+
+	// Carry the applied state forward, so the status write that follows doesn't conflict on resourceVersion.
+	installation.SetResourceVersion(desired.GetResourceVersion())
 	if installation.Spec.CalicoNetwork == nil {
 		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
 	}
 	installation.Spec.CalicoNetwork.IPPools = pools
-	return r.client.Update(ctx, installation)
+	return nil
+}
+
+// poolListContent renders the IP pool list for an apply request, which must carry only the fields this
+// controller means to own.
+func poolListContent(pools []operatorv1.IPPool) ([]any, error) {
+	raw, err := json.Marshal(pools)
+	if err != nil {
+		return nil, fmt.Errorf("marshal IP pools: %w", err)
+	}
+	content := []any{}
+	if err := json.Unmarshal(raw, &content); err != nil {
+		return nil, fmt.Errorf("unmarshal IP pools: %w", err)
+	}
+	return content, nil
 }
 
 // recordDefaults adds per-pool field defaults to the Installation status, leaving the spec untouched.

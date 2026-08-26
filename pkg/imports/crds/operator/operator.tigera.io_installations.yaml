@@ -1467,6 +1467,9 @@ spec:
                         type: object
                       maxItems: 25
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - cidr
+                      x-kubernetes-list-type: map
                     kubeProxyManagement:
                       description: |-
                         KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.

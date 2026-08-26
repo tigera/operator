@@ -64,7 +64,7 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(storagev1.SchemeBuilder.AddToScheme(scheme)).NotTo(HaveOccurred())
 
 		// Create a client that will have a crud interface of k8s objects.
-		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).WithReturnManagedFields().Build()
 		ctx, cancel = context.WithCancel(context.Background())
 
 		// Create an object we can use throughout the test to do the compliance reconcile loops.
@@ -143,11 +143,12 @@ var _ = Describe("IP Pool controller tests", func() {
 		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// Verify an IP pool was defaulted onto the status, not the spec.
-		Expect(installation.Spec.CalicoNetwork).To(BeNil())
-		Expect(installation.Status.Defaults.CalicoNetwork.IPPools).To(HaveLen(1))
-		pool := installation.Status.Defaults.CalicoNetwork.IPPools[0]
+		// Verify the IP pool was defaulted onto the spec, and that nothing was recorded on the status.
+		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		pool := installation.Spec.CalicoNetwork.IPPools[0]
 		Expect(pool.CIDR).To(Equal("192.168.0.0/16"))
+		Expect(pool.Encapsulation).To(Equal(operator.EncapsulationIPIP))
+		Expect(installation.Status.Defaults).To(BeNil())
 
 		// Expect the IP pool to be created in the API server as well.
 		ipPools := v3.IPPoolList{}
@@ -155,6 +156,104 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(err).ShouldNot(HaveOccurred())
 		Expect(ipPools.Items).To(HaveLen(1))
 		Expect(ipPools.Items[0].Spec.CIDR).To(Equal(pool.CIDR))
+	})
+
+	It("should apply its IP pool defaults under its own field manager", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		createInstallation(ctx, c, instance)
+
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		installation := &operator.Installation{}
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, installation)).ShouldNot(HaveOccurred())
+
+		// The pools are owned by this controller's field manager, so another manager of the Installation
+		// keeps the pools it declared.
+		var applied *metav1.ManagedFieldsEntry
+		for i := range installation.ManagedFields {
+			if installation.ManagedFields[i].Manager == poolFieldManager {
+				applied = &installation.ManagedFields[i]
+			}
+		}
+		Expect(applied).NotTo(BeNil())
+		Expect(applied.Operation).To(Equal(metav1.ManagedFieldsOperationApply))
+		Expect(applied.FieldsV1).NotTo(BeNil())
+		Expect(applied.FieldsV1.GetRawString()).To(ContainSubstring("ipPools"))
+	})
+
+	It("should keep its own default pool when it reconciles again before the computed config is republished", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		createInstallation(ctx, c, instance)
+
+		// Use the projectcalico.org/v3 API path, so that a reconcile deciding to delete the pool
+		// carries the deletion out rather than just marking the controller as degraded.
+		r.clientv3 = c
+		r.opts.UseV3CRDs = true
+
+		// Set up expected mocks.
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		// The first reconcile defaults the pool and creates it. The second stands in for the reconcile
+		// triggered by that create, before the core controller has republished the computed config.
+		for i := 0; i < 2; i++ {
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+		}
+		mockStatus.AssertExpectations(GinkgoT())
+
+		installation := &operator.Installation{}
+		err := c.Get(ctx, utils.DefaultInstanceKey, installation)
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// The spec still declares the pool, rather than the empty list that means pools are managed
+		// out-of-band.
+		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(installation.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+
+		// And the pool is still in the cluster.
+		ipPools := v3.IPPoolList{}
+		err = c.List(ctx, &ipPools)
+		Expect(err).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/16"))
 	})
 
 	It("should not create a default IP pool if one already exists", func() {
@@ -197,9 +296,9 @@ var _ = Describe("IP Pool controller tests", func() {
 		err = c.Get(ctx, utils.DefaultInstanceKey, installation)
 		Expect(err).ShouldNot(HaveOccurred())
 
-		// An explicitly empty pool list is the recorded default, meaning pools are managed out-of-band.
-		Expect(installation.Status.Defaults).NotTo(BeNil())
-		Expect(installation.Status.Defaults.CalicoNetwork.IPPools).To(Equal([]operator.IPPool{}))
+		// An explicitly empty pool list on the spec means pools are managed out-of-band.
+		Expect(installation.Spec.CalicoNetwork.IPPools).To(Equal([]operator.IPPool{}))
+		Expect(installation.Status.Defaults).To(BeNil())
 
 		// No new IP pools should exist.
 		ipPools := v3.IPPoolList{}

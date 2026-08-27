@@ -1389,10 +1389,10 @@ spec:
                       type: string
                     ipPools:
                       description: |-
-                        IPPools contains a list of IP pools to manage. If nil, the operator chooses: on a cluster with no
-                        operator-managed pools it creates a single IPv4 pool, and on a cluster that already has them it keeps
-                        the pools in use. Provide an empty list to manage IP pools out-of-band; the operator then deletes the
-                        pools it owns and creates none.
+                        IPPools contains a list of IP pools to manage. If left unset, the operator fills it in with the pools
+                        it already owns, or with the platform's pod CIDRs or a built-in default on a cluster that has none. A
+                        cluster with pools the operator does not own gets an empty list. Provide an empty list to manage IP
+                        pools out-of-band; the operator then deletes the pools it owns and creates none.
                         IP pools in this list will be reconciled by the operator and should not be modified out-of-band.
                       items:
                         properties:
@@ -1468,6 +1468,9 @@ spec:
                         type: object
                       maxItems: 25
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - cidr
+                      x-kubernetes-list-type: map
                     kubeProxyManagement:
                       description: |-
                         KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.

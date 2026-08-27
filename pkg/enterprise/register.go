@@ -16,6 +16,7 @@ package enterprise
 
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/enterprise/apiserver"
 	"github.com/tigera/operator/pkg/enterprise/clusterconnection"
 	"github.com/tigera/operator/pkg/enterprise/csr"
@@ -37,6 +38,10 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 	// an Installation asking for the deprecated TigeraSecureEnterprise still gets the
 	// Enterprise extensions.
 	if variant.IsEnterprise() {
+		// Registered here rather than in an init, so the images arrive with the
+		// extensions and cannot be missed by a build that has one without the other.
+		components.RegisterVariantImages(variant, components.EnterpriseImages)
+
 		return extensions.New(extensions.Set{
 			Installation:      installation.New(variant, o),
 			Windows:           windows.New(variant),

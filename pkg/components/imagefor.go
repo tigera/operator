@@ -49,14 +49,24 @@ var ImageKeys = []string{
 	ImageKeyIstioPilot, ImageKeyIstioInstallCNI, ImageKeyIstioZTunnel, ImageKeyIstioProxyv2,
 }
 
+// variantImages is what a variant registered over the images this build ships. It is
+// written once while the operator resolves its variant, before any render runs.
+var variantImages = map[operator.ProductVariant][]Component{}
+
+// RegisterVariantImages declares the images a variant runs. A variant's own package
+// calls this as it builds its extensions.
+func RegisterVariantImages(v operator.ProductVariant, imgs []Component) {
+	variantImages[v] = imgs
+}
+
 // ImageFor returns the image the given variant runs for key. A miss is an error rather
-// than a fallback, since a Calico image on an Enterprise install is a bug.
+// than a fallback to another image, which would ship the wrong one silently.
 func ImageFor(v operator.ProductVariant, key string) (Component, error) {
-	list := CalicoImages
-	if v.IsEnterprise() {
-		list = EnterpriseImages
+	imgs := CalicoImages
+	if registered, ok := variantImages[v]; ok {
+		imgs = registered
 	}
-	for _, c := range list {
+	for _, c := range imgs {
 		if c.Image == key {
 			return c, nil
 		}

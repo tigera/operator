@@ -333,7 +333,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if !poolsDeclared && computed.CalicoNetwork.IPPools != nil {
-		// Nobody declared pools, so the chosen list goes back on the spec, where whoever edits it next can see it.
+		// The spec didn't declare any pools, so the chosen list goes back on the spec, where whoever edits it next can see it.
 		if err := r.writePoolMembership(ctx, installation, computed.CalicoNetwork.DeepCopy().IPPools); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write IP pools to the Installation", err, reqLogger)
 			return reconcile.Result{}, err

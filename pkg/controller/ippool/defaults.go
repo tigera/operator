@@ -75,8 +75,8 @@ func fillDefaults(ctx context.Context, client client.Client, spec *operator.Inst
 		return fmt.Errorf("cannot perform IP pool defaulting until CNI configuration is available")
 	}
 
-	// Platform CIDRs and the built-in default only apply to a cluster with no IP pools at all. On any other
-	// cluster the caller has already decided which pools to manage.
+	// Only add default CIDRs if there are no existing pools in the cluster. On a cluster that already has
+	// pools, the caller has decided which ones to manage.
 	if currentPools == nil || len(currentPools.Items) == 0 {
 		if spec.KubernetesProvider.IsOpenShift() {
 			// If configured to run in openshift, then also fetch the openshift configuration API.

@@ -148,8 +148,28 @@ func hasOwnerLabel(pool *v3.IPPool) bool {
 	return false
 }
 
-// writePoolMembership applies the pools this controller chose to the Installation spec, which is the
-// one default this controller does not send to the status.
+// ownedPoolMembership returns the pool list to use when nobody declared one. A pool the operator
+// does not own means IP pools are managed out-of-band; nil means the cluster has no pools at all.
+func ownedPoolMembership(currentPools *v3.IPPoolList) []operatorv1.IPPool {
+	if currentPools == nil || len(currentPools.Items) == 0 {
+		return nil
+	}
+
+	owned := []operatorv1.IPPool{}
+	for i := range currentPools.Items {
+		if !hasOwnerLabel(&currentPools.Items[i]) {
+			return []operatorv1.IPPool{}
+		}
+
+		pool := operatorv1.IPPool{}
+		FromProjectCalico(&pool, currentPools.Items[i])
+		owned = append(owned, pool)
+	}
+	return owned
+}
+
+// writePoolMembership applies the pools this controller chose to the Installation spec, the one
+// default that does not go to the status.
 func (r *Reconciler) writePoolMembership(ctx context.Context, installation *operatorv1.Installation, pools []operatorv1.IPPool) error {
 	content, err := poolListContent(pools)
 	if err != nil {
@@ -169,21 +189,25 @@ func (r *Reconciler) writePoolMembership(ctx context.Context, installation *oper
 			},
 		},
 	}}
-	if err := r.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(desired), client.FieldOwner(poolFieldManager)); err != nil {
+	// Take the field from whoever holds it. Anyone editing the Installation with kubectl claims the
+	// pool list, and this only runs when nobody has declared pools, so there is no intent to overwrite.
+	opts := []client.ApplyOption{client.FieldOwner(poolFieldManager), client.ForceOwnership}
+	if err := r.client.Apply(ctx, client.ApplyConfigurationFromUnstructured(desired), opts...); err != nil {
 		return err
 	}
 
-	// Carry the applied state forward, so the status write that follows doesn't conflict on resourceVersion.
-	installation.SetResourceVersion(desired.GetResourceVersion())
-	if installation.Spec.CalicoNetwork == nil {
-		installation.Spec.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+	// Adopt the merged object from the apply response, since the copy we read may be older than what
+	// the server now holds.
+	applied := &operatorv1.Installation{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(desired.Object, applied); err != nil {
+		return fmt.Errorf("decode applied Installation: %w", err)
 	}
-	installation.Spec.CalicoNetwork.IPPools = pools
+	*installation = *applied
 	return nil
 }
 
-// poolListContent renders the IP pool list for an apply request, which must carry only the fields this
-// controller means to own.
+// poolListContent renders the fully defaulted IP pool list as the content of an apply request, which
+// claims ownership of every field it sets.
 func poolListContent(pools []operatorv1.IPPool) ([]any, error) {
 	raw, err := json.Marshal(pools)
 	if err != nil {
@@ -269,15 +293,6 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		declared = utils.OverrideInstallationSpec(declared, *overlay)
 	}
 
-	poolsDeclared := declared.CalicoNetwork != nil && declared.CalicoNetwork.IPPools != nil
-	if poolsDeclared {
-		// Pool membership comes from the spec, since the computed config lags a write-back by a reconcile.
-		if computed.CalicoNetwork == nil {
-			computed.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
-		}
-		computed.CalicoNetwork.IPPools = declared.CalicoNetwork.DeepCopy().IPPools
-	}
-
 	if computed.CNI == nil || computed.CNI.Type == "" {
 		r.status.SetDegraded(operatorv1.ResourceNotReady, "Waiting for CNI type to be configured on Installation", nil, reqLogger)
 		return reconcile.Result{}, nil
@@ -296,6 +311,18 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		}
 	}
 
+	// Decide which pools to manage before defaulting, and decide it from the cluster rather than the
+	// computed config, which lags this controller's own write by a reconcile.
+	poolsDeclared := declared.CalicoNetwork != nil && declared.CalicoNetwork.IPPools != nil
+	if computed.CalicoNetwork == nil {
+		computed.CalicoNetwork = &operatorv1.CalicoNetworkSpec{}
+	}
+	if poolsDeclared {
+		computed.CalicoNetwork.IPPools = declared.CalicoNetwork.DeepCopy().IPPools
+	} else {
+		computed.CalicoNetwork.IPPools = ownedPoolMembership(currentPools)
+	}
+
 	if err = fillDefaults(ctx, r.client, computed, currentPools); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "error filling IP pool defaults", err, reqLogger)
 		return reconcile.Result{}, err
@@ -305,8 +332,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	if !poolsDeclared && computed.CalicoNetwork != nil && computed.CalicoNetwork.IPPools != nil {
-		// Nobody declared pools, so the chosen list goes on the spec, where whoever edits it next can see it.
+	if !poolsDeclared && computed.CalicoNetwork.IPPools != nil {
+		// Nobody declared pools, so the chosen list goes back on the spec, where whoever edits it next can see it.
 		if err := r.writePoolMembership(ctx, installation, computed.CalicoNetwork.DeepCopy().IPPools); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write IP pools to the Installation", err, reqLogger)
 			return reconcile.Result{}, err

@@ -256,6 +256,103 @@ var _ = Describe("IP Pool controller tests", func() {
 		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/16"))
 	})
 
+	It("should re-apply the pools it owns when the spec's pool list is cleared", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		createInstallation(ctx, c, instance)
+
+		// Use the projectcalico.org/v3 API path, so that a reconcile deciding to delete the pool
+		// carries the deletion out rather than just marking the controller as degraded.
+		r.clientv3 = c
+		r.opts.UseV3CRDs = true
+
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		// Clear the pool list. This is what a user reverting the field does, and also what an
+		// Installation cache that has not caught up with this controller's own write serves.
+		installation := &operator.Installation{}
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, installation)).ShouldNot(HaveOccurred())
+		installation.Spec.CalicoNetwork.IPPools = nil
+		Expect(c.Update(ctx, installation)).ShouldNot(HaveOccurred())
+
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		// The cleared list reads as "keep what you own", not as a request to manage pools out-of-band,
+		// so the pool survives and goes back on the spec.
+		ipPools := v3.IPPoolList{}
+		Expect(c.List(ctx, &ipPools)).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(HaveLen(1))
+		Expect(ipPools.Items[0].Spec.CIDR).To(Equal("192.168.0.0/16"))
+
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, installation)).ShouldNot(HaveOccurred())
+		Expect(installation.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
+		Expect(installation.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("192.168.0.0/16"))
+	})
+
+	It("should delete the pools it owns when the spec declares an empty list", func() {
+		instance := &operator.Installation{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       "default",
+				Finalizers: []string{"tigera.io/operator-cleanup"},
+			},
+			Spec: operator.InstallationSpec{
+				Variant:  operator.Calico,
+				Registry: "some.registry.org/",
+				CNI: &operator.CNISpec{
+					Type: operator.PluginCalico,
+					IPAM: &operator.IPAMSpec{Type: operator.IPAMPluginCalico},
+				},
+			},
+		}
+		createInstallation(ctx, c, instance)
+
+		r.clientv3 = c
+		r.opts.UseV3CRDs = true
+
+		mockStatus.On("OnCRFound")
+		mockStatus.On("SetMetaData", mock.Anything)
+		mockStatus.On("IsAvailable").Return(true)
+		mockStatus.On("ReadyToMonitor")
+		mockStatus.On("ClearDegraded")
+
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		installation := &operator.Installation{}
+		Expect(c.Get(ctx, utils.DefaultInstanceKey, installation)).ShouldNot(HaveOccurred())
+		installation.Spec.CalicoNetwork.IPPools = []operator.IPPool{}
+		updateInstallation(ctx, c, installation)
+
+		_, err = r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+		mockStatus.AssertExpectations(GinkgoT())
+
+		ipPools := v3.IPPoolList{}
+		Expect(c.List(ctx, &ipPools)).ShouldNot(HaveOccurred())
+		Expect(ipPools.Items).To(BeEmpty())
+	})
+
 	It("should not create a default IP pool if one already exists", func() {
 		instance := &operator.Installation{
 			ObjectMeta: metav1.ObjectMeta{
@@ -944,6 +1041,39 @@ var _ = Describe("fillDefaults()", func() {
 			Expect(instance.Spec.CalicoNetwork.IPPools[0].CIDR).To(Equal("172.16.0.0/16"))
 			Expect(ValidatePools(&instance.Spec)).NotTo(HaveOccurred())
 		})
+	})
+})
+
+var _ = Describe("ownedPoolMembership()", func() {
+	ownedPool := func(cidr string) v3.IPPool {
+		return v3.IPPool{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:   "owned",
+				Labels: map[string]string{managedByLabel: managedByValue},
+			},
+			Spec: v3.IPPoolSpec{CIDR: cidr},
+		}
+	}
+
+	It("should return nil when the cluster has no pools", func() {
+		Expect(ownedPoolMembership(nil)).To(BeNil())
+		Expect(ownedPoolMembership(&v3.IPPoolList{})).To(BeNil())
+	})
+
+	It("should return the pools the operator owns", func() {
+		pools := &v3.IPPoolList{Items: []v3.IPPool{ownedPool("192.168.0.0/16")}}
+		membership := ownedPoolMembership(pools)
+		Expect(membership).To(HaveLen(1))
+		Expect(membership[0].CIDR).To(Equal("192.168.0.0/16"))
+	})
+
+	It("should return an empty list when any pool is unowned", func() {
+		unowned := v3.IPPool{
+			ObjectMeta: metav1.ObjectMeta{Name: "theirs"},
+			Spec:       v3.IPPoolSpec{CIDR: "10.0.0.0/16"},
+		}
+		pools := &v3.IPPoolList{Items: []v3.IPPool{ownedPool("192.168.0.0/16"), unowned}}
+		Expect(ownedPoolMembership(pools)).To(Equal([]operator.IPPool{}))
 	})
 })
 

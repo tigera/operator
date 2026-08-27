@@ -355,7 +355,7 @@ run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 ## Create a local kind dual stack cluster.
 KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
-KINDEST_NODE_VERSION?=v1.31.12
+KINDEST_NODE_VERSION?=v1.32.11
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy

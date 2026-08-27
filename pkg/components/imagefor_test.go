@@ -22,6 +22,11 @@ import (
 )
 
 var _ = Describe("ImageFor", func() {
+	BeforeEach(func() {
+		// The operator registers this as it builds the Enterprise extensions.
+		RegisterVariantImages(operator.CalicoEnterprise, EnterpriseImages)
+	})
+
 	// The generated component lists are the source of truth, so a key that no longer
 	// names an entry in either list would make ImageFor error at render time.
 	It("resolves every key for both variants", func() {
@@ -41,5 +46,11 @@ var _ = Describe("ImageFor", func() {
 	It("errors on an image the variant does not supply", func() {
 		_, err := ImageFor(operator.CalicoEnterprise, "whisker")
 		Expect(err).To(HaveOccurred())
+	})
+
+	It("runs this build's images for a variant that registered none", func() {
+		img, err := ImageFor(operator.Calico, ImageKeyNode)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(img).To(Equal(ComponentCalicoNode))
 	})
 })

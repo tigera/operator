@@ -28,8 +28,7 @@ type tableKey struct {
 }
 
 // Table maps an image key, per variant, to the image it resolves to, so the render
-// package never branches on variant. Registry, image path, and FIPS handling are
-// applied downstream.
+// package never branches on variant. Registry and image path are applied downstream.
 type Table struct {
 	m map[tableKey]components.Component
 }

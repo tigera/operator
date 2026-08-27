@@ -35,6 +35,7 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
@@ -48,7 +49,6 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
-	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -69,7 +69,9 @@ type ESKubeControllersController struct {
 	multiTenant     bool
 	cloud           bool
 	tierWatchReady  *utils.ReadyFlag
-	images          *imageoverride.Overrides
+
+	// kubeControllersImage is nil unless the variant runs its own build.
+	kubeControllersImage *components.Component
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
@@ -87,16 +89,16 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Create the reconciler
 	r := &ESKubeControllersController{
-		client:          mgr.GetClient(),
-		scheme:          mgr.GetScheme(),
-		clusterDomain:   opts.ClusterDomain,
-		variant:         opts.Variant,
-		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
-		elasticExternal: opts.ElasticExternal,
-		multiTenant:     opts.MultiTenant,
-		cloud:           opts.Cloud,
-		images:          opts.Extensions.Images(),
-		tierWatchReady:  &utils.ReadyFlag{},
+		client:               mgr.GetClient(),
+		scheme:               mgr.GetScheme(),
+		clusterDomain:        opts.ClusterDomain,
+		variant:              opts.Variant,
+		status:               status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
+		elasticExternal:      opts.ElasticExternal,
+		multiTenant:          opts.MultiTenant,
+		cloud:                opts.Cloud,
+		kubeControllersImage: opts.Extensions.Installation().KubeControllersImage(),
+		tierWatchReady:       &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -357,7 +359,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
-		ImageOverrides:               r.images,
+		Image:                        r.kubeControllersImage,
 	}
 	esKubeControllersCfg := entkubecontrollers.Configuration{
 		KubeControllersConfiguration: &kubeControllersCfg,

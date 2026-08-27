@@ -27,7 +27,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/policysync"
 	"github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	ristio "github.com/tigera/operator/pkg/render/istio"
 )
@@ -45,11 +45,11 @@ func New(variant operatorv1.ProductVariant) *Extension {
 }
 
 // RegisterImages adds the images the istio components resolve.
-func RegisterImages(o *imageoverride.Overrides, variant operatorv1.ProductVariant) {
-	o.Register(variant, ristio.ComponentNamePilot, components.ComponentIstioPilot)
-	o.Register(variant, ristio.ComponentNameInstallCNI, components.ComponentIstioInstallCNI)
-	o.Register(variant, ristio.ComponentNameZTunnel, components.ComponentIstioZTunnel)
-	o.Register(variant, ristio.ComponentNameProxyv2, components.ComponentIstioProxyv2)
+func RegisterImages(o *images.Table, variant operatorv1.ProductVariant) {
+	o.Register(variant, ristio.ImageKeyPilot, components.ComponentIstioPilot)
+	o.Register(variant, ristio.ImageKeyInstallCNI, components.ComponentIstioInstallCNI)
+	o.Register(variant, ristio.ImageKeyZTunnel, components.ComponentIstioZTunnel)
+	o.Register(variant, ristio.ImageKeyProxyv2, components.ComponentIstioProxyv2)
 }
 
 // PolicySyncRequired reports whether the ApplicationLayer flow needs the policy-sync

@@ -35,7 +35,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -173,7 +173,7 @@ type APIServerConfiguration struct {
 	// APIService and the resources it needs are left alone.
 	HoldAPIServiceCutover bool
 
-	ImageOverrides *imageoverride.Overrides
+	Images *images.Table
 }
 
 type apiServerComponent struct {
@@ -194,7 +194,7 @@ func (c *apiServerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	// API server container, and a variant modifier needs it for the query server
 	// container and the deployment skeleton it may render itself.
 	var err error
-	c.calicoImage, err = components.GetReference(c.cfg.ImageOverrides.Resolve(ComponentNameCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(c.cfg.Images.Resolve(ImageKeyCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}

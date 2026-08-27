@@ -42,7 +42,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -126,9 +126,9 @@ var _ = Describe("kube-controllers rendering tests", func() {
 
 	It("resolves the kube-controllers image through the image overrides", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
-		overrides := imageoverride.New()
-		overrides.Register(operatorv1.CalicoEnterprise, render.ComponentNameKubeControllers, components.CalicoCloudImage())
-		cfg.ImageOverrides = overrides
+		overrides := images.New()
+		overrides.Register(operatorv1.CalicoEnterprise, render.ImageKeyKubeControllers, components.CalicoCloudImage())
+		cfg.Images = overrides
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -301,7 +301,7 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		// Override configuration to match expected Enterprise config.
 		instance.Variant = operatorv1.CalicoEnterprise
 		cfg.MetricsPort = 9094
-		cfg.ImageOverrides = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Images()
+		cfg.Images = enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Images()
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())

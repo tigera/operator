@@ -51,7 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -193,7 +193,7 @@ type ReconcileAPIServer struct {
 	migrationWatchReady *utils.ReadyFlag
 	opts                options.ControllerOptions
 	ext                 extensions.APIServerExtension
-	images              *imageoverride.Overrides
+	images              *images.Table
 }
 
 // Reconcile reads that state of the cluster for a APIServer object and makes changes based on the state read
@@ -399,7 +399,7 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		KubernetesVersion:            r.opts.KubernetesVersion,
 		ClusterDomain:                r.opts.ClusterDomain,
 		RequiresAggregationServer:    !r.opts.UseV3CRDs,
-		ImageOverrides:               r.images,
+		Images:                       r.images,
 		HoldAPIServiceCutover:        holdCutover,
 	}
 
@@ -438,12 +438,12 @@ func (r *ReconcileAPIServer) Reconcile(ctx context.Context, request reconcile.Re
 		}
 
 		webhooksCfg := webhooks.Configuration{
-			PullSecrets:    pullSecrets,
-			KeyPair:        webhooksTLS,
-			Installation:   installationSpec,
-			APIServer:      &instance.Spec,
-			OpenShift:      r.opts.DetectedProvider.IsOpenShift(),
-			ImageOverrides: r.images,
+			PullSecrets:  pullSecrets,
+			KeyPair:      webhooksTLS,
+			Installation: installationSpec,
+			APIServer:    &instance.Spec,
+			OpenShift:    r.opts.DetectedProvider.IsOpenShift(),
+			Images:       r.images,
 		}
 		components = append(components, webhooks.Component(&webhooksCfg))
 		certKeyPairOptions = append(certKeyPairOptions, rcertificatemanagement.NewKeyPairOption(webhooksTLS, true, true))

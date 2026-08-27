@@ -22,7 +22,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/typhaautoscaler"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
 )
@@ -46,17 +46,17 @@ func New(variant operatorv1.ProductVariant, opts eoptions.Options) *Extension {
 }
 
 // RegisterImages adds the images the installation controller's components resolve.
-func RegisterImages(o *imageoverride.Overrides, variant operatorv1.ProductVariant, opts eoptions.Options) {
-	o.Register(variant, render.ComponentNameNode, components.ComponentTigeraNode)
+func RegisterImages(o *images.Table, variant operatorv1.ProductVariant, opts eoptions.Options) {
+	o.Register(variant, render.ImageKeyNode, components.ComponentTigeraNode)
 
 	// The node component renders the cni-plugins init container; its image resolves
 	// through its own override key.
-	o.Register(variant, render.ComponentNameCNIPlugins, components.ComponentTigeraCNIPlugins)
+	o.Register(variant, render.ImageKeyCNIPlugins, components.ComponentTigeraCNIPlugins)
 
 	if opts.Cloud {
 		// Calico Cloud runs kube-controllers from the combined image, which carries the
 		// Cloud behavior the mono image lacks.
-		o.Register(variant, render.ComponentNameKubeControllers, components.CalicoCloudImage())
+		o.Register(variant, render.ImageKeyKubeControllers, components.CalicoCloudImage())
 	}
 }
 

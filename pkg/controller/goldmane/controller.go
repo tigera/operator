@@ -38,7 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -148,7 +148,7 @@ type Reconciler struct {
 	clusterDomain string
 	variant       operatorv1.ProductVariant
 	ext           extensions.GoldmaneExtension
-	images        *imageoverride.Overrides
+	images        *images.Table
 }
 
 // Reconcile reads that state of the cluster for a Goldmane object and makes changes based on the
@@ -277,7 +277,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		ManagementClusterConnection: mgmtClusterConnectionCR,
 		ClusterDomain:               r.clusterDomain,
 		Goldmane:                    goldmaneCR,
-		ImageOverrides:              r.images,
+		Images:                      r.images,
 	}
 
 	components := []render.Component{certComponent, goldmane.Goldmane(cfg)}

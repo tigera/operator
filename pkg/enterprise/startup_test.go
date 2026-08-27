@@ -154,7 +154,7 @@ var _ = Describe("ProtectedNamespaces", func() {
 
 	It("leaves tenancy alone for a Calico install", func() {
 		// A nil clientset is safe precisely because Calico never probes for tenancy.
-		e, err := enterprise.Build(ctx, extensions.FactoryInputs{Variant: operatorv1.Calico})
+		e, err := enterprise.Build(ctx, operatorv1.Calico, nil, false, false)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(e.Startup().MultiTenant()).To(BeFalse())

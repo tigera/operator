@@ -43,7 +43,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/enterprise"
-	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/imports/crds"
 	"github.com/tigera/operator/pkg/render"
@@ -86,10 +85,6 @@ var (
 // bootstrapConfigMapName is the name of the ConfigMap that contains cluster-wide
 // configuration for the operator loaded at startup.
 const bootstrapConfigMapName = "operator-bootstrap-config"
-
-// buildExtensions is the variant's extensions factory, and the only place this binary
-// names a variant. A variant's own main supplies its own once main becomes a shim.
-var buildExtensions extensions.Factory = enterprise.Build
 
 func init() {
 	// +kubebuilder:scaffold:scheme
@@ -461,14 +456,7 @@ admission policy installation; once an Installation exists it is the authority o
 		}
 	}
 
-	// Build the extensions now that the variant is resolved. Once main is a shim around
-	// a library entry point, the variant's own main supplies this factory.
-	extensionRegistry, err := buildExtensions(ctx, extensions.FactoryInputs{
-		Variant:    variant,
-		Clientset:  clientset,
-		ManageCRDs: manageCRDs,
-		UseV3CRDs:  v3CRDs,
-	})
+	extensionRegistry, err := enterprise.Build(ctx, variant, clientset, manageCRDs, v3CRDs)
 	if err != nil {
 		setupLog.Error(err, "Failed to build the variant's extensions")
 		os.Exit(1)

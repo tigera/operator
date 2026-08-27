@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/client-go/kubernetes"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
@@ -38,29 +40,26 @@ import (
 	"github.com/tigera/operator/version"
 )
 
-// Build satisfies the operator's extensions factory.
-var _ extensions.Factory = Build
-
-// Build is the extensions factory the operator calls once the variant is resolved.
-// Tenancy and the cloud build flag are resolved here rather than passed in, since each
-// only ever describes an Enterprise install.
-func Build(ctx context.Context, in extensions.FactoryInputs) (extensions.Extensions, error) {
+// Build returns the Calico Enterprise extensions, and is called once the variant is
+// resolved. Tenancy and the cloud build flag are resolved here rather than passed in,
+// since each only ever describes an Enterprise install.
+func Build(ctx context.Context, variant operatorv1.ProductVariant, clientset kubernetes.Interface, manageCRDs, useV3CRDs bool) (extensions.Extensions, error) {
 	o := eoptions.Options{
-		ManageCRDs: in.ManageCRDs,
-		UseV3CRDs:  in.UseV3CRDs,
+		ManageCRDs: manageCRDs,
+		UseV3CRDs:  useV3CRDs,
 		Cloud:      isCloudBuild(),
 	}
 
-	if in.Variant.IsEnterprise() {
+	if variant.IsEnterprise() {
 		// Tenancy shows up as a namespaced Manager, a CRD only Enterprise installs.
-		multiTenant, err := discovery.MultiTenant(ctx, in.Clientset)
+		multiTenant, err := discovery.MultiTenant(ctx, clientset)
 		if err != nil {
 			return extensions.Extensions{}, fmt.Errorf("failed to determine the tenancy mode: %w", err)
 		}
 		o.MultiTenant = multiTenant
 	}
 
-	return New(in.Variant, o), nil
+	return New(variant, o), nil
 }
 
 // New builds the Calico Enterprise extensions from options already resolved.

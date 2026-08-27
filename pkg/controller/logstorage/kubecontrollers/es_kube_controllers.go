@@ -35,7 +35,6 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/logstorage/esutils"
@@ -69,9 +68,6 @@ type ESKubeControllersController struct {
 	multiTenant     bool
 	cloud           bool
 	tierWatchReady  *utils.ReadyFlag
-
-	// kubeControllersImage is nil unless the variant runs its own build.
-	kubeControllersImage *components.Component
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
@@ -89,16 +85,15 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	// Create the reconciler
 	r := &ESKubeControllersController{
-		client:               mgr.GetClient(),
-		scheme:               mgr.GetScheme(),
-		clusterDomain:        opts.ClusterDomain,
-		variant:              opts.Variant,
-		status:               status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
-		elasticExternal:      opts.ElasticExternal,
-		multiTenant:          opts.MultiTenant,
-		cloud:                opts.Cloud,
-		kubeControllersImage: opts.Extensions.Installation().KubeControllersImage(),
-		tierWatchReady:       &utils.ReadyFlag{},
+		client:          mgr.GetClient(),
+		scheme:          mgr.GetScheme(),
+		clusterDomain:   opts.ClusterDomain,
+		variant:         opts.Variant,
+		status:          status.New(mgr.GetClient(), initializer.TigeraStatusLogStorageKubeController, opts.KubernetesVersion),
+		elasticExternal: opts.ElasticExternal,
+		multiTenant:     opts.MultiTenant,
+		cloud:           opts.Cloud,
+		tierWatchReady:  &utils.ReadyFlag{},
 	}
 	r.status.Run(opts.ShutdownContext)
 
@@ -359,7 +354,6 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
-		Image:                        r.kubeControllersImage,
 	}
 	esKubeControllersCfg := entkubecontrollers.Configuration{
 		KubeControllersConfiguration: &kubeControllersCfg,

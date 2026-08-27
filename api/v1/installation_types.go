@@ -888,6 +888,9 @@ type IPPool struct {
 	Name string `json:"name,omitempty"`
 
 	// CIDR contains the address range for the IP Pool in classless inter-domain routing format.
+	// MaxLength keeps the rule below inside the CEL cost budget.
+	// +kubebuilder:validation:MaxLength=43
+	// +kubebuilder:validation:XValidation:rule="isCIDR(self) && string(cidr(self).masked()) == self",message="cidr must be in canonical form, for example 192.168.0.0/16 or fd00:10:244::/64"
 	CIDR string `json:"cidr"`
 
 	// Encapsulation specifies the encapsulation type that will be used with

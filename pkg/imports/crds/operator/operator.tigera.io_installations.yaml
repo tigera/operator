@@ -1417,10 +1417,16 @@ spec:
                             format: int32
                             type: integer
                           cidr:
-                            description:
-                              CIDR contains the address range for the IP
-                              Pool in classless inter-domain routing format.
+                            description: |-
+                              CIDR contains the address range for the IP Pool in classless inter-domain routing format.
+                              MaxLength keeps the rule below inside the CEL cost budget.
+                            maxLength: 43
                             type: string
+                            x-kubernetes-validations:
+                              - message:
+                                  cidr must be in canonical form, for example 192.168.0.0/16
+                                  or fd00:10:244::/64
+                                rule: isCIDR(self) && string(cidr(self).masked()) == self
                           disableBGPExport:
                             default: false
                             description: |-

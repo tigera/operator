@@ -913,14 +913,14 @@ var _ = Describe("fillDefaults()", func() {
 			Expect(fillDefaults(ctx, cli, &i.Spec, currentPools)).ToNot(HaveOccurred())
 
 			if i.Spec.CalicoNetwork != nil && i.Spec.CalicoNetwork.IPPools != nil && len(i.Spec.CalicoNetwork.IPPools) != 0 {
-				v4pool := render.GetIPv4Pool(i.Spec.CalicoNetwork.IPPools)
+				v4pool := poolOfFamily(i.Spec.CalicoNetwork.IPPools, render.IsIPv4Pool)
 				Expect(v4pool).ToNot(BeNil())
 				Expect(v4pool.CIDR).ToNot(BeEmpty(), "CIDR should be set on pool %v", v4pool)
 				Expect(v4pool.Encapsulation).To(BeElementOf(operator.EncapsulationTypes), "Encapsulation should be set on pool %q", v4pool)
 				Expect(v4pool.NATOutgoing).To(BeElementOf(operator.NATOutgoingTypes), "NATOutgoing should be set on pool %v", v4pool)
 				Expect(v4pool.NodeSelector).ToNot(BeEmpty(), "NodeSelector should be set on pool %v", v4pool)
 
-				v6pool := render.GetIPv6Pool(i.Spec.CalicoNetwork.IPPools)
+				v6pool := poolOfFamily(i.Spec.CalicoNetwork.IPPools, render.IsIPv6Pool)
 				Expect(v6pool).To(BeNil())
 			}
 
@@ -1006,10 +1006,10 @@ var _ = Describe("fillDefaults()", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(instance.Spec.CalicoNetwork.IPPools).To(HaveLen(1))
 
-		v4pool := render.GetIPv4Pool(instance.Spec.CalicoNetwork.IPPools)
+		v4pool := poolOfFamily(instance.Spec.CalicoNetwork.IPPools, render.IsIPv4Pool)
 		Expect(v4pool).To(BeNil())
 
-		v6pool := render.GetIPv6Pool(instance.Spec.CalicoNetwork.IPPools)
+		v6pool := poolOfFamily(instance.Spec.CalicoNetwork.IPPools, render.IsIPv6Pool)
 		Expect(v6pool).NotTo(BeNil())
 		Expect(v6pool.CIDR).To(Equal("fd00::0/64"))
 		Expect(v6pool.BlockSize).NotTo(BeNil())
@@ -1167,6 +1167,21 @@ func fillPrerequisiteDefaults(i *operator.Installation) {
 }
 
 // createInstallation creates the Installation with its effective config published on the status.
+// poolOfFamily returns the one pool matching the family predicate. These tests never declare two
+// pools of the same family, so a second match is a bug in the test rather than a choice to make.
+func poolOfFamily(pools []operator.IPPool, matches func(operator.IPPool) bool) *operator.IPPool {
+	var found *operator.IPPool
+	for i := range pools {
+		if !matches(pools[i]) {
+			continue
+		}
+
+		ExpectWithOffset(1, found).To(BeNil(), "more than one pool of the same family")
+		found = &pools[i]
+	}
+	return found
+}
+
 func createInstallation(ctx context.Context, c client.Client, instance *operator.Installation) {
 	instance.Status.Computed = instance.Spec.DeepCopy()
 	ExpectWithOffset(1, c.Create(ctx, instance)).ShouldNot(HaveOccurred())

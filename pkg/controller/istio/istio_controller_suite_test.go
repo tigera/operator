@@ -19,7 +19,16 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+
+	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 )
+
+// The operator registers the Enterprise images as it builds the Enterprise
+// extensions, so a suite with Enterprise-variant specs registers them too.
+var _ = ginkgo.BeforeSuite(func() {
+	components.RegisterVariantImages(operatorv1.CalicoEnterprise, components.EnterpriseImages)
+})
 
 func TestIstio(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)

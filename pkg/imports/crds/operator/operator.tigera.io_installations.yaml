@@ -1389,10 +1389,10 @@ spec:
                       type: string
                     ipPools:
                       description: |-
-                        IPPools contains a list of IP pools to manage. If nil, the operator chooses: on a cluster with no
-                        operator-managed pools it creates a single IPv4 pool, and on a cluster that already has them it keeps
-                        the pools in use. Provide an empty list to manage IP pools out-of-band; the operator then deletes the
-                        pools it owns and creates none.
+                        IPPools contains a list of IP pools to manage. If left unset, the operator fills it in with the pools
+                        it already owns, or with the platform's pod CIDRs or a built-in default on a cluster that has none. A
+                        cluster with pools the operator does not own gets an empty list. Provide an empty list to manage IP
+                        pools out-of-band; the operator then deletes the pools it owns and creates none.
                         IP pools in this list will be reconciled by the operator and should not be modified out-of-band.
                       items:
                         properties:
@@ -1417,10 +1417,16 @@ spec:
                             format: int32
                             type: integer
                           cidr:
-                            description:
-                              CIDR contains the address range for the IP
-                              Pool in classless inter-domain routing format.
+                            description: |-
+                              CIDR contains the address range for the IP Pool in classless inter-domain routing format.
+                              MaxLength keeps the rule below inside the CEL cost budget.
+                            maxLength: 43
                             type: string
+                            x-kubernetes-validations:
+                              - message:
+                                  cidr must be in canonical form, for example 192.168.0.0/16
+                                  or fd00:10:244::/64
+                                rule: isCIDR(self) && string(cidr(self).masked()) == self
                           disableBGPExport:
                             default: false
                             description: |-
@@ -1468,6 +1474,9 @@ spec:
                         type: object
                       maxItems: 25
                       type: array
+                      x-kubernetes-list-map-keys:
+                        - cidr
+                      x-kubernetes-list-type: map
                     kubeProxyManagement:
                       description: |-
                         KubeProxyManagement controls whether the operator manages the kube-proxy DaemonSet.

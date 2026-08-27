@@ -22,7 +22,7 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
@@ -80,7 +80,7 @@ type Configuration struct {
 	ClusterDomain               string
 	Goldmane                    *operatorv1.Goldmane
 
-	ImageOverrides *imageoverride.Overrides
+	Images *images.Table
 }
 
 type Component struct {
@@ -95,7 +95,7 @@ func (c *Component) ResolveImages(is *operatorv1.ImageSet) error {
 	prefix := c.cfg.Installation.ImagePrefix
 
 	var err error
-	c.calicoImage, err = components.GetReference(c.cfg.ImageOverrides.Resolve(render.ComponentNameCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(c.cfg.Images.Resolve(render.ImageKeyCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 

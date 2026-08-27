@@ -80,22 +80,21 @@ type (
 	}
 )
 
-// Component names, which key the image overrides a variant resolves through.
+// Image keys, which a variant's image table resolves through.
 const (
-	ComponentNameNode = "node"
+	ImageKeyNode = "node"
 
-	// ComponentNameCNIPlugins keys the upstream CNI plugins image. The node
-	// component renders the cni-plugins init container, so the image resolves
-	// through its own override key.
-	ComponentNameCNIPlugins = "cni-plugins"
+	// ImageKeyCNIPlugins keys the upstream CNI plugins image, which the node
+	// component renders as an init container.
+	ImageKeyCNIPlugins = "cni-plugins"
 
 	// The two windows images get their own keys, since one component renders both.
-	ComponentNameWindowsNodeImg = "windows-node-image"
-	ComponentNameWindowsCNIImg  = "windows-cni-image"
+	ImageKeyWindowsNode = "windows-node"
+	ImageKeyWindowsCNI  = "windows-cni"
 
-	ComponentNameKubeControllers = "kube-controllers"
+	ImageKeyKubeControllers = "kube-controllers"
 
-	// ComponentNameCalico keys the combined calico image; most components run one of
+	// ImageKeyCalico keys the combined calico image; most components run one of
 	// its binaries.
-	ComponentNameCalico = "calico"
+	ImageKeyCalico = "calico"
 )

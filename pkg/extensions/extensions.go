@@ -15,7 +15,7 @@
 package extensions
 
 import (
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 )
 
 // Set is the extensions a variant supplies, one per extended controller. What it
@@ -34,7 +34,7 @@ type Set struct {
 
 	// Images maps a component name to the image the variant runs for it. One set for
 	// the whole operator, since the variant is fixed for the process lifetime.
-	Images *imageoverride.Overrides
+	Images *images.Table
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -121,6 +121,6 @@ func (e Extensions) GatewayAPI() GatewayAPIExtension {
 
 // Images returns the variant's image overrides. A nil set resolves every component to
 // the default the caller passes.
-func (e Extensions) Images() *imageoverride.Overrides {
+func (e Extensions) Images() *images.Table {
 	return e.set.Images
 }

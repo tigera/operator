@@ -29,7 +29,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -44,8 +44,8 @@ type Configuration struct {
 	IstioNamespace string
 	Scheme         *runtime.Scheme
 
-	// ImageOverrides swaps in a variant's images for the components below.
-	ImageOverrides *imageoverride.Overrides
+	// Images swaps in a variant's images for the components below.
+	Images *images.Table
 }
 
 var _ render.Component = &IstioComponent{}
@@ -84,10 +84,10 @@ const (
 
 // Component names, which key the image overrides a variant resolves through.
 const (
-	ComponentNamePilot      = "istio-pilot"
-	ComponentNameInstallCNI = "istio-install-cni"
-	ComponentNameZTunnel    = "istio-ztunnel"
-	ComponentNameProxyv2    = "istio-proxyv2"
+	ImageKeyPilot      = "istio-pilot"
+	ImageKeyInstallCNI = "istio-install-cni"
+	ImageKeyZTunnel    = "istio-ztunnel"
+	ImageKeyProxyv2    = "istio-proxyv2"
 )
 
 // ConfiguredComponent is the istio component, exposed so a variant extension can
@@ -218,21 +218,21 @@ func (c *IstioComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	reg := in.Registry
 	path := in.ImagePath
 	prefix := in.ImagePrefix
-	overrides := c.cfg.ImageOverrides
+	overrides := c.cfg.Images
 
-	c.IstioPilotImage, err = components.GetReference(overrides.Resolve(ComponentNamePilot, components.ComponentCalicoIstioPilot, in), reg, path, prefix, is)
+	c.IstioPilotImage, err = components.GetReference(overrides.Resolve(ImageKeyPilot, components.ComponentCalicoIstioPilot, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
-	c.IstioInstallCNIImage, err = components.GetReference(overrides.Resolve(ComponentNameInstallCNI, components.ComponentCalicoIstioInstallCNI, in), reg, path, prefix, is)
+	c.IstioInstallCNIImage, err = components.GetReference(overrides.Resolve(ImageKeyInstallCNI, components.ComponentCalicoIstioInstallCNI, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
-	c.IstioZTunnelImage, err = components.GetReference(overrides.Resolve(ComponentNameZTunnel, components.ComponentCalicoIstioZTunnel, in), reg, path, prefix, is)
+	c.IstioZTunnelImage, err = components.GetReference(overrides.Resolve(ImageKeyZTunnel, components.ComponentCalicoIstioZTunnel, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
-	c.IstioProxyv2Image, err = components.GetReference(overrides.Resolve(ComponentNameProxyv2, components.ComponentCalicoIstioProxyv2, in), reg, path, prefix, is)
+	c.IstioProxyv2Image, err = components.GetReference(overrides.Resolve(ImageKeyProxyv2, components.ComponentCalicoIstioProxyv2, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}

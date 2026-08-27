@@ -53,7 +53,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
@@ -186,7 +186,7 @@ type ReconcileGatewayAPI struct {
 	clusterDomain       string
 	variant             operatorv1.ProductVariant
 	ext                 extensions.GatewayAPIExtension
-	images              *imageoverride.Overrides
+	images              *images.Table
 	multiTenant         bool
 	newComponentHandler func(log logr.Logger, client client.Client, scheme *runtime.Scheme, cr metav1.Object, opts ...utils.ComponentHandlerOption) utils.ComponentHandler
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
@@ -355,7 +355,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		CurrentGatewayClasses:  set.New[string](),
 		IncludeV3NetworkPolicy: includeV3NetworkPolicy,
 		TrustedBundle:          trustedBundle,
-		ImageOverrides:         r.images,
+		Images:                 r.images,
 	}
 
 	if gatewayAPI.Spec.EnvoyGatewayConfigRef != nil {

@@ -37,7 +37,7 @@ import (
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	"github.com/tigera/operator/pkg/controller/migration"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	"github.com/tigera/operator/pkg/render/common/configmap"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -146,7 +146,7 @@ type NodeConfiguration struct {
 
 	V3CRDs bool
 
-	ImageOverrides *imageoverride.Overrides
+	Images *images.Table
 }
 
 // Node creates the node daemonset and other resources for the daemonset to operate normally.
@@ -197,11 +197,11 @@ func (c *nodeComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		return imageName
 	}
 
-	c.calicoImage = appendIfErr(components.GetReference(c.cfg.ImageOverrides.Resolve(ComponentNameCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is))
-	nodeImage := c.cfg.ImageOverrides.Resolve(ComponentNameNode, components.ComponentCalicoNode, c.cfg.Installation)
+	c.calicoImage = appendIfErr(components.GetReference(c.cfg.Images.Resolve(ImageKeyCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is))
+	nodeImage := c.cfg.Images.Resolve(ImageKeyNode, components.ComponentCalicoNode, c.cfg.Installation)
 	c.nodeImage = appendIfErr(components.GetReference(nodeImage, reg, path, prefix, is))
 	if c.installUpstreamPlugins() {
-		cniPluginsImage := c.cfg.ImageOverrides.Resolve(ComponentNameCNIPlugins, components.ComponentCalicoCNIPlugins, c.cfg.Installation)
+		cniPluginsImage := c.cfg.Images.Resolve(ImageKeyCNIPlugins, components.ComponentCalicoCNIPlugins, c.cfg.Installation)
 		c.cniPluginsImage = appendIfErr(components.GetReference(cniPluginsImage, reg, path, prefix, is))
 	}
 

@@ -48,7 +48,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/cloudconfig"
 	entkubecontrollers "github.com/tigera/operator/pkg/enterprise/kubecontrollers"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
@@ -69,7 +69,7 @@ type ESKubeControllersController struct {
 	multiTenant     bool
 	cloud           bool
 	tierWatchReady  *utils.ReadyFlag
-	images          *imageoverride.Overrides
+	images          *images.Table
 }
 
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
@@ -357,7 +357,7 @@ func (r *ESKubeControllersController) Reconcile(ctx context.Context, request rec
 		TrustedBundle:                trustedBundle,
 		Namespace:                    helper.InstallNamespace(),
 		BindingNamespaces:            namespaces,
-		ImageOverrides:               r.images,
+		Images:                       r.images,
 	}
 	esKubeControllersCfg := entkubecontrollers.Configuration{
 		KubeControllersConfiguration: &kubeControllersCfg,

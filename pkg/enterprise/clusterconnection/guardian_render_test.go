@@ -107,7 +107,7 @@ var _ = Describe("Guardian enterprise rendering tests", func() {
 			OpenShift:                   openshift,
 			ManagementClusterConnection: &operatorv1.ManagementClusterConnection{},
 			IncludeEgressNetworkPolicy:  true,
-			ImageOverrides:              enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Images(),
+			Images:                      enterprise.New(operatorv1.CalicoEnterprise, eoptions.Options{}).Images(),
 		}
 	}
 

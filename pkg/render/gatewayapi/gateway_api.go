@@ -29,7 +29,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -76,9 +76,9 @@ const (
 
 // Component names, which key the image overrides a variant resolves through.
 const (
-	ComponentNameEnvoyGateway   = "envoy-gateway"
-	ComponentNameEnvoyProxy     = "envoy-proxy"
-	ComponentNameEnvoyRatelimit = "envoy-ratelimit"
+	ImageKeyEnvoyGateway   = "envoy-gateway"
+	ImageKeyEnvoyProxy     = "envoy-proxy"
+	ImageKeyEnvoyRatelimit = "envoy-ratelimit"
 )
 
 // gatewayAPIResources defines all of the resources that we expect to read from the rendered Envoy Gateway
@@ -365,7 +365,7 @@ type GatewayAPIImplementationConfig struct {
 	CustomEnvoyProxies     map[string]*envoyapi.EnvoyProxy
 	CurrentGatewayClasses  set.Set[string]
 	IncludeV3NetworkPolicy bool
-	ImageOverrides         *imageoverride.Overrides
+	Images                 *images.Table
 
 	// GatewayNamespaces is the list of namespaces containing a Gateway managed by
 	// this operator.
@@ -409,17 +409,17 @@ func (pr *gatewayAPIImplementationComponent) ResolveImages(is *operatorv1.ImageS
 
 	var err error
 	pr.envoyGatewayImage, err = components.GetReference(
-		pr.cfg.ImageOverrides.Resolve(ComponentNameEnvoyGateway, components.ComponentCalicoEnvoyGateway, in), reg, path, prefix, is)
+		pr.cfg.Images.Resolve(ImageKeyEnvoyGateway, components.ComponentCalicoEnvoyGateway, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
 	pr.envoyProxyImage, err = components.GetReference(
-		pr.cfg.ImageOverrides.Resolve(ComponentNameEnvoyProxy, components.ComponentCalicoEnvoyProxy, in), reg, path, prefix, is)
+		pr.cfg.Images.Resolve(ImageKeyEnvoyProxy, components.ComponentCalicoEnvoyProxy, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}
 	pr.envoyRatelimitImage, err = components.GetReference(
-		pr.cfg.ImageOverrides.Resolve(ComponentNameEnvoyRatelimit, components.ComponentCalicoEnvoyRatelimit, in), reg, path, prefix, is)
+		pr.cfg.Images.Resolve(ImageKeyEnvoyRatelimit, components.ComponentCalicoEnvoyRatelimit, in), reg, path, prefix, is)
 	if err != nil {
 		return err
 	}

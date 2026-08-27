@@ -45,7 +45,7 @@ import (
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	eistio "github.com/tigera/operator/pkg/enterprise/istio"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/test"
 )
@@ -934,7 +934,7 @@ var _ = Describe("Istio controller tests", func() {
 				},
 			}
 			Expect(cli.Create(ctx, imageSet)).NotTo(HaveOccurred())
-			istioImages := imageoverride.New()
+			istioImages := images.New()
 			eistio.RegisterImages(istioImages, operatorv1.CalicoEnterprise)
 
 			r := &ReconcileIstio{

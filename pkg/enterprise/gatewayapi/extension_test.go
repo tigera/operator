@@ -40,7 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
@@ -63,8 +63,8 @@ func testScheme() *runtime.Scheme {
 func enterpriseComponent(cfg *gatewayapi.GatewayAPIImplementationConfig) render.Component {
 	ext := New(operatorv1.CalicoEnterprise)
 	cfg.Scheme = testScheme()
-	cfg.ImageOverrides = imageoverride.New()
-	RegisterImages(cfg.ImageOverrides, operatorv1.CalicoEnterprise)
+	cfg.Images = images.New()
+	RegisterImages(cfg.Images, operatorv1.CalicoEnterprise)
 
 	comp, err := gatewayapi.GatewayAPIImplementationComponent(cfg)
 	Expect(err).NotTo(HaveOccurred())

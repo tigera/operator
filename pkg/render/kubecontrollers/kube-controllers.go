@@ -34,7 +34,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -88,9 +88,9 @@ type KubeControllersConfiguration struct {
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
-	// ImageOverrides lets a variant swap the kube-controllers image. The controller
+	// Images lets a variant swap the kube-controllers image. The controller
 	// wires in the operator's image overrides; nil resolves to the core image.
-	ImageOverrides *imageoverride.Overrides
+	Images *images.Table
 
 	// Namespace to be installed into.
 	Namespace string
@@ -222,8 +222,8 @@ func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error 
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	calico := c.cfg.ImageOverrides.Resolve(render.ComponentNameCalico, components.ComponentCalico, c.cfg.Installation)
-	image := c.cfg.ImageOverrides.Resolve(render.ComponentNameKubeControllers, calico, c.cfg.Installation)
+	calico := c.cfg.Images.Resolve(render.ImageKeyCalico, components.ComponentCalico, c.cfg.Installation)
+	image := c.cfg.Images.Resolve(render.ImageKeyKubeControllers, calico, c.cfg.Installation)
 	c.calicoImage, err = components.GetReference(image, reg, path, prefix, is)
 	if err != nil {
 		return err

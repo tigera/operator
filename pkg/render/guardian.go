@@ -34,7 +34,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
@@ -127,7 +127,7 @@ type GuardianConfiguration struct {
 	// guardian when the version changes, which triggers the management cluster to re-check for version skew.
 	Version string
 
-	ImageOverrides *imageoverride.Overrides
+	Images *images.Table
 }
 
 // GuardianRenderData is the variant-specific Guardian input a controller extension
@@ -165,7 +165,7 @@ func (c *guardianComponent) ResolveImages(is *operatorv1.ImageSet) error {
 	path := c.cfg.Installation.ImagePath
 	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.calicoImage, err = components.GetReference(c.cfg.ImageOverrides.Resolve(ComponentNameCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(c.cfg.Images.Resolve(ImageKeyCalico, components.ComponentCalico, c.cfg.Installation), reg, path, prefix, is)
 	return err
 }
 

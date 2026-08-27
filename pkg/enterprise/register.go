@@ -29,7 +29,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/whisker"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -51,7 +51,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 			Goldmane:          goldmane.New(variant),
 			Whisker:           whisker.New(variant),
 			GatewayAPI:        gatewayapi.New(variant),
-			Images:            images(variant, o),
+			Images:            imageTable(variant, o),
 		})
 	}
 
@@ -63,10 +63,10 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 	return extensions.Extensions{}
 }
 
-// images is every component whose image differs for Enterprise.
-func images(variant operatorv1.ProductVariant, o eoptions.Options) *imageoverride.Overrides {
-	set := imageoverride.New()
-	set.Register(variant, render.ComponentNameCalico, components.ComponentTigeraCalico)
+// imageTable is every component whose image differs for Enterprise.
+func imageTable(variant operatorv1.ProductVariant, o eoptions.Options) *images.Table {
+	set := images.New()
+	set.Register(variant, render.ImageKeyCalico, components.ComponentTigeraCalico)
 	installation.RegisterImages(set, variant, o)
 	windows.RegisterImages(set, variant)
 	gatewayapi.RegisterImages(set, variant)

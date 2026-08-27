@@ -40,7 +40,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 	rcertificatemanagement "github.com/tigera/operator/pkg/render/certificatemanagement"
 	"github.com/tigera/operator/pkg/render/goldmane"
@@ -151,7 +151,7 @@ type Reconciler struct {
 	clusterDomain string
 	variant       operatorv1.ProductVariant
 	ext           extensions.WhiskerExtension
-	images        *imageoverride.Overrides
+	images        *images.Table
 }
 
 // Reconcile reads that state of the cluster for a Whisker object and makes changes based on the
@@ -266,7 +266,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		WhiskerBackendKeyPair: backendKeyPair,
 		Whisker:               whiskerCR,
 		ClusterDomain:         r.clusterDomain,
-		ImageOverrides:        r.images,
+		Images:                r.images,
 	}
 
 	clusterInfo := &v3.ClusterInformation{}

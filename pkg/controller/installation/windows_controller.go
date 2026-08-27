@@ -50,7 +50,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
+	"github.com/tigera/operator/pkg/images"
 	"github.com/tigera/operator/pkg/render"
 )
 
@@ -171,7 +171,7 @@ type ReconcileWindows struct {
 	ipamConfigWatchReady *utils.ReadyFlag
 	opts                 options.ControllerOptions
 	ext                  extensions.WindowsExtension
-	images               *imageoverride.Overrides
+	images               *images.Table
 }
 
 // newWindowsReconciler returns a new reconcile.Reconciler
@@ -348,13 +348,13 @@ func (r *ReconcileWindows) Reconcile(ctx context.Context, request reconcile.Requ
 	}
 
 	windowsCfg := render.WindowsConfiguration{
-		K8sServiceEp:   k8sapi.Endpoint,
-		K8sDNSServers:  kubeDNSIPs,
-		Installation:   &defaulted.Spec,
-		ClusterDomain:  r.opts.ClusterDomain,
-		TLS:            typhaNodeTLS,
-		VXLANVNI:       *felixConfiguration.Spec.VXLANVNI,
-		ImageOverrides: r.images,
+		K8sServiceEp:  k8sapi.Endpoint,
+		K8sDNSServers: kubeDNSIPs,
+		Installation:  &defaulted.Spec,
+		ClusterDomain: r.opts.ClusterDomain,
+		TLS:           typhaNodeTLS,
+		VXLANVNI:      *felixConfiguration.Spec.VXLANVNI,
+		Images:        r.images,
 	}
 	component = render.Windows(&windowsCfg)
 

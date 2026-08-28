@@ -737,6 +737,12 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		return reconcile.Result{}, err
 	}
 
+	wafUIEnabled, err := wafManagementEnabled(ctx, r.client, installationSpec.Variant, tenant.MultiTenant())
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error reading the GatewayAPI WAF extension", err, logc)
+		return reconcile.Result{}, err
+	}
+
 	managerCfg := &render.ManagerConfiguration{
 		VoltronRouteConfig:         routeConfig,
 		KeyValidatorConfig:         keyValidatorConfig,
@@ -764,6 +770,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		Authentication:             authenticationCR,
 		KibanaEnabled:              kibanaEnabled,
 		RBACManagementEnabled:      rbacManagementEnabled,
+		WAFManagementEnabled:       wafUIEnabled,
 		CACertCommonName:           certificateManager.CACertCommonName(),
 		Cloud:                      r.opts.Cloud,
 		CloudResources:             mcr,
@@ -1037,6 +1044,32 @@ func (r *ReconcileManager) managerGatewayNamespaces(ctx context.Context) ([]stri
 	}
 	slices.Sort(namespaces)
 	return namespaces, true, nil
+}
+
+// wafManagementEnabled reports whether to render the WAF management UI surface, which
+// follows GatewayAPI.spec.extensions.waf: turning WAF on gives you the UI for it, and
+// there is no second switch to forget.
+//
+// Enterprise-only, and off on multi-tenant management clusters, matching
+// utils.RBACManagementEnabled. The read mirrors isGatewayWAFEnabled in the
+// applicationlayer controller: a missing GatewayAPI CR means no gateways, so no WAF and
+// no UI, and that is not an error. Any other read error is returned so the caller
+// requeues rather than reporting the feature off.
+//
+// The manager controller already watches GatewayAPI (see Add), so flipping the extension
+// re-reconciles and rolls ui-apis with the new value.
+func wafManagementEnabled(ctx context.Context, c client.Client, variant operatorv1.ProductVariant, multiTenant bool) (bool, error) {
+	if !variant.IsEnterprise() || multiTenant {
+		return false, nil
+	}
+	gatewayAPI, msg, err := gatewayapi.GetGatewayAPI(ctx, c)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s: %w", msg, err)
+	}
+	return gatewayAPI.Spec.IsWAFGatewayExtensionEnabled(), nil
 }
 
 // resolveGateway validates the Manager spec.ingressGateway configuration, resolves the

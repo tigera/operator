@@ -218,6 +218,11 @@ type ManagerConfiguration struct {
 	// The controller has already applied the variant, the admin's gate and tenancy.
 	RBACManagementEnabled bool
 
+	// WAFManagementEnabled reports whether to serve the WAF management UI surface.
+	// It follows GatewayAPI.spec.extensions.waf; the controller has already applied
+	// the variant and tenancy.
+	WAFManagementEnabled bool
+
 	// CACertCommonName is the CommonName from the CA certificate used for operator-managed certificates.
 	// Passed to Voltron so it can identify the correct CA issuer public key.
 	CACertCommonName string
@@ -770,6 +775,7 @@ func (c *managerComponent) managerUIAPIsContainer() corev1.Container {
 		{Name: "LINSEED_CLIENT_KEY", Value: keyPath},
 		{Name: "ELASTIC_KIBANA_DISABLED", Value: strconv.FormatBool(c.cfg.Tenant.MultiTenant())},
 		{Name: "VOLTRON_URL", Value: ManagerService(c.cfg.Tenant)},
+		{Name: "WAF_UI_ENABLED", Value: strconv.FormatBool(c.cfg.WAFManagementEnabled)},
 	}
 
 	// Determine the Linseed location. Use code default unless in multi-tenant mode,

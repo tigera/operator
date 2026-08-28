@@ -158,6 +158,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			{Name: "LINSEED_CLIENT_KEY", Value: "/internal-manager-tls/tls.key"},
 			{Name: "ELASTIC_KIBANA_DISABLED", Value: "false"},
 			{Name: "VOLTRON_URL", Value: render.ManagerService(nil)},
+			{Name: "WAF_UI_ENABLED", Value: "false"},
 		}
 		Expect(uiAPIs.Env).To(Equal(uiAPIsExpectedEnvVars))
 
@@ -1846,6 +1847,35 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 		})
 	})
+	Context("WAF management UI", func() {
+		var installation *operatorv1.InstallationSpec
+		BeforeEach(func() {
+			replicas := int32(1)
+			installation = &operatorv1.InstallationSpec{
+				ControlPlaneReplicas: &replicas,
+				Variant:              operatorv1.CalicoEnterprise,
+				Registry:             "testregistry.com/",
+			}
+		})
+
+		// ui-apis reads WAF_UI_ENABLED at startup rather than watching anything, so the
+		// GatewayAPI WAF extension's state has to reach it through the pod spec.
+		DescribeTable("projects the WAF extension state onto WAF_UI_ENABLED",
+			func(enabled bool, expected string) {
+				resources, _ := renderObjects(renderConfig{
+					installation:         installation,
+					ns:                   render.ManagerNamespace,
+					wafManagementEnabled: enabled,
+				})
+				deployment := rtest.GetResource(resources, render.ManagerDeploymentName, render.ManagerNamespace, "apps", "v1", "Deployment").(*appsv1.Deployment)
+				uiAPIs := rtest.GetContainer(deployment.Spec.Template.Spec.Containers, render.UIAPIsName)
+				Expect(uiAPIs).NotTo(BeNil())
+				Expect(uiAPIs.Env).To(ContainElement(corev1.EnvVar{Name: "WAF_UI_ENABLED", Value: expected}))
+			},
+			Entry("extension off", false, "false"),
+			Entry("extension on", true, "true"),
+		)
+	})
 })
 
 type renderConfig struct {
@@ -1866,6 +1896,8 @@ type renderConfig struct {
 	ldapHost       string
 	// rbacManagementEnabled mirrors the admin's rbac-ui-config value.
 	rbacManagementEnabled bool
+	// wafManagementEnabled mirrors GatewayAPI.spec.extensions.waf.state.
+	wafManagementEnabled  bool
 	cloud                 bool
 	voltronMetricsEnabled bool
 	cloudResources        render.ManagerCloudResources
@@ -1940,6 +1972,7 @@ func renderObjects(roc renderConfig) ([]client.Object, []client.Object) {
 		ExternalElastic:       roc.externalElastic,
 		CACertCommonName:      certificateManager.CACertCommonName(),
 		RBACManagementEnabled: roc.rbacManagementEnabled,
+		WAFManagementEnabled:  roc.wafManagementEnabled,
 		Cloud:                 roc.cloud,
 		CloudResources:        roc.cloudResources,
 	}

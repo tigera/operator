@@ -17,40 +17,41 @@ package components
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	operator "github.com/tigera/operator/api/v1"
 )
 
 var _ = Describe("ImageFor", func() {
-	BeforeEach(func() {
-		// The operator registers this as it builds the Enterprise extensions.
-		RegisterVariantImages(operator.CalicoEnterprise, EnterpriseImages)
-	})
-
-	// The generated component lists are the source of truth, so a key that no longer
-	// names an entry in either list would make ImageFor error at render time.
-	It("resolves every key for both variants", func() {
+	// The generated component lists are the source of truth, so a key that stops naming
+	// an entry in either list would make ImageFor error at render time.
+	It("names an entry in both lists, resolving to a different image in each", func() {
 		for _, key := range ImageKeys {
-			cal, err := ImageFor(operator.Calico, key)
-			Expect(err).NotTo(HaveOccurred(), "Calico image for %q", key)
-			Expect(cal.Image).To(Equal(key))
+			cal, calOK := byImage(CalicoImages)[key]
+			Expect(calOK).To(BeTrue(), "Calico image for %q", key)
 
-			ent, err := ImageFor(operator.CalicoEnterprise, key)
-			Expect(err).NotTo(HaveOccurred(), "Enterprise image for %q", key)
-			Expect(ent.Image).To(Equal(key))
+			ent, entOK := byImage(EnterpriseImages)[key]
+			Expect(entOK).To(BeTrue(), "Enterprise image for %q", key)
 
-			Expect(cal).NotTo(Equal(ent), "%q resolves to the same image for both variants, so it needs no key", key)
+			Expect(cal).NotTo(Equal(ent), "%q is the same image for both variants, so it needs no key", key)
 		}
 	})
 
-	It("errors on an image the variant does not supply", func() {
-		_, err := ImageFor(operator.CalicoEnterprise, "whisker")
-		Expect(err).To(HaveOccurred())
-	})
-
-	It("runs this build's images for a variant that registered none", func() {
-		img, err := ImageFor(operator.Calico, ImageKeyNode)
+	It("resolves the images this build ships when no variant registered", func() {
+		img, err := ImageFor(ImageKeyNode)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(img).To(Equal(ComponentCalicoNode))
+	})
+
+	It("resolves what the variant registered", func() {
+		DeferCleanup(UseImages(EnterpriseImages))
+
+		img, err := ImageFor(ImageKeyNode)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(img).To(Equal(ComponentTigeraNode))
+	})
+
+	It("errors on an image the running variant does not supply", func() {
+		DeferCleanup(UseImages(EnterpriseImages))
+
+		_, err := ImageFor("whisker")
+		Expect(err).To(HaveOccurred())
 	})
 })

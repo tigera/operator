@@ -49,35 +49,56 @@ var ImageKeys = []string{
 	ImageKeyIstioPilot, ImageKeyIstioInstallCNI, ImageKeyIstioZTunnel, ImageKeyIstioProxyv2,
 }
 
-// variantImages is what a variant registered over the images this build ships. It is
-// written once while the operator resolves its variant, before any render runs.
-var variantImages = map[operator.ProductVariant][]Component{}
+// variantImages is the image set this process runs, registered by the variant as it
+// builds its extensions. Nil means the images this build ships.
+var variantImages map[string]Component
 
-// RegisterVariantImages declares the images a variant runs. A variant's own package
-// calls this as it builds its extensions.
-func RegisterVariantImages(v operator.ProductVariant, imgs []Component) {
-	variantImages[v] = imgs
+// RegisterVariantImages declares the images the running variant supplies. The process
+// restarts when the variant changes, so only one variant ever registers.
+func RegisterVariantImages(imgs []Component) {
+	variantImages = byImage(imgs)
 }
 
-// ImageFor returns the image the given variant runs for key. A miss is an error rather
-// than a fallback to another image, which would ship the wrong one silently.
-func ImageFor(v operator.ProductVariant, key string) (Component, error) {
-	imgs := CalicoImages
-	if registered, ok := variantImages[v]; ok {
-		imgs = registered
+// UseImages registers imgs and returns a function restoring what was there, for tests
+// that render one variant while the suite covers both.
+func UseImages(imgs []Component) func() {
+	prev := variantImages
+	variantImages = byImage(imgs)
+	return func() { variantImages = prev }
+}
+
+func byImage(imgs []Component) map[string]Component {
+	if len(imgs) == 0 {
+		return nil
 	}
+	m := make(map[string]Component, len(imgs))
 	for _, c := range imgs {
-		if c.Image == key {
-			return c, nil
-		}
+		m[c.Image] = c
 	}
-	return Component{}, fmt.Errorf("no image named %q for variant %s", key, v)
+	return m
 }
 
-// ReferenceFor returns the fully qualified image the installation's variant runs for
-// key, honoring the installation's registry and image path and any ImageSet.
+// calicoImages is what this build ships, resolved when no variant registered its own.
+var calicoImages = byImage(CalicoImages)
+
+// ImageFor returns the image the running variant supplies for key. A miss is an error
+// rather than a fallback to another image, which would ship the wrong one silently.
+func ImageFor(key string) (Component, error) {
+	imgs := variantImages
+	if imgs == nil {
+		imgs = calicoImages
+	}
+	c, ok := imgs[key]
+	if !ok {
+		return Component{}, fmt.Errorf("no image named %q", key)
+	}
+	return c, nil
+}
+
+// ReferenceFor returns the fully qualified image the running variant supplies for key,
+// honoring the installation's registry and image path and any ImageSet.
 func ReferenceFor(key string, in *operator.InstallationSpec, is *operator.ImageSet) (string, error) {
-	c, err := ImageFor(in.Variant, key)
+	c, err := ImageFor(key)
 	if err != nil {
 		return "", err
 	}

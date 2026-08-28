@@ -38,9 +38,9 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 	// an Installation asking for the deprecated TigeraSecureEnterprise still gets the
 	// Enterprise extensions.
 	if variant.IsEnterprise() {
-		// Registered here rather than in an init, so the images arrive with the
-		// extensions and cannot be missed by a build that has one without the other.
-		components.RegisterVariantImages(variant, components.EnterpriseImages)
+		// Registered here so the images arrive with the extensions. A test that wants
+		// this build's own images instead calls components.UseImages.
+		components.RegisterVariantImages(components.EnterpriseImages)
 
 		return extensions.New(extensions.Set{
 			Installation:      installation.New(variant, o),
@@ -62,4 +62,13 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 	}
 
 	return extensions.Extensions{}
+}
+
+// Images is the image set Enterprise runs, for the caller to register. New leaves it
+// alone so that building the extensions has no effect outside the value it returns.
+func Images(variant operatorv1.ProductVariant) []components.Component {
+	if !variant.IsEnterprise() {
+		return nil
+	}
+	return components.EnterpriseImages
 }

@@ -34,6 +34,7 @@ API design principles and the Go/kubebuilder coding conventions for `api/v1` CRD
 ## Variants
 
 - **Core code is variant-blind.** Controllers and render packages outside `pkg/enterprise` must not name a variant, in code or in comments. Behavior a single variant needs registers through `pkg/extensions`.
+- **A controller only one variant runs lives in `pkg/enterprise`.** It is contributed through the controller list on `ControllerOptions` rather than named by `AddToManager`, so it carries no variant check of its own.
 
 ## Security
 

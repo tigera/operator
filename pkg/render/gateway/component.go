@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -390,7 +391,10 @@ func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
 			Action:   v3.Allow,
 			Protocol: &networkpolicy.TCPProtocol,
 			Destination: networkpolicy.CreateEntityRule(
-				c.cfg.BackendNamespace, "calico-gateway-api-controller",
+				// The Envoy Gateway controller (the proxy's xDS source) always
+				// runs in calico-system, not in this component's backend
+				// namespace, which differs for multi-tenant Manager.
+				rgatewayapi.DeploymentNamespace, rgatewayapi.GatewayControllerLabel,
 				18000, 18001,
 			),
 		},

@@ -607,6 +607,10 @@ var _ = Describe("Gateway deletion component", func() {
 
 		Context("moving into the backend namespace", func() {
 			BeforeEach(func() {
+				// The stale namespace is the custom one the gateway is leaving,
+				// distinct from the backend namespace it moves into — so the
+				// staleNS != bkNS path is actually exercised.
+				delCfg.StaleNamespace = "custom-gateway-ns"
 				delCfg.TargetNamespace = bkNS
 			})
 

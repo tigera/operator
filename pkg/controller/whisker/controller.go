@@ -299,6 +299,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		// default 15s route timeout would drop the stream.
 		RouteRequestTimeout: ptr.To("0s"),
 		Provider:            r.provider,
+		Azure:               installationSpec.Azure,
 	})
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface

@@ -73,6 +73,10 @@ type Config struct {
 	ExtraProxyObjects []client.Object
 
 	Provider operatorv1.Provider
+
+	// Azure carries Installation.Azure so the gateway namespace gets the same
+	// Azure-policy labels as other operator-created namespaces on AKS.
+	Azure *operatorv1.Azure
 }
 
 // Helper renders and cleans up one UI component's gateway resources.
@@ -307,7 +311,7 @@ func (h *Helper) ensureNamespace(ctx context.Context, name string) error {
 	if err == nil || !errors.IsNotFound(err) {
 		return err
 	}
-	ns := render.CreateNamespace(name, h.cfg.Provider, render.PSSPrivileged, nil)
+	ns := render.CreateNamespace(name, h.cfg.Provider, render.PSSPrivileged, h.cfg.Azure)
 	// The gateway label marks the namespace as ours, so teardown can tell a
 	// namespace the operator created from one the user already had.
 	ns.Labels[rgateway.GatewayLabel] = h.cfg.ResourcePrefix

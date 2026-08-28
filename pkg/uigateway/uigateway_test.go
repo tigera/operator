@@ -356,6 +356,22 @@ var _ = Describe("Cleanup helpers", func() {
 			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix))
 		})
 
+		It("creates an AKS gateway namespace with the Azure-policy label", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			cfgAKS := cfg
+			cfgAKS.Provider = operatorv1.ProviderAKS
+			h = uigateway.NewHelper(cli, cfgAKS)
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			Expect(err).NotTo(HaveOccurred())
+
+			ns := &corev1.Namespace{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			// Matches every other operator-created namespace on AKS; without it
+			// Azure Policy differs for the gateway namespace.
+			Expect(ns.Labels).To(HaveKeyWithValue("control-plane", "true"))
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix))
+		})
+
 		It("creates the gateway namespace stamped with the ownership label", func() {
 			build(gatewayAPI("tigera-gateway-class"))
 			_, err := h.Components(ctx, spec("ns-a"), keyPair())

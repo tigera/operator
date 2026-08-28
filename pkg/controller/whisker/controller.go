@@ -46,6 +46,7 @@ import (
 	"github.com/tigera/operator/pkg/render/goldmane"
 	"github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
+	"github.com/tigera/operator/pkg/uigateway"
 )
 
 const (
@@ -107,6 +108,14 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 
 	if err = c.WatchObject(&v3.ClusterInformation{}, &handler.EnqueueRequestForObject{}); err != nil {
 		return fmt.Errorf("whisker-controller failed to watch ClusterInformation")
+	}
+
+	if err = c.WatchObject(&operatorv1.GatewayAPI{}, &handler.EnqueueRequestForObject{}); err != nil {
+		return fmt.Errorf("%s failed to watch GatewayAPI resource: %w", controllerName, err)
+	}
+
+	if err = uigateway.AddWatches(c, opts.K8sClientset, log, whisker.GatewayResourcePrefix, whisker.GatewayTLSSecretName); err != nil {
+		return fmt.Errorf("%s failed to add gateway watches: %w", controllerName, err)
 	}
 
 	// Perform periodic reconciliation. This acts as a backstop to catch reconcile issues,
@@ -279,18 +288,64 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		cfg.ClusterID = clusterInfo.Spec.ClusterGUID
 	}
 
+	gwHelper := uigateway.NewHelper(r.cli, uigateway.Config{
+		ResourcePrefix:               whisker.GatewayResourcePrefix,
+		TLSSecretName:                whisker.GatewayTLSSecretName,
+		BackendNamespace:             whisker.WhiskerNamespace,
+		BackendServiceName:           whisker.WhiskerName,
+		BackendPort:                  int32(whisker.WhiskerServicePort),
+		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
+		// Whisker streams flow logs as server-sent events; Envoy Gateway's
+		// default 15s route timeout would drop the stream.
+		RouteRequestTimeout: ptr.To("0s"),
+		Provider:            r.provider,
+		Azure:               installationSpec.Azure,
+	})
+	var gatewayComponents []render.Component
+	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
+	gatewayEnabled := whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant == operatorv1.Calico
+	if gw := whiskerCR.Spec.IngressGateway; gatewayEnabled {
+		var err error
+		gatewayTLSKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.GatewayTLSSecretName, common.OperatorNamespace(), []string{gw.Hostname})
+		if err != nil {
+			r.status.SetDegraded(operatorv1.CertificateError, "Error getting or creating gateway TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+
+		gatewayComponents, err = gwHelper.Components(ctx, gw, gatewayTLSKeyPair)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Failed to render gateway resources", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		// Whisker's NetworkPolicy admits the gateway's Envoy proxy from this namespace.
+		cfg.IngressGatewayNamespace = gw.NamespaceOrDefault()
+	} else {
+		var err error
+		gatewayComponents, err = gwHelper.Teardown(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
+	keyPairOptions := []rcertificatemanagement.KeyPairOption{
+		rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true),
+		rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
+	}
+	if gatewayTLSKeyPair != nil {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(gatewayTLSKeyPair, true, false))
+	}
+
 	certComponent := rcertificatemanagement.CertificateManagement(&rcertificatemanagement.Config{
 		Namespace:       goldmane.GoldmaneNamespace,
 		TruthNamespace:  common.OperatorNamespace(),
 		ServiceAccounts: []string{whisker.WhiskerServiceAccountName},
-		KeyPairOptions: []rcertificatemanagement.KeyPairOption{
-			rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true),
-			rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
-		},
-		TrustedBundle: trustedBundle,
+		KeyPairOptions:  keyPairOptions,
+		TrustedBundle:   trustedBundle,
 	})
 
 	components := []render.Component{certComponent, whisker.Whisker(cfg)}
+	components = append(components, gatewayComponents...)
 	if err = imageset.ApplyImageSet(ctx, r.cli, r.variant, components...); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error with images from ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
@@ -300,6 +355,13 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		if err := ch.CreateOrUpdateOrDelete(ctx, component, r.status); err != nil {
 			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error creating / updating resource", err, reqLogger)
 			return reconcile.Result{}, err
+		}
+	}
+
+	if gatewayEnabled {
+		if msg := gwHelper.UnhealthyReason(ctx, whiskerCR.Spec.IngressGateway.NamespaceOrDefault()); msg != "" {
+			r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, reqLogger)
+			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}
 	}
 

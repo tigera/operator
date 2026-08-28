@@ -300,13 +300,30 @@ var _ = Describe("Cleanup helpers", func() {
 				labeledGateway(prefix+"-gateway", "ns-ours"),
 				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
 					Name:   "ns-ours",
-					Labels: map[string]string{rgateway.GatewayLabel: prefix},
+					Labels: map[string]string{rgateway.GatewayNamespaceLabel: "true"},
 				}},
 			)
 			components, err := h.Teardown(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deletedNamespaces(components)).To(ConsistOf("ns-ours"),
 				"the backend namespace belongs to another controller and must survive")
+		})
+
+		It("keeps a shared namespace while another component's Gateway remains", func() {
+			foreign := labeledGateway("calico-manager-gateway", "ns-shared")
+			foreign.Labels[rgateway.GatewayLabel] = "calico-manager"
+			build(
+				labeledGateway(prefix+"-gateway", "ns-shared"),
+				foreign,
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+					Name:   "ns-shared",
+					Labels: map[string]string{rgateway.GatewayNamespaceLabel: "true"},
+				}},
+			)
+			components, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deletedNamespaces(components)).NotTo(ContainElement("ns-shared"),
+				"another component's Gateway still lives here, so the namespace must survive")
 		})
 
 		It("never deletes a namespace the user created", func() {
@@ -353,7 +370,7 @@ var _ = Describe("Cleanup helpers", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
 			Expect(ns.Labels).To(HaveKeyWithValue("openshift.io/run-level", "0"),
 				"without this the Envoy proxy pod fails SCC admission in a fresh namespace")
-			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix))
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"))
 		})
 
 		It("creates an AKS gateway namespace with the Azure-policy label", func() {
@@ -369,7 +386,7 @@ var _ = Describe("Cleanup helpers", func() {
 			// Matches every other operator-created namespace on AKS; without it
 			// Azure Policy differs for the gateway namespace.
 			Expect(ns.Labels).To(HaveKeyWithValue("control-plane", "true"))
-			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix))
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"))
 		})
 
 		It("creates the gateway namespace stamped with the ownership label", func() {
@@ -379,8 +396,8 @@ var _ = Describe("Cleanup helpers", func() {
 
 			ns := &corev1.Namespace{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix),
-				"the label is what lets teardown delete only a namespace the operator created")
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"),
+				"the marker is what lets teardown delete only a namespace the operator created")
 			Expect(ns.OwnerReferences).To(BeEmpty())
 		})
 

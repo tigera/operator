@@ -43,6 +43,12 @@ const (
 	// component's resource prefix. Cleanup lists Gateways by this label to
 	// find namespaces holding leftover gateway resources.
 	GatewayLabel = "operator.tigera.io/gateway"
+
+	// GatewayNamespaceLabel marks a namespace the operator created for a
+	// gateway. It is component-agnostic: teardown deletes the namespace only
+	// once no labeled Gateway from any component remains, so components that
+	// share a namespace never delete it out from under each other.
+	GatewayNamespaceLabel = "operator.tigera.io/gateway-namespace"
 )
 
 // Configuration holds everything the shared gateway component needs to render

@@ -407,6 +407,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 	})
 
 	It("honours gateway controller customizations", func() {
+		DeferCleanup(components.UseImages(components.EnterpriseImages))
+
 		installation := &operatorv1.InstallationSpec{
 			Registry: "myregistry.io/",
 			Variant:  operatorv1.CalicoEnterprise,
@@ -484,6 +486,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 	})
 
 	It("honours GatewayClass and EnvoyProxy customizations", func() {
+		DeferCleanup(components.UseImages(components.EnterpriseImages))
+
 		installation := &operatorv1.InstallationSpec{
 			Registry: "myregistry.io/",
 			Variant:  operatorv1.CalicoEnterprise,

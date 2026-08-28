@@ -258,6 +258,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise", func() {
+		DeferCleanup(components.UseImages(components.EnterpriseImages))
+
 		expectedResources := []struct {
 			name    string
 			ns      string

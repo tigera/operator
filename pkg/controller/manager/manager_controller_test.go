@@ -1581,3 +1581,71 @@ func assertSANs(secret *corev1.Secret, expectedSAN string) {
 
 	Expect(cert.DNSNames).To(Equal([]string{expectedSAN}))
 }
+
+// The WAF management UI follows GatewayAPI.spec.extensions.waf, so there is no second
+// switch to set. These cover the read the manager controller does to resolve it.
+var _ = Describe("wafManagementEnabled", func() {
+	var c client.Client
+	var ctx context.Context
+
+	BeforeEach(func() {
+		scheme := runtime.NewScheme()
+		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
+		c = ctrlrfake.DefaultFakeClientBuilder(scheme).Build()
+		ctx = context.Background()
+	})
+
+	gatewayAPI := func(name string, state *operatorv1.WAFExtensionState) *operatorv1.GatewayAPI {
+		gw := &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: name}}
+		if state != nil {
+			gw.Spec.Extensions = &operatorv1.GatewayAPIExtensions{
+				WAF: &operatorv1.WAFExtensionSpec{State: state},
+			}
+		}
+		return gw
+	}
+	enabled := operatorv1.WAFExtensionStateEnabled
+	disabled := operatorv1.WAFExtensionStateDisabled
+
+	// A cluster with no gateways has no WAF, so no UI. That is the normal state of a
+	// cluster that never enabled Gateway API, not a failure to read.
+	It("is disabled and does not error when no GatewayAPI CR exists", func() {
+		got, err := wafManagementEnabled(ctx, c, operatorv1.CalicoEnterprise, false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeFalse())
+	})
+
+	DescribeTable("follows the WAF extension state",
+		func(state *operatorv1.WAFExtensionState, expected bool) {
+			Expect(c.Create(ctx, gatewayAPI("default", state))).NotTo(HaveOccurred())
+			got, err := wafManagementEnabled(ctx, c, operatorv1.CalicoEnterprise, false)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(Equal(expected))
+		},
+		Entry("extensions unset", nil, false),
+		Entry("state Disabled", &disabled, false),
+		Entry("state Enabled", &enabled, true),
+	)
+
+	// GetGatewayAPI falls back to the legacy enterprise name, so an older cluster that
+	// never got a "default" CR still resolves.
+	It("reads the legacy tigera-secure CR", func() {
+		Expect(c.Create(ctx, gatewayAPI("tigera-secure", &enabled))).NotTo(HaveOccurred())
+		got, err := wafManagementEnabled(ctx, c, operatorv1.CalicoEnterprise, false)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(got).To(BeTrue())
+	})
+
+	// The variant and tenancy guards win over the extension, matching
+	// utils.RBACManagementEnabled.
+	DescribeTable("stays off where the feature is not offered",
+		func(variant operatorv1.ProductVariant, multiTenant bool) {
+			Expect(c.Create(ctx, gatewayAPI("default", &enabled))).NotTo(HaveOccurred())
+			got, err := wafManagementEnabled(ctx, c, variant, multiTenant)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(got).To(BeFalse())
+		},
+		Entry("Calico variant", operatorv1.Calico, false),
+		Entry("multi-tenant management cluster", operatorv1.CalicoEnterprise, true),
+	)
+})

@@ -174,6 +174,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
+
+		// Gateway objects are garbage-collected with the CR, but a namespace the
+		// operator created for them has no owner reference and must be torn down here.
+		gwHelper := uigateway.NewHelper(r.cli, uigateway.Config{
+			ResourcePrefix:   whisker.GatewayResourcePrefix,
+			TLSSecretName:    whisker.GatewayTLSSecretName,
+			BackendNamespace: whisker.WhiskerNamespace,
+		})
+		gwComponents, err := gwHelper.Teardown(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		ch := utils.NewComponentHandler(log, r.cli, r.scheme, nil)
+		for _, component := range gwComponents {
+			if err := ch.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error tearing down gateway resources", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
 		f, err := r.maintainFinalizer(ctx, nil)
 		// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer
 		if f {

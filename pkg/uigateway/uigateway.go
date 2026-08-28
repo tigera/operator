@@ -268,6 +268,9 @@ func (h *Helper) UnhealthyReason(ctx context.Context, gatewayNS string) string {
 		}
 		return fmt.Sprintf("Failed to read HTTPRoute %s/%s status: %v", gatewayNS, routeName, err)
 	}
+	if len(route.Status.Parents) == 0 {
+		return fmt.Sprintf("HTTPRoute %s/%s not accepted by any parent yet", gatewayNS, routeName)
+	}
 	for _, ps := range route.Status.Parents {
 		if msg := unhealthyCondition(ps.Conditions, string(gapi.RouteConditionAccepted), "HTTPRoute not accepted"); msg != "" {
 			return msg
@@ -280,16 +283,20 @@ func (h *Helper) UnhealthyReason(ctx context.Context, gatewayNS string) string {
 	return ""
 }
 
-// unhealthyCondition returns a message when the named condition exists and is
-// not True. A missing condition is healthy: the controller has not written
-// its verdict yet, and Accepted/Programmed gate readiness once it does.
+// unhealthyCondition returns a message when the named condition is missing or
+// not True. A missing condition is not ready: the Gateway API controller has
+// not confirmed this state, so readiness waits for its verdict rather than
+// assuming success.
 func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix string) string {
 	for _, cond := range conditions {
-		if cond.Type == condType && cond.Status != metav1.ConditionTrue {
-			return fmt.Sprintf("%s: %s", msgPrefix, cond.Message)
+		if cond.Type == condType {
+			if cond.Status != metav1.ConditionTrue {
+				return fmt.Sprintf("%s: %s", msgPrefix, cond.Message)
+			}
+			return ""
 		}
 	}
-	return ""
+	return fmt.Sprintf("%s: not reported yet", msgPrefix)
 }
 
 // namespaceDeletable reports whether teardown may delete this namespace: the

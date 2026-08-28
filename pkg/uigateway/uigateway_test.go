@@ -105,9 +105,14 @@ var _ = Describe("UnhealthyReason", func() {
 		Expect(h.UnhealthyReason(ctx, ns)).To(Equal("Gateway not programmed: no addresses assigned"))
 	})
 
-	It("treats missing Gateway conditions as healthy and moves on to the HTTPRoute", func() {
+	It("reports a Gateway whose conditions have not been published yet", func() {
 		build(newGateway(), newRoute())
-		Expect(h.UnhealthyReason(ctx, ns)).To(BeEmpty())
+		Expect(h.UnhealthyReason(ctx, ns)).To(ContainSubstring("not reported yet"))
+	})
+
+	It("reports an HTTPRoute that no parent has accepted yet", func() {
+		build(healthyGateway(), newRoute())
+		Expect(h.UnhealthyReason(ctx, ns)).To(ContainSubstring("not accepted by any parent yet"))
 	})
 
 	It("reports a missing HTTPRoute once the Gateway is healthy", func() {

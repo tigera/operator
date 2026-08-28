@@ -142,6 +142,14 @@ const (
 	backendAccessSuffix = "-ingressgateway-backend-access"
 )
 
+// GatewayName is the Gateway object name for a component's resource prefix.
+// Callers that reference the Gateway by name (its NetworkPolicy selector, its
+// health read-back) use this so the name cannot drift from the render.
+func GatewayName(prefix string) string { return prefix + "-gateway" }
+
+// RouteName is the HTTPRoute object name for a component's resource prefix.
+func RouteName(prefix string) string { return prefix + "-route" }
+
 // gatewayAccess grants the operator the write permissions needed in the gateway namespace; the
 // cluster-wide ClusterRole keeps the reads.
 func (c *gatewayComponent) gatewayAccess() (*rbacv1.Role, *rbacv1.RoleBinding) {
@@ -217,7 +225,7 @@ func (c *gatewayComponent) gateway() *gapi.Gateway {
 	return &gapi.Gateway{
 		TypeMeta: metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.cfg.ResourcePrefix + "-gateway",
+			Name:      GatewayName(c.cfg.ResourcePrefix),
 			Namespace: c.cfg.GatewayNamespace,
 			Labels: map[string]string{
 				GatewayLabel: c.cfg.ResourcePrefix,
@@ -251,7 +259,7 @@ func (c *gatewayComponent) gateway() *gapi.Gateway {
 }
 
 func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
-	gatewayName := gapi.ObjectName(c.cfg.ResourcePrefix + "-gateway")
+	gatewayName := gapi.ObjectName(GatewayName(c.cfg.ResourcePrefix))
 	sectionName := gapi.SectionName(c.cfg.ResourcePrefix + "-https")
 	backendName := gapi.ObjectName(c.cfg.ResourcePrefix + "-backend")
 	backendNS := gapi.Namespace(c.cfg.BackendNamespace)
@@ -265,7 +273,7 @@ func (c *gatewayComponent) httpRoute() *gapi.HTTPRoute {
 	return &gapi.HTTPRoute{
 		TypeMeta: metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.cfg.ResourcePrefix + "-route",
+			Name:      RouteName(c.cfg.ResourcePrefix),
 			Namespace: c.cfg.GatewayNamespace,
 		},
 		Spec: gapi.HTTPRouteSpec{
@@ -331,8 +339,10 @@ func (c *gatewayComponent) backend() *envoyapi.Backend {
 	}
 }
 
-// The ReferenceGrant is v1beta1: the standard has not promoted it to v1, so a
-// cluster serving pre-installed Gateway API CRDs (OpenShift 4.19+) has no v1.
+// ReferenceGrant is written as v1beta1, the only version served by every
+// Gateway API bundle we may find pre-installed (OpenShift 4.19 ships v1.2.1,
+// and CRDManagementPreferExisting leaves it alone). v1beta1 is still the
+// storage version as of Gateway API v1.6.
 func (c *gatewayComponent) referenceGrant() *gapiv1b1.ReferenceGrant {
 	backendName := gapi.ObjectName(c.cfg.ResourcePrefix + "-backend")
 
@@ -364,7 +374,7 @@ func (c *gatewayComponent) referenceGrant() *gapiv1b1.ReferenceGrant {
 // proxyNetworkPolicy creates a Calico NetworkPolicy that allows the Envoy
 // proxy pod to function in calico-system (which has a default deny).
 func (c *gatewayComponent) proxyNetworkPolicy() *v3.NetworkPolicy {
-	gatewayName := c.cfg.ResourcePrefix + "-gateway"
+	gatewayName := GatewayName(c.cfg.ResourcePrefix)
 	policyName := networkpolicy.CalicoComponentPolicyPrefix + gatewayName + "-proxy"
 
 	egressRules := networkpolicy.AppendDNSEgressRules(nil, c.cfg.OpenShift)
@@ -468,13 +478,13 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 		},
 		&gapi.HTTPRoute{
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: prefix + "-route", Namespace: staleNS},
+			ObjectMeta: metav1.ObjectMeta{Name: RouteName(prefix), Namespace: staleNS},
 		},
 	}
 
 	// The Backend and ReferenceGrant live in the backend namespace, so only the
-	// component cleaning that namespace deletes them. A component for another
-	// namespace has no write access there once its own grant is gone, and
+	// teardown pass for that namespace deletes them. The operator's write access
+	// in any other namespace is gone once that namespace's grant is removed, and
 	// teardown always includes the backend namespace, so they are still removed
 	// exactly once.
 	if staleNS == bkNS && c.cfg.TargetNamespace == "" {
@@ -514,7 +524,7 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 	// leftovers by its label.
 	objs = append(objs, &gapi.Gateway{
 		TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
-		ObjectMeta: metav1.ObjectMeta{Name: prefix + "-gateway", Namespace: staleNS},
+		ObjectMeta: metav1.ObjectMeta{Name: GatewayName(prefix), Namespace: staleNS},
 	})
 
 	// The grants go after the resources they permit deleting. The backend grant

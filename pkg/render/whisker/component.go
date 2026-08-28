@@ -38,6 +38,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/selector"
+	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -307,7 +308,7 @@ func (c *Component) networkPolicy() *v3.NetworkPolicy {
 			Protocol: &networkpolicy.TCPProtocol,
 			Source: v3.EntityRule{
 				NamespaceSelector: fmt.Sprintf("%s == '%s'", selector.CalicoNameLabel, c.cfg.IngressGatewayNamespace),
-				Selector:          fmt.Sprintf("gateway.envoyproxy.io/owning-gateway-name == '%s'", GatewayResourcePrefix+"-gateway"),
+				Selector:          fmt.Sprintf("gateway.envoyproxy.io/owning-gateway-name == '%s'", rgateway.GatewayName(GatewayResourcePrefix)),
 			},
 			Destination: v3.EntityRule{
 				Ports: networkpolicy.Ports(WhiskerServicePort),

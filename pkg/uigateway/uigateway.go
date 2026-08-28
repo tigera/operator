@@ -37,6 +37,7 @@ import (
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -119,6 +120,12 @@ func (h *Helper) Components(
 	// The backend namespace already exists and belongs to another controller,
 	// so only a namespace the user named is created here.
 	gwNS := spec.NamespaceOrDefault()
+	// The operator namespace holds the gateway listener secret untyped, so
+	// rendering the typed copy there fails on the immutable Secret type and
+	// degrades with no way out. Refuse it before anything is written.
+	if gwNS == common.OperatorNamespace() {
+		return nil, fmt.Errorf("spec.ingressGateway.gatewayNamespace cannot be the operator namespace %q", gwNS)
+	}
 	if gwNS != h.cfg.BackendNamespace {
 		if err := h.ensureNamespace(ctx, gwNS); err != nil {
 			return nil, fmt.Errorf("failed to ensure gateway namespace %s: %w", gwNS, err)
@@ -236,8 +243,8 @@ func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
 // down. NotFound counts too: the cache may not yet hold what this reconcile
 // just applied, and the requeue re-checks.
 func (h *Helper) UnhealthyReason(ctx context.Context, gatewayNS string) string {
-	gatewayName := h.cfg.ResourcePrefix + "-gateway"
-	routeName := h.cfg.ResourcePrefix + "-route"
+	gatewayName := rgateway.GatewayName(h.cfg.ResourcePrefix)
+	routeName := rgateway.RouteName(h.cfg.ResourcePrefix)
 
 	gw := &gapi.Gateway{}
 	if err := h.cli.Get(ctx, client.ObjectKey{Name: gatewayName, Namespace: gatewayNS}, gw); err != nil {

@@ -421,6 +421,13 @@ var _ = Describe("Cleanup helpers", func() {
 			Expect(err.Error()).To(ContainSubstring("multiple GatewayClasses"))
 		})
 
+		It("refuses the operator namespace as the gateway namespace", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			_, err := h.Components(ctx, spec(common.OperatorNamespace()), keyPair())
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be the operator namespace"))
+		})
+
 		It("refuses to render under certificateManagement", func() {
 			build(gatewayAPI("tigera-gateway-class"))
 			cmKeyPair := &certificatemanagement.KeyPair{CertificateManagement: &operatorv1.CertificateManagement{}}

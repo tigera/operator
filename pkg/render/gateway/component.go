@@ -124,6 +124,7 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 		c.tlsSecret(),
 	)
 
+	var toDelete []client.Object
 	if c.cfg.GatewayNamespace == c.cfg.BackendNamespace {
 		// calico-system has an operator-managed default-deny on both variants,
 		// and the GatewayAPI controller skips it (lifecycle guard), so the
@@ -132,9 +133,15 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 		// get.
 		objs = append(objs, c.proxyNetworkPolicy())
 		objs = append(objs, c.cfg.ExtraProxyObjects...)
+
+		// The gateway now shares the backend namespace, so the cross-namespace
+		// ReferenceGrant is no longer needed. Delete it here, where the render
+		// holds the backend-namespace grant — a stale pass for the old gateway
+		// namespace has no write access in the backend namespace.
+		toDelete = append(toDelete, c.referenceGrant())
 	}
 
-	return objs, nil
+	return objs, toDelete
 }
 
 const (
@@ -483,22 +490,16 @@ func (c *gatewayDeletionComponent) Objects() (objsToCreate, objsToDelete []clien
 	}
 
 	// The Backend and ReferenceGrant live in the backend namespace, so only the
-	// teardown pass for that namespace deletes them. The operator's write access
-	// in any other namespace is gone once that namespace's grant is removed, and
-	// teardown always includes the backend namespace, so they are still removed
-	// exactly once.
+	// backend namespace's own teardown pass deletes them. A pass for any other
+	// namespace has no write access there. On a move into the backend namespace
+	// the ReferenceGrant is deleted by the live render instead, which holds the
+	// backend grant.
 	if staleNS == bkNS && c.cfg.TargetNamespace == "" {
 		objs = append(objs,
 			&envoyapi.Backend{
 				TypeMeta:   metav1.TypeMeta{Kind: BackendKind, APIVersion: "gateway.envoyproxy.io/v1alpha1"},
 				ObjectMeta: metav1.ObjectMeta{Name: prefix + "-backend", Namespace: bkNS},
 			},
-		)
-	}
-
-	// The gateway component moving into the backend namespace needs no ReferenceGrant, so clean it up.
-	if (staleNS == bkNS && c.cfg.TargetNamespace == "") || c.cfg.TargetNamespace == bkNS {
-		objs = append(objs,
 			&gapiv1b1.ReferenceGrant{
 				TypeMeta:   metav1.TypeMeta{Kind: "ReferenceGrant", APIVersion: "gateway.networking.k8s.io/v1beta1"},
 				ObjectMeta: metav1.ObjectMeta{Name: prefix + "-allow-gateway", Namespace: bkNS},

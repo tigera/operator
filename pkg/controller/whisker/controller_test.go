@@ -355,6 +355,7 @@ var _ = Describe("whisker controller tests", func() {
 			Expect(result.RequeueAfter).To(BeZero(), "no requeue: there is no gateway to wait for")
 			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady,
 				mock.Anything, mock.Anything, mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "ingressgateway-variant", mock.Anything)
 		})
 
 		It("tears down labeled gateway resources when spec.ingressGateway is nil", func() {

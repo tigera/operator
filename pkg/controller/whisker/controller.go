@@ -321,6 +321,12 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
 	gatewayEnabled := whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant == operatorv1.Calico
+	if whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant != operatorv1.Calico {
+		r.status.SetWarning("ingressgateway-variant",
+			"spec.ingressGateway on the Whisker resource is ignored on Calico Enterprise; expose the UI through the Manager resource's spec.ingressGateway instead")
+	} else {
+		r.status.ClearWarning("ingressgateway-variant")
+	}
 	if gw := whiskerCR.Spec.IngressGateway; gatewayEnabled {
 		var err error
 		gatewayTLSKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.GatewayTLSSecretName, common.OperatorNamespace(), []string{gw.Hostname})

@@ -17,7 +17,7 @@ package enterprise
 import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/controller/options"
-	"github.com/tigera/operator/pkg/enterprise/monitor"
+	"github.com/tigera/operator/pkg/enterprise/controller/monitor"
 )
 
 // Controllers returns the reconcilers only Calico Enterprise runs, for the caller to

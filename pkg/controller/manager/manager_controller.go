@@ -767,6 +767,7 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
 		ExtraProxyObjects:            euigateway.ProxyObjects(helper.InstallNamespace()),
 		Provider:                     r.opts.DetectedProvider,
+		Azure:                        installationSpec.Azure,
 	})
 	if r.opts.MultiTenant {
 		// Multi-tenant CIG is not supported: resource names and the cleanup

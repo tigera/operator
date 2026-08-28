@@ -32,6 +32,9 @@ type Set struct {
 	Whisker           WhiskerExtension
 	GatewayAPI        GatewayAPIExtension
 
+	// Startup is the variant's hook into operator startup rather than into a controller.
+	Startup StartupExtension
+
 	// Images maps a component name to the image the variant runs for it. One set for
 	// the whole operator, since the variant is fixed for the process lifetime.
 	Images *imageoverride.Overrides
@@ -117,6 +120,13 @@ func (e Extensions) GatewayAPI() GatewayAPIExtension {
 		return noopGatewayAPI{}
 	}
 	return e.set.GatewayAPI
+}
+
+func (e Extensions) Startup() StartupExtension {
+	if e.set.Startup == nil {
+		return noopStartup{}
+	}
+	return e.set.Startup
 }
 
 // Images returns the variant's image overrides. A nil set resolves every component to

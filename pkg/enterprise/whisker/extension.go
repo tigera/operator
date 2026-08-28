@@ -15,12 +15,9 @@
 package whisker
 
 import (
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
-	rwhisker "github.com/tigera/operator/pkg/render/whisker"
 )
 
 // Extension is the Calico Enterprise behavior for the whisker controller.
@@ -35,18 +32,8 @@ func New(variant operatorv1.ProductVariant) *Extension {
 	return &Extension{variant: variant}
 }
 
-// Modify dispatches over the components the whisker controller renders.
+// Modify is a no-op: the whisker render component shapes its objects per
+// variant itself.
 func (e *Extension) Modify(c render.Component, ri render.Inputs) render.Component {
-	switch c.(type) {
-	case *rwhisker.Component:
-		return extensions.Decorate(c, ri, e.variant, deleteWhisker)
-	default:
-		return c
-	}
-}
-
-// deleteWhisker moves everything whisker rendered to the delete list. Enterprise has
-// no whisker, so an install upgraded from Calico cleans up after itself.
-func deleteWhisker(create, del []client.Object) ([]client.Object, []client.Object) {
-	return nil, append(del, create...)
+	return c
 }

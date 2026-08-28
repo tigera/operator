@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
@@ -1187,6 +1188,19 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			},
 		},
 	}
+
+	// Read access to both feature-gate switches, ungated. ui-apis has to read a switch
+	// to learn whether its feature is on, so a grant rendered only while the feature is
+	// on could never be used to observe it being turned on. The read is name-scoped;
+	// list and watch only authorize a request that field-selects one of these names.
+	cr.Rules = append(cr.Rules,
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch"},
+		},
+	)
 
 	// Keep in sync with the rbacManagementUINamespacedRole gate.
 	if rbacManagementEnabled {

@@ -12,23 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package monitor
+package applicationlayer
 
 import (
 	"testing"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-
-	uzap "go.uber.org/zap"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestStatus(t *testing.T) {
-	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
+func TestRender(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)
 	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
-	reporterConfig.JUnitReport = "../../../report/ut/monitor_controller_suite.xml"
-	ginkgo.RunSpecs(t, "pkg/controller/monitor Suite", suiteConfig, reporterConfig)
+	reporterConfig.JUnitReport = "../../../../report/applicationlayer_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/applicationlayer/applicationlayer Suite", suiteConfig, reporterConfig)
 }

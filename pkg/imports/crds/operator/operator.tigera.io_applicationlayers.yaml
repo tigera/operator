@@ -39,6 +39,7 @@ spec:
               description: ApplicationLayerSpec defines the desired state of ApplicationLayer
               properties:
                 applicationLayerPolicy:
+                  default: Disabled
                   description: |-
                     Application Layer Policy controls whether or not ALP enforcement is enabled for the cluster.
                     When enabled, NetworkPolicies with HTTP Match rules may be defined to opt-in workloads for traffic enforcement on the application layer.
@@ -47,6 +48,7 @@ spec:
                     - Disabled
                   type: string
                 envoy:
+                  default: {}
                   description: User-configurable settings for the Envoy proxy.
                   properties:
                     useRemoteAddress:
@@ -317,9 +319,11 @@ spec:
                       type: object
                   type: object
                 logCollection:
+                  default: {}
                   description: Specification for application layer (L7) log collection.
                   properties:
                     collectLogs:
+                      default: Disabled
                       description: |-
                         This setting enables or disable log collection.
                         Allowed values are Enabled or Disabled.
@@ -328,12 +332,14 @@ spec:
                         - Disabled
                       type: string
                     logIntervalSeconds:
+                      default: 5
                       description: |-
                         Interval in seconds for sending L7 log information for processing.
                         Default: 5 sec
                       format: int64
                       type: integer
                     logRequestsPerInterval:
+                      default: -1
                       description: |-
                         Maximum number of unique L7 logs that are sent LogIntervalSeconds.
                         Adjust this to limit the number of L7 logs sent per LogIntervalSeconds
@@ -343,6 +349,7 @@ spec:
                       type: integer
                   type: object
                 sidecarInjection:
+                  default: Disabled
                   description: |-
                     SidecarInjection controls whether or not sidecar injection is enabled for the cluster.
                     When enabled, pods with the label
@@ -354,6 +361,7 @@ spec:
                     - Disabled
                   type: string
                 webApplicationFirewall:
+                  default: Disabled
                   description: |-
                     WebApplicationFirewall controls whether or not ModSecurity enforcement is enabled for the cluster.
                     When enabled, Services may opt-in to having ingress traffic examed by ModSecurity.

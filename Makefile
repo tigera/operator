@@ -258,7 +258,10 @@ else
   GIT_VERSION?=$(shell git describe --tags --dirty --always --abbrev=12)
 endif
 
-# To update the Istio version, see "Updating the bundled version of Istio" in docs/common_tasks.md.
+# To update the Istio version, see "Updating the bundled version of Istio" in
+# docs/common_tasks.md.  Keep this in step with the Istio version the calico
+# repo builds the Istio images from, or the rendered manifests will point at
+# images built from a different release.
 ISTIO_HELM_REPO ?= https://istio-release.storage.googleapis.com/charts
 ISTIO_VERSION ?= 1.29.2
 ISTIO_RESOURCES_DIR = pkg/render/istio

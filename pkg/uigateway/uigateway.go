@@ -308,7 +308,7 @@ func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix strin
 // namespaceDeletable reports whether teardown may delete this namespace: the
 // operator must have created it (the gateway-namespace marker), and no labeled
 // Gateway from another component may still live in it. That keeps one
-// component's teardown from deleting a namespace another still shares.
+// component's (Manager/Whisker) teardown from deleting a namespace another still shares.
 func (h *Helper) namespaceDeletable(ctx context.Context, name string) (bool, error) {
 	if name == h.cfg.BackendNamespace {
 		return false, nil

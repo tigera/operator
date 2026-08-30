@@ -82,8 +82,11 @@ var _ = Describe("Gateway component render", func() {
 			toCreate, toDelete = comp.Objects()
 		})
 
-		It("returns objects to create and nothing to delete", func() {
-			Expect(toDelete).To(BeNil())
+		It("deletes the now-unneeded cross-namespace ReferenceGrant", func() {
+			// With the gateway in the backend namespace the ReferenceGrant is
+			// not rendered; the render deletes any stale one here, where it
+			// holds the backend grant.
+			Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
 			Expect(toCreate).NotTo(BeEmpty())
 		})
 
@@ -604,16 +607,21 @@ var _ = Describe("Gateway deletion component", func() {
 
 		Context("moving into the backend namespace", func() {
 			BeforeEach(func() {
+				// The stale namespace is the custom one the gateway is leaving,
+				// distinct from the backend namespace it moves into — so the
+				// staleNS != bkNS path is actually exercised.
+				delCfg.StaleNamespace = "custom-gateway-ns"
 				delCfg.TargetNamespace = bkNS
 			})
 
-			It("deletes the ReferenceGrant, which is no longer rendered", func() {
-				Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).NotTo(BeNil())
+			It("leaves the ReferenceGrant to the live render, which holds the backend grant", func() {
+				// A stale pass for the old gateway namespace has no write access
+				// in the backend namespace, so it must not try to delete there.
+				Expect(findObject[*gapiv1b1.ReferenceGrant](toDelete, prefix+"-allow-gateway", bkNS)).To(BeNil())
 			})
 
 			It("still keeps the backend grant", func() {
-				// The new render writes the Backend there, so the grant stays
-				// even though this pass deletes the ReferenceGrant.
+				// The new render writes the Backend there, so the grant stays.
 				accessName := prefix + "-ingressgateway-access"
 				Expect(findObject[*rbacv1.Role](toDelete, accessName, bkNS)).To(BeNil())
 				Expect(findObject[*rbacv1.RoleBinding](toDelete, accessName, bkNS)).To(BeNil())

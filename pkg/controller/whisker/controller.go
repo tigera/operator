@@ -174,6 +174,27 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	} else if whiskerCR == nil {
 		r.status.OnCRNotFound()
+
+		// Gateway objects are garbage-collected with the CR, but a namespace the
+		// operator created for them has no owner reference and must be torn down here.
+		gwHelper := uigateway.NewHelper(r.cli, uigateway.Config{
+			ResourcePrefix:   whisker.GatewayResourcePrefix,
+			TLSSecretName:    whisker.GatewayTLSSecretName,
+			BackendNamespace: whisker.WhiskerNamespace,
+		})
+		gwComponents, err := gwHelper.Teardown(ctx)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Failed to list gateways for cleanup", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		ch := utils.NewComponentHandler(log, r.cli, r.scheme, nil)
+		for _, component := range gwComponents {
+			if err := ch.CreateOrUpdateOrDelete(ctx, component, nil); err != nil {
+				r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error tearing down gateway resources", err, reqLogger)
+				return reconcile.Result{}, err
+			}
+		}
+
 		f, err := r.maintainFinalizer(ctx, nil)
 		// If the finalizer is still set, then requeue so we aren't dependent on the periodic reconcile to check and remove the finalizer
 		if f {
@@ -295,10 +316,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		// default 15s route timeout would drop the stream.
 		RouteRequestTimeout: ptr.To("0s"),
 		Provider:            r.provider,
+		Azure:               installationSpec.Azure,
 	})
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
 	gatewayEnabled := whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant == operatorv1.Calico
+	if whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant != operatorv1.Calico {
+		r.status.SetWarning("ingressgateway-variant",
+			"spec.ingressGateway on the Whisker resource is ignored on Calico Enterprise; expose the UI through the Manager resource's spec.ingressGateway instead")
+	} else {
+		r.status.ClearWarning("ingressgateway-variant")
+	}
 	if gw := whiskerCR.Spec.IngressGateway; gatewayEnabled {
 		var err error
 		gatewayTLSKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.GatewayTLSSecretName, common.OperatorNamespace(), []string{gw.Hostname})

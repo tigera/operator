@@ -105,9 +105,14 @@ var _ = Describe("UnhealthyReason", func() {
 		Expect(h.UnhealthyReason(ctx, ns)).To(Equal("Gateway not programmed: no addresses assigned"))
 	})
 
-	It("treats missing Gateway conditions as healthy and moves on to the HTTPRoute", func() {
+	It("reports a Gateway whose conditions have not been published yet", func() {
 		build(newGateway(), newRoute())
-		Expect(h.UnhealthyReason(ctx, ns)).To(BeEmpty())
+		Expect(h.UnhealthyReason(ctx, ns)).To(ContainSubstring("not reported yet"))
+	})
+
+	It("reports an HTTPRoute that no parent has accepted yet", func() {
+		build(healthyGateway(), newRoute())
+		Expect(h.UnhealthyReason(ctx, ns)).To(ContainSubstring("not accepted by any parent yet"))
 	})
 
 	It("reports a missing HTTPRoute once the Gateway is healthy", func() {
@@ -300,13 +305,30 @@ var _ = Describe("Cleanup helpers", func() {
 				labeledGateway(prefix+"-gateway", "ns-ours"),
 				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
 					Name:   "ns-ours",
-					Labels: map[string]string{rgateway.GatewayLabel: prefix},
+					Labels: map[string]string{rgateway.GatewayNamespaceLabel: "true"},
 				}},
 			)
 			components, err := h.Teardown(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(deletedNamespaces(components)).To(ConsistOf("ns-ours"),
 				"the backend namespace belongs to another controller and must survive")
+		})
+
+		It("keeps a shared namespace while another component's Gateway remains", func() {
+			foreign := labeledGateway("calico-manager-gateway", "ns-shared")
+			foreign.Labels[rgateway.GatewayLabel] = "calico-manager"
+			build(
+				labeledGateway(prefix+"-gateway", "ns-shared"),
+				foreign,
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+					Name:   "ns-shared",
+					Labels: map[string]string{rgateway.GatewayNamespaceLabel: "true"},
+				}},
+			)
+			components, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(deletedNamespaces(components)).NotTo(ContainElement("ns-shared"),
+				"another component's Gateway still lives here, so the namespace must survive")
 		})
 
 		It("never deletes a namespace the user created", func() {
@@ -353,7 +375,23 @@ var _ = Describe("Cleanup helpers", func() {
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
 			Expect(ns.Labels).To(HaveKeyWithValue("openshift.io/run-level", "0"),
 				"without this the Envoy proxy pod fails SCC admission in a fresh namespace")
-			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix))
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"))
+		})
+
+		It("creates an AKS gateway namespace with the Azure-policy label", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			cfgAKS := cfg
+			cfgAKS.Provider = operatorv1.ProviderAKS
+			h = uigateway.NewHelper(cli, cfgAKS)
+			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			Expect(err).NotTo(HaveOccurred())
+
+			ns := &corev1.Namespace{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			// Matches every other operator-created namespace on AKS; without it
+			// Azure Policy differs for the gateway namespace.
+			Expect(ns.Labels).To(HaveKeyWithValue("control-plane", "true"))
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"))
 		})
 
 		It("creates the gateway namespace stamped with the ownership label", func() {
@@ -363,8 +401,8 @@ var _ = Describe("Cleanup helpers", func() {
 
 			ns := &corev1.Namespace{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
-			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayLabel, prefix),
-				"the label is what lets teardown delete only a namespace the operator created")
+			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"),
+				"the marker is what lets teardown delete only a namespace the operator created")
 			Expect(ns.OwnerReferences).To(BeEmpty())
 		})
 
@@ -403,6 +441,13 @@ var _ = Describe("Cleanup helpers", func() {
 			_, err := h.Components(ctx, spec("ns-a"), keyPair())
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("multiple GatewayClasses"))
+		})
+
+		It("refuses the operator namespace as the gateway namespace", func() {
+			build(gatewayAPI("tigera-gateway-class"))
+			_, err := h.Components(ctx, spec(common.OperatorNamespace()), keyPair())
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("cannot be the operator namespace"))
 		})
 
 		It("refuses to render under certificateManagement", func() {

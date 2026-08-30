@@ -37,6 +37,7 @@ import (
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
@@ -73,6 +74,10 @@ type Config struct {
 	ExtraProxyObjects []client.Object
 
 	Provider operatorv1.Provider
+
+	// Azure carries Installation.Azure so the gateway namespace gets the same
+	// Azure-policy labels as other operator-created namespaces on AKS.
+	Azure *operatorv1.Azure
 }
 
 // Helper renders and cleans up one UI component's gateway resources.
@@ -115,6 +120,12 @@ func (h *Helper) Components(
 	// The backend namespace already exists and belongs to another controller,
 	// so only a namespace the user named is created here.
 	gwNS := spec.NamespaceOrDefault()
+	// The operator namespace holds the gateway listener secret untyped, so
+	// rendering the typed copy there fails on the immutable Secret type and
+	// degrades with no way out. Refuse it before anything is written.
+	if gwNS == common.OperatorNamespace() {
+		return nil, fmt.Errorf("spec.ingressGateway.gatewayNamespace cannot be the operator namespace %q", gwNS)
+	}
 	if gwNS != h.cfg.BackendNamespace {
 		if err := h.ensureNamespace(ctx, gwNS); err != nil {
 			return nil, fmt.Errorf("failed to ensure gateway namespace %s: %w", gwNS, err)
@@ -177,7 +188,7 @@ func (h *Helper) StaleComponents(ctx context.Context, desiredNS string) ([]rende
 		if ns == desiredNS {
 			continue
 		}
-		owned, err := h.ownsNamespace(ctx, ns)
+		deletable, err := h.namespaceDeletable(ctx, ns)
 		if err != nil {
 			return nil, err
 		}
@@ -187,7 +198,7 @@ func (h *Helper) StaleComponents(ctx context.Context, desiredNS string) ([]rende
 			BackendNamespace:  h.cfg.BackendNamespace,
 			TLSSecretName:     h.cfg.TLSSecretName,
 			ExtraProxyObjects: h.cfg.ExtraProxyObjects,
-			DeleteNamespace:   owned,
+			DeleteNamespace:   deletable,
 			TargetNamespace:   desiredNS,
 		}))
 	}
@@ -211,7 +222,7 @@ func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
 	}
 	var components []render.Component
 	for _, ns := range namespaces {
-		owned, err := h.ownsNamespace(ctx, ns)
+		deletable, err := h.namespaceDeletable(ctx, ns)
 		if err != nil {
 			return nil, err
 		}
@@ -221,7 +232,7 @@ func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
 			BackendNamespace:  h.cfg.BackendNamespace,
 			TLSSecretName:     h.cfg.TLSSecretName,
 			ExtraProxyObjects: h.cfg.ExtraProxyObjects,
-			DeleteNamespace:   owned,
+			DeleteNamespace:   deletable,
 		}))
 	}
 	return components, nil
@@ -232,8 +243,8 @@ func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
 // down. NotFound counts too: the cache may not yet hold what this reconcile
 // just applied, and the requeue re-checks.
 func (h *Helper) UnhealthyReason(ctx context.Context, gatewayNS string) string {
-	gatewayName := h.cfg.ResourcePrefix + "-gateway"
-	routeName := h.cfg.ResourcePrefix + "-route"
+	gatewayName := rgateway.GatewayName(h.cfg.ResourcePrefix)
+	routeName := rgateway.RouteName(h.cfg.ResourcePrefix)
 
 	gw := &gapi.Gateway{}
 	if err := h.cli.Get(ctx, client.ObjectKey{Name: gatewayName, Namespace: gatewayNS}, gw); err != nil {
@@ -257,6 +268,9 @@ func (h *Helper) UnhealthyReason(ctx context.Context, gatewayNS string) string {
 		}
 		return fmt.Sprintf("Failed to read HTTPRoute %s/%s status: %v", gatewayNS, routeName, err)
 	}
+	if len(route.Status.Parents) == 0 {
+		return fmt.Sprintf("HTTPRoute %s/%s not accepted by any parent yet", gatewayNS, routeName)
+	}
 	for _, ps := range route.Status.Parents {
 		if msg := unhealthyCondition(ps.Conditions, string(gapi.RouteConditionAccepted), "HTTPRoute not accepted"); msg != "" {
 			return msg
@@ -269,21 +283,27 @@ func (h *Helper) UnhealthyReason(ctx context.Context, gatewayNS string) string {
 	return ""
 }
 
-// unhealthyCondition returns a message when the named condition exists and is
-// not True. A missing condition is healthy: the controller has not written
-// its verdict yet, and Accepted/Programmed gate readiness once it does.
+// unhealthyCondition returns a message when the named condition is missing or
+// not True. A missing condition is not ready: the Gateway API controller has
+// not confirmed this state, so readiness waits for its verdict rather than
+// assuming success.
 func unhealthyCondition(conditions []metav1.Condition, condType, msgPrefix string) string {
 	for _, cond := range conditions {
-		if cond.Type == condType && cond.Status != metav1.ConditionTrue {
-			return fmt.Sprintf("%s: %s", msgPrefix, cond.Message)
+		if cond.Type == condType {
+			if cond.Status != metav1.ConditionTrue {
+				return fmt.Sprintf("%s: %s", msgPrefix, cond.Message)
+			}
+			return ""
 		}
 	}
-	return ""
+	return fmt.Sprintf("%s: not reported yet", msgPrefix)
 }
 
-// ownsNamespace reports whether the operator created this namespace for the
-// component's gateway, which is the only case where teardown may delete it.
-func (h *Helper) ownsNamespace(ctx context.Context, name string) (bool, error) {
+// namespaceDeletable reports whether teardown may delete this namespace: the
+// operator must have created it (the gateway-namespace marker), and no labeled
+// Gateway from another component may still live in it. That keeps one
+// component's teardown from deleting a namespace another still shares.
+func (h *Helper) namespaceDeletable(ctx context.Context, name string) (bool, error) {
 	if name == h.cfg.BackendNamespace {
 		return false, nil
 	}
@@ -294,23 +314,50 @@ func (h *Helper) ownsNamespace(ctx context.Context, name string) (bool, error) {
 		}
 		return false, err
 	}
-	return ns.Labels[rgateway.GatewayLabel] == h.cfg.ResourcePrefix, nil
+	if ns.Labels[rgateway.GatewayNamespaceLabel] != "true" {
+		return false, nil
+	}
+	other, err := h.otherGatewaysInNamespace(ctx, name)
+	if err != nil {
+		return false, err
+	}
+	return !other, nil
+}
+
+// otherGatewaysInNamespace reports whether a Gateway owned by a different
+// component (a different gateway-label value) still lives in the namespace.
+func (h *Helper) otherGatewaysInNamespace(ctx context.Context, name string) (bool, error) {
+	gwList := &gapi.GatewayList{}
+	if err := h.cli.List(ctx, gwList, client.InNamespace(name), client.HasLabels{rgateway.GatewayLabel}); err != nil {
+		var noMatch *apimeta.NoKindMatchError
+		if stderrors.As(err, &noMatch) {
+			return false, nil
+		}
+		return false, err
+	}
+	for i := range gwList.Items {
+		if gwList.Items[i].Labels[rgateway.GatewayLabel] != h.cfg.ResourcePrefix {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // ensureNamespace creates the gateway namespace if it does not exist, stamped
-// with the gateway label so teardown deletes only a namespace the operator
-// created; a namespace the user already had is never touched. The namespace
-// is built like the install namespace, so on OpenShift it carries the labels
-// that let the Envoy proxy pod pass admission.
+// with the gateway-namespace marker so teardown deletes only a namespace the
+// operator created; a namespace the user already had is never touched. The
+// namespace is built like the install namespace, so on OpenShift it carries
+// the labels that let the Envoy proxy pod pass admission.
 func (h *Helper) ensureNamespace(ctx context.Context, name string) error {
 	err := h.cli.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
 	if err == nil || !errors.IsNotFound(err) {
 		return err
 	}
-	ns := render.CreateNamespace(name, h.cfg.Provider, render.PSSPrivileged, nil)
-	// The gateway label marks the namespace as ours, so teardown can tell a
-	// namespace the operator created from one the user already had.
-	ns.Labels[rgateway.GatewayLabel] = h.cfg.ResourcePrefix
+	ns := render.CreateNamespace(name, h.cfg.Provider, render.PSSPrivileged, h.cfg.Azure)
+	// The marker is component-agnostic so teardown can tell a namespace the
+	// operator created from one the user already had, without tying it to the
+	// component that happened to create it.
+	ns.Labels[rgateway.GatewayNamespaceLabel] = "true"
 	if err := h.cli.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}

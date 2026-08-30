@@ -355,6 +355,7 @@ var _ = Describe("whisker controller tests", func() {
 			Expect(result.RequeueAfter).To(BeZero(), "no requeue: there is no gateway to wait for")
 			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady,
 				mock.Anything, mock.Anything, mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "ingressgateway-variant", mock.Anything)
 		})
 
 		It("tears down labeled gateway resources when spec.ingressGateway is nil", func() {
@@ -371,6 +372,38 @@ var _ = Describe("whisker controller tests", func() {
 			gw := &gapi.Gateway{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-b"}, gw)).To(HaveOccurred(),
 				"the stray labeled Gateway should be torn down")
+		})
+
+		It("deletes a gateway namespace it created once the Whisker CR is gone", func() {
+			// The gateway objects are garbage-collected with the CR, but a
+			// namespace the operator created for them is not, so the CR-not-found
+			// path must delete it or it leaks.
+			mockStatus.On("OnCRNotFound").Return()
+
+			w := &operatorv1.Whisker{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, w)).NotTo(HaveOccurred())
+			Expect(cli.Delete(ctx, w)).NotTo(HaveOccurred())
+
+			Expect(cli.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{
+				Name:   "ns-gw",
+				Labels: map[string]string{rgateway.GatewayNamespaceLabel: "true"},
+			}})).NotTo(HaveOccurred())
+			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
+				Name:      gatewayName,
+				Namespace: "ns-gw",
+				Labels:    map[string]string{rgateway.GatewayLabel: whisker.GatewayResourcePrefix},
+			}}
+			Expect(cli.Create(ctx, stray)).NotTo(HaveOccurred())
+
+			_, err := doReconcile()
+			Expect(err).NotTo(HaveOccurred())
+
+			gw := &gapi.Gateway{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-gw"}, gw)).To(HaveOccurred(),
+				"gateway resources must be torn down once the CR is gone")
+			ns := &corev1.Namespace{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-gw"}, ns)).To(HaveOccurred(),
+				"the operator-created gateway namespace must be deleted, not leaked")
 		})
 	})
 })

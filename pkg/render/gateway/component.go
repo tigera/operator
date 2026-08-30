@@ -143,8 +143,7 @@ func (c *gatewayComponent) Objects() (objsToCreate, objsToDelete []client.Object
 
 		// The gateway now shares the backend namespace, so the cross-namespace
 		// ReferenceGrant is no longer needed. Delete it here, where the render
-		// holds the backend-namespace grant — a stale pass for the old gateway
-		// namespace has no write access in the backend namespace.
+		// holds the backend-namespace grant.
 		toDelete = append(toDelete, c.referenceGrant())
 	}
 
@@ -156,9 +155,8 @@ const (
 	backendAccessSuffix = "-ingressgateway-backend-access"
 )
 
-// GatewayName is the Gateway object name for a component's resource prefix.
-// Callers that reference the Gateway by name (its NetworkPolicy selector, its
-// health read-back) use this so the name cannot drift from the render.
+// GatewayName returns the Gateway object's name for a resource prefix, so callers
+// that reference the Gateway by name stay in sync with the render.
 func GatewayName(prefix string) string { return prefix + "-gateway" }
 
 // RouteName is the HTTPRoute object name for a component's resource prefix.

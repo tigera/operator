@@ -363,16 +363,30 @@ var _ = Describe("Cleanup helpers", func() {
 			return certificatemanagement.NewKeyPair(secret, []string{""}, "")
 		}
 
+		// createdNamespace finds the Namespace object the components render, or
+		// nil when none is rendered.
+		createdNamespace := func(components []render.Component, name string) *corev1.Namespace {
+			for _, c := range components {
+				toCreate, _ := c.Objects()
+				for _, obj := range toCreate {
+					if ns, ok := obj.(*corev1.Namespace); ok && ns.GetName() == name {
+						return ns
+					}
+				}
+			}
+			return nil
+		}
+
 		It("creates an OpenShift gateway namespace the proxy can run in", func() {
 			build(gatewayAPI("tigera-gateway-class"))
 			cfgOCP := cfg
 			cfgOCP.Provider = operatorv1.ProviderOpenShift
 			h = uigateway.NewHelper(cli, cfgOCP)
-			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			components, err := h.Components(ctx, spec("ns-a"), keyPair())
 			Expect(err).NotTo(HaveOccurred())
 
-			ns := &corev1.Namespace{}
-			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			ns := createdNamespace(components, "ns-a")
+			Expect(ns).NotTo(BeNil())
 			Expect(ns.Labels).To(HaveKeyWithValue("openshift.io/run-level", "0"),
 				"without this the Envoy proxy pod fails SCC admission in a fresh namespace")
 			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"))
@@ -383,11 +397,11 @@ var _ = Describe("Cleanup helpers", func() {
 			cfgAKS := cfg
 			cfgAKS.Provider = operatorv1.ProviderAKS
 			h = uigateway.NewHelper(cli, cfgAKS)
-			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			components, err := h.Components(ctx, spec("ns-a"), keyPair())
 			Expect(err).NotTo(HaveOccurred())
 
-			ns := &corev1.Namespace{}
-			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			ns := createdNamespace(components, "ns-a")
+			Expect(ns).NotTo(BeNil())
 			// Matches every other operator-created namespace on AKS; without it
 			// Azure Policy differs for the gateway namespace.
 			Expect(ns.Labels).To(HaveKeyWithValue("control-plane", "true"))
@@ -396,11 +410,11 @@ var _ = Describe("Cleanup helpers", func() {
 
 		It("creates the gateway namespace stamped with the ownership label", func() {
 			build(gatewayAPI("tigera-gateway-class"))
-			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			components, err := h.Components(ctx, spec("ns-a"), keyPair())
 			Expect(err).NotTo(HaveOccurred())
 
-			ns := &corev1.Namespace{}
-			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
+			ns := createdNamespace(components, "ns-a")
+			Expect(ns).NotTo(BeNil())
 			Expect(ns.Labels).To(HaveKeyWithValue(rgateway.GatewayNamespaceLabel, "true"),
 				"the marker is what lets teardown delete only a namespace the operator created")
 			Expect(ns.OwnerReferences).To(BeEmpty())
@@ -413,20 +427,22 @@ var _ = Describe("Cleanup helpers", func() {
 					Labels: map[string]string{"team": "netsec"},
 				},
 			})
-			_, err := h.Components(ctx, spec("ns-a"), keyPair())
+			components, err := h.Components(ctx, spec("ns-a"), keyPair())
 			Expect(err).NotTo(HaveOccurred())
 
+			Expect(createdNamespace(components, "ns-a")).To(BeNil(),
+				"a user namespace must never be re-rendered with the ownership label, or teardown would delete it")
 			ns := &corev1.Namespace{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, ns)).NotTo(HaveOccurred())
 			Expect(ns.Labels).To(Equal(map[string]string{"team": "netsec"}),
-				"a user namespace must never gain the ownership label, or teardown would delete it")
+				"the existing namespace is read only, never written")
 		})
 
 		It("does not create the backend namespace, which another controller owns", func() {
 			build(gatewayAPI("tigera-gateway-class"))
-			_, err := h.Components(ctx, spec(backendNS), keyPair())
+			components, err := h.Components(ctx, spec(backendNS), keyPair())
 			Expect(err).NotTo(HaveOccurred())
-			Expect(cli.Get(ctx, types.NamespacedName{Name: backendNS}, &corev1.Namespace{})).To(HaveOccurred())
+			Expect(createdNamespace(components, backendNS)).To(BeNil())
 		})
 
 		It("reports a missing GatewayAPI CR with a message naming the prerequisite", func() {
@@ -453,11 +469,11 @@ var _ = Describe("Cleanup helpers", func() {
 		It("refuses to render under certificateManagement", func() {
 			build(gatewayAPI("tigera-gateway-class"))
 			cmKeyPair := &certificatemanagement.KeyPair{CertificateManagement: &operatorv1.CertificateManagement{}}
-			_, err := h.Components(ctx, spec("ns-a"), cmKeyPair)
+			components, err := h.Components(ctx, spec("ns-a"), cmKeyPair)
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("certificateManagement"))
-			Expect(cli.Get(ctx, types.NamespacedName{Name: "ns-a"}, &corev1.Namespace{})).To(HaveOccurred(),
-				"nothing should be created when the render is refused")
+			Expect(createdNamespace(components, "ns-a")).To(BeNil(),
+				"nothing should be rendered when the render is refused")
 		})
 	})
 })

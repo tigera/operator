@@ -117,8 +117,6 @@ func (h *Helper) Components(
 		return nil, fmt.Errorf("failed to resolve gateway class: %w", err)
 	}
 
-	// The backend namespace already exists and belongs to another controller,
-	// so only a namespace the user named is created here.
 	gwNS := spec.NamespaceOrDefault()
 	// The operator namespace holds the gateway listener secret untyped, so
 	// rendering the typed copy there fails on the immutable Secret type and
@@ -126,16 +124,24 @@ func (h *Helper) Components(
 	if gwNS == common.OperatorNamespace() {
 		return nil, fmt.Errorf("spec.ingressGateway.gatewayNamespace cannot be the operator namespace %q", gwNS)
 	}
-	if gwNS != h.cfg.BackendNamespace {
-		if err := h.ensureNamespace(ctx, gwNS); err != nil {
-			return nil, fmt.Errorf("failed to ensure gateway namespace %s: %w", gwNS, err)
-		}
-	}
 
 	// Stale-namespace cleanup lands in the same reconcile as the new render.
 	components, err := h.StaleComponents(ctx, gwNS)
 	if err != nil {
 		return nil, err
+	}
+
+	// The backend namespace belongs to another controller; only a namespace the
+	// user named is rendered here, and only when it does not already exist, so a
+	// namespace the user already had is never restamped.
+	if gwNS != h.cfg.BackendNamespace {
+		gwNamespace, err := h.gatewayNamespaceObject(ctx, gwNS)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve gateway namespace %s: %w", gwNS, err)
+		}
+		if gwNamespace != nil {
+			components = append(components, render.NewCreationPassthrough(gwNamespace))
+		}
 	}
 
 	return append(components, rgateway.Component(&rgateway.Configuration{
@@ -343,25 +349,23 @@ func (h *Helper) otherGatewaysInNamespace(ctx context.Context, name string) (boo
 	return false, nil
 }
 
-// ensureNamespace creates the gateway namespace if it does not exist, stamped
-// with the gateway-namespace marker so teardown deletes only a namespace the
-// operator created; a namespace the user already had is never touched. The
-// namespace is built like the install namespace, so on OpenShift it carries
-// the labels that let the Envoy proxy pod pass admission.
-func (h *Helper) ensureNamespace(ctx context.Context, name string) error {
+// gatewayNamespaceObject returns the Namespace to render for a user-named
+// gateway namespace, or nil when the namespace already exists and must be left
+// untouched. The component-agnostic marker lets teardown delete only a
+// namespace the operator created, without tying it to the component that
+// created it. The namespace is built like the install namespace, so on
+// OpenShift it carries the labels that let the Envoy proxy pod pass admission.
+func (h *Helper) gatewayNamespaceObject(ctx context.Context, name string) (*corev1.Namespace, error) {
 	err := h.cli.Get(ctx, types.NamespacedName{Name: name}, &corev1.Namespace{})
-	if err == nil || !errors.IsNotFound(err) {
-		return err
+	if err == nil {
+		return nil, nil
+	}
+	if !errors.IsNotFound(err) {
+		return nil, err
 	}
 	ns := render.CreateNamespace(name, h.cfg.Provider, render.PSSPrivileged, h.cfg.Azure)
-	// The marker is component-agnostic so teardown can tell a namespace the
-	// operator created from one the user already had, without tying it to the
-	// component that happened to create it.
 	ns.Labels[rgateway.GatewayNamespaceLabel] = "true"
-	if err := h.cli.Create(ctx, ns); err != nil && !errors.IsAlreadyExists(err) {
-		return err
-	}
-	return nil
+	return ns, nil
 }
 
 // resolveClassName returns the GatewayClass to use: the one named by

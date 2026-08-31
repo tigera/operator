@@ -160,6 +160,19 @@ var _ = Describe("Node rendering tests", func() {
 				}))
 			})
 
+			It("should grant calico-node access to the IP pool status subresource", func() {
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				role := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+					Resources: []string{"ippools/status"},
+					Verbs:     []string{"update"},
+				}))
+			})
+
 			It("should render all resources for a default configuration", func() {
 				expectedResources := []struct {
 					name    string

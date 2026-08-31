@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	"github.com/tigera/operator/pkg/render/common/securitycontextconstraints"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/manager"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	"github.com/tigera/operator/pkg/tls/certkeyusage"
@@ -1187,6 +1188,17 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 			},
 		},
 	}
+
+	// Ungated: ui-apis has to read a switch to learn its feature is on.
+	// Named list and watch do work: the apiserver lifts metadata.name off the field selector.
+	cr.Rules = append(cr.Rules,
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch"},
+		},
+	)
 
 	// Keep in sync with the rbacManagementUINamespacedRole gate.
 	if rbacManagementEnabled {

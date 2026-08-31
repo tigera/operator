@@ -372,6 +372,17 @@ var _ = Describe("API server enterprise modifier", func() {
 			Verbs:     []string{"get", "create", "update", "patch"},
 		}))
 
+		// Both roles read the gatewayapi TigeraStatus, which is where Gateway API
+		// readiness lives.
+		for _, role := range []*rbacv1.ClusterRole{uiUser, networkAdmin} {
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"operator.tigera.io"},
+				Resources:     []string{"tigerastatuses"},
+				ResourceNames: []string{"gatewayapi"},
+				Verbs:         []string{"get"},
+			}))
+		}
+
 		// Audit policy configmap.
 		_, ok := extensions.FindObject[*corev1.ConfigMap](objs, "calico-audit-policy")
 		Expect(ok).To(BeTrue())

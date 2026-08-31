@@ -644,6 +644,34 @@ var _ = Describe("Manager controller tests", func() {
 				Expect(namespace.Labels["pod-security.kubernetes.io/enforce-version"]).To(Equal("latest"))
 			})
 
+			It("should leave the manager's trusted bundle alone on the cloud path", func() {
+				// The default-named tigera-ca-bundle belongs to the core controller, which renders it
+				// into the same namespace with a different set of certificates. If the manager writes
+				// that same ConfigMap the two controllers overwrite each other on every reconcile,
+				// which rolls every workload that mounts or inherits the bundle. The cloud path must
+				// therefore hand back the component-named bundle it was given, not substitute its own.
+				helper := utils.NewNamespaceHelper(false, render.ManagerNamespace, "")
+
+				// handleCloudReconcile resolves the tenant from this ConfigMap.
+				Expect(c.Create(ctx, &corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{Name: utils.CloudAuthConfig, Namespace: common.OperatorNamespace()},
+					Data:       map[string]string{"tenantID": "Auth0ID"},
+				})).NotTo(HaveOccurred())
+
+				in, err := certificateManager.CreateNamedTrustedBundleFromSecrets(TrustedBundlePrefix, c, helper.TruthNamespace(), true)
+				Expect(err).NotTo(HaveOccurred())
+
+				out, _, _, res, err := r.handleCloudReconcile(ctx, log, helper, nil, certificateManager, in, nil, "")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res).To(BeNil())
+
+				Expect(out).NotTo(BeNil())
+				Expect(out.ConfigMap(helper.InstallNamespace()).Name).
+					To(Equal(certificatemanagement.TrustedBundleName(render.ManagerName, true)))
+				Expect(out.ConfigMap(helper.InstallNamespace()).Name).
+					NotTo(Equal(certificatemanagement.TrustedCertConfigMapName))
+			})
+
 			Context("image reconciliation", func() {
 				It("should use builtin images", func() {
 					mockStatus.On("RemoveCertificateSigningRequests", mock.Anything).Return()

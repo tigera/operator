@@ -71,22 +71,15 @@ func (r *ReconcileManager) handleCloudReconcile(
 	reqLogger logr.Logger,
 	helper eutils.NamespaceHelper,
 	tenant *operatorv1.Tenant,
-	authenticationCR *operatorv1.Authentication,
 	certificateManager certificatemanager.CertificateManager,
 	bundleMaker certificatemanagement.TrustedBundle,
 	trustedSecretNames []string,
 	requestNamespace string,
 ) (certificatemanagement.TrustedBundle, render.ManagerCloudResources, *operatorv1.Tenant, *reconcile.Result, error) {
 
-	if authenticationCR != nil && authenticationCR.Spec.OIDC != nil && authenticationCR.Spec.OIDC.Type == operatorv1.OIDCTypeTigera {
-		var err error
-		bundleMaker, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates()
-		if err != nil {
-			r.status.SetDegraded(operatorv1.ResourceCreateError, "failed to create trusted bundle with system root certs", err, reqLogger)
-			return nil, render.ManagerCloudResources{}, nil, nil, err
-		}
-	}
-
+	// The trusted bundle is built by the caller, which decides both its name and whether it carries the
+	// system root certificates. All that is left to do here is confirm the certificates it trusts are
+	// available before the manager is rendered.
 	for _, secret := range trustedSecretNames {
 		certificate, err := certificateManager.GetCertificate(r.client, secret, helper.TruthNamespace())
 		if err != nil {
@@ -97,10 +90,6 @@ func (r *ReconcileManager) handleCloudReconcile(
 			r.status.SetDegraded(operatorv1.ResourceNotReady, fmt.Sprintf("Waiting for secret '%s' to become available", secret), nil, reqLogger)
 			// stop reconciler iteration with no error as it is waiting for a resource to become available
 			return nil, render.ManagerCloudResources{}, nil, &reconcile.Result{}, nil
-		}
-
-		if bundleMaker != nil {
-			bundleMaker.AddCertificates(certificate)
 		}
 	}
 

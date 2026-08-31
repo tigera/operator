@@ -1,4 +1,4 @@
-// Copyright (c) 2023-2026 Tigera, Inc. All rights reserved.
+// Copyright (c) 2026 Tigera, Inc. All rights reserved.
 
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package egressgateway
+package otelcollector
 
 import (
 	"testing"
@@ -24,10 +24,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 )
 
-func TestRender(t *testing.T) {
+func TestController(t *testing.T) {
 	logf.SetLogger(zap.New(zap.WriteTo(ginkgo.GinkgoWriter), zap.UseDevMode(true), zap.Level(uzap.NewAtomicLevelAt(uzap.DebugLevel))))
 	gomega.RegisterFailHandler(ginkgo.Fail)
 	suiteConfig, reporterConfig := ginkgo.GinkgoConfiguration()
-	reporterConfig.JUnitReport = "../../../report/ut/egressgateway_suite.xml"
-	ginkgo.RunSpecs(t, "pkg/egressgateway/egressgateway Suite", suiteConfig, reporterConfig)
+	reporterConfig.JUnitReport = "../../../../report/ut/otelcollector_controller_suite.xml"
+	ginkgo.RunSpecs(t, "pkg/enterprise/controller/otelcollector Controller Suite", suiteConfig, reporterConfig)
 }

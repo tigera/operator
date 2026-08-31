@@ -82,6 +82,7 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		certificatemanagement.CASecretName,
 		whisker.WhiskerKeyPairSecret,
 		goldmane.GoldmaneKeyPairSecret,
+		render.TigeraLinseedSecret,
 	} {
 		if err = utils.AddSecretsWatch(c, secretName, common.OperatorNamespace()); err != nil {
 			return fmt.Errorf("failed to add watch for secret %s/%s: %w", common.OperatorNamespace(), secretName, err)
@@ -214,12 +215,16 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, nil
 	}
 
-	if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
-		return reconcile.Result{}, err
-	} else if goldmaneCR == nil {
-		r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
-		return reconcile.Result{}, nil
+	isEnterprise := installationSpec.Variant.IsEnterprise()
+
+	if !isEnterprise {
+		if goldmaneCR, err := utils.GetIfExists[operatorv1.Goldmane](ctx, utils.DefaultInstanceKey, r.cli); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying for Goldmane CR", err, reqLogger)
+			return reconcile.Result{}, err
+		} else if goldmaneCR == nil {
+			r.status.SetDegraded(operatorv1.ResourceNotFound, "Goldmane CR not present; Goldmane is pre requisite for Whisker", err, reqLogger)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	pullSecrets, err := utils.GetInstallationPullSecrets(installationSpec, r.cli)
@@ -234,12 +239,17 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
-	whiskerCertificateNames := dns.GetServiceDNSNames(whisker.WhiskerName, whisker.WhiskerNamespace, r.clusterDomain)
-	whiskerCertificateNames = append(whiskerCertificateNames, "localhost")
-	whiskerKeyPair, err := certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerKeyPairSecret, whisker.WhiskerNamespace, whiskerCertificateNames)
-	if err != nil {
-		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, reqLogger)
-		return reconcile.Result{}, err
+	// The Whisker UI and its nginx TLS pair are OSS-only; in enterprise the UI
+	// is a manager UI module and only the backend is deployed.
+	var whiskerKeyPair certificatemanagement.KeyPairInterface
+	if !isEnterprise {
+		whiskerCertificateNames := dns.GetServiceDNSNames(whisker.WhiskerName, whisker.WhiskerNamespace, r.clusterDomain)
+		whiskerCertificateNames = append(whiskerCertificateNames, "localhost")
+		whiskerKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.WhiskerKeyPairSecret, whisker.WhiskerNamespace, whiskerCertificateNames)
+		if err != nil {
+			r.status.SetDegraded(operatorv1.ResourceCreateError, "Error creating whisker TLS certificate", err, reqLogger)
+			return reconcile.Result{}, err
+		}
 	}
 
 	whiskerBackendCertificateNames := dns.GetServiceDNSNames("whisker-backend", whisker.WhiskerNamespace, r.clusterDomain)
@@ -250,15 +260,23 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	var trustedBundleSecrets []string
+	if isEnterprise {
+		trustedBundleSecrets = append(trustedBundleSecrets, render.TigeraLinseedSecret)
+	} else {
+		trustedBundleSecrets = append(trustedBundleSecrets, goldmane.GoldmaneKeyPairSecret)
+	}
+
 	trustedBundle, err := certificateManager.CreateNamedTrustedBundleFromSecrets(
 		whisker.WhiskerDeploymentName,
 		r.cli,
 		common.OperatorNamespace(),
 		false,
-		goldmane.GoldmaneKeyPairSecret,
+		trustedBundleSecrets...,
 	)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the trusted bundle", err, reqLogger)
+		return reconcile.Result{}, err
 	}
 
 	preDefaultPatchFrom := client.MergeFrom(whiskerCR.DeepCopy())
@@ -352,8 +370,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	keyPairOptions := []rcertificatemanagement.KeyPairOption{
-		rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true),
 		rcertificatemanagement.NewKeyPairOption(backendKeyPair, true, true),
+	}
+	if whiskerKeyPair != nil {
+		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(whiskerKeyPair, true, true))
 	}
 	if gatewayTLSKeyPair != nil {
 		keyPairOptions = append(keyPairOptions, rcertificatemanagement.NewKeyPairOption(gatewayTLSKeyPair, true, false))

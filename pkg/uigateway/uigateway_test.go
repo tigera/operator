@@ -167,7 +167,9 @@ var _ = Describe("Cleanup helpers", func() {
 	build := func(objs ...client.Object) {
 		scheme := runtime.NewScheme()
 		Expect(apis.AddToScheme(scheme, false)).NotTo(HaveOccurred())
-		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(objs...).Build()
+		mapper := apimeta.NewDefaultRESTMapper(nil)
+		mapper.Add(gapi.SchemeGroupVersion.WithKind("Gateway"), apimeta.RESTScopeNamespace)
+		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).WithObjects(objs...).WithRESTMapper(mapper).Build()
 		cfg = uigateway.Config{
 			ResourcePrefix:   prefix,
 			TLSSecretName:    prefix + "-gateway-tls",
@@ -482,6 +484,10 @@ var _ = Describe("Cleanup helpers", func() {
 // Gateways fails with NoKindMatchError, everything else passes through.
 type noGatewayKindClient struct {
 	client.Client
+}
+
+func (c noGatewayKindClient) RESTMapper() apimeta.RESTMapper {
+	return apimeta.NewDefaultRESTMapper(nil)
 }
 
 func (c noGatewayKindClient) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {

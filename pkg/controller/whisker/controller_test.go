@@ -18,6 +18,7 @@ import (
 	"context"
 
 	networkingv1 "k8s.io/api/networking/v1"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -73,8 +74,11 @@ var _ = Describe("whisker controller tests", func() {
 		// Gateway and HTTPRoute status is written by the Envoy Gateway
 		// controller, not by the operator's spec updates — model that as a
 		// status subresource so reconcile updates don't wipe it.
+		gwMapper := apimeta.NewDefaultRESTMapper(nil)
+		gwMapper.Add(gapi.SchemeGroupVersion.WithKind("Gateway"), apimeta.RESTScopeNamespace)
 		cli = ctrlrfake.DefaultFakeClientBuilder(scheme).
 			WithStatusSubresource(&gapi.Gateway{}, &gapi.HTTPRoute{}).
+			WithRESTMapper(gwMapper).
 			Build()
 
 		// Create a CertificateManagement instance for tests that need it.

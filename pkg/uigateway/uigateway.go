@@ -30,6 +30,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -160,10 +161,32 @@ func (h *Helper) Components(
 	})), nil
 }
 
+// gatewayKindServed reports whether the cluster serves the Gateway kind. Whisker
+// ships on every OSS install, but the Gateway API CRDs land only once the
+// GatewayAPI CR is created, so without CIG the RESTMapper has no Gateway
+// mapping and teardown has nothing to list. Only a definitive no-match skips
+// the List; any other mapper state falls through, where the List's own
+// NoKindMatchError handling is the backstop.
+func (h *Helper) gatewayKindServed() bool {
+	mapper := h.cli.RESTMapper()
+	if mapper == nil {
+		return true
+	}
+	_, err := mapper.RESTMapping(schema.GroupKind{Group: gapi.GroupName, Kind: "Gateway"}, gapi.GroupVersion.Version)
+	if err == nil {
+		return true
+	}
+	var noMatch *apimeta.NoKindMatchError
+	return !stderrors.As(err, &noMatch)
+}
+
 // Namespaces returns the sorted, de-duplicated namespaces of Gateways carrying
 // this component's gateway label. A cluster that does not serve the Gateway kind
 // has none, so it returns empty rather than an error.
 func (h *Helper) Namespaces(ctx context.Context) ([]string, error) {
+	if !h.gatewayKindServed() {
+		return nil, nil
+	}
 	gwList := &gapi.GatewayList{}
 	if err := h.cli.List(ctx, gwList, client.MatchingLabels{rgateway.GatewayLabel: h.cfg.ResourcePrefix}); err != nil {
 		var noMatch *apimeta.NoKindMatchError
@@ -409,11 +432,11 @@ func AddWatches(c ctrlruntime.Controller, k8sClientset kubernetes.Interface, log
 	go utils.WaitToAddResourceWatch(c, k8sClientset, log, nil, []client.Object{
 		&gapi.Gateway{
 			TypeMeta:   metav1.TypeMeta{Kind: "Gateway", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: resourcePrefix + "-gateway"},
+			ObjectMeta: metav1.ObjectMeta{Name: rgateway.GatewayName(resourcePrefix)},
 		},
 		&gapi.HTTPRoute{
 			TypeMeta:   metav1.TypeMeta{Kind: "HTTPRoute", APIVersion: "gateway.networking.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{Name: resourcePrefix + "-route"},
+			ObjectMeta: metav1.ObjectMeta{Name: rgateway.RouteName(resourcePrefix)},
 		},
 	}, gatewayWatchPredicate)
 	return nil

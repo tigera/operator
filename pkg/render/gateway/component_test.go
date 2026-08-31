@@ -201,6 +201,21 @@ var _ = Describe("Gateway component render", func() {
 			Expect(string(rg.Spec.From[0].Namespace)).To(Equal("custom-gateway-ns"))
 		})
 
+		It("places each object in its own namespace", func() {
+			// gwNS and bkNS differ here, so this catches a swap the same-namespace
+			// context cannot: the Gateway, HTTPRoute, and TLS secret belong in the
+			// gateway namespace, the Backend in the backend namespace.
+			Expect(findObject[*gapi.Gateway](toCreate, prefix+"-gateway", "custom-gateway-ns")).NotTo(BeNil())
+			Expect(findObject[*gapi.HTTPRoute](toCreate, prefix+"-route", "custom-gateway-ns")).NotTo(BeNil())
+			Expect(findObject[*corev1.Secret](toCreate, tlsName, "custom-gateway-ns")).NotTo(BeNil())
+			Expect(findObject[*envoyapi.Backend](toCreate, prefix+"-backend", bkNS)).NotTo(BeNil())
+
+			Expect(findObject[*envoyapi.Backend](toCreate, prefix+"-backend", "custom-gateway-ns")).To(BeNil(),
+				"the Backend belongs in the backend namespace, not the gateway namespace")
+			Expect(findObject[*gapi.Gateway](toCreate, prefix+"-gateway", bkNS)).To(BeNil(),
+				"the Gateway belongs in the gateway namespace, not the backend namespace")
+		})
+
 		It("grants each namespace only the kinds it holds", func() {
 			gwAccess := prefix + "-ingressgateway-access"
 			bkAccess := prefix + "-ingressgateway-backend-access"

@@ -432,18 +432,18 @@ var _ = Describe("Testing core-controller installation", func() {
 			})
 		})
 
-		It("degrades with a configuration reason when the extension rejects the configuration", func() {
+		It("degrades with a configuration reason when the metrics port is invalid", func() {
 			mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return()
 
 			port := 0
-			Expect(c.Create(ctx, &v3.FelixConfiguration{
+			Expect(c.Create(ctx, &crdv1.FelixConfiguration{
 				ObjectMeta: metav1.ObjectMeta{Name: "default"},
-				Spec:       v3.FelixConfigurationSpec{PrometheusReporterPort: &port},
+				Spec:       crdv1.FelixConfigurationSpec{PrometheusReporterPort: &port},
 			})).NotTo(HaveOccurred())
 
 			_, err := r.Reconcile(ctx, reconcile.Request{})
 			Expect(err).To(HaveOccurred())
-			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.InvalidConfigurationError, "invalid metrics port: felixConfiguration prometheusReporterPort=0 not supported", mock.Anything, mock.Anything)
+			mockStatus.AssertCalled(GinkgoT(), "SetDegraded", operator.InvalidConfigurationError, "invalid metrics port", mock.Anything, mock.Anything)
 		})
 
 		Context("image tests", func() {

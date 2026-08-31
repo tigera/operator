@@ -37,8 +37,10 @@ import (
 	rcomponents "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
+	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -259,6 +261,14 @@ func (c *guardianComponent) clusterRole() *rbacv1.ClusterRole {
 				"networksets",
 			},
 			Verbs: []string{"get", "list", "watch"},
+		},
+		{
+			// ui-apis reads the UI feature gates in this cluster over the tunnel, and
+			// guardian re-credentials those reads as itself.
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch"},
 		},
 	}
 

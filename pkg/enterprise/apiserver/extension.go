@@ -1292,6 +1292,14 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"gatewayapis"},
 			Verbs:     []string{"get"},
 		},
+		// Allow the user to read the gatewayapi TigeraStatus. Gateway API readiness
+		// lives there, not on the GatewayAPI CR.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"tigerastatuses"},
+			ResourceNames: []string{"gatewayapi"},
+			Verbs:         []string{"get"},
+		},
 		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
 		{
 			APIGroups: []string{"gateway.networking.k8s.io"},
@@ -1542,6 +1550,14 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"gatewayapis"},
 			Verbs:     []string{"get", "create", "update", "patch"},
+		},
+		// Allow the user to read the gatewayapi TigeraStatus. Gateway API readiness
+		// lives there, not on the GatewayAPI CR.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"tigerastatuses"},
+			ResourceNames: []string{"gatewayapi"},
+			Verbs:         []string{"get"},
 		},
 		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
 		{

@@ -635,6 +635,50 @@ type Sysctl struct {
 	Value string `json:"value"`
 }
 
+// EVPNSpec controls BGP EVPN mode for the cluster.
+type EVPNSpec struct {
+	// Mode enables or disables BGP EVPN.  When Enabled, the calico-bgp
+	// DaemonSet is rendered and BIRD is short-circuited on calico-node.
+	// +kubebuilder:validation:Enum=Disabled;Enabled
+	// +kubebuilder:default=Disabled
+	Mode EVPNMode `json:"mode,omitempty"`
+
+	// PeerIP is the address of the external EVPN speaker each cluster node
+	// peers with (typically a ToR/RR, a spine-level LB, or a
+	// customer-managed VM running FRR).  Passed to Felix as
+	// FELIX_EVPN_PEER_IP.  Optional; when empty no default peer is
+	// configured and operators can supply peers via BGPPeer CRs.
+	// +optional
+	PeerIP string `json:"peerIP,omitempty"`
+
+	// PeerASN is the ASN the external EVPN speaker announces.  Passed as
+	// FELIX_EVPN_PEER_ASN.
+	// +optional
+	PeerASN uint32 `json:"peerASN,omitempty"`
+
+	// LocalASN is the ASN cluster nodes announce.  Passed as
+	// FELIX_EVPN_NODE_ASN.
+	// +optional
+	LocalASN uint32 `json:"localASN,omitempty"`
+
+	// MaxHopLimit sets eBGP multi-hop TTL when peering with a
+	// non-directly-attached speaker.  0 or unset means BGP's default
+	// (1 hop for eBGP, unlimited for iBGP).  Passed as
+	// FELIX_EVPN_MAX_HOP_LIMIT.
+	// +optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=255
+	MaxHopLimit uint32 `json:"maxHopLimit,omitempty"`
+}
+
+// EVPNMode enables or disables the EVPN feature.
+type EVPNMode string
+
+const (
+	EVPNModeDisabled EVPNMode = "Disabled"
+	EVPNModeEnabled  EVPNMode = "Enabled"
+)
+
 // CalicoNetworkSpec specifies configuration options for Calico provided pod networking.
 type CalicoNetworkSpec struct {
 	// LinuxDataplane is used to select the dataplane used for Linux nodes. In particular, it
@@ -679,6 +723,16 @@ type CalicoNetworkSpec struct {
 	// +optional
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	BGP *BGPOption `json:"bgp,omitempty"`
+
+	// EVPN configures BGP EVPN control-plane extensions.  When Enabled, the
+	// operator renders a calico-bgp DaemonSet on every node (running GoBGP
+	// alongside calico-node) and passes EVPN configuration through to Felix
+	// via environment variables.  BIRD's runit script is short-circuited so
+	// calico-bgp becomes the only BGP daemon on the node.
+	//
+	// See designs/2026/PMREQ-818-bgp-evpn-research/bgp-evpn-phase1-design.md.
+	// +optional
+	EVPN *EVPNSpec `json:"evpn,omitempty"`
 
 	// ClusterRoutingMode controls which component programs the routes that a node needs in order to reach
 	// workloads on other nodes. It only applies to IP Pools with vxlanMode: Never; the routes for IP Pools

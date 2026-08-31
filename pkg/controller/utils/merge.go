@@ -316,6 +316,11 @@ func mergeCalicoNetwork(cfg, override *operatorv1.CalicoNetworkSpec) *operatorv1
 		out.BGP = override.BGP
 	}
 
+	switch compareFields(out.EVPN, override.EVPN) {
+	case BOnlySet, Different:
+		out.EVPN = override.EVPN
+	}
+
 	switch compareFields(out.ClusterRoutingMode, override.ClusterRoutingMode) {
 	case BOnlySet, Different:
 		out.ClusterRoutingMode = override.ClusterRoutingMode

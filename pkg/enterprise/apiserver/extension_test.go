@@ -356,16 +356,24 @@ var _ = Describe("API server enterprise modifier", func() {
 		// Gateways and HTTPRoutes as policy attach targets.
 		for _, role := range []*rbacv1.ClusterRole{uiUser, networkAdmin} {
 			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
-				APIGroups: []string{"operator.tigera.io"},
-				Resources: []string{"gatewayapis"},
-				Verbs:     []string{"get"},
-			}))
-			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups: []string{"gateway.networking.k8s.io"},
 				Resources: []string{"gateways", "httproutes"},
 				Verbs:     []string{"get", "list", "watch"},
 			}))
 		}
+
+		// Only the admin can write the gatewayapis CR, so the WAF UI can enable
+		// Gateway API. Delete is withheld from both.
+		Expect(uiUser.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		}))
+		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get", "create", "update", "patch"},
+		}))
 
 		// Audit policy configmap.
 		_, ok := extensions.FindObject[*corev1.ConfigMap](objs, "calico-audit-policy")

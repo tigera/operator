@@ -1685,11 +1685,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			Verbs:     []string{"create"},
 		}
 
-		// Read-only access to the gate ui-apis watches.
-		gateReadRule := rbacv1.PolicyRule{
+		// The ungated ClusterRole rule ui-apis reads the gates through.
+		clusterGateReadRule := rbacv1.PolicyRule{
 			APIGroups:     []string{""},
 			Resources:     []string{"configmaps"},
-			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
 			Verbs:         []string{"get", "list", "watch"},
 		}
 
@@ -1709,9 +1709,22 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			})
 			role := rtest.GetResource(resources, render.ManagerClusterRole, render.ManagerNamespace, rbacv1.GroupName, "v1", "Role").(*rbacv1.Role)
 			Expect(role.Rules).To(ContainElement(nsCreateRule))
-			// ui-apis keeps read access to the gate so it can observe the admin
-			// switching the feature back off.
-			Expect(role.Rules).To(ContainElement(gateReadRule))
+		})
+
+		It("adds the gate read to the managed-calico cluster role for a single tenant", func() {
+			resources, _ := renderObjects(renderConfig{
+				installation: installation,
+				ns:           render.ManagerNamespace,
+				tenant: &operatorv1.Tenant{
+					ObjectMeta: metav1.ObjectMeta{Name: "tenantA"},
+					Spec: operatorv1.TenantSpec{
+						ID:                    "tenant-a",
+						ManagedClusterVariant: &operatorv1.Calico,
+					},
+				},
+			})
+			clusterRole := rtest.GetResource(resources, render.ManagerManagedCalicoClusterRole, "", rbacv1.GroupName, "v1", "ClusterRole").(*rbacv1.ClusterRole)
+			Expect(clusterRole.Rules).To(ContainElement(clusterGateReadRule))
 		})
 
 		// A tenant reaches the renderer with the switch already off: multi-tenant
@@ -1741,6 +1754,7 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Resources: []string{"compliances"},
 				Verbs:     []string{"get"},
 			}))
+			Expect(clusterRole.Rules).NotTo(ContainElement(clusterGateReadRule))
 		})
 
 		Context("LDAP egress network policy gate", func() {

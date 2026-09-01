@@ -503,6 +503,14 @@ func (c *nodeComponent) nodeRole() *rbacv1.ClusterRole {
 				Verbs: []string{"update"},
 			},
 			{
+				// calico/node marks the IP pools it creates allocatable.
+				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+				Resources: []string{
+					"ippools/status",
+				},
+				Verbs: []string{"update"},
+			},
+			{
 				// For migration code in calico/node startup only. Remove when the migration
 				// code is removed from node.
 				APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},

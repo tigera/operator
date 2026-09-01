@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/enterprise/istio"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
 	"github.com/tigera/operator/pkg/enterprise/tiers"
+	"github.com/tigera/operator/pkg/enterprise/uigateway"
 	"github.com/tigera/operator/pkg/enterprise/whisker"
 	"github.com/tigera/operator/pkg/enterprise/windows"
 	"github.com/tigera/operator/pkg/extensions"
@@ -85,6 +86,7 @@ func New(variant operatorv1.ProductVariant, o eoptions.Options) extensions.Exten
 		set.Goldmane = goldmane.New(variant)
 		set.Whisker = whisker.New(variant)
 		set.GatewayAPI = gatewayapi.New(variant)
+		set.UIGateway = uigateway.New()
 	case variant == operatorv1.Calico:
 		// Clean up what a prior Enterprise installation left behind.
 		set.APIServer = apiserver.CalicoCleanup{}

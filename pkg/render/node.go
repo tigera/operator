@@ -692,6 +692,13 @@ func (c *nodeComponent) createCalicoPluginConfig() map[string]any {
 		"calico_api_group":             apiGroup,
 	}
 
+	// When MTU is auto-detected, the CNI plugin reads the value from
+	// /var/lib/calico/mtu, which Felix writes on startup. Wait for it to avoid
+	// setting the wrong MTU.
+	if mtu == 0 {
+		calicoPluginConfig["require_mtu_file"] = true
+	}
+
 	// Determine logging configuration
 	if c.cfg.Installation.Logging != nil && c.cfg.Installation.Logging.CNI != nil {
 

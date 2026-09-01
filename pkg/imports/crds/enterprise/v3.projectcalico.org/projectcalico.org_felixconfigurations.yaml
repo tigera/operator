@@ -229,6 +229,9 @@ spec:
                     the first packet traverses the policy rules. Client applications need to handle reconnection attempts if initial
                     connection attempts fail. This may be problematic for some applications or for very low DNS TTLs.
                     [Default: DelayDeniedPacket]
+                  enum:
+                    - Inline
+                    - NoDelay
                   type: string
                 bpfDSROptoutCIDRs:
                   description: |-
@@ -339,17 +342,13 @@ spec:
                     packets from external sources are dropped. [Default: true]
                   type: boolean
                 bpfJITHardening:
-                  allOf:
-                    - enum:
-                        - Auto
-                        - Strict
-                    - enum:
-                        - Auto
-                        - Strict
                   description: |-
                     BPFJITHardening controls BPF JIT hardening. When set to "Auto", Felix will set JIT hardening to 1
                     if it detects the current value is 2 (strict mode that hurts performance). When set to "Strict",
                     Felix will not modify the JIT hardening setting. [Default: Auto]
+                  enum:
+                    - Auto
+                    - Strict
                   type: string
                 bpfKubeProxyHealthzPort:
                   description: |-
@@ -1140,6 +1139,9 @@ spec:
                     EndpointPolicies - Processes only policies for endpoints identified as the source
                     or destination of the packet (whether workload or host endpoints).
                     [Default: EndpointPolicies]
+                  enum:
+                    - AllPolicies
+                    - EndpointPolicies
                   type: string
                 flowLogsPositionFilePath:
                   description: |-
@@ -1906,6 +1908,11 @@ spec:
                   description: |-
                     PrometheusMetricsClientAuth specifies the client authentication type for the /metrics endpoint.
                     This determines how the server validates client certificates. Default is "RequireAndVerifyClientCert".
+                  enum:
+                    - RequireAndVerifyClientCert
+                    - RequireAnyClientCert
+                    - VerifyClientCertIfGiven
+                    - NoClientCert
                   type: string
                 prometheusMetricsEnabled:
                   description:

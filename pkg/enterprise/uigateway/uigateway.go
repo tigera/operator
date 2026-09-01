@@ -13,16 +13,37 @@
 // limitations under the License.
 
 // Package uigateway layers the Calico Enterprise pieces onto a UI component's
-// ingress gateway. The common gateway code carries no variant knowledge; an
-// Enterprise controller passes what this package builds, and an OSS controller
-// passes nothing.
+// ingress gateway. The common gateway code carries no variant knowledge; it
+// reaches this package only through the registered UIGateway extension.
 package uigateway
 
 import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/tigera/operator/pkg/extensions"
 	rgatewayapi "github.com/tigera/operator/pkg/render/gatewayapi"
 )
+
+// ManagerGatewayResourcePrefix names the Manager's CIG resources; the OSS
+// counterpart is whisker.GatewayResourcePrefix.
+const ManagerGatewayResourcePrefix = "calico-manager"
+
+// Extension is the Calico Enterprise behavior for UI ingress gateways.
+type Extension struct{}
+
+var _ extensions.UIGatewayExtension = Extension{}
+
+// New returns the UI gateway extension for Calico Enterprise.
+func New() Extension { return Extension{} }
+
+// ProxyObjects returns the WAF filter objects for the Manager gateway; other
+// components get nothing.
+func (Extension) ProxyObjects(resourcePrefix, namespace string) []client.Object {
+	if resourcePrefix != ManagerGatewayResourcePrefix {
+		return nil
+	}
+	return ProxyObjects(namespace)
+}
 
 // ProxyObjects returns the Enterprise-only objects that run beside a UI
 // gateway's Envoy proxy in the backend namespace: the WAF HTTP filter's

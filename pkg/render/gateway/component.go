@@ -194,33 +194,33 @@ func (c *gatewayComponent) backendAccess() (*rbacv1.Role, *rbacv1.RoleBinding) {
 // own ServiceAccount, the identity that renders the gateway resources.
 func (c *gatewayComponent) access(name, namespace string, rules []rbacv1.PolicyRule) (*rbacv1.Role, *rbacv1.RoleBinding) {
 	return &rbacv1.Role{
-			TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
+		TypeMeta: metav1.TypeMeta{Kind: "Role", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
+		},
+		Rules: rules,
+	}, &rbacv1.RoleBinding{
+		TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
+		},
+		RoleRef: rbacv1.RoleRef{
+			APIGroup: "rbac.authorization.k8s.io",
+			Kind:     "Role",
+			Name:     name,
+		},
+		Subjects: []rbacv1.Subject{
+			{
+				Kind:      "ServiceAccount",
+				Name:      common.OperatorServiceAccount(),
+				Namespace: common.OperatorNamespace(),
 			},
-			Rules: rules,
-		}, &rbacv1.RoleBinding{
-			TypeMeta: metav1.TypeMeta{Kind: "RoleBinding", APIVersion: "rbac.authorization.k8s.io/v1"},
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      name,
-				Namespace: namespace,
-				Labels:    map[string]string{GatewayLabel: c.cfg.ResourcePrefix},
-			},
-			RoleRef: rbacv1.RoleRef{
-				APIGroup: "rbac.authorization.k8s.io",
-				Kind:     "Role",
-				Name:     name,
-			},
-			Subjects: []rbacv1.Subject{
-				{
-					Kind:      "ServiceAccount",
-					Name:      common.OperatorServiceAccount(),
-					Namespace: common.OperatorNamespace(),
-				},
-			},
-		}
+		},
+	}
 }
 
 func (c *gatewayComponent) tlsSecret() *corev1.Secret {

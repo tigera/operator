@@ -353,8 +353,7 @@ func (h *Helper) accessResourcesGone(ctx context.Context, namespace string) (boo
 		if err == nil {
 			return false, nil
 		}
-		var noMatch *apimeta.NoKindMatchError
-		if !errors.IsNotFound(err) && !stderrors.As(err, &noMatch) {
+		if !errors.IsNotFound(err) && !apimeta.IsNoMatchError(err) {
 			return false, err
 		}
 	}

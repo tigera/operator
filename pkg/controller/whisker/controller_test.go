@@ -328,15 +328,10 @@ var _ = Describe("whisker controller tests", func() {
 			Expect(degradedErr).To(ContainSubstring("certificateManagement"))
 		})
 
-		It("renders no gateway and tears down leftovers on a non-Calico variant", func() {
-			// Whisker's own Deployment is deleted on other variants.
-			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+		It("renders no gateway and tears down leftovers when the extension unsets spec.ingressGateway", func() {
+			reconciler.ext = trimIngressGateway{reconciler.ext}
 			createGatewayAPI()
 			setIngressGateway(nil)
-
-			Expect(cli.Get(ctx, types.NamespacedName{Name: installation.Name}, installation)).NotTo(HaveOccurred())
-			installation.Status.Computed.Variant = operatorv1.CalicoEnterprise
-			Expect(cli.Status().Update(ctx, installation)).NotTo(HaveOccurred())
 
 			stray := &gapi.Gateway{ObjectMeta: metav1.ObjectMeta{
 				Name:      gatewayName,
@@ -350,9 +345,9 @@ var _ = Describe("whisker controller tests", func() {
 
 			gw := &gapi.Gateway{}
 			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: whisker.WhiskerNamespace}, gw)).To(HaveOccurred(),
-				"Whisker is deleted on other variants, so its gateway must not be rendered")
+				"a variant that does not serve the gateway must not render one")
 			Expect(cli.Get(ctx, types.NamespacedName{Name: gatewayName, Namespace: "ns-b"}, gw)).To(HaveOccurred(),
-				"gateway resources left from a Calico install should be torn down")
+				"gateway resources left from an earlier install should be torn down")
 
 			// The health read-back must be gated the same way as the render. If it
 			// is not, the reconcile degrades over a gateway it just tore down and
@@ -360,7 +355,10 @@ var _ = Describe("whisker controller tests", func() {
 			Expect(result.RequeueAfter).To(BeZero(), "no requeue: there is no gateway to wait for")
 			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady,
 				mock.Anything, mock.Anything, mock.Anything)
-			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "ingressgateway-variant", mock.Anything)
+
+			w := &operatorv1.Whisker{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, w)).NotTo(HaveOccurred())
+			Expect(w.Spec.IngressGateway).NotTo(BeNil(), "the field the variant ignores must survive on the CR the user wrote")
 		})
 
 		It("tears down labeled gateway resources when spec.ingressGateway is nil", func() {
@@ -412,3 +410,14 @@ var _ = Describe("whisker controller tests", func() {
 		})
 	})
 })
+
+// trimIngressGateway stands in for a variant that does not serve whisker's own
+// gateway. The Enterprise version of this lives in pkg/enterprise/whisker.
+type trimIngressGateway struct {
+	extensions.WhiskerExtension
+}
+
+func (trimIngressGateway) ValidateAndDefault(cr *operatorv1.Whisker, _ status.StatusManager) error {
+	cr.Spec.IngressGateway = nil
+	return nil
+}

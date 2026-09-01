@@ -278,6 +278,14 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		return reconcile.Result{}, err
 	}
 
+	// Render from a copy, so a variant that does not support a field can unset it
+	// while the CR on the API keeps what the user asked for.
+	renderCR := whiskerCR.DeepCopy()
+	if err := r.ext.ValidateAndDefault(renderCR, r.status); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceValidationError, "Invalid Whisker configuration", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	ri := render.Inputs{
 		Installation:  installationSpec,
 		ClusterDomain: r.clusterDomain,
@@ -291,7 +299,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 		TrustedCertBundle:     trustedBundle,
 		WhiskerKeyPair:        whiskerKeyPair,
 		WhiskerBackendKeyPair: backendKeyPair,
-		Whisker:               whiskerCR,
+		Whisker:               renderCR,
 		ClusterDomain:         r.clusterDomain,
 	}
 
@@ -320,14 +328,8 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	})
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
-	gatewayEnabled := whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant == operatorv1.Calico
-	if whiskerCR.Spec.IngressGateway != nil && installationSpec.Variant != operatorv1.Calico {
-		r.status.SetWarning("ingressgateway-variant",
-			"spec.ingressGateway on the Whisker resource is ignored on Calico Enterprise; expose the UI through the Manager resource's spec.ingressGateway instead")
-	} else {
-		r.status.ClearWarning("ingressgateway-variant")
-	}
-	if gw := whiskerCR.Spec.IngressGateway; gatewayEnabled {
+	gatewayEnabled := renderCR.Spec.IngressGateway != nil
+	if gw := renderCR.Spec.IngressGateway; gatewayEnabled {
 		var err error
 		gatewayTLSKeyPair, err = certificateManager.GetOrCreateKeyPair(r.cli, whisker.GatewayTLSSecretName, common.OperatorNamespace(), []string{gw.Hostname})
 		if err != nil {
@@ -382,7 +384,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, request reconcile.Request) (
 	}
 
 	if gatewayEnabled {
-		if msg := gwHelper.UnhealthyReason(ctx, whiskerCR.Spec.IngressGateway.NamespaceOrDefault()); msg != "" {
+		if msg := gwHelper.UnhealthyReason(ctx, renderCR.Spec.IngressGateway.NamespaceOrDefault()); msg != "" {
 			r.status.SetDegraded(operatorv1.ResourceNotReady, msg, nil, reqLogger)
 			return reconcile.Result{RequeueAfter: utils.StandardRetry}, nil
 		}

@@ -959,16 +959,17 @@ var _ = Describe("LogCollector controller tests", func() {
 				Syslog: &operatorv1.SyslogStoreSpec{},
 			}}}
 			modifiedFields := fillDefaults(&logCollector)
-			expectedFields := []string{"CollectProcessPath", "AdditionalStores.Syslog.LogTypes", "AdditionalStores.Syslog.Encryption"}
+			expectedFields := []string{"CollectProcessPath", "IngestionCompression", "AdditionalStores.Syslog.LogTypes", "AdditionalStores.Syslog.Encryption"}
 			expectedLogTypes := []operatorv1.SyslogLogType{
 				operatorv1.SyslogLogAudit,
 				operatorv1.SyslogLogDNS,
 				operatorv1.SyslogLogFlows,
 			}
 
-			Expect(len(modifiedFields)).To(Equal(3))
+			Expect(len(modifiedFields)).To(Equal(4))
 			Expect(modifiedFields).To(ConsistOf(expectedFields))
 			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathEnable))
+			Expect(*logCollector.Spec.IngestionCompression).To(Equal(operatorv1.IngestionCompressionZstd))
 			Expect(logCollector.Spec.AdditionalStores.Syslog.LogTypes).To(Equal(expectedLogTypes))
 		})
 		It("CollectProcessPath,syslog types should not be changed if set already", func() {
@@ -978,10 +979,13 @@ var _ = Describe("LogCollector controller tests", func() {
 
 			processPath := operatorv1.CollectProcessPathDisable
 			logCollector.Spec.CollectProcessPath = &processPath
+			compression := operatorv1.IngestionCompressionNone
+			logCollector.Spec.IngestionCompression = &compression
 			logCollector.Spec.AdditionalStores.Syslog.LogTypes = []operatorv1.SyslogLogType{operatorv1.SyslogLogAudit}
 			logCollector.Spec.AdditionalStores.Syslog.Encryption = operatorv1.EncryptionNone
 			modifiedFields := fillDefaults(&logCollector)
 			Expect(*logCollector.Spec.CollectProcessPath).To(Equal(operatorv1.CollectProcessPathDisable))
+			Expect(*logCollector.Spec.IngestionCompression).To(Equal(operatorv1.IngestionCompressionNone))
 			expectedLogTypes := []operatorv1.SyslogLogType{
 				operatorv1.SyslogLogAudit,
 			}

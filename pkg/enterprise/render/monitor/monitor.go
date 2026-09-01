@@ -1769,6 +1769,7 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 						},
 					},
 					HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
+						//nolint:staticcheck // SA1019: migrating to authorization changes the rendered ServiceMonitor
 						BearerTokenSecret: &ep.BearerTokenSecret,
 					},
 				},

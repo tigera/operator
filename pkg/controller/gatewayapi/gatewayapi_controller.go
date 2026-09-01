@@ -169,6 +169,23 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return nil
 	}
 
+	// Watch GatewayClass for the same reason, and lazily for the same reason. Without this
+	// we cannot see a class wedged in Terminating: we own it by ownerRef, so deleting the
+	// GatewayAPI CR marks it, and Envoy Gateway's gateway-exists finalizer then blocks the
+	// delete for as long as any Gateway uses the class.
+	gatewayClassesWatched := false
+	r.watchGatewayClasses = func() error {
+		if gatewayClassesWatched {
+			return nil
+		}
+		log.V(1).Info("Adding watch for GatewayClass resources")
+		if err = c.WatchObject(&gapi.GatewayClass{}, &handler.EnqueueRequestForObject{}); err != nil {
+			return fmt.Errorf("gatewayapi-controller failed to watch GatewayClass resource: %w", err)
+		}
+		gatewayClassesWatched = true
+		return nil
+	}
+
 	return nil
 }
 
@@ -189,6 +206,7 @@ type ReconcileGatewayAPI struct {
 	watchEnvoyProxy     func(namespacedName operatorv1.NamespacedName) error
 	watchEnvoyGateway   func(namespacedName operatorv1.NamespacedName) error
 	watchGateways       func() error
+	watchGatewayClasses func() error
 }
 
 // Reconcile reads that state of the cluster for a GatewayAPI object and makes changes based on the state read
@@ -483,6 +501,10 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 
 	// Start watching Gateway resources now that the CRDs are in place, so future
 	// Gateway changes trigger reconciliation.
+	if err = r.watchGatewayClasses(); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching GatewayClass resources", err, log)
+		return reconcile.Result{}, err
+	}
 	if err = r.watchGateways(); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error watching Gateway resources", err, log)
 		return reconcile.Result{}, err
@@ -610,10 +632,85 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	wedged, err := r.unwedgeTerminatingGatewayClasses(ctx, gatewayAPI, gwList.Items, log)
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error recovering a terminating GatewayClass", err, log)
+		return reconcile.Result{}, err
+	}
+	if wedged != "" {
+		// Return before ClearDegraded below, so the repair is visible in tigerastatus rather
+		// than healing silently. The requeued reconcile re-creates the class and clears this.
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, wedged, nil, log)
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
 	return reconcile.Result{}, nil
+}
+
+// unwedgeTerminatingGatewayClasses repairs a GatewayClass stuck in Terminating.
+//
+// We set a controller ownerRef on each GatewayClass we render, so deleting the GatewayAPI CR
+// makes the garbage collector mark the class for deletion. Envoy Gateway puts
+// gateway-exists-finalizer.gateway.networking.k8s.io on it, and refuses to release that while
+// any Gateway still uses the class. The delete therefore never completes.
+//
+// A class in that state is not inert. Envoy Gateway keeps managing it but skips its
+// parametersRef entirely, because it only resolves the ref when DeletionTimestamp is nil.
+// Every gateway Deployment it renders then falls back to the upstream Envoy image with no
+// imagePullSecrets, and it still reports the class Accepted=True, so nothing surfaces the
+// fault. Re-creating the GatewayAPI CR restores the EnvoyProxy but cannot clear a
+// DeletionTimestamp, so the cluster never converges on its own.
+//
+// Removing the finalizer lets the pending delete finish. The next reconcile re-creates the
+// class from the render, and Envoy Gateway then resolves parametersRef normally. Gateways
+// briefly lose their managed class while this happens, so the proxy Deployment is torn down
+// and re-provisioned with the correct image.
+//
+// It returns a message describing the first class it repaired, so the caller can surface the
+// repair on TigeraStatus. A wedge that heals silently is how this went unnoticed for hours.
+func (r *ReconcileGatewayAPI) unwedgeTerminatingGatewayClasses(ctx context.Context, gatewayAPI *operatorv1.GatewayAPI, gateways []gapi.Gateway, reqLogger logr.Logger) (string, error) {
+	for i := range gatewayAPI.Spec.GatewayClasses {
+		name := gatewayAPI.Spec.GatewayClasses[i].Name
+
+		gc := &gapi.GatewayClass{}
+		if err := r.client.Get(ctx, types.NamespacedName{Name: name}, gc); err != nil {
+			if errors.IsNotFound(err) || meta.IsNoMatchError(err) {
+				continue
+			}
+			return "", err
+		}
+		if gc.DeletionTimestamp == nil {
+			continue
+		}
+
+		blocking := 0
+		for j := range gateways {
+			if string(gateways[j].Spec.GatewayClassName) == name {
+				blocking++
+			}
+		}
+
+		reqLogger.Info("GatewayClass is stuck terminating; clearing finalizers so it can be re-created",
+			"gatewayClass", name, "deletionTimestamp", gc.DeletionTimestamp,
+			"finalizers", gc.Finalizers, "blockingGateways", blocking)
+
+		patched := gc.DeepCopy()
+		patched.Finalizers = nil
+		if err := r.client.Patch(ctx, patched, client.MergeFrom(gc)); err != nil {
+			if errors.IsNotFound(err) || errors.IsConflict(err) {
+				// Someone else finished the delete, or raced us. The next reconcile re-creates it.
+				continue
+			}
+			return "", err
+		}
+
+		return fmt.Sprintf("GatewayClass %q was stuck terminating with %d Gateway(s) still using it; "+
+			"its finalizers have been cleared so it can be re-created", name, blocking), nil
+	}
+	return "", nil
 }
 
 // GetGatewayAPI finds the correct GatewayAPI resource and returns a message and error in the case of an error.

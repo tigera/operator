@@ -110,6 +110,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		mockStatus.On("AddCronJobs", mock.Anything)
 		mockStatus.On("OnCRNotFound").Return()
 		mockStatus.On("ClearDegraded")
+		mockStatus.On("SetDegraded", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return().Maybe()
 		mockStatus.On("ReadyToMonitor")
 		mockStatus.On("SetMetaData", mock.Anything).Return()
 		mockStatus.On("RemoveDeployments", mock.Anything).Return()
@@ -126,6 +127,7 @@ var _ = Describe("Gateway API controller tests", func() {
 			watchEnvoyProxy:     func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchEnvoyGateway:   func(namespacedName operatorv1.NamespacedName) error { return nil },
 			watchGateways:       func() error { return nil },
+			watchGatewayClasses: func() error { return nil },
 		}
 	})
 
@@ -875,6 +877,47 @@ var _ = Describe("Gateway API controller tests", func() {
 		}
 		Expect(owners).To(ConsistOf("Gateway/flipped", "Gateway/gw1"))
 	})
+
+	It("clears the finalizers on a GatewayClass wedged in Terminating", func() {
+		Expect(c.Create(ctx, installation)).NotTo(HaveOccurred())
+		Expect(c.Create(ctx, &operatorv1.GatewayAPI{ObjectMeta: metav1.ObjectMeta{Name: "tigera-secure"}})).NotTo(HaveOccurred())
+
+		By("creating a GatewayClass that Envoy Gateway's finalizer is holding open")
+		gc := &gapi.GatewayClass{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       gatewayapi.GatewayClassName,
+				Finalizers: []string{"gateway-exists-finalizer.gateway.networking.k8s.io"},
+			},
+		}
+		Expect(c.Create(ctx, gc)).NotTo(HaveOccurred())
+
+		By("deleting it, which only marks it because of the finalizer")
+		Expect(c.Delete(ctx, gc)).NotTo(HaveOccurred())
+		wedged := &gapi.GatewayClass{}
+		Expect(c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, wedged)).NotTo(HaveOccurred())
+		Expect(wedged.DeletionTimestamp).NotTo(BeNil())
+
+		By("triggering a reconcile")
+		_, err := r.Reconcile(ctx, reconcile.Request{})
+		Expect(err).ShouldNot(HaveOccurred())
+
+		By("checking the wedged class is gone, so the next render can re-create it cleanly")
+		err = c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, &gapi.GatewayClass{})
+		Expect(apierrors.IsNotFound(err)).To(BeTrue(), "expected the terminating GatewayClass to have been released")
+
+		By("checking the repair was surfaced on TigeraStatus rather than healing silently")
+		var degradedMsgs []string
+		for _, call := range mockStatus.Calls {
+			if call.Method == "SetDegraded" && len(call.Arguments) > 1 {
+				if msg, ok := call.Arguments[1].(string); ok {
+					degradedMsgs = append(degradedMsgs, msg)
+				}
+			}
+		}
+		Expect(degradedMsgs).To(ContainElement(ContainSubstring("stuck terminating")),
+			"expected a Degraded naming the wedged GatewayClass")
+	})
+
 })
 
 var fakeComponentHandlers []*fakeComponentHandler

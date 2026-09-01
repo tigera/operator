@@ -25,8 +25,10 @@ import (
 	"fmt"
 	"slices"
 
+	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -36,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	gapi "sigs.k8s.io/gateway-api/apis/v1"
+	gapiv1b1 "sigs.k8s.io/gateway-api/apis/v1beta1"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -205,7 +208,12 @@ func (h *Helper) Namespaces(ctx context.Context) ([]string, error) {
 
 // StaleComponents returns deletion components for every labeled Gateway
 // outside the desired namespace — leftovers of a gatewayNamespace change.
+// It also clears access finalizers whose resources are gone, so a stale
+// namespace's grant finishes deleting.
 func (h *Helper) StaleComponents(ctx context.Context, desiredNS string) ([]render.Component, error) {
+	if err := h.clearRBACFinalizers(ctx); err != nil {
+		return nil, err
+	}
 	strays, err := h.Namespaces(ctx)
 	if err != nil {
 		return nil, err
@@ -234,9 +242,14 @@ func (h *Helper) StaleComponents(ctx context.Context, desiredNS string) ([]rende
 
 // Teardown returns deletion components for every labeled Gateway namespace,
 // plus the backend namespace, which holds the Backend and ReferenceGrant.
-// No labeled Gateway means nothing to do: the Gateway is rendered first, so
-// nothing else can exist without one.
+// It first clears access finalizers whose resources are gone — a grant can
+// outlive its Gateway, so this runs even when no labeled Gateway remains.
+// After that, no labeled Gateway means nothing to do: the Gateway is
+// rendered first, so nothing else can exist without one.
 func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
+	if err := h.clearRBACFinalizers(ctx); err != nil {
+		return nil, err
+	}
 	namespaces, err := h.Namespaces(ctx)
 	if err != nil {
 		return nil, err
@@ -263,6 +276,80 @@ func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
 		}))
 	}
 	return components, nil
+}
+
+// clearRBACFinalizers removes RBACFinalizer from every labeled access
+// Role and RoleBinding that is marked for deletion, once the gateway
+// resources it covers are gone. The finalizer keeps the operator's write
+// grant in place until then, so teardown does not depend on delete order.
+func (h *Helper) clearRBACFinalizers(ctx context.Context) error {
+	byLabel := client.MatchingLabels{rgateway.GatewayLabel: h.cfg.ResourcePrefix}
+	roles := &rbacv1.RoleList{}
+	if err := h.cli.List(ctx, roles, byLabel); err != nil {
+		return err
+	}
+	bindings := &rbacv1.RoleBindingList{}
+	if err := h.cli.List(ctx, bindings, byLabel); err != nil {
+		return err
+	}
+	var grants []client.Object
+	for i := range roles.Items {
+		grants = append(grants, &roles.Items[i])
+	}
+	for i := range bindings.Items {
+		grants = append(grants, &bindings.Items[i])
+	}
+
+	resourcesGone := map[string]bool{}
+	for _, grant := range grants {
+		if grant.GetDeletionTimestamp().IsZero() || !slices.Contains(grant.GetFinalizers(), rgateway.RBACFinalizer) {
+			continue
+		}
+		ns := grant.GetNamespace()
+		gone, checked := resourcesGone[ns]
+		if !checked {
+			var err error
+			if gone, err = h.accessResourcesGone(ctx, ns); err != nil {
+				return err
+			}
+			resourcesGone[ns] = gone
+		}
+		if !gone {
+			continue
+		}
+		patchFrom := client.MergeFrom(grant.DeepCopyObject().(client.Object))
+		grant.SetFinalizers(slices.DeleteFunc(grant.GetFinalizers(), func(f string) bool {
+			return f == rgateway.RBACFinalizer
+		}))
+		if err := h.cli.Patch(ctx, grant, patchFrom); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// accessResourcesGone reports whether none of the component's gateway
+// resources remain in the namespace — the point at which an access grant
+// there has nothing left to cover. A kind the cluster does not serve counts
+// as gone.
+func (h *Helper) accessResourcesGone(ctx context.Context, namespace string) (bool, error) {
+	prefix := h.cfg.ResourcePrefix
+	for name, obj := range map[string]client.Object{
+		rgateway.GatewayName(prefix):        &gapi.Gateway{},
+		rgateway.RouteName(prefix):          &gapi.HTTPRoute{},
+		rgateway.BackendName(prefix):        &envoyapi.Backend{},
+		rgateway.ReferenceGrantName(prefix): &gapiv1b1.ReferenceGrant{},
+	} {
+		err := h.cli.Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, obj)
+		if err == nil {
+			return false, nil
+		}
+		var noMatch *apimeta.NoKindMatchError
+		if !errors.IsNotFound(err) && !stderrors.As(err, &noMatch) {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // UnhealthyReason returns why the Gateway or HTTPRoute is not ready, or ""

@@ -22,6 +22,8 @@ import (
 
 	envoyapi "github.com/envoyproxy/gateway/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -253,6 +255,64 @@ var _ = Describe("Cleanup helpers", func() {
 			components, err := h.StaleComponents(ctx, backendNS)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(components).To(BeEmpty())
+		})
+	})
+
+	Describe("access grant finalizers", func() {
+		accessName := prefix + "-ingressgateway-access"
+
+		accessGrant := func(ns string) (*rbacv1.Role, *rbacv1.RoleBinding) {
+			objMeta := func() metav1.ObjectMeta {
+				return metav1.ObjectMeta{
+					Name:       accessName,
+					Namespace:  ns,
+					Labels:     map[string]string{rgateway.GatewayLabel: prefix},
+					Finalizers: []string{rgateway.RBACFinalizer},
+				}
+			}
+			return &rbacv1.Role{ObjectMeta: objMeta()}, &rbacv1.RoleBinding{ObjectMeta: objMeta()}
+		}
+
+		It("completes a marked grant's deletion once the gateway resources are gone", func() {
+			role, binding := accessGrant("ns-a")
+			build(role, binding)
+			Expect(cli.Delete(ctx, role)).To(Succeed())
+			Expect(cli.Delete(ctx, binding)).To(Succeed())
+
+			_, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(kerrors.IsNotFound(cli.Get(ctx, types.NamespacedName{Name: accessName, Namespace: "ns-a"}, &rbacv1.Role{}))).To(BeTrue(),
+				"the finalizer should be cleared so the pending delete finishes")
+			Expect(kerrors.IsNotFound(cli.Get(ctx, types.NamespacedName{Name: accessName, Namespace: "ns-a"}, &rbacv1.RoleBinding{}))).To(BeTrue())
+		})
+
+		It("holds a marked grant while its Gateway remains", func() {
+			role, binding := accessGrant("ns-a")
+			build(role, binding, labeledGateway(rgateway.GatewayName(prefix), "ns-a"))
+			Expect(cli.Delete(ctx, role)).To(Succeed())
+			Expect(cli.Delete(ctx, binding)).To(Succeed())
+
+			_, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			got := &rbacv1.Role{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: accessName, Namespace: "ns-a"}, got)).To(Succeed())
+			Expect(got.Finalizers).To(ContainElement(rgateway.RBACFinalizer),
+				"the grant must keep the operator's write access until the Gateway is gone")
+		})
+
+		It("leaves a grant that is not marked for deletion alone", func() {
+			role, binding := accessGrant("ns-a")
+			build(role, binding)
+
+			_, err := h.Teardown(ctx)
+			Expect(err).NotTo(HaveOccurred())
+
+			got := &rbacv1.Role{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: accessName, Namespace: "ns-a"}, got)).To(Succeed())
+			Expect(got.DeletionTimestamp.IsZero()).To(BeTrue())
+			Expect(got.Finalizers).To(ContainElement(rgateway.RBACFinalizer))
 		})
 	})
 

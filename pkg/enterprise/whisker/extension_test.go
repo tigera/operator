@@ -102,7 +102,8 @@ var _ = Describe("whisker enterprise CR validation", func() {
 	It("keeps spec.ingressGateway when the installation is Calico", func() {
 		cr := whiskerCR()
 		Expect(calicoExt.Whisker().ValidateAndDefault(cr, mockStatus)).To(Succeed())
-		Expect(cr.Spec.IngressGateway).NotTo(BeNil(), "the Enterprise build serves whisker's own gateway on a Calico install")
+		Expect(cr.Spec.IngressGateway).NotTo(BeNil(),
+			"a Calico install registers no whisker extension, so the Enterprise build still serves whisker's own gateway")
 
 		Expect(warningKey).To(BeEmpty())
 	})

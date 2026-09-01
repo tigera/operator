@@ -325,11 +325,12 @@ func (h *Helper) clearRBACFinalizers(ctx context.Context) error {
 		if !gone {
 			continue
 		}
-		patchFrom := client.MergeFrom(grant.DeepCopyObject().(client.Object))
 		grant.SetFinalizers(slices.DeleteFunc(grant.GetFinalizers(), func(f string) bool {
 			return f == rgateway.RBACFinalizer
 		}))
-		if err := h.cli.Patch(ctx, grant, patchFrom); err != nil && !errors.IsNotFound(err) {
+		// Update, not Patch: the operator's ClusterRole grants update on
+		// roles and rolebindings but not patch.
+		if err := h.cli.Update(ctx, grant); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}

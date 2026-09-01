@@ -26,9 +26,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/render/whisker"
@@ -58,7 +60,7 @@ var _ = Describe("ComponentRendering", func() {
 		Expect(objsToCreate).To(HaveLen(createObjs))
 		Expect(objsToDelete).To(HaveLen(delObjs))
 	},
-		Entry("Should return objects to create when variant is Calico",
+		Entry("Should return the whisker objects to create",
 			&whisker.Configuration{
 				Installation: &operatorv1.InstallationSpec{
 					KubernetesProvider: operatorv1.ProviderGKE,
@@ -70,19 +72,6 @@ var _ = Describe("ComponentRendering", func() {
 				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
 			},
 			numExpectedObjects, numDeprecatedObjects,
-		),
-		Entry("Should return objects to delete when variant is not Calico",
-			&whisker.Configuration{
-				Installation: &operatorv1.InstallationSpec{
-					KubernetesProvider: operatorv1.ProviderGKE,
-					Variant:            operatorv1.CalicoEnterprise,
-				},
-				TrustedCertBundle:     defaultTrustedCertBundle,
-				WhiskerKeyPair:        defaultWhiskerKeyPair,
-				WhiskerBackendKeyPair: defaultTLSKeyPair,
-				Whisker:               &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
-			},
-			0, numExpectedObjects+numDeprecatedObjects,
 		),
 	)
 
@@ -247,6 +236,45 @@ var _ = Describe("ComponentRendering", func() {
 		actual, ok := config.Data["default.conf"]
 		Expect(ok).To(BeTrue(), "expected default.conf to be present in config map")
 		Expect(actual).To(Equal(whisker.NginxConfigDual))
+	})
+
+	It("should add a gateway ingress rule to the NetworkPolicy when the ingress gateway is configured", func() {
+		cfg := &whisker.Configuration{
+			Installation: &operatorv1.InstallationSpec{
+				KubernetesProvider: operatorv1.ProviderGKE,
+				Variant:            operatorv1.Calico,
+			},
+			TrustedCertBundle:       defaultTrustedCertBundle,
+			WhiskerKeyPair:          defaultWhiskerKeyPair,
+			WhiskerBackendKeyPair:   defaultTLSKeyPair,
+			Whisker:                 &operatorv1.Whisker{Spec: operatorv1.WhiskerSpec{Notifications: ptr.To(operatorv1.Enabled)}},
+			IngressGatewayNamespace: "gateway-ns",
+		}
+		objsToCreate, _ := whisker.Whisker(cfg).Objects()
+		var policy *v3.NetworkPolicy
+		for _, obj := range objsToCreate {
+			if p, ok := obj.(*v3.NetworkPolicy); ok && p.Name == whisker.WhiskerPolicyName {
+				policy = p
+			}
+		}
+		Expect(policy).NotTo(BeNil())
+		Expect(policy.Spec.Ingress).To(HaveLen(1))
+		rule := policy.Spec.Ingress[0]
+		// kubernetes.io/metadata.name, not projectcalico.org/name: the latter is
+		// applied by Calico's namespace controller, which does not run on every
+		// dataplane (see #5151).
+		Expect(rule.Source.NamespaceSelector).To(Equal("kubernetes.io/metadata.name == 'gateway-ns'"))
+		Expect(rule.Source.Selector).To(Equal("gateway.envoyproxy.io/owning-gateway-name == 'calico-whisker-gateway'"))
+		Expect(rule.Destination.Ports).To(Equal(networkpolicy.Ports(uint16(whisker.WhiskerServicePort))))
+
+		// Without the gateway, Whisker stays deny-all.
+		cfg.IngressGatewayNamespace = ""
+		objsToCreate, _ = whisker.Whisker(cfg).Objects()
+		for _, obj := range objsToCreate {
+			if p, ok := obj.(*v3.NetworkPolicy); ok && p.Name == whisker.WhiskerPolicyName {
+				Expect(p.Spec.Ingress).To(BeEmpty())
+			}
+		}
 	})
 
 	It("should render a service with HTTPS port", func() {

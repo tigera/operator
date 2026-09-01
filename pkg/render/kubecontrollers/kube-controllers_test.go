@@ -39,8 +39,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
-	"github.com/tigera/operator/pkg/imageoverride"
-	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -121,11 +119,10 @@ var _ = Describe("kube-controllers rendering tests", func() {
 		}))
 	})
 
-	It("resolves the kube-controllers image through the image overrides", func() {
+	It("runs the image the variant supplied over its own calico image", func() {
 		instance.Variant = operatorv1.CalicoEnterprise
-		overrides := imageoverride.New()
-		overrides.Register(operatorv1.CalicoEnterprise, render.ComponentNameKubeControllers, components.CalicoCloudImage())
-		cfg.ImageOverrides = overrides
+		cloud := components.CalicoCloudImage()
+		cfg.Image = &cloud
 
 		component := kubecontrollers.NewCalicoKubeControllers(&cfg)
 		Expect(component.ResolveImages(nil)).To(BeNil())
@@ -261,6 +258,8 @@ var _ = Describe("kube-controllers rendering tests", func() {
 	})
 
 	It("should render all calico-kube-controllers resources for a default configuration using CalicoEnterprise", func() {
+		DeferCleanup(components.UseImages(components.EnterpriseImages))
+
 		expectedResources := []struct {
 			name    string
 			ns      string
@@ -703,11 +702,6 @@ var _ = Describe("kube-controllers rendering tests", func() {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderOpenShift
 				} else {
 					cfg.Installation.KubernetesProvider = operatorv1.ProviderNone
-				}
-				if scenario.ManagedCluster {
-					cfg.ManagementClusterConnection = &operatorv1.ManagementClusterConnection{}
-				} else {
-					cfg.ManagementClusterConnection = nil
 				}
 				instance.Variant = operatorv1.CalicoEnterprise
 				defaultDenyPolicy := &v3.NetworkPolicy{

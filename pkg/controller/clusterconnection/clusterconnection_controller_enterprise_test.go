@@ -46,9 +46,9 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
 
@@ -152,7 +152,8 @@ var _ = Describe("ManagementClusterConnection controller enterprise tests", func
 			Status: operatorv1.InstallationStatus{
 				Variant: operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{
-					Registry:           "my-reg",
+					Variant:            operatorv1.CalicoEnterprise,
+					Registry:           "some.registry.org/",
 					KubernetesProvider: operatorv1.ProviderNone,
 				},
 			},

@@ -60,11 +60,11 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	"github.com/tigera/operator/pkg/imports/admission"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/secret"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls"
 	"github.com/tigera/operator/test"
 )
@@ -203,7 +203,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Status: operator.InstallationStatus{
 						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
-							Registry: "my-reg",
+							Registry: "some.registry.org/",
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
 						},
@@ -362,6 +362,52 @@ var _ = Describe("Testing core-controller installation", func() {
 				// Host alisas should be set on the DaemonSet Pod.
 				Expect(ds.Spec.Template.Spec.HostAliases).To(HaveLen(1))
 				Expect(ds.Spec.Template.Spec.HostAliases[0].IP).To(Equal("1.2.3.4"))
+			})
+		})
+
+		Context("DNS configuration", func() {
+			operatorDeployment := func(policy corev1.DNSPolicy, dnsConfig *corev1.PodDNSConfig) *appsv1.Deployment {
+				return &appsv1.Deployment{
+					ObjectMeta: metav1.ObjectMeta{Name: common.OperatorName(), Namespace: common.OperatorNamespace()},
+					Spec: appsv1.DeploymentSpec{
+						Template: corev1.PodTemplateSpec{
+							Spec: corev1.PodSpec{DNSPolicy: policy, DNSConfig: dnsConfig},
+						},
+					},
+				}
+			}
+
+			nodeDaemonSet := func() appsv1.DaemonSet {
+				_, err := r.Reconcile(ctx, reconcile.Request{})
+				Expect(err).ShouldNot(HaveOccurred())
+
+				ds := appsv1.DaemonSet{}
+				key := types.NamespacedName{Name: common.NodeDaemonSetName, Namespace: common.CalicoNamespace}
+				Expect(c.Get(ctx, key, &ds)).NotTo(HaveOccurred())
+				return ds
+			}
+
+			It("should use the node's resolver when the operator has no explicit dnsConfig", func() {
+				Expect(c.Create(ctx, operatorDeployment(corev1.DNSClusterFirstWithHostNet, nil))).NotTo(HaveOccurred())
+
+				ds := nodeDaemonSet()
+				Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSDefault))
+				Expect(ds.Spec.Template.Spec.DNSConfig).To(BeNil())
+			})
+
+			It("should inherit the operator's DNS settings when it has an explicit dnsConfig", func() {
+				dnsConfig := &corev1.PodDNSConfig{Nameservers: []string{"10.96.0.10", "169.254.169.253"}}
+				Expect(c.Create(ctx, operatorDeployment(corev1.DNSNone, dnsConfig))).NotTo(HaveOccurred())
+
+				ds := nodeDaemonSet()
+				Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSNone))
+				Expect(ds.Spec.Template.Spec.DNSConfig).To(Equal(dnsConfig))
+			})
+
+			It("should use the node's resolver when the operator Deployment is missing", func() {
+				ds := nodeDaemonSet()
+				Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSDefault))
+				Expect(ds.Spec.Template.Spec.DNSConfig).To(BeNil())
 			})
 		})
 
@@ -804,7 +850,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Status: operator.InstallationStatus{
 					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
-						Registry: "my-reg",
+						Registry: "some.registry.org/",
 						// The test is provider agnostic.
 						KubernetesProvider: operator.ProviderNone,
 					},
@@ -2195,7 +2241,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(policies.Items).To(HaveLen(0))
 		})
 
-		It("should set default spec.Azure if provider is AKS", func() {
+		It("should record a default Azure config if provider is AKS", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderAKS
 
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -2211,11 +2257,13 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, instance)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			Expect(instance.Spec.Azure).NotTo(BeNil())
-			Expect(instance.Spec.Azure).To(Equal(azure))
+			Expect(instance.Spec.Azure).To(BeNil())
+			Expect(instance.Status.Defaults).NotTo(BeNil())
+			Expect(instance.Status.Defaults.Azure).To(Equal(azure))
+			Expect(instance.Status.Computed.Azure).To(Equal(azure))
 		})
 
-		It("should not set default spec.Azure if provider is not AKS", func() {
+		It("should not record a default Azure config if provider is not AKS", func() {
 			cr.Spec.KubernetesProvider = operator.ProviderEKS
 
 			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
@@ -2228,6 +2276,26 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(err).ShouldNot(HaveOccurred())
 
 			Expect(instance.Spec.Azure).To(BeNil())
+			Expect(instance.Status.Defaults.Azure).To(BeNil())
+		})
+
+		It("should merge the overlay Installation into the computed spec", func() {
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			Expect(c.Create(ctx, &operator.Installation{
+				ObjectMeta: metav1.ObjectMeta{Name: "overlay"},
+				Spec: operator.InstallationSpec{
+					ControlPlaneReplicas: ptr.To[int32](3),
+				},
+			})).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			instance := &operator.Installation{}
+			Expect(c.Get(ctx, types.NamespacedName{Name: "default"}, instance)).ShouldNot(HaveOccurred())
+
+			Expect(instance.Spec.ControlPlaneReplicas).To(BeNil())
+			Expect(instance.Status.Computed.ControlPlaneReplicas).To(Equal(ptr.To[int32](3)))
 		})
 	})
 
@@ -2302,7 +2370,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				Status: operator.InstallationStatus{
 					Variant: operator.CalicoEnterprise,
 					Computed: &operator.InstallationSpec{
-						Registry: "my-reg",
+						Registry: "some.registry.org/",
 						// The test is provider agnostic.
 						KubernetesProvider: operator.ProviderNone,
 					},
@@ -2425,7 +2493,7 @@ var _ = Describe("Testing core-controller installation", func() {
 					Status: operator.InstallationStatus{
 						Variant: operator.CalicoEnterprise,
 						Computed: &operator.InstallationSpec{
-							Registry: "my-reg",
+							Registry: "some.registry.org/",
 							// The test is provider agnostic.
 							KubernetesProvider: operator.ProviderNone,
 						},

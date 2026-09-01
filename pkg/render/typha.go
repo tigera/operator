@@ -25,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
@@ -76,9 +78,9 @@ type TyphaConfiguration struct {
 	MigrateNamespaces bool
 	ClusterDomain     string
 
-	// The health port that Felix is bound to. We configure Typha to bind to the port
-	// that is one less.
-	FelixHealthPort int
+	// FelixConfiguration is the cluster's default FelixConfiguration. Typha binds to the
+	// port one below Felix's health port.
+	FelixConfiguration *v3.FelixConfiguration
 }
 
 // Typha creates the typha daemonset and other resources for the daemonset to operate normally.
@@ -95,11 +97,8 @@ type typhaComponent struct {
 }
 
 func (c *typhaComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.cfg.Installation.Registry
-	path := c.cfg.Installation.ImagePath
-	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.ReferenceFor(components.ImageKeyCalico, c.cfg.Installation, is)
 	return err
 }
 
@@ -587,7 +586,7 @@ func (c *typhaComponent) typhaEnvVars(typhaSecret certificatemanagement.KeyPairI
 
 // typhaHealthPort returns the liveness and readiness port to use for typha.
 func typhaHealthPort(cfg *TyphaConfiguration) int {
-	return TyphaHealthPort(cfg.FelixHealthPort)
+	return TyphaHealthPort(felixHealthPort(cfg.FelixConfiguration))
 }
 
 // TyphaHealthPort returns the health port Typha binds to, given Felix's.

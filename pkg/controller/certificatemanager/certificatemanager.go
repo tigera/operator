@@ -34,6 +34,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -70,7 +71,9 @@ type certificateManager struct {
 	*crypto.CA
 	keyPair *certificatemanagement.KeyPair
 	log     logr.Logger
-	tenant  *operatorv1.Tenant
+
+	// caSecretName is the secret holding the CA this instance signs with.
+	caSecretName string
 
 	// Controls whether this instance of the certificate manager is allowed to
 	// create new CAs. Most instances should simply read the existing CA and use it to sign
@@ -103,9 +106,6 @@ type CertificateManager interface {
 	// - A bundle with Calico's root certificates + any user supplied certificates in /etc/pki/tls/certs/tigera-ca-bundle.crt.
 	// - A system root certificate bundle in /etc/pki/tls/certs/ca-bundle.crt.
 	CreateTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
-	// CreateMultiTenantTrustedBundleWithSystemRootCertificates is an alternative to CreateTrustedBundleWithSystemRootCertificates that is appropriate for
-	// multi-tenant management clusters.
-	CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error)
 	// AddToStatusManager lets the status manager monitor pending CSRs if the certificate management is enabled.
 	AddToStatusManager(manager status.StatusManager, namespace string)
 	// KeyPair Returns the CA KeyPairInterface, so it can be rendered in the operator namespace.
@@ -113,8 +113,6 @@ type CertificateManager interface {
 	// LoadTrustedBundle loads an existing trusted bundle to pass to render.
 	LoadTrustedBundle(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	LoadNamedTrustedBundle(context.Context, client.Client, string, string) (certificatemanagement.TrustedBundleRO, error)
-	// LoadMultiTenantTrustedBundleWithRootCertificates loads an existing trusted bundle with system root certificates to pass to render.
-	LoadMultiTenantTrustedBundleWithRootCertificates(context.Context, client.Client, string) (certificatemanagement.TrustedBundleRO, error)
 	// SignCertificate signs a certificate using the certificate manager's private key. The function is assuming that the
 	// public key of the requestor is already set in the certificate template.
 	SignCertificate(certificate *x509.Certificate) ([]byte, error)
@@ -138,9 +136,11 @@ func WithLogger(log logr.Logger) Option {
 	}
 }
 
-func WithTenant(t *operatorv1.Tenant) Option {
+// WithCASecretName overrides the secret the CA is read from. Callers that manage more
+// than one CA in a cluster use this to keep them apart.
+func WithCASecretName(name string) Option {
 	return func(cm *certificateManager) error {
-		cm.tenant = t
+		cm.caSecretName = name
 		return nil
 	}
 }
@@ -160,20 +160,13 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 
 	// Create a certificatemanager instance and apply any user-provided options to
 	// initialize it.
-	cm := &certificateManager{log: log}
+	cm := &certificateManager{log: log, caSecretName: certificatemanagement.CASecretName}
 	for _, opt := range opts {
 		if err := opt(cm); err != nil {
 			return nil, err
 		}
 	}
 	cm.log.V(2).Info("Creating CertificateManager in namespace", "ns", ns)
-
-	// Determine the name of the CA secret to use. Default to the tigera CA name. For
-	// per-tenant CA secrets, we use a different name for differentiation.
-	caSecretName := certificatemanagement.CASecretName
-	if cm.tenant.MultiTenant() {
-		caSecretName = certificatemanagement.TenantCASecretName
-	}
 
 	var certificateManagementEnabled bool
 	if installation != nil {
@@ -182,7 +175,8 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			return nil, err
 		}
 		// We instantiate csrImage regardless of whether certificate management is enabled; it may still be used.
-		csrImage, err = certificatemanagement.ResolveCSRInitImage(installation, imageSet)
+		// The init container runs out of the combined image as a key-cert-provisioner subcommand.
+		csrImage, err = components.GetReference(components.CombinedCalicoImage(installation), installation.Registry, installation.ImagePath, installation.ImagePrefix, imageSet)
 		if err != nil {
 			return nil, err
 		}
@@ -198,9 +192,9 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 
 	if !certificateManagementEnabled {
 		// Using operator-managed certificates. Check to see if we have already provisioned a CA.
-		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, caSecretName))
+		cm.log.V(2).Info("Looking for an existing CA", "secret", fmt.Sprintf("%s/%s", ns, cm.caSecretName))
 		caSecret := &corev1.Secret{}
-		k := types.NamespacedName{Name: caSecretName, Namespace: ns}
+		k := types.NamespacedName{Name: cm.caSecretName, Namespace: ns}
 		if err = cli.Get(context.Background(), k, caSecret); err != nil && !kerrors.IsNotFound(err) {
 			return nil, err
 		} else if kerrors.IsNotFound(err) {
@@ -214,7 +208,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 			if !cm.allowCACreation {
 				// Most controllers should NOT allow CA creation. For single-tenant, this is handled at cluster startup by the secret controller.
 				// For multi-tenant clusters, each tenant has its own CA that is created by the tenant controller.
-				return nil, fmt.Errorf("CA secret %s/%s does not exist yet and is not allowed for this call", ns, caSecretName)
+				return nil, fmt.Errorf("CA secret %s/%s does not exist yet and is not allowed for this call", ns, cm.caSecretName)
 			}
 			// No existing CA data - we need to generate a new one.
 			cm.log.Info("Generating a new CA", "namespace", ns)
@@ -262,7 +256,7 @@ func Create(cli client.Client, installation *operatorv1.InstallationSpec, cluste
 	cm.CA = cryptoCA
 	cm.Certificate = x509Cert
 	cm.keyPair = &certificatemanagement.KeyPair{
-		Name:                  caSecretName,
+		Name:                  cm.caSecretName,
 		Namespace:             ns,
 		PrivateKey:            privateKey,
 		PrivateKeyPEM:         privateKeyPEM,
@@ -607,20 +601,12 @@ func (cm *certificateManager) CreateTrustedBundleWithSystemRootCertificates(cert
 	return certificatemanagement.CreateTrustedBundleWithSystemRootCertificates(cm.keyPair, certificates...)
 }
 
-func (cm *certificateManager) CreateMultiTenantTrustedBundleWithSystemRootCertificates(certificates ...certificatemanagement.CertificateInterface) (certificatemanagement.TrustedBundle, error) {
-	return certificatemanagement.CreateMultiTenantTrustedBundleWithSystemRootCertificates(cm.keyPair, certificates...)
-}
-
 func (cm *certificateManager) LoadNamedTrustedBundle(ctx context.Context, client client.Client, ns, name string) (certificatemanagement.TrustedBundleRO, error) {
 	return cm.loadTrustedBundle(ctx, client, ns, name)
 }
 
 func (cm *certificateManager) LoadTrustedBundle(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
 	return cm.loadTrustedBundle(ctx, client, ns, certificatemanagement.TrustedCertConfigMapName)
-}
-
-func (cm *certificateManager) LoadMultiTenantTrustedBundleWithRootCertificates(ctx context.Context, client client.Client, ns string) (certificatemanagement.TrustedBundleRO, error) {
-	return cm.loadTrustedBundle(ctx, client, ns, certificatemanagement.TrustedCertConfigMapNamePublic)
 }
 
 func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client client.Client, ns string, name string) (certificatemanagement.TrustedBundleRO, error) {
@@ -633,8 +619,10 @@ func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client clie
 
 	// Create a new readOnlyTrustedBundle based on the given configuration.
 	includeSystemCerts := len(obj.Data[certificatemanagement.RHELRootCertificateBundleName]) > 0
-	useMultiTenantName := name == certificatemanagement.TrustedCertConfigMapNamePublic
-	a := newReadOnlyTrustedBundle(cm, includeSystemCerts, useMultiTenantName)
+	a, err := newReadOnlyTrustedBundle(cm, name, includeSystemCerts)
+	if err != nil {
+		return nil, err
+	}
 
 	// Augment it with annotations from the actual ConfigMap so that we inherit the hash annotations used to
 	// detect changes to the ConfigMap's contents.
@@ -646,19 +634,15 @@ func (cm *certificateManager) loadTrustedBundle(ctx context.Context, client clie
 	return a, nil
 }
 
-// newReadOnlyTrustedBundle creates a new readOnlyTrustedBundle. If system is true, the bundle will include a system root certificate bundle.
-// TrustedBundleRO is useful for mounting a bundle of certificates to trust in a pod without the ability to modify the bundle, and allows
-// one controller to create the bundle and another to mount it.
-func newReadOnlyTrustedBundle(cm CertificateManager, includeSystemCerts, multiTenant bool) *readOnlyTrustedBundle {
-	if includeSystemCerts {
-		bundle, _ := cm.CreateTrustedBundleWithSystemRootCertificates()
-		if multiTenant {
-			// For multi-tenant clusters, the system root certificate bundle uses a different name. Load it instead.
-			bundle, _ = cm.CreateMultiTenantTrustedBundleWithSystemRootCertificates()
-		}
-		return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: bundle}
+// newReadOnlyTrustedBundle creates a new readOnlyTrustedBundle for the ConfigMap of the given
+// name. TrustedBundleRO lets one controller create a bundle and another mount it without being
+// able to modify it.
+func newReadOnlyTrustedBundle(cm CertificateManager, name string, includeSystemCerts bool) (*readOnlyTrustedBundle, error) {
+	bundle, err := certificatemanagement.CreateTrustedBundleWithName(name, includeSystemCerts, cm.KeyPair())
+	if err != nil {
+		return nil, err
 	}
-	return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: cm.CreateTrustedBundle()}
+	return &readOnlyTrustedBundle{annotations: map[string]string{}, bundle: bundle}, nil
 }
 
 // readOnlyTrustedBundle implements the TrustedBundleRO interface. It allows for annotations to be provided that will be added to

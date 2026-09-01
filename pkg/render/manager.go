@@ -251,7 +251,7 @@ func (c *managerComponent) ResolveImages(is *operatorv1.ImageSet) error {
 		errMsgs = append(errMsgs, err.Error())
 	}
 
-	c.calicoImage, err = components.GetReference(components.CombinedCalicoImage(c.cfg.Installation), reg, path, prefix, is)
+	c.calicoImage, err = components.GetReference(components.ComponentTigeraCalico, reg, path, prefix, is)
 	if err != nil {
 		errMsgs = append(errMsgs, err.Error())
 	}
@@ -1374,15 +1374,7 @@ func (c *managerComponent) managerCalicoSystemNetworkPolicy() *v3.NetworkPolicy 
 		// valid config), so only the host is narrowed.
 		dest := v3.EntityRule{Ports: networkpolicy.Ports(389, 636)}
 		if host := ldapEgressHost(c.cfg.Authentication.Spec.LDAP.Host); host != "" {
-			if ip := net.ParseIP(host); ip != nil {
-				suffix := "/32"
-				if ip.To4() == nil {
-					suffix = "/128"
-				}
-				dest.Nets = []string{ip.String() + suffix}
-			} else {
-				dest.Domains = []string{host}
-			}
+			dest = networkpolicy.EntityRuleForHostPort(host, c.cfg.ClusterDomain, networkpolicy.Ports(389, 636)...)
 		}
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,

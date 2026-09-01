@@ -23,7 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
+	ctrl "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -34,13 +34,13 @@ import (
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
 	"github.com/tigera/api/pkg/lib/numorstring"
 	operatorv1 "github.com/tigera/operator/api/v1"
-	"github.com/tigera/operator/pkg/controller/istio/waypoint"
+	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/controller/utils/imageset"
 	"github.com/tigera/operator/pkg/ctrlruntime"
-	eutils "github.com/tigera/operator/pkg/enterprise/utils"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/gatewayapi"
 	"github.com/tigera/operator/pkg/render/istio"
@@ -63,7 +63,7 @@ var (
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := newReconciler(mgr, opts)
 
-	c, err := ctrlruntime.NewController("istio-controller", mgr, controller.Options{Reconciler: r})
+	c, err := ctrlruntime.NewController("istio-controller", mgr, ctrl.Options{Reconciler: r})
 	if err != nil {
 		return fmt.Errorf("failed to create istio-controller: %w", err)
 	}
@@ -92,24 +92,6 @@ func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 		return fmt.Errorf("istio-controller failed to create periodic reconcile watch: %w", err)
 	}
 
-	// The waypoint controller reconciles the per-Gateway state the Istio
-	// feature needs beyond istiod's own rendering. It creates a
-	// tigera-operator-secrets RoleBinding in namespaces that contain
-	// istio-waypoint Gateways — granting the operator permission to manage
-	// secrets there on clusters where its ClusterRole doesn't allow
-	// cluster-wide secret writes — and replicates the Installation pull
-	// secrets into those namespaces, so waypoint pods can pull the Istio proxy
-	// image from a private registry (the imagePullSecrets reference injected
-	// via istiod's global config is namespace-scoped and the secret must exist
-	// in the user namespace). It also deletes the per-class resource sets that istiod
-	// strands when a Gateway's spec.gatewayClassName changes: istiod only
-	// applies the set for the current class and never deletes the previous
-	// class's set, and owner-reference GC only fires when the Gateway itself
-	// is deleted.
-	if err := waypoint.Add(mgr, opts); err != nil {
-		return fmt.Errorf("failed to add waypoint controller: %w", err)
-	}
-
 	return nil
 }
 
@@ -120,6 +102,7 @@ func newReconciler(mgr manager.Manager, opts options.ControllerOptions) *Reconci
 		scheme:   mgr.GetScheme(),
 		status:   status.New(mgr.GetClient(), "istio", opts.KubernetesVersion),
 		provider: opts.DetectedProvider,
+		ext:      opts.Extensions,
 	}
 
 	r.status.Run(opts.ShutdownContext)
@@ -132,6 +115,7 @@ type ReconcileIstio struct {
 	scheme   *runtime.Scheme
 	status   status.StatusManager
 	provider operatorv1.Provider
+	ext      extensions.Extensions
 }
 
 func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -187,7 +171,7 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Get the Installation, for k8s provider info.
-	installationSpec, err := utils.GetInstallationSpec(ctx, r)
+	installationSpec, err := utils.GetComputedInstallationSpec(ctx, r)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			r.status.SetDegraded(operatorv1.ResourceNotFound, "Installation not found", err, reqLogger)
@@ -237,6 +221,20 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 
+	ci := controller.Inputs{
+		RenderInputs: render.Inputs{Installation: installationSpec},
+		Client:       r.Client,
+	}
+	ci, err = r.ext.Istio().ExtendInputs(ctx, ci)
+	if err != nil {
+		if reason, ok := extensions.DegradedReason(err); ok {
+			r.status.SetDegraded(reason, err.Error(), nil, reqLogger)
+			return reconcile.Result{}, err
+		}
+		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error preparing Istio extension", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
 	// Apply the image set
 	if err = imageset.ApplyImageSet(ctx, r.Client, installationSpec.Variant, istioComponent); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error with ImageSet", err, reqLogger)
@@ -251,7 +249,10 @@ func (r *ReconcileIstio) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 
 	// Deploy Istio components, passing the Istio CR for the owner this time.
-	err = utils.NewComponentHandler(log, r, r.scheme, instance).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
+	modifier := utils.WithModifier(func(c render.Component) render.Component {
+		return r.ext.Istio().Modify(c, ci.RenderInputs)
+	})
+	err = utils.NewComponentHandler(log, r, r.scheme, instance, modifier).CreateOrUpdateOrDelete(ctx, istioComponent, r.status)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Error rendering Calico Istio resources", err, log)
 		return reconcile.Result{}, err
@@ -373,21 +374,15 @@ func (r *ReconcileIstio) configureIstioDSCPMark(instance *operatorv1.Istio, fc *
 	return true, nil
 }
 
-// configurePolicySyncPathPrefix reconciles FelixConfiguration.policySyncPathPrefix
-// for the Istio side. The L7 ambient waypoint pod's l7-collector sidecar
-// dials Felix's nodeagent socket, which Felix only opens when this field
-// is set. The applicationlayer controller writes this same field for the
-// Dikastes/sidecar/WAF flow; both controllers consult each other's state
-// (via utils.{ApplicationLayerRequiresPolicySync,IstioRequiresPolicySync})
-// so that deleting one CR does not strand the other.
+// configurePolicySyncPathPrefix reconciles FelixConfiguration.policySyncPathPrefix,
+// which the variant extension shares with this controller.
 func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, instance *operatorv1.Istio, fc *v3.FelixConfiguration, remove bool) (bool, error) {
 	var istioNeeds bool
 	if !remove {
-		// Mirror the renderer gate at pkg/render/istio/istio.go: it reads
-		// installationSpec.Variant (i.e. Installation.Spec.Variant), so the
-		// policy-sync field tracks the renderer's decision to ship the L7
-		// waypoint sidecar even before Status.Variant catches up.
-		installationSpec, err := utils.GetInstallationSpec(ctx, r.Client)
+		// Mirror the renderer gate at pkg/render/istio/istio.go, which reads the same
+		// computed variant, so the policy-sync field tracks the renderer's decision to
+		// ship the L7 waypoint sidecar.
+		installationSpec, err := utils.GetComputedInstallationSpec(ctx, r.Client)
 		if err != nil && !errors.IsNotFound(err) {
 			return false, err
 		}
@@ -398,11 +393,10 @@ func (r *ReconcileIstio) configurePolicySyncPathPrefix(ctx context.Context, inst
 		istioNeeds = utils.IstioRequiresPolicySync(instance, variant)
 	}
 
-	al, err := eutils.GetApplicationLayer(ctx, r.Client)
+	alNeeds, err := r.ext.Istio().PolicySyncRequired(ctx, r.Client)
 	if err != nil {
 		return false, err
 	}
-	alNeeds := utils.ApplicationLayerRequiresPolicySync(al)
 
 	desired := utils.DesiredPolicySyncPathPrefix(fc.Spec.PolicySyncPathPrefix, alNeeds, istioNeeds)
 	if fc.Spec.PolicySyncPathPrefix == desired {

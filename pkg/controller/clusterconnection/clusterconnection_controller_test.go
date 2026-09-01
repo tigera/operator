@@ -47,8 +47,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	"github.com/tigera/operator/pkg/render"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/test"
 )
 
@@ -155,7 +155,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 			Status: operatorv1.InstallationStatus{
 				Variant: operatorv1.CalicoEnterprise,
 				Computed: &operatorv1.InstallationSpec{
-					Registry:           "my-reg",
+					Variant:            operatorv1.CalicoEnterprise,
+					Registry:           "some.registry.org/",
 					KubernetesProvider: operatorv1.ProviderNone,
 				},
 			},
@@ -238,6 +239,8 @@ var _ = Describe("ManagementClusterConnection controller tests", func() {
 
 			err := c.Update(ctx, installationCopy)
 			Expect(err).NotTo(HaveOccurred())
+			installationCopy.Status.Computed = installationCopy.Spec.DeepCopy()
+			Expect(c.Status().Update(ctx, installationCopy)).NotTo(HaveOccurred())
 
 			// Reconcile creates the guardian deployment.
 			_, err = r.Reconcile(ctx, reconcile.Request{})

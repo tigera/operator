@@ -34,7 +34,6 @@ import (
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
-	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	rcomp "github.com/tigera/operator/pkg/render/common/components"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
@@ -72,11 +71,6 @@ type KubeControllersConfiguration struct {
 	Installation   *operatorv1.InstallationSpec
 	Authentication *operatorv1.Authentication
 
-	// ManagementCluster and ManagementClusterConnection are inputs for the enterprise
-	// es-kube-controllers assembler. No base rendering reads them.
-	ManagementCluster           *operatorv1.ManagementCluster
-	ManagementClusterConnection *operatorv1.ManagementClusterConnection
-
 	// ManagedClusterWatchBinding binds kube-controllers to the managed-cluster watch
 	// ClusterRole. The assemblers set it; multi-cluster management is not a core feature.
 	ManagedClusterWatchBinding bool
@@ -93,26 +87,16 @@ type KubeControllersConfiguration struct {
 	KubeControllersGatewaySecret *corev1.Secret
 	TrustedBundle                certificatemanagement.TrustedBundleRO
 
-	// TenantID is the Calico Cloud tenant. Only the enterprise assembler consumes it.
-	TenantID string
-
-	// Cloud reports whether this is a Calico Cloud install. Only the enterprise
-	// es-kube-controllers assembler consumes it.
-	Cloud bool
-
 	// ImageOverrides lets a variant swap the kube-controllers image. The controller
 	// wires in the operator's image overrides; nil resolves to the core image.
-	ImageOverrides *imageoverride.Overrides
+	// Image overrides what kube-controllers runs, or nil for the variant's calico image.
+	Image *components.Component
 
 	// Namespace to be installed into.
 	Namespace string
 
 	// List of namespaces that are running a kube-controllers instance that need a cluster role binding.
 	BindingNamespaces []string
-
-	// Tenant object provides tenant configuration for both single and multi-tenant modes.
-	// If this is nil, then we should run in zero-tenant mode.
-	Tenant *operatorv1.Tenant
 
 	// The fields below parameterize the generic kube-controllers component. The
 	// variant assemblers (NewCalicoKubeControllers, the enterprise es builder)
@@ -234,16 +218,14 @@ type kubeControllersComponent struct {
 }
 
 func (c *kubeControllersComponent) ResolveImages(is *operatorv1.ImageSet) error {
-	reg := c.cfg.Installation.Registry
-	path := c.cfg.Installation.ImagePath
-	prefix := c.cfg.Installation.ImagePrefix
 	var err error
-	image := c.cfg.ImageOverrides.Resolve(render.ComponentNameKubeControllers, components.CombinedCalicoImage(c.cfg.Installation), c.cfg.Installation)
-	c.calicoImage, err = components.GetReference(image, reg, path, prefix, is)
-	if err != nil {
+	if c.cfg.Image != nil {
+		in := c.cfg.Installation
+		c.calicoImage, err = components.GetReference(*c.cfg.Image, in.Registry, in.ImagePath, in.ImagePrefix, is)
 		return err
 	}
-	return nil
+	c.calicoImage, err = components.ReferenceFor(components.ImageKeyCalico, c.cfg.Installation, is)
+	return err
 }
 
 func (c *kubeControllersComponent) SupportedOSType() rmeta.OSType {
@@ -720,7 +702,7 @@ func kubeControllersCalicoSystemPolicy(cfg *KubeControllersConfiguration) *v3.Ne
 		})
 	}
 
-	if r, err := cfg.K8sServiceEp.DestinationEntityRule(); r != nil && err == nil {
+	if r, err := cfg.K8sServiceEp.DestinationEntityRule(cfg.ClusterDomain); r != nil && err == nil {
 		egressRules = append(egressRules, v3.Rule{
 			Action:      v3.Allow,
 			Protocol:    &networkpolicy.TCPProtocol,

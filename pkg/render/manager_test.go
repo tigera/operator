@@ -334,6 +334,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"ippools", "ipamconfigurations"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ipamblocks"},
+				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"stagednetworkpolicies",
 					"tier.stagednetworkpolicies",
@@ -676,6 +686,16 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{"clusterinformations"},
 				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"ippools", "ipamconfigurations"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ipamblocks"},
+				Verbs:     []string{"list"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},

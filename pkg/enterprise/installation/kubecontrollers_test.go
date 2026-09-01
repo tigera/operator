@@ -393,6 +393,103 @@ var _ = Describe("calico-kube-controllers enterprise surface", func() {
 			Expect(enabledControllers(create)).NotTo(ContainSubstring("rbacsync"))
 		})
 
+		// Kubernetes' privilege-escalation guard lets the controller create a
+		// ClusterRole only if it already holds every permission that role
+		// grants. So each grant the managed calico-ui-* roles make has to be
+		// mirrored here, or rbacsync's create is rejected and the sync cycle
+		// aborts. These entries are the ones added for EV-6977; the resource is
+		// enough to pin, since the whole rule is what would go missing.
+		DescribeTable("mirrors the managed roles' grants so rbacsync clears the escalation guard",
+			func(apiGroup, resource string) {
+				create, _ := renderWith(ext, gate("true"))
+				role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, kubecontrollers.KubeControllerRole)
+				Expect(ok).To(BeTrue())
+				Expect(role.Rules).To(ContainElement(SatisfyAll(
+					HaveField("APIGroups", ContainElement(apiGroup)),
+					HaveField("Resources", ContainElement(resource)),
+				)), "no rule grants %s/%s", apiGroup, resource)
+			},
+			Entry("the Gateway API enabled check on cluster-context", "operator.tigera.io", "gatewayapis"),
+			Entry("WAF policies", "applicationlayer.projectcalico.org", "globalwafpolicies"),
+			Entry("WAF policy attach targets", "gateway.networking.k8s.io", "httproutes"),
+			Entry("the deployments the WAF page displays", "apps", "deployments"),
+			Entry("admin network policies", "policy.networking.k8s.io", "adminnetworkpolicies"),
+			Entry("baseline admin network policies", "policy.networking.k8s.io", "baselineadminnetworkpolicies"),
+			Entry("cluster network policies", "policy.networking.k8s.io", "clusternetworkpolicies"),
+			Entry("networks, which egress-gateways-mod writes", "projectcalico.org", "networks"),
+			Entry("security event webhooks under the CRD group", "crd.projectcalico.org", "securityeventwebhooks"),
+		)
+
+		It("grants networks the modify verbs, not just the IPAM syncer's reads", func() {
+			// The common rules already grant networks watch/list/get for the
+			// node controller. calico-ui-egress-gateways-mod also writes them,
+			// so a read-only grant would not clear the escalation guard.
+			create, _ := renderWith(ext, gate("true"))
+			role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, kubecontrollers.KubeControllerRole)
+			Expect(ok).To(BeTrue())
+			Expect(role.Rules).To(ContainElement(SatisfyAll(
+				HaveField("APIGroups", ContainElement("projectcalico.org")),
+				HaveField("Resources", ContainElement("networks")),
+				HaveField("Verbs", ContainElements("create", "update", "patch", "delete")),
+			)))
+		})
+
+		It("grants deployments patch for the WAF sidecar toggle", func() {
+			// calico-ui-waf-mod patches a deployment's pod template to enable
+			// sidecar WAF, so a read-only grant would not clear the escalation
+			// guard for that role.
+			create, _ := renderWith(ext, gate("true"))
+			role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, kubecontrollers.KubeControllerRole)
+			Expect(ok).To(BeTrue())
+			Expect(role.Rules).To(ContainElement(SatisfyAll(
+				HaveField("APIGroups", ContainElement("apps")),
+				HaveField("Resources", ContainElement("deployments")),
+				HaveField("Verbs", ContainElement("patch")),
+			)))
+		})
+
+		It("keeps the webhooks CRD group read-only", func() {
+			// The managed role writes securityeventwebhooks through the
+			// aggregated group only, so the escalation guard needs write here
+			// on that group and reads on the CRD group behind it. Write on the
+			// CRD group would be privilege the catalogue never hands out.
+			create, _ := renderWith(ext, gate("true"))
+			role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, kubecontrollers.KubeControllerRole)
+			Expect(ok).To(BeTrue())
+
+			for _, rule := range role.Rules {
+				for _, group := range rule.APIGroups {
+					if group != "crd.projectcalico.org" {
+						continue
+					}
+					for _, resource := range rule.Resources {
+						if resource != "securityeventwebhooks" {
+							continue
+						}
+						Expect(rule.Verbs).NotTo(ContainElements("create", "update", "patch", "delete"),
+							"the CRD group must stay read-only for securityeventwebhooks")
+					}
+				}
+			}
+
+			Expect(role.Rules).To(ContainElement(SatisfyAll(
+				HaveField("APIGroups", ContainElement("projectcalico.org")),
+				HaveField("Resources", ContainElement("securityeventwebhooks")),
+				HaveField("Verbs", ContainElements("create", "update", "patch", "delete")),
+			)), "the aggregated group must carry the write verbs")
+		})
+
+		It("withholds the rbacsync-only grants when the feature is off", func() {
+			// policy.networking.k8s.io is granted by nothing else in the
+			// kube-controllers role, so it tracks the gate exactly.
+			create, _ := renderWith(ext, gate("false"))
+			role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, kubecontrollers.KubeControllerRole)
+			Expect(ok).To(BeTrue())
+			Expect(role.Rules).NotTo(ContainElement(
+				HaveField("APIGroups", ContainElement("policy.networking.k8s.io")),
+			))
+		})
+
 		It("never creates the ConfigMap itself", func() {
 			create, _ := renderWith(ext, gate("true"))
 			_, ok := extensions.FindObject[*corev1.ConfigMap](create, rbacmanagement.ConfigMapName)

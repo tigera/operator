@@ -18,11 +18,13 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/stretchr/testify/mock"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/utils/ptr"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
+	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/render"
 	rwhisker "github.com/tigera/operator/pkg/render/whisker"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -61,5 +63,55 @@ var _ = Describe("whisker enterprise render extension", func() {
 		create, del := calicoExt.Whisker().Modify(base, renderInputs(operatorv1.Calico)).Objects()
 		Expect(create).To(HaveLen(len(baseCreate)))
 		Expect(del).To(HaveLen(len(baseDelete)))
+	})
+})
+
+var _ = Describe("whisker enterprise CR validation", func() {
+	var (
+		mockStatus *status.MockStatus
+		warningKey string
+		warningMsg string
+	)
+
+	whiskerCR := func() *operatorv1.Whisker {
+		return &operatorv1.Whisker{
+			Spec: operatorv1.WhiskerSpec{
+				IngressGateway: &operatorv1.IngressGatewaySpec{Hostname: "whisker.test.local"},
+			},
+		}
+	}
+
+	BeforeEach(func() {
+		mockStatus = &status.MockStatus{}
+		warningKey, warningMsg = "", ""
+		mockStatus.On("SetWarning", mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) { warningKey, warningMsg = args.String(0), args.String(1) }).Return().Maybe()
+		mockStatus.On("ClearWarning", mock.Anything).Return().Maybe()
+	})
+
+	It("drops spec.ingressGateway and warns, pointing at the Manager resource", func() {
+		cr := whiskerCR()
+		Expect(ext.Whisker().ValidateAndDefault(cr, mockStatus)).To(Succeed())
+		Expect(cr.Spec.IngressGateway).To(BeNil())
+
+		Expect(warningKey).To(Equal("ingressgateway-variant"))
+		Expect(warningMsg).To(ContainSubstring("Manager resource's spec.ingressGateway"))
+		mockStatus.AssertNotCalled(GinkgoT(), "ClearWarning", mock.Anything)
+	})
+
+	It("keeps spec.ingressGateway when the installation is Calico", func() {
+		cr := whiskerCR()
+		Expect(calicoExt.Whisker().ValidateAndDefault(cr, mockStatus)).To(Succeed())
+		Expect(cr.Spec.IngressGateway).NotTo(BeNil(),
+			"a Calico install registers no whisker extension, so the Enterprise build still serves whisker's own gateway")
+
+		Expect(warningKey).To(BeEmpty())
+	})
+
+	It("clears the warning once spec.ingressGateway is unset", func() {
+		Expect(ext.Whisker().ValidateAndDefault(&operatorv1.Whisker{}, mockStatus)).To(Succeed())
+
+		mockStatus.AssertCalled(GinkgoT(), "ClearWarning", "ingressgateway-variant")
+		Expect(warningKey).To(BeEmpty())
 	})
 })

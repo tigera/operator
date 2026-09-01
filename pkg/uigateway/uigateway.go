@@ -45,6 +45,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/gatewayapi"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
 	rgateway "github.com/tigera/operator/pkg/render/gateway"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
@@ -74,9 +75,6 @@ type Config struct {
 	// it for a component that streams, where the default would cut the stream.
 	RouteRequestTimeout *string
 
-	// ExtraProxyObjects are the variant's additions beside the proxy, or nil.
-	ExtraProxyObjects []client.Object
-
 	Provider operatorv1.Provider
 
 	// Azure carries Installation.Azure so the gateway namespace gets the same
@@ -87,12 +85,22 @@ type Config struct {
 // Helper renders and cleans up one UI component's gateway resources.
 type Helper struct {
 	cli client.Client
+	ext extensions.UIGatewayExtension
 	cfg Config
 }
 
-// NewHelper returns the helper for one UI component's gateway.
-func NewHelper(cli client.Client, cfg Config) *Helper {
-	return &Helper{cli: cli, cfg: cfg}
+// NewHelper returns the helper for one UI component's gateway. ext supplies
+// the variant's additions beside the proxy; nil adds none.
+func NewHelper(cli client.Client, ext extensions.UIGatewayExtension, cfg Config) *Helper {
+	return &Helper{cli: cli, ext: ext, cfg: cfg}
+}
+
+// proxyObjects returns the variant's additions beside the proxy.
+func (h *Helper) proxyObjects() []client.Object {
+	if h.ext == nil {
+		return nil
+	}
+	return h.ext.ProxyObjects(h.cfg.ResourcePrefix, h.cfg.BackendNamespace)
 }
 
 // Components renders the component's gateway resources, plus deletion
@@ -158,7 +166,7 @@ func (h *Helper) Components(
 		BackendCABundleConfigMapName: h.cfg.BackendCABundleConfigMapName,
 		TLSKeyPair:                   keyPair,
 		ResourcePrefix:               h.cfg.ResourcePrefix,
-		ExtraProxyObjects:            h.cfg.ExtraProxyObjects,
+		ExtraProxyObjects:            h.proxyObjects(),
 		OpenShift:                    h.cfg.Provider.IsOpenShift(),
 		RouteRequestTimeout:          h.cfg.RouteRequestTimeout,
 	})), nil
@@ -232,7 +240,7 @@ func (h *Helper) StaleComponents(ctx context.Context, desiredNS string) ([]rende
 			StaleNamespace:    ns,
 			BackendNamespace:  h.cfg.BackendNamespace,
 			TLSSecretName:     h.cfg.TLSSecretName,
-			ExtraProxyObjects: h.cfg.ExtraProxyObjects,
+			ExtraProxyObjects: h.proxyObjects(),
 			DeleteNamespace:   deletable,
 			TargetNamespace:   desiredNS,
 		}))
@@ -271,7 +279,7 @@ func (h *Helper) Teardown(ctx context.Context) ([]render.Component, error) {
 			StaleNamespace:    ns,
 			BackendNamespace:  h.cfg.BackendNamespace,
 			TLSSecretName:     h.cfg.TLSSecretName,
-			ExtraProxyObjects: h.cfg.ExtraProxyObjects,
+			ExtraProxyObjects: h.proxyObjects(),
 			DeleteNamespace:   deletable,
 		}))
 	}

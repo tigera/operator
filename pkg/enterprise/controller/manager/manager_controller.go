@@ -753,14 +753,13 @@ func (r *ReconcileManager) Reconcile(ctx context.Context, request reconcile.Requ
 	// observed on the cluster.
 	var gatewayComponents []render.Component
 	var gatewayTLSKeyPair certificatemanagement.KeyPairInterface
-	gwHelper := uigateway.NewHelper(r.client, uigateway.Config{
+	gwHelper := uigateway.NewHelper(r.client, r.opts.Extensions.UIGateway(), uigateway.Config{
 		ResourcePrefix:               ManagerGatewayResourcePrefix,
 		TLSSecretName:                ManagerGatewayTLSSecretName,
 		BackendNamespace:             helper.InstallNamespace(),
 		BackendServiceName:           render.ManagerServiceName,
 		BackendPort:                  render.ManagerPort,
 		BackendCABundleConfigMapName: certificatemanagement.TrustedCertConfigMapName,
-		ExtraProxyObjects:            euigateway.ProxyObjects(helper.InstallNamespace()),
 		Provider:                     r.opts.DetectedProvider,
 		Azure:                        installationSpec.Azure,
 	})
@@ -941,7 +940,7 @@ func (r *ReconcileManager) resolveAdditionalTunnelCert(
 
 const (
 	ManagerGatewayTLSSecretName  = "calico-manager-gateway-tls"
-	ManagerGatewayResourcePrefix = "calico-manager"
+	ManagerGatewayResourcePrefix = euigateway.ManagerGatewayResourcePrefix
 )
 
 // resolveGateway validates the Manager spec.ingressGateway configuration, resolves the

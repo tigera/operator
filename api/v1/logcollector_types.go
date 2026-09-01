@@ -41,6 +41,15 @@ type LogCollectorSpec struct {
 	// +kubebuilder:validation:Enum=Enabled;Disabled
 	CollectProcessPath *CollectProcessPathOption `json:"collectProcessPath,omitempty"`
 
+	// IngestionCompression selects the compression applied to log batches in
+	// transit to Linseed, the log ingestion endpoint. It does not affect the
+	// zstd compression of the rotated log files on each node's disk, and it
+	// does not apply to the additional stores or OpenTelemetry exporters.
+	// Default: Zstd
+	// +optional
+	// +kubebuilder:default=Zstd
+	IngestionCompression *IngestionCompressionOption `json:"ingestionCompression,omitempty"`
+
 	// If running as a multi-tenant management cluster, the namespace in which
 	// the management cluster's tenant services are running.
 	// +optional
@@ -92,6 +101,19 @@ type EncryptionOption string
 const (
 	EncryptionNone EncryptionOption = "None"
 	EncryptionTLS  EncryptionOption = "TLS"
+)
+
+// IngestionCompressionOption specifies the compression applied to log
+// batches in transit to the log ingestion endpoint.
+//
+// One of: None, Gzip, Zstd
+// +kubebuilder:validation:Enum=None;Gzip;Zstd
+type IngestionCompressionOption string
+
+const (
+	IngestionCompressionNone IngestionCompressionOption = "None"
+	IngestionCompressionGzip IngestionCompressionOption = "Gzip"
+	IngestionCompressionZstd IngestionCompressionOption = "Zstd"
 )
 
 type AdditionalLogStoreSpec struct {

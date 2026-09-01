@@ -110,6 +110,31 @@ var _ = Describe("NonClusterHost controller tests", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
+		It("should default IngestionCompression to Zstd and keep an explicit value", func() {
+			// CRs created before the field existed lack it; reconcile must
+			// materialize the default so hosts reading the CR see it.
+			Expect(cli.Create(ctx, nonclusterhost)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			nch := &operatorv1.NonClusterHost{}
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, nch)).NotTo(HaveOccurred())
+			Expect(nch.Spec.IngestionCompression).NotTo(BeNil())
+			Expect(*nch.Spec.IngestionCompression).To(Equal(operatorv1.IngestionCompressionZstd))
+
+			// An explicit value survives reconcile untouched.
+			none := operatorv1.IngestionCompressionNone
+			nch.Spec.IngestionCompression = &none
+			Expect(cli.Update(ctx, nch)).NotTo(HaveOccurred())
+
+			_, err = r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(cli.Get(ctx, client.ObjectKey{Name: "tigera-secure"}, nch)).NotTo(HaveOccurred())
+			Expect(*nch.Spec.IngestionCompression).To(Equal(operatorv1.IngestionCompressionNone))
+		})
+
 		It("should set degraded status if endpoint is invalid", func() {
 			mockStatus.On("SetDegraded", operatorv1.ResourceValidationError, "Invalid endpoint", mock.Anything, mock.Anything).Return()
 

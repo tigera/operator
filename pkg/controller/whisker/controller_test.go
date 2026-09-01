@@ -31,6 +31,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/utils"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	entwhisker "github.com/tigera/operator/pkg/enterprise/whisker"
 	"github.com/tigera/operator/pkg/extensions"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rgateway "github.com/tigera/operator/pkg/render/gateway"
@@ -328,9 +329,10 @@ var _ = Describe("whisker controller tests", func() {
 			Expect(degradedErr).To(ContainSubstring("certificateManagement"))
 		})
 
-		It("renders no gateway and tears down leftovers on a non-Calico variant", func() {
+		It("renders no gateway and tears down leftovers when the Enterprise extension is active", func() {
 			// Whisker's own Deployment is deleted on other variants.
 			mockStatus.On("RemoveDeployments", mock.Anything).Return()
+			reconciler.ext = entwhisker.New(operatorv1.CalicoEnterprise)
 			createGatewayAPI()
 			setIngressGateway(nil)
 
@@ -361,6 +363,10 @@ var _ = Describe("whisker controller tests", func() {
 			mockStatus.AssertNotCalled(GinkgoT(), "SetDegraded", operatorv1.ResourceNotReady,
 				mock.Anything, mock.Anything, mock.Anything)
 			mockStatus.AssertCalled(GinkgoT(), "SetWarning", "ingressgateway-variant", mock.Anything)
+
+			w := &operatorv1.Whisker{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, w)).NotTo(HaveOccurred())
+			Expect(w.Spec.IngressGateway).NotTo(BeNil(), "the field the variant ignores must survive on the CR the user wrote")
 		})
 
 		It("tears down labeled gateway resources when spec.ingressGateway is nil", func() {

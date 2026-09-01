@@ -382,9 +382,10 @@ func rbacSyncIDPGroupsRole() []client.Object {
 // context roles). The comment on each rule names the managed role(s) it covers.
 //
 // Only the grants unique to the managed roles live here. Core resources those
-// roles also grant (namespaces, nodes, services, pods, clusterinformations,
-// hostendpoints, serviceaccounts, tiers) are already held by the common
-// kube-controllers rules above, which satisfy the escalation guard for them.
+// roles also grant (namespaces, nodes, services, pods, configmaps,
+// clusterinformations, hostendpoints, serviceaccounts, tiers) are already held
+// by the common kube-controllers rules above, which satisfy the escalation
+// guard for them.
 func rbacSyncControllerRules() []rbacv1.PolicyRule {
 	return []rbacv1.PolicyRule{
 		// RBAC management: the ClusterRoles and bindings the controller
@@ -426,7 +427,8 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 		// The per-feature pages, view and modify: Dashboards, Managed Clusters,
 		// Global Network Sets, Network Sets, Policy Recommendations, Packet
 		// Captures, Alerts and Security Events, Threat Feeds, Compliance
-		// Reports, Webhooks, Deep Packet Inspection, and Egress Gateways.
+		// Reports, Deep Packet Inspection, and Egress Gateways. Webhooks has
+		// its own rule below, because it spans two API groups.
 		// Mirrors the matching calico-ui-<feature>-{view,mod} roles
 		// (e.g. calico-ui-managed-clusters-{view,mod}, calico-ui-alerts-
 		// {view,mod}, calico-ui-egress-gateways-{view,mod}).
@@ -444,6 +446,7 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 				"deeppacketinspections/status",
 				"egressgatewaypolicies",
 				"externalnetworks",
+				"networks",
 				"globalalerts",
 				"globalalerts/status",
 				"globalalerttemplates",
@@ -455,7 +458,33 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 				"globalreporttypes",
 				"packetcaptures",
 				"packetcaptures/files",
-				"securityeventwebhooks",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// Webhooks, view and modify: securityeventwebhooks is reachable under
+		// both the aggregated API group and the CRD group behind it, and the
+		// managed role grants reads on both. Writes go through the aggregated
+		// group only, so that is the only group needing the write verbs here.
+		// Mirrors calico-ui-webhooks-{view,mod}.
+		{
+			APIGroups: []string{"projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		{
+			APIGroups: []string{"crd.projectcalico.org"},
+			Resources: []string{"securityeventwebhooks"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		// Admin Network Policies, view and modify: the Kubernetes admin network
+		// policy API is tierless, so it is granted outside the tier rules above.
+		// Mirrors calico-ui-admin-network-policies-{view,mod}.
+		{
+			APIGroups: []string{"policy.networking.k8s.io"},
+			Resources: []string{
+				"adminnetworkpolicies",
+				"baselineadminnetworkpolicies",
+				"clusternetworkpolicies",
 			},
 			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
 		},
@@ -516,12 +545,54 @@ func rbacSyncControllerRules() []rbacv1.PolicyRule {
 			Verbs:     []string{"get"},
 		},
 		// Manager UI load: feature-enabled checks for Application Layer / WAF,
-		// Packet Capture, and Intrusion Detection. Mirrors calico-ui-cluster-
-		// context (which bundles the compliances check above into the same rule).
+		// Gateway API, Packet Capture, and Intrusion Detection. Mirrors
+		// calico-ui-cluster-context (which bundles the compliances check above
+		// into the same rule).
 		{
 			APIGroups: []string{"operator.tigera.io"},
-			Resources: []string{"applicationlayers", "packetcaptureapis", "intrusiondetections"},
+			Resources: []string{"applicationlayers", "gatewayapis", "packetcaptureapis", "intrusiondetections"},
 			Verbs:     []string{"get"},
+		},
+		// WAF, view and modify: the policy, plugin and validation policy
+		// resources the WAF pages read and write. Mirrors calico-ui-waf-
+		// {view,mod}.
+		//
+		// KubeControllersEnterpriseCommonRules already grants these through
+		// wafRules(), but only when the GatewayAPI CR is present. The rbacsync
+		// controller needs them whenever RBAC management is enabled, so they are
+		// repeated here rather than relying on that gate — otherwise the managed
+		// WAF roles are creatable on Gateway API clusters and rejected by the
+		// escalation guard everywhere else.
+		{
+			APIGroups: []string{"applicationlayer.projectcalico.org"},
+			Resources: []string{
+				"globalwafpolicies",
+				"globalwafplugins",
+				"globalwafvalidationpolicies",
+				"wafpolicies",
+				"wafplugins",
+				"wafvalidationpolicies",
+			},
+			Verbs: []string{"get", "list", "watch", "create", "update", "patch", "delete"},
+		},
+		// WAF, view and modify: the Gateway API objects a WAF policy attaches
+		// to, offered as attach targets. Read-only on both managed variants.
+		// Mirrors calico-ui-waf-{view,mod}. Same wafRules() gating caveat as
+		// the rule above.
+		{
+			APIGroups: []string{"gateway.networking.k8s.io"},
+			Resources: []string{"gateways", "httproutes"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		// WAF, view and modify: the deployments the WAF configuration page
+		// displays; the mod role also patches a deployment's pod template to
+		// toggle sidecar WAF. Mirrors calico-ui-waf-{view,mod}. The base
+		// kube-controllers rules grant apps/daemonsets only, scoped to
+		// calico-node, so none of this is already held.
+		{
+			APIGroups: []string{"apps"},
+			Resources: []string{"deployments"},
+			Verbs:     []string{"get", "list", "watch", "patch"},
 		},
 		// Global Network Sets and Network Sets, view and modify: listing the
 		// pods a network set selects. Mirrors the pods grant on calico-ui-

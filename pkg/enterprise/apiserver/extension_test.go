@@ -425,6 +425,44 @@ var _ = Describe("API server enterprise modifier", func() {
 		Entry("no ConfigMap", nil, false),
 	)
 
+	DescribeTable("grants tigera-network-admin write access to the switch whatever the gate says",
+		func(gate *corev1.ConfigMap) {
+			var objs []client.Object
+			if gate != nil {
+				objs = append(objs, gate)
+			}
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, objs...)
+			eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			rendered, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](rendered, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+
+			// A rule rendered only while the feature is off could never be used to turn it
+			// on, so all three are ungated. bind additionally ungates the UI's buttons.
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles"},
+				Verbs:     []string{"bind"},
+			}))
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create"},
+			}))
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{rbacmanagement.ConfigMapName},
+				Verbs:         []string{"get", "update"},
+			}))
+		},
+		Entry("enabled", rbacManagementGate("true")),
+		Entry("disabled", rbacManagementGate("false")),
+		Entry("no ConfigMap", nil),
+	)
+
 	It("reads the gate on a managed cluster, which carries tigera-network-admin too", func() {
 		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil,
 			&operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}},

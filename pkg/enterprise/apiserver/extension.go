@@ -1622,6 +1622,39 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 		},
 	}...)
 
+	// Write access to the switch, so a network admin can turn the RBAC management UI on
+	// without cluster-admin. Not gated: a rule rendered only while the feature is off
+	// could never be used to turn it on.
+	//
+	// bind carries two jobs. The UI greys out both its Enable and its Create Role button
+	// unless the caller holds escalate or bind on clusterroles, so without it a network
+	// admin cannot reach the feature at all. It is also what the apiserver's escalation
+	// check requires when ui-apis writes a binding to a ClusterRole whose permissions the
+	// caller does not already hold.
+	//
+	// create cannot be restricted by resource name -- the name is not in the request path
+	// at authorization time, so such a rule never matches -- so it admits creating any
+	// ConfigMap in the namespace. update, not patch: ui-apis writes the switch back with a
+	// full update, so patch alone cannot turn the feature off again.
+	rules = append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles"},
+			Verbs:     []string{"bind"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName},
+			Verbs:         []string{"get", "update"},
+		},
+	)
+
 	// ui-apis writes these impersonating the caller, so the apiserver enforces escalation
 	// against the user's own permissions.
 	if c.data.rbacManagementEnabled {

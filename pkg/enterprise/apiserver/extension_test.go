@@ -51,6 +51,7 @@ import (
 	"github.com/tigera/operator/pkg/render"
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -423,6 +424,37 @@ var _ = Describe("API server enterprise modifier", func() {
 		Entry("enabled", rbacManagementGate("true"), true),
 		Entry("disabled", rbacManagementGate("false"), false),
 		Entry("no ConfigMap", nil, false),
+	)
+
+	DescribeTable("grants tigera-network-admin write access to the gate ConfigMap whatever the gate says",
+		func(gate *corev1.ConfigMap) {
+			var objs []client.Object
+			if gate != nil {
+				objs = append(objs, gate)
+			}
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, objs...)
+			eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			rendered, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](rendered, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create"},
+			}))
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+			}))
+		},
+		Entry("enabled", rbacManagementGate("true")),
+		Entry("disabled", rbacManagementGate("false")),
+		Entry("no ConfigMap", nil),
 	)
 
 	It("reads the gate on a managed cluster, which carries tigera-network-admin too", func() {

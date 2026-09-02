@@ -97,6 +97,7 @@ func (r *LogStorageConditions) Reconcile(ctx context.Context, request reconcile.
 			// The LogStorage was modified after we read it - our cached copy is stale. Requeue and
 			// recompute the conditions from the updated object instead of reporting an error.
 			reqLogger.V(3).Info("Conflict updating LogStorage status conditions, retrying")
+			//nolint:staticcheck // SA1019: a conflict wants a prompt retry, not a flat delay
 			return reconcile.Result{Requeue: true}, nil
 		}
 		log.WithValues("reason", err).Info("Failed to update LogStorage status conditions")

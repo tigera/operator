@@ -337,6 +337,7 @@ var _ = Describe("Monitor controller tests", func() {
 								},
 							},
 							HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
+								//nolint:staticcheck // SA1019: mirrors the deprecated field monitor.go still renders
 								BearerTokenSecret: &corev1.SecretKeySelector{
 									LocalObjectReference: corev1.LocalObjectReference{
 										Name: monitor.TigeraExternalPrometheus,

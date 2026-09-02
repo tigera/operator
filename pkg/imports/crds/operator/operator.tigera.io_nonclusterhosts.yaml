@@ -48,6 +48,19 @@ spec:
                     hosts. For example: https://1.2.3.4:443"
                   pattern: ^https://.+$
                   type: string
+                ingestionCompression:
+                  default: Zstd
+                  description: |-
+                    IngestionCompression selects the compression applied to log batches in
+                    transit from non-cluster hosts to the log ingestion endpoint. Hosts
+                    read this field live. On a cluster whose CRD predates the field, hosts
+                    fall back to gzip, which every release's ingestion listener inflates.
+                    Default: Zstd
+                  enum:
+                    - None
+                    - Gzip
+                    - Zstd
+                  type: string
                 typhaEndpoint:
                   description:
                     "Location of the Typha endpoint for non-cluster host

@@ -425,6 +425,12 @@ func (c *fluentBitComponent) linseedHTTPOutput(tag, certPath, keyPath, storageLi
 		// accumulate during a Linseed outage.
 		"retry_limit": "no_limits",
 	}
+	// Compress batches on the wire; Linseed inflates zstd and gzip request
+	// bodies transparently. None omits the option, so out_http posts plain
+	// NDJSON.
+	if v := compressValue(c.cfg.LogCollector.Spec.IngestionCompression); v != "" {
+		out["compress"] = v
+	}
 	if storageLimit != "" {
 		out["storage.total_limit_size"] = storageLimit
 	}
@@ -432,6 +438,23 @@ func (c *fluentBitComponent) linseedHTTPOutput(tag, certPath, keyPath, storageLi
 		out["header"] = fmt.Sprintf("x-tenant-id %s", c.cfg.Tenant.Spec.ID)
 	}
 	return out
+}
+
+// compressValue maps the IngestionCompression API value to out_http's
+// compress option; "" means the option is omitted. An unset field maps to
+// the default, which the API server fills in on every read.
+func compressValue(compression *operatorv1.IngestionCompressionOption) string {
+	if compression == nil {
+		return "zstd"
+	}
+	switch *compression {
+	case operatorv1.IngestionCompressionNone:
+		return ""
+	case operatorv1.IngestionCompressionGzip:
+		return "gzip"
+	default:
+		return "zstd"
+	}
 }
 
 // linseedStorageLimit caps a tag's filesystem buffer — storage.total_limit_size

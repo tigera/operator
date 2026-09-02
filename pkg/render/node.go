@@ -1533,6 +1533,42 @@ func (c *nodeComponent) nodeEnvVars() []corev1.EnvVar {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{Name: "FELIX_BPFEXTTOSERVICECONNMARK", Value: "0x80"})
 	}
 
+	// EVPN feature: propagate configuration to Felix via env vars.  The
+	// standalone calico-bgp DaemonSet is rendered separately (see
+	// EVPNBGPDaemon()) and shares the UDS at /var/run/calico/bgp.sock
+	// with calico-node.
+	if c.cfg.Installation.CalicoNetwork != nil &&
+		c.cfg.Installation.CalicoNetwork.EVPN != nil &&
+		c.cfg.Installation.CalicoNetwork.EVPN.Mode == operatorv1.EVPNModeEnabled {
+		evpn := c.cfg.Installation.CalicoNetwork.EVPN
+		nodeEnv = append(nodeEnv,
+			corev1.EnvVar{Name: "FELIX_EVPN_SOCKET_PATH", Value: "/var/run/calico/bgp.sock"},
+			corev1.EnvVar{Name: "FELIX_EVPN_NODE_IP", ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{FieldPath: "status.hostIP"},
+			}},
+		)
+		if evpn.LocalASN != 0 {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name: "FELIX_EVPN_NODE_ASN", Value: fmt.Sprintf("%d", evpn.LocalASN),
+			})
+		}
+		if evpn.PeerIP != "" {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name: "FELIX_EVPN_PEER_IP", Value: evpn.PeerIP,
+			})
+		}
+		if evpn.PeerASN != 0 {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name: "FELIX_EVPN_PEER_ASN", Value: fmt.Sprintf("%d", evpn.PeerASN),
+			})
+		}
+		if evpn.MaxHopLimit != 0 {
+			nodeEnv = append(nodeEnv, corev1.EnvVar{
+				Name: "FELIX_EVPN_MAX_HOP_LIMIT", Value: fmt.Sprintf("%d", evpn.MaxHopLimit),
+			})
+		}
+	}
+
 	if c.vppDataplaneEnabled() {
 		nodeEnv = append(nodeEnv, corev1.EnvVar{
 			Name:  "FELIX_USEINTERNALDATAPLANEDRIVER",

@@ -1384,6 +1384,17 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	components = append(components, render.Node(&nodeCfg))
 
+	// EVPN: when Installation.spec.calicoNetwork.evpn.mode == Enabled,
+	// render a standalone calico-bgp DaemonSet next to calico-node.
+	if defaulted.Spec.CalicoNetwork != nil &&
+		defaulted.Spec.CalicoNetwork.EVPN != nil &&
+		defaulted.Spec.CalicoNetwork.EVPN.Mode == operatorv1.EVPNModeEnabled {
+		components = append(components, render.NewPassthrough(
+			[]client.Object{render.EVPNBGPDaemon(&defaulted.Spec)},
+			nil,
+		))
+	}
+
 	csiCfg := render.CSIConfiguration{
 		Installation: &defaulted.Spec,
 		Terminating:  installationMarkedForDeletion,

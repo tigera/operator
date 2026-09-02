@@ -1379,6 +1379,55 @@ spec:
                         - Enabled
                         - Disabled
                       type: string
+                    evpn:
+                      description: |-
+                        EVPN configures BGP EVPN control-plane extensions.  When Enabled, the
+                        operator renders a calico-bgp DaemonSet on every node (running GoBGP
+                        alongside calico-node) and passes EVPN configuration through to Felix
+                        via environment variables.  BIRD's runit script is short-circuited so
+                        calico-bgp becomes the only BGP daemon on the node.
+                        See designs/2026/PMREQ-818-bgp-evpn-research/bgp-evpn-phase1-design.md.
+                      properties:
+                        localASN:
+                          description: |-
+                            LocalASN is the ASN cluster nodes announce.  Passed as
+                            FELIX_EVPN_NODE_ASN.
+                          format: int32
+                          type: integer
+                        maxHopLimit:
+                          description: |-
+                            MaxHopLimit sets eBGP multi-hop TTL when peering with a
+                            non-directly-attached speaker.  0 or unset means BGP's default
+                            (1 hop for eBGP, unlimited for iBGP).  Passed as
+                            FELIX_EVPN_MAX_HOP_LIMIT.
+                          format: int32
+                          maximum: 255
+                          minimum: 0
+                          type: integer
+                        mode:
+                          default: Disabled
+                          description: |-
+                            Mode enables or disables BGP EVPN.  When Enabled, the calico-bgp
+                            DaemonSet is rendered and BIRD is short-circuited on calico-node.
+                          enum:
+                            - Disabled
+                            - Enabled
+                          type: string
+                        peerASN:
+                          description: |-
+                            PeerASN is the ASN the external EVPN speaker announces.  Passed as
+                            FELIX_EVPN_PEER_ASN.
+                          format: int32
+                          type: integer
+                        peerIP:
+                          description: |-
+                            PeerIP is the address of the external EVPN speaker each cluster node
+                            peers with (typically a ToR/RR, a spine-level LB, or a
+                            customer-managed VM running FRR).  Passed to Felix as
+                            FELIX_EVPN_PEER_IP.  Optional; when empty no default peer is
+                            configured and operators can supply peers via BGPPeer CRs.
+                          type: string
+                      type: object
                     hostPorts:
                       description: |-
                         HostPorts configures whether or not Calico will support Kubernetes HostPorts. Valid only when using the Calico CNI plugin.

@@ -393,8 +393,8 @@ var _ = Describe("API server enterprise modifier", func() {
 		Expect(svc.Spec.Ports).To(ContainElement(HaveField("Name", render.QueryServerPortName)))
 	})
 
-	DescribeTable("grants tigera-network-admin the role management verbs only when RBAC management is enabled",
-		func(gate *corev1.ConfigMap, expected bool) {
+	DescribeTable("grants tigera-network-admin the role management verbs whatever the gate says",
+		func(gate *corev1.ConfigMap) {
 			var objs []client.Object
 			if gate != nil {
 				objs = append(objs, gate)
@@ -409,20 +409,25 @@ var _ = Describe("API server enterprise modifier", func() {
 
 			// ui-apis writes bindings impersonating the caller, so the caller's own role
 			// has to carry the verbs or the apiserver's escalation check rejects it.
-			matcher := ContainElement(rbacv1.PolicyRule{
+			//
+			// Rendered whatever the gate says: gating them races the user, who enables the
+			// feature from the UI. ui-apis starts serving /team as soon as the switch is
+			// written, before this controller has re-rendered the role, and the resulting
+			// 403 is not a state the UI retries on.
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups: []string{"rbac.authorization.k8s.io"},
 				Resources: []string{"clusterrolebindings", "rolebindings"},
 				Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
-			})
-			if expected {
-				Expect(networkAdmin.Rules).To(matcher)
-			} else {
-				Expect(networkAdmin.Rules).NotTo(matcher)
-			}
+			}))
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{"rbac.authorization.k8s.io"},
+				Resources: []string{"clusterroles", "roles"},
+				Verbs:     []string{"get", "list", "watch"},
+			}))
 		},
-		Entry("enabled", rbacManagementGate("true"), true),
-		Entry("disabled", rbacManagementGate("false"), false),
-		Entry("no ConfigMap", nil, false),
+		Entry("enabled", rbacManagementGate("true")),
+		Entry("disabled", rbacManagementGate("false")),
+		Entry("no ConfigMap", nil),
 	)
 
 	DescribeTable("grants tigera-network-admin write access to the switch whatever the gate says",

@@ -87,10 +87,6 @@ type apiServerRenderData struct {
 	// run. The base render resolves it too, but a modifier runs with no ImageSet.
 	calicoImage string
 
-	// rbacManagementEnabled mirrors the rbac-ui-config gate. ui-apis writes role bindings
-	// impersonating the caller, so tigera-network-admin needs the verbs itself.
-	rbacManagementEnabled bool
-
 	// bindingNamespaces is the set of tenant namespaces whose calico-apiserver ServiceAccount
 	// should be granted Linseed access. Empty for zero/single-tenant clusters; every tenant
 	// namespace for multi-tenant management clusters.
@@ -225,8 +221,10 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		return ci, nil, extensions.InvalidConfigf("having both a ManagementCluster and a ManagementClusterConnection is not supported")
 	}
 
-	rbacManagementEnabled, err := utils.RBACManagementEnabled(ctx, ci.Client, e.variant, e.opts.MultiTenant)
-	if err != nil {
+	// Nothing the apiserver renders branches on the switch any more, but an unreadable
+	// switch still means unknown cluster state, so degrade rather than reconcile on a
+	// guess.
+	if _, err := utils.RBACManagementEnabled(ctx, ci.Client, e.variant, e.opts.MultiTenant); err != nil {
 		return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "error reading the RBAC management UI ConfigMap: %w", err)
 	}
 
@@ -345,7 +343,6 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 		calicoImage:                 calicoImage,
 		bindingNamespaces:           bindingNamespaces,
 		cloud:                       e.opts.Cloud,
-		rbacManagementEnabled:       rbacManagementEnabled,
 	}
 	return ci, nil, nil
 }
@@ -1657,20 +1654,30 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 
 	// ui-apis writes these impersonating the caller, so the apiserver enforces escalation
 	// against the user's own permissions.
-	if c.data.rbacManagementEnabled {
-		rules = append(rules,
-			rbacv1.PolicyRule{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterroles", "roles"},
-				Verbs:     []string{"get", "list", "watch"},
-			},
-			rbacv1.PolicyRule{
-				APIGroups: []string{"rbac.authorization.k8s.io"},
-				Resources: []string{"clusterrolebindings", "rolebindings"},
-				Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
-			},
-		)
-	}
+	//
+	// Ungated, like the switch above, because gating them on the switch races the user.
+	// Enabling the feature is a UI action: it writes the switch, and only then does this
+	// controller observe it and re-render the role. In that window ui-apis is already
+	// serving /team, so its first list of ClusterRoleBindings is rejected. The UI polls
+	// for the feature to come live and treats a 404 as "not ready yet", but a 403 is not
+	// a state it expects, so it surfaces a permission error instead of retrying and the
+	// user has to reload to recover.
+	//
+	// Leaving them ungated does not expose the feature -- ui-apis still gates every /team
+	// route on the switch -- but it does mean a network admin holds binding writes through
+	// the Kubernetes API whether or not the feature is on.
+	rules = append(rules,
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterroles", "roles"},
+			Verbs:     []string{"get", "list", "watch"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups: []string{"rbac.authorization.k8s.io"},
+			Resources: []string{"clusterrolebindings", "rolebindings"},
+			Verbs:     []string{"get", "list", "watch", "create", "update", "delete"},
+		},
+	)
 
 	// Privileges for lma.tigera.io have no effect on managed clusters.
 	if c.data.managementClusterConnection == nil {

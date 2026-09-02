@@ -1050,6 +1050,26 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs:     []string{"get", "list"},
 			},
 			{
+				// IP Pools page: ui-apis reads pools and IPAM config via the
+				// aggregated API to serve /ipam/pools endpoints and detect IPAM mode.
+				APIGroups: []string{"projectcalico.org"},
+				Resources: []string{"ippools", "ipamconfigurations"},
+				Verbs:     []string{"get", "list"},
+			},
+			{
+				// IPAMBlocks are only served via the CRD API group, not the
+				// aggregated projectcalico.org API.
+				APIGroups: []string{"crd.projectcalico.org"},
+				Resources: []string{"ipamblocks"},
+				Verbs:     []string{"list"},
+			},
+			{
+				// IP Pools page: ui-apis reads the Installation to detect the IPAM mode.
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"installations"},
+				Verbs:     []string{"get"},
+			},
+			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"stagednetworkpolicies",

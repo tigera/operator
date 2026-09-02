@@ -1063,6 +1063,12 @@ func managerClusterRole(managedCluster bool, kubernetesProvider operatorv1.Provi
 				Verbs:     []string{"list"},
 			},
 			{
+				// IP Pools page: ui-apis reads the Installation to detect the IPAM mode.
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"installations"},
+				Verbs:     []string{"get"},
+			},
+			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"stagednetworkpolicies",

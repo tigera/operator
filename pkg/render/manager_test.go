@@ -343,6 +343,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				Verbs:     []string{"list"},
 			},
 			{
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"installations"},
+				Verbs:     []string{"get"},
+			},
+			{
 				APIGroups: []string{"projectcalico.org"},
 				Resources: []string{
 					"stagednetworkpolicies",
@@ -696,6 +701,11 @@ var _ = Describe("Tigera Secure Manager rendering tests", func() {
 				APIGroups: []string{"crd.projectcalico.org"},
 				Resources: []string{"ipamblocks"},
 				Verbs:     []string{"list"},
+			},
+			{
+				APIGroups: []string{"operator.tigera.io"},
+				Resources: []string{"installations"},
+				Verbs:     []string{"get"},
 			},
 			{
 				APIGroups: []string{"projectcalico.org"},

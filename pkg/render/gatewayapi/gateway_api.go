@@ -452,8 +452,12 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// core Installation's default-deny.
 	if pr.cfg.IncludeV3NetworkPolicy {
 		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
+		// One per Gateway namespace. These are owned by the GatewayAPI CR rather than by
+		// the namespace's Gateways, because mergeState skips a v3.NetworkPolicy whose Spec
+		// has not changed (component.go), so a second owner reference would never merge in.
+		// A namespace that stops hosting Gateways is swept by the controller instead.
 		for _, ns := range pr.cfg.GatewayNamespaces {
-			objs = append(objs, gatewayAPIProxyPolicy(ns, pr.cfg.GatewayListenerPorts[ns], openShift))
+			objs = append(objs, ProxyPolicy(ns, pr.cfg.GatewayListenerPorts[ns], openShift))
 		}
 	}
 
@@ -1097,10 +1101,10 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 	}
 }
 
-// gatewayAPIProxyPolicy lets the data-plane envoy proxies in ns punch through any
-// default-deny there (deploy.type=GatewayNamespace). It is namespaced, not global, so a
-// pod outside a Gateway namespace cannot pick up these rules by wearing the proxy label.
-func gatewayAPIProxyPolicy(ns string, listenerPorts []uint16, openShift bool) *v3.NetworkPolicy {
+// ProxyPolicy lets the data-plane envoy proxies in ns punch through any default-deny
+// there (deploy.type=GatewayNamespace). It is namespaced, not global, so a pod outside a
+// Gateway namespace cannot pick up these rules by wearing the proxy label.
+func ProxyPolicy(ns string, listenerPorts []uint16, openShift bool) *v3.NetworkPolicy {
 	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
 	egress = append(egress,
 		// xDS config (18000) and Wasm module fetch (18002) on the envoy-gateway controller.

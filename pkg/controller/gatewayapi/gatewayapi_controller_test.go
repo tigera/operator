@@ -117,6 +117,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		fakeComponentHandlers = nil
 		r = &ReconcileGatewayAPI{
 			client:              c,
+			apiReader:           c,
 			scheme:              scheme,
 			status:              mockStatus,
 			variant:             operatorv1.CalicoEnterprise,
@@ -746,6 +747,26 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-sa"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-config"}, &corev1.ConfigMap{})).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, &gapi.GatewayClass{})).NotTo(HaveOccurred())
+	})
+
+	It("sweeps the proxy policy out of a namespace that no longer hosts a Gateway", func() {
+		// The render owns these by the GatewayAPI CR, so nothing garbage-collects one when
+		// the last Gateway in its namespace goes away. Without the sweep a pod there could
+		// keep the allow by wearing the proxy label.
+		for _, ns := range []string{"app-ns", "gone-ns"} {
+			Expect(c.Create(ctx, gatewayapi.ProxyPolicy(ns, []uint16{80}, false))).NotTo(HaveOccurred())
+		}
+		// A policy of the user's own in a namespace we are about to sweep, to prove the
+		// sweep matches on our name and does not touch anything else.
+		theirs := gatewayapi.ProxyPolicy("gone-ns", []uint16{80}, false)
+		theirs.Name = "their-own-policy"
+		Expect(c.Create(ctx, theirs)).NotTo(HaveOccurred())
+
+		Expect(r.sweepOrphanedProxyPolicies(ctx, []string{"app-ns"})).NotTo(HaveOccurred())
+
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: gatewayapi.ProxyPolicyName}, &v3.NetworkPolicy{})).NotTo(HaveOccurred())
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "gone-ns", Name: gatewayapi.ProxyPolicyName}, &v3.NetworkPolicy{}))).To(BeTrue())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "gone-ns", Name: "their-own-policy"}, &v3.NetworkPolicy{})).NotTo(HaveOccurred())
 	})
 
 	It("collects each Gateway namespace's listener ports, deduplicated and sorted", func() {

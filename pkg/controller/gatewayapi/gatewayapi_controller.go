@@ -73,6 +73,7 @@ var log = logf.Log.WithName("controller_gatewayapi")
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileGatewayAPI{
 		client:              mgr.GetClient(),
+		apiReader:           mgr.GetAPIReader(),
 		scheme:              mgr.GetScheme(),
 		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
@@ -177,7 +178,11 @@ var _ reconcile.Reconciler = &ReconcileGatewayAPI{}
 
 // ReconcileGatewayAPI reconciles a GatewayAPI object
 type ReconcileGatewayAPI struct {
-	client              client.Client
+	client client.Client
+	// apiReader reads straight from the API server. The sweep below needs to look at
+	// NetworkPolicies cluster-wide, and going through the cached client for that would
+	// start an informer holding every Calico policy on the cluster in memory.
+	apiReader           client.Reader
 	scheme              *runtime.Scheme
 	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
@@ -604,6 +609,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if err = r.sweepOrphanedProxyPolicies(ctx, gatewayConfig.GatewayNamespaces); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error removing orphaned proxy policies", err, log)
+		return reconcile.Result{}, err
+	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
@@ -679,6 +689,28 @@ func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI 
 	// These objects require graceful termination before the CNI plugin is torn down.
 	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.CalicoNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
+}
+
+// sweepOrphanedProxyPolicies deletes the proxy policy from namespaces that no longer host
+// one of our Gateways. The render owns these by the GatewayAPI CR, not by the Gateways in
+// the namespace, so nothing garbage-collects them when the last Gateway there goes away.
+// Matching is by our own policy name, so a user's own policies are never touched.
+func (r *ReconcileGatewayAPI) sweepOrphanedProxyPolicies(ctx context.Context, gatewayNamespaces []string) error {
+	policies := &v3.NetworkPolicyList{}
+	if err := r.apiReader.List(ctx, policies); err != nil {
+		return err
+	}
+	wanted := set.New(gatewayNamespaces...)
+	for i := range policies.Items {
+		policy := &policies.Items[i]
+		if policy.Name != gatewayapi.ProxyPolicyName || wanted.Has(policy.Namespace) {
+			continue
+		}
+		if err := r.client.Delete(ctx, policy); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 // gatewayNamespacesAndPorts reports the namespaces holding a Gateway of one of our

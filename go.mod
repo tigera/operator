@@ -37,7 +37,7 @@ require (
 	github.com/tigera/operator/api v0.0.0-20260120220012-4a3f8a7d8399
 	github.com/urfave/cli/v3 v3.6.2
 	go.uber.org/zap v1.28.0
-	golang.org/x/crypto v0.55.0
+	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	gopkg.in/inf.v0 v0.9.1
 	gopkg.in/yaml.v2 v2.4.0

@@ -1398,6 +1398,12 @@ func (c *nodeComponent) nodeVolumeMounts() []corev1.VolumeMount {
 		// Read-only so Felix can detect kernel lockdown=confidentiality via
 		// /sys/kernel/security/lockdown (securityfs is separate from /sys/fs).
 		corev1.VolumeMount{MountPath: "/sys/kernel/security", Name: "sys-kernel-security", ReadOnly: true},
+		// Read-only bind of the host's /proc. Felix reaches host-mount-namespace
+		// paths (pod netns files, the CRI socket) through host PID-1's root at
+		// /host/proc/1/root, which works regardless of calico-node's PID
+		// namespace and does not require hostPID=true. Reuses the "nodeproc"
+		// HostPath(/proc) volume already declared in nodeVolumes().
+		corev1.VolumeMount{MountPath: "/host/proc", Name: "nodeproc", ReadOnly: true},
 		c.cfg.TLS.NodeSecret.VolumeMount(c.SupportedOSType()),
 	)
 

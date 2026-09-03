@@ -5372,6 +5372,11 @@ func (in *InstallationStatus) DeepCopyInto(out *InstallationStatus) {
 		*out = new(InstallationSpec)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.Defaults != nil {
+		in, out := &in.Defaults, &out.Defaults
+		*out = new(InstallationSpec)
+		(*in).DeepCopyInto(*out)
+	}
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]metav1.Condition, len(*in))
@@ -9784,6 +9789,11 @@ func (in *WhiskerSpec) DeepCopyInto(out *WhiskerSpec) {
 		in, out := &in.Notifications, &out.Notifications
 		*out = new(NotificationMode)
 		**out = **in
+	}
+	if in.IngressGateway != nil {
+		in, out := &in.IngressGateway, &out.IngressGateway
+		*out = new(IngressGatewaySpec)
+		(*in).DeepCopyInto(*out)
 	}
 }
 

@@ -169,10 +169,8 @@ EXCLUDE_MANIFEST_REGISTRIES?=gcr.io/
 # amd64 only. Constrain ARCHES (not just VALIDARCHES) so push-all, which iterates ARCHES, does not
 # try to push arches that were never built.
 ARCHES:=amd64
-# Bake cloud mode into the operator binary so it cannot be disabled at runtime (see isCloudBuild in
-# cmd/cloud.go). buildVariant lives in package main, which the linker addresses as "main" (not by its
-# import path), so this -X target is "main.buildVariant" rather than a $(PACKAGE_NAME)-prefixed path.
-CLOUD_LDFLAGS=-X main.buildVariant=cloud
+# Bake cloud mode into the operator binary so it cannot be disabled at runtime.
+CLOUD_LDFLAGS=-X $(PACKAGE_NAME)/version.BuildVariant=cloud
 endif
 
 BUILD_IMAGE?=tigera/operator
@@ -332,9 +330,11 @@ sub-image-%:
 	$(MAKE) images ARCH=$*
 
 BINDIR?=build/init/bin
+# Match the kubectl client to the version of the kind test cluster.
+KUBECTL_VERSION?=$(KINDEST_NODE_VERSION)
 $(BINDIR)/kubectl:
 	mkdir -p $(BINDIR)
-	curl -sSf -L --retry 5 https://dl.k8s.io/release/v1.30.5/bin/linux/$(ARCH)/kubectl -o $@
+	curl -sSf -L --retry 5 https://dl.k8s.io/release/$(KUBECTL_VERSION)/bin/linux/$(ARCH)/kubectl -o $@
 	chmod +x $@
 
 kubectl: $(BINDIR)/kubectl
@@ -380,7 +380,7 @@ run-fvs: $(ENVOY_GATEWAY_CHART) $(ISTIO_CHART_FILES)
 ## Create a local kind dual stack cluster.
 KIND_CLUSTER_NAME?=tigera-operator-kind
 KIND_KUBECONFIG?=./kubeconfig.yaml
-KINDEST_NODE_VERSION?=v1.31.12
+KINDEST_NODE_VERSION?=v1.35.5
 cluster-create: $(BINDIR)/kubectl $(BINDIR)/kind
 	# First make sure any previous cluster is deleted
 	make cluster-destroy

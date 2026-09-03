@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
-	"slices"
 	"strings"
 
 	admregv1 "k8s.io/api/admissionregistration/v1"
@@ -45,6 +44,7 @@ import (
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render"
@@ -55,7 +55,7 @@ import (
 	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/common/securitycontext"
-	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -303,7 +303,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 	if err != nil {
 		return ci, nil, extensions.Degradedf(operatorv1.ResourceReadError, "error getting ImageSet: %w", err)
 	}
-	calicoImage, err := components.GetReference(components.CombinedCalicoImage(in), in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
+	calicoImage, err := components.GetReference(components.ComponentTigeraCalico, in.Registry, in.ImagePath, in.ImagePrefix, imageSet)
 	if err != nil {
 		return ci, nil, extensions.Degradedf(operatorv1.ResourceUpdateError, "error with images from ImageSet: %w", err)
 	}
@@ -393,21 +393,8 @@ func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, creat
 	// those objects back out of the delete list.
 	create, del = c.ensureDeployment(create, del)
 
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
-		c.layerDeployment(dep)
-	}
-	if svc, ok := extensions.FindObject[*corev1.Service](create, render.APIServerServiceName); ok {
-		c.addServicePorts(svc)
-	}
-	// Enterprise serves staged policies through the tiered-policy passthrough role.
-	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](create, render.TieredPolicyPassthruClusterRoleName); ok {
-		for i := range role.Rules {
-			if slices.Contains(role.Rules[i].Resources, "networkpolicies") {
-				role.Rules[i].Resources = append(role.Rules[i].Resources, "stagednetworkpolicies", "stagedglobalnetworkpolicies")
-			}
-		}
-	}
-
+	c.layerDeployment(extensions.MustFindObject[*appsv1.Deployment](create, render.APIServerName))
+	c.addServicePorts(extensions.MustFindObject[*corev1.Service](create, render.APIServerServiceName))
 	// The L7 sidecar mutating webhook is driven by ApplicationLayer. The base always
 	// queues it for deletion; when sidecar injection is on, render it and pull it back
 	// out of the delete list.
@@ -473,10 +460,8 @@ func modifyAPIServer(ri render.Inputs, cfg *render.APIServerConfiguration, creat
 	// Re-apply deployment overrides so the modifier-added query server container picks up
 	// any per-container overrides. The override appliers use replace/merge semantics, so
 	// re-running over the render-applied containers is idempotent.
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](create, render.APIServerName); ok {
-		if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
-			rcomp.ApplyDeploymentOverrides(dep, overrides)
-		}
+	if overrides := c.cfg.APIServer.APIServerDeployment; overrides != nil {
+		rcomp.ApplyDeploymentOverrides(extensions.MustFindObject[*appsv1.Deployment](create, render.APIServerName), overrides)
 	}
 
 	return create, del
@@ -740,9 +725,9 @@ func (c *apiServer) sidecarMutatingWebhookConfig() *admregv1.MutatingWebhookConf
 }
 
 // modifyAPIServerPolicy adds the enterprise additions to the API server network policy:
-// the OIDC egress rule (when an OIDC key validator is configured) and the L7 admission
-// controller ingress port (when sidecar injection is enabled). The base policy carries
-// neither.
+// the OIDC egress rule (when an OIDC key validator is configured), the query server's
+// egress to Linseed via Guardian (on a managed cluster) and the L7 admission controller
+// ingress port (when sidecar injection is enabled). The base policy carries none of these.
 func modifyAPIServerPolicy(ri render.Inputs, cfg *render.APIServerConfiguration, create, del []client.Object) ([]client.Object, []client.Object) {
 	c := &apiServer{cfg: cfg, data: apiServerData(ri)}
 
@@ -751,17 +736,20 @@ func modifyAPIServerPolicy(ri render.Inputs, cfg *render.APIServerConfiguration,
 		return create, del
 	}
 
-	// Insert the OIDC egress rule before the trailing Pass rule so it is evaluated.
 	if c.data.keyValidatorConfig != nil {
 		if parsedURL, err := url.Parse(c.data.keyValidatorConfig.Issuer()); err == nil {
-			oidc := networkpolicy.GetOIDCEgressRule(parsedURL)
-			egress := policy.Spec.Egress
-			if n := len(egress); n > 0 && egress[n-1].Action == v3.Pass {
-				policy.Spec.Egress = append(egress[:n-1:n-1], oidc, egress[n-1])
-			} else {
-				policy.Spec.Egress = append(egress, oidc)
-			}
+			insertEgressBeforePass(policy, networkpolicy.GetOIDCEgressRule(parsedURL))
 		}
+	}
+
+	// A managed cluster has no local Linseed; the query server reaches it through Guardian,
+	// matching the LINSEED_URL that LinseedEndpoint returns.
+	if c.data.managementClusterConnection != nil {
+		insertEgressBeforePass(policy, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		})
 	}
 
 	// Allow the kube-apiserver to reach the L7 admission controller.
@@ -774,6 +762,17 @@ func modifyAPIServerPolicy(ri render.Inputs, cfg *render.APIServerConfiguration,
 	}
 
 	return create, del
+}
+
+// insertEgressBeforePass inserts rule ahead of the policy's trailing Pass rule, so that it is
+// evaluated before the tier hands the traffic to subsequent tiers.
+func insertEgressBeforePass(policy *v3.NetworkPolicy, rule v3.Rule) {
+	egress := policy.Spec.Egress
+	if n := len(egress); n > 0 && egress[n-1].Action == v3.Pass {
+		policy.Spec.Egress = append(egress[:n-1:n-1], rule, egress[n-1])
+		return
+	}
+	policy.Spec.Egress = append(egress, rule)
 }
 
 // auditVolumes are the host-path audit log and audit policy volumes used by the
@@ -807,11 +806,19 @@ func (c *apiServer) auditVolumes() []corev1.Volume {
 }
 
 func (c *apiServer) multiTenantSecretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, true)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, tunnelSecretName(c.data.managementCluster), true)
 }
 
 func (c *apiServer) secretsRBAC() []client.Object {
-	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, c.data.managementCluster, false)
+	return render.TunnelSecretRBAC(render.APIServerSecretsRBACName, render.APIServerServiceAccountName, tunnelSecretName(c.data.managementCluster), false)
+}
+
+// tunnelSecretName is the configured tunnel CA secret, or the default when none is set.
+func tunnelSecretName(mc *operatorv1.ManagementCluster) string {
+	if mc != nil && mc.Spec.TLS != nil && mc.Spec.TLS.SecretName != "" {
+		return mc.Spec.TLS.SecretName
+	}
+	return render.VoltronTunnelSecretName
 }
 
 // linseedAccessClusterRole is a minimal, least-privilege ClusterRole granting the calico-apiserver
@@ -1286,6 +1293,14 @@ func (c *apiServer) tigeraUserClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"gatewayapis"},
 			Verbs:     []string{"get"},
 		},
+		// Allow the user to read the gatewayapi TigeraStatus. Gateway API readiness
+		// lives there, not on the GatewayAPI CR.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"tigerastatuses"},
+			ResourceNames: []string{"gatewayapi"},
+			Verbs:         []string{"get"},
+		},
 		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
 		{
 			APIGroups: []string{"gateway.networking.k8s.io"},
@@ -1531,11 +1546,19 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			Resources: []string{"applicationlayers", "packetcaptureapis", "compliances", "intrusiondetections"},
 			Verbs:     []string{"get", "update", "patch", "create", "delete"},
 		},
-		// Allow the user to read the gatewayapis CR to detect if Gateway API is enabled/disabled.
+		// Allow the user to read and write the gatewayapis CR to enable Gateway API.
 		{
 			APIGroups: []string{"operator.tigera.io"},
 			Resources: []string{"gatewayapis"},
-			Verbs:     []string{"get"},
+			Verbs:     []string{"get", "create", "update", "patch"},
+		},
+		// Allow the user to read the gatewayapi TigeraStatus. Gateway API readiness
+		// lives there, not on the GatewayAPI CR.
+		{
+			APIGroups:     []string{"operator.tigera.io"},
+			Resources:     []string{"tigerastatuses"},
+			ResourceNames: []string{"gatewayapi"},
+			Verbs:         []string{"get"},
 		},
 		// Allow the user to read Gateways and HTTPRoutes to offer as WAF policy attach targets.
 		{
@@ -1599,6 +1622,22 @@ func (c *apiServer) tigeraNetworkAdminClusterRole() *rbacv1.ClusterRole {
 			Verbs: []string{"patch"},
 		},
 	}...)
+
+	// Ungated: a rule rendered only while a feature is on could never turn it on.
+	rules = append(rules,
+		// create cannot be name-scoped, so this admits any ConfigMap in any namespace.
+		rbacv1.PolicyRule{
+			APIGroups: []string{""},
+			Resources: []string{"configmaps"},
+			Verbs:     []string{"create"},
+		},
+		rbacv1.PolicyRule{
+			APIGroups:     []string{""},
+			Resources:     []string{"configmaps"},
+			ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+			Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+		},
+	)
 
 	// ui-apis writes these impersonating the caller, so the apiserver enforces escalation
 	// against the user's own permissions.

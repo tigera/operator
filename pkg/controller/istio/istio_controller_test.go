@@ -43,6 +43,8 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/status"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
+	eistio "github.com/tigera/operator/pkg/enterprise/istio"
+	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/render/istio"
 	"github.com/tigera/operator/test"
 )
@@ -109,6 +111,7 @@ var _ = Describe("Istio controller tests", func() {
 				},
 			},
 		}
+		installation.Status.Computed = &installation.Spec
 
 		istioCR = &operatorv1.Istio{
 			ObjectMeta: metav1.ObjectMeta{
@@ -535,6 +538,8 @@ var _ = Describe("Istio controller tests", func() {
 				inst.Spec.Variant = operatorv1.CalicoEnterprise
 				inst.Status.Variant = operatorv1.CalicoEnterprise
 				Expect(cli.Update(ctx, inst)).NotTo(HaveOccurred())
+				inst.Status.Computed = inst.Spec.DeepCopy()
+				Expect(cli.Status().Update(ctx, inst)).NotTo(HaveOccurred())
 			})
 
 			It("sets policySyncPathPrefix to the operator default when no AL is present", func() {
@@ -875,6 +880,8 @@ var _ = Describe("Istio controller tests", func() {
 			installation.Spec.Variant = operatorv1.CalicoEnterprise
 			installation.Status.Variant = operatorv1.CalicoEnterprise
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+			installation.Status.Computed = installation.Spec.DeepCopy()
+			Expect(cli.Status().Update(ctx, installation)).NotTo(HaveOccurred())
 
 			r := &ReconcileIstio{
 				Client:   cli,
@@ -903,9 +910,13 @@ var _ = Describe("Istio controller tests", func() {
 		})
 
 		It("should handle ImageSet application for Enterprise variant", func() {
+			DeferCleanup(components.UseImages(components.EnterpriseImages))
+
 			installation.Spec.Variant = operatorv1.CalicoEnterprise
 			installation.Status.Variant = operatorv1.CalicoEnterprise
 			Expect(cli.Update(ctx, installation)).NotTo(HaveOccurred())
+			installation.Status.Computed = installation.Spec.DeepCopy()
+			Expect(cli.Status().Update(ctx, installation)).NotTo(HaveOccurred())
 
 			// Create ImageSet with all required Istio images for Enterprise
 			imageSet := &operatorv1.ImageSet{
@@ -930,6 +941,7 @@ var _ = Describe("Istio controller tests", func() {
 				scheme:   scheme,
 				provider: operatorv1.ProviderNone,
 				status:   mockStatus,
+				ext:      extensions.New(extensions.Set{Istio: eistio.New(operatorv1.CalicoEnterprise)}),
 			}
 
 			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})

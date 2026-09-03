@@ -756,7 +756,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	instanceStatus := instance.Status
 	if !r.migrationChecked {
 		// update Installation resource with existing install if it exists.
 		nc, err := convert.NeedsConversion(ctx, r.client)
@@ -780,15 +779,38 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
+	// instance keeps the spec as declared by the user, and is the only object we write back.
+	// Defaulting happens on this copy, which the rest of the reconcile renders from.
+	defaulted := instance.DeepCopy()
+
+	// Seed from recorded defaults, so changing a default doesn't change existing clusters.
+	if instance.Status.Defaults != nil {
+		defaulted.Spec = utils.OverrideInstallationSpec(*instance.Status.Defaults, instance.Spec)
+
+		// Pool lists merge whole, so layer the per-pool defaults back under the declared pools.
+		if err := utils.LayerPoolDefaults(&defaulted.Spec, instance.Status.Defaults); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to apply recorded installation defaults", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+	}
+
 	// update Installation with defaults
-	if err := updateInstallationWithDefaults(ctx, r.client, instance, r.opts.DetectedProvider, r.opts.Variant); err != nil {
+	if err := updateInstallationWithDefaults(ctx, r.client, defaulted, r.opts.DetectedProvider, r.opts.Variant); err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error querying installation", err, reqLogger)
 		return reconcile.Result{}, err
 	}
-	reqLogger.V(2).Info("Loaded config", "installation", instance)
+
+	// The IP pool controller records its own defaults, so leave that subtree alone.
+	recordedDefaults, err := utils.MergeRecordedDefaults(instance.Status.Defaults, instance.Spec, defaulted.Spec,
+		utils.DefaultsScope{Foreign: []string{utils.PoolDefaultsPath}})
+	if err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to determine installation defaults", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+	reqLogger.V(2).Info("Loaded config", "installation", defaulted)
 
 	// Validate the configuration.
-	if err := validateCustomResource(instance); err != nil {
+	if err := validateCustomResource(defaulted); err != nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid Installation provided", err, reqLogger)
 		return reconcile.Result{}, err
 	}
@@ -842,22 +864,6 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		utils.SetInstallationFinalizer(instance, render.OperatorCompleteFinalizer)
 	}
 
-	// Update CRDs before persisting defaults. Defaulting can set a value only this operator version's
-	// CRD accepts (e.g. an autodetected kubernetesProvider=Kind); on upgrade the old served CRD would
-	// otherwise reject the write and the reconcile would loop before ever reaching the CRD update.
-	if err = r.updateCRDs(ctx, r.opts.Variant, reqLogger); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// Write the discovered configuration back to the API. This is essentially a poor-man's defaulting, and
-	// ensures that we don't surprise anyone by changing defaults in a future version of the operator.
-	// Note that we only write the 'base' installation back. We don't want to write the changes from 'overlay', as those should only
-	// be stored in the 'overlay' resource.
-	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
-		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write defaults", err, reqLogger)
-		return reconcile.Result{}, err
-	}
-
 	// Update Installation with 'overlay'
 	overlay := operatorv1.Installation{}
 	if err := r.client.Get(ctx, utils.OverlayInstanceKey, &overlay); err != nil {
@@ -867,38 +873,58 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 		reqLogger.V(5).Info("no 'overlay' installation found")
 	} else {
-		instance.Spec = utils.OverrideInstallationSpec(instance.Spec, overlay.Spec)
-		reqLogger.V(2).Info("loaded final computed config", "config", instance)
+		defaulted.Spec = utils.OverrideInstallationSpec(defaulted.Spec, overlay.Spec)
+		reqLogger.V(2).Info("loaded final computed config", "config", defaulted)
 
 		// Validate the configuration.
-		if err := validateCustomResource(instance); err != nil {
+		if err := validateCustomResource(defaulted); err != nil {
 			r.status.SetDegraded(operatorv1.InvalidConfigurationError, "Invalid computed config", err, reqLogger)
 			return reconcile.Result{}, err
 		}
 	}
 
-	if err = r.updateMutatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
+	// Update the CRDs before either write below. Defaulting can produce a value only this
+	// operator version's CRD accepts, autodetected kubernetesProvider: Kind being the case
+	// that bit us, and the status write is fully schema-validated.
+	if err = r.updateCRDs(ctx, r.opts.Variant, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if err = r.updateValidatingAdmissionPolicies(ctx, instance, reqLogger); err != nil {
+	// Publish the effective config before anything below can return early, since every other
+	// controller reads it instead of the spec and stalls until it lands.
+	computed := defaulted.Spec.DeepCopy()
+	if !reflect.DeepEqual(instance.Status.Defaults, recordedDefaults) || !reflect.DeepEqual(instance.Status.Computed, computed) {
+		// Write a copy, so the response can't drop the finalizers the patch below carries.
+		written := instance.DeepCopy()
+		written.Status.Defaults = recordedDefaults
+		written.Status.Computed = computed
+		if err := r.client.Status().Update(ctx, written); err != nil {
+			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation defaults", err, reqLogger)
+			return reconcile.Result{}, err
+		}
+		// Carry the new resourceVersion, so the patch below isn't rejected as stale.
+		instance.ResourceVersion = written.ResourceVersion
+		instance.Status = written.Status
+	}
+
+	// Write finalizers and migrated manifest config. Defaults are recorded in the status
+	// instead, since writing them to the spec steals ownership from whoever manages the CR.
+	if err := r.client.Patch(ctx, instance, preDefaultPatchFrom); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write installation", err, reqLogger)
+		return reconcile.Result{}, err
+	}
+
+	if err = r.updateMutatingAdmissionPolicies(ctx, defaulted, reqLogger); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if err = r.updateValidatingAdmissionPolicies(ctx, defaulted, reqLogger); err != nil {
 		return reconcile.Result{}, err
 	}
 
 	// Now that migrated config is stored in the installation resource, we no longer need
 	// to check if a migration is needed for the lifetime of the operator.
 	r.migrationChecked = true
-
-	// A status is needed at this point for operator scorecard tests.
-	// status.variant is written later but for some tests the reconciliation
-	// does not get to that point.
-	if reflect.DeepEqual(instanceStatus, operatorv1.InstallationStatus{}) {
-		instance.Status = operatorv1.InstallationStatus{}
-		if err := r.client.Status().Update(ctx, instance); err != nil {
-			r.status.SetDegraded(operatorv1.ResourceUpdateError, "Failed to write default status", err, reqLogger)
-			return reconcile.Result{}, err
-		}
-	}
 
 	// Wait for IP pools to be programmed. This may be done out-of-band by the user, or by the operator's IP pool controller.
 	currentPools, err := GetActivePools(ctx, r.client)
@@ -908,7 +934,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Make sure CNI is configured before continuing.
-	if instance.Spec.CNI == nil || instance.Spec.CNI.IPAM == nil {
+	if defaulted.Spec.CNI == nil || defaulted.Spec.CNI.IPAM == nil {
 		r.status.SetDegraded(operatorv1.InvalidConfigurationError, "waiting for spec.cni to be filled in", nil, reqLogger)
 		return reconcile.Result{}, nil
 	}
@@ -916,8 +942,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Determine if this cluster needs IP pools in order to operate.
 	// - If the installation has IP pools specified, then the cluster wants IP pools.
 	// - If the installation has no IP pools specified, it may still need them if it's using Calico IPAM or networking.
-	needsIPPools := instance.Spec.CalicoNetwork != nil && len(instance.Spec.CalicoNetwork.IPPools) != 0
-	if instance.Spec.CNI.Type == operatorv1.PluginCalico || instance.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico {
+	needsIPPools := defaulted.Spec.CalicoNetwork != nil && len(defaulted.Spec.CalicoNetwork.IPPools) != 0
+	if defaulted.Spec.CNI.Type == operatorv1.PluginCalico || defaulted.Spec.CNI.IPAM.Type == operatorv1.IPAMPluginCalico {
 		needsIPPools = true
 	}
 	if needsIPPools && len(currentPools.Items) == 0 {
@@ -937,7 +963,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Query for pull secrets in operator namespace
-	pullSecrets, err := utils.GetInstallationPullSecrets(&instance.Spec, r.client)
+	pullSecrets, err := utils.GetInstallationPullSecrets(&defaulted.Spec, r.client)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving pull secrets", err, reqLogger)
 		return reconcile.Result{}, err
@@ -961,13 +987,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	certificateManager, err := certificatemanager.Create(r.client, &instance.Spec, r.opts.ClusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
+	certificateManager, err := certificatemanager.Create(r.client, &defaulted.Spec, r.opts.ClusterDomain, common.OperatorNamespace(), certificatemanager.WithLogger(reqLogger))
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceCreateError, "Unable to create the Tigera CA", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
-	typhaNodeTLS, err := GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
+	typhaNodeTLS, err := utils.GetOrCreateTyphaNodeTLSConfig(r.client, certificateManager)
 	if err != nil {
 		log.Error(err, "Error with Typha/Felix secrets")
 		r.status.SetDegraded(operatorv1.CertificateError, "Error with Typha/Felix secrets", err, reqLogger)
@@ -980,7 +1006,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	bgpLayout, err := getConfigMap(r.client, render.BGPLayoutConfigMapName)
+	bgpLayout, err := utils.GetOperatorConfigMap(r.client, render.BGPLayoutConfigMapName)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error retrieving BGP layout ConfigMap", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1002,8 +1028,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	openShiftOnAws := false
-	if instance.Spec.KubernetesProvider.IsOpenShift() {
-		openShiftOnAws, err = isOpenshiftOnAws(instance, ctx, r.client)
+	if defaulted.Spec.KubernetesProvider.IsOpenShift() {
+		openShiftOnAws, err = isOpenshiftOnAws(defaulted, ctx, r.client)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking if OpenShift is on AWS", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1033,19 +1059,19 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Set any non-default FelixConfiguration values that we need.
 	felixConfiguration, err := utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
 		// Configure defaults.
-		u, err := r.setDefaultsOnFelixConfiguration(ctx, instance, fc, reqLogger, needsNamespaceMigration)
+		u, err := r.setDefaultsOnFelixConfiguration(ctx, defaulted, fc, reqLogger, needsNamespaceMigration)
 		if err != nil {
 			return false, err
 		}
 
 		// Configure nftables mode.
-		u2, err := r.setNftablesMode(ctx, instance, fc, reqLogger)
+		u2, err := r.setNftablesMode(ctx, defaulted, fc, reqLogger)
 		if err != nil {
 			return false, err
 		}
 
 		// Configure cluster routing mode.
-		u3, err := setClusterRoutingOnFelixConfiguration(instance, fc, reqLogger)
+		u3, err := setClusterRoutingOnFelixConfiguration(defaulted, fc, reqLogger)
 		if err != nil {
 			return false, err
 		}
@@ -1060,7 +1086,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	// Set any non-default BGPConfiguration values that we need.
 	_, err = utils.PatchBGPConfiguration(ctx, r.client, func(bgpConfig *v3.BGPConfiguration) (bool, error) {
 		// Configure cluster routing mode.
-		u, err := setClusterRoutingOnBGPConfiguration(instance, bgpConfig, reqLogger)
+		u, err := setClusterRoutingOnBGPConfiguration(defaulted, bgpConfig, reqLogger)
 		if err != nil {
 			return false, err
 		}
@@ -1074,11 +1100,11 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	calicoVersion := r.ext.ProductVersion()
+	calicoVersion := r.ext.ProductVersion(&instance.Spec)
 
 	ci := controller.Inputs{
 		RenderInputs: render.Inputs{
-			Installation:       &instance.Spec,
+			Installation:       &defaulted.Spec,
 			FelixConfiguration: felixConfiguration,
 			ClusterDomain:      r.opts.ClusterDomain,
 			TrustedBundle:      typhaNodeTLS.TrustedBundle,
@@ -1120,14 +1146,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		r.client,
 		r.scheme,
 		instance,
-		utils.WithModifier(func(c render.Component) render.Component {
-			return r.ext.Modify(c, ci.RenderInputs)
-		}),
+		utils.WithExtension(r.ext, ci.RenderInputs),
 	)
 
 	// Render namespaces first - this ensures that any other controllers blocked on namespace existence can proceed.
 	namespaceCfg := &render.NamespaceConfiguration{
-		Installation: &instance.Spec,
+		Installation: &defaulted.Spec,
 		PullSecrets:  pullSecrets,
 	}
 	if err := handler.CreateOrUpdateOrDelete(ctx, render.Namespaces(namespaceCfg), nil); err != nil {
@@ -1153,8 +1177,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 		awsSGSetupCfg := &render.AWSSGSetupConfiguration{
-			PullSecrets:     instance.Spec.ImagePullSecrets,
-			Installation:    &instance.Spec,
+			PullSecrets:     defaulted.Spec.ImagePullSecrets,
+			Installation:    &defaulted.Spec,
 			HostedOpenShift: hostedOpenShift,
 		}
 		awsSetup, err := render.AWSSecurityGroupSetup(awsSGSetupCfg)
@@ -1167,7 +1191,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		}
 	}
 
-	if instance.Spec.KubernetesProvider.IsGKE() {
+	if defaulted.Spec.KubernetesProvider.IsGKE() {
 		// We do this only for GKE as other providers don't (yet?)
 		// automatically add resource quota that constrains whether
 		// Calico components that are marked cluster or node critical
@@ -1199,12 +1223,12 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Build a configuration for rendering calico/typha.
 	typhaCfg := render.TyphaConfiguration{
-		K8sServiceEp:      k8sapi.Endpoint,
-		Installation:      &instance.Spec,
-		TLS:               typhaNodeTLS,
-		MigrateNamespaces: needsNamespaceMigration,
-		ClusterDomain:     r.opts.ClusterDomain,
-		FelixHealthPort:   *felixConfiguration.Spec.HealthPort,
+		K8sServiceEp:       k8sapi.Endpoint,
+		Installation:       &defaulted.Spec,
+		TLS:                typhaNodeTLS,
+		MigrateNamespaces:  needsNamespaceMigration,
+		ClusterDomain:      r.opts.ClusterDomain,
+		FelixConfiguration: felixConfiguration,
 	}
 	components = append(components, render.Typha(&typhaCfg))
 
@@ -1273,15 +1297,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	goldmaneRunning := goldmaneCR != nil
 
-	// Calico node DNS configuration and policy should be inherited from the tigera/operator Deployment by default since:
-	//
-	// - they are both host networked and run prior to CNI being installed (and thus beofre kube-dns is available)
-	// - they both need access to in-cluster serivces via kube-dns, as well as external services such as the API server.
-	//
-	// So, they will require the same DNS configuration.
-	//
-	// Users can override this with explicit configuration in the Installation resource, but using the operator as
-	// a baseline is a reasonable default.
+	// calico/node runs before CNI is installed, so cluster DNS is not yet reachable on the node. Use the
+	// node's own resolver, and inherit the operator's DNS settings only when it has an explicit dnsConfig.
 	operatorDeployment := &appsv1.Deployment{}
 	defaultDNSPolicy := corev1.DNSDefault
 	var defaultDNSConfig *corev1.PodDNSConfig
@@ -1291,7 +1308,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 			return reconcile.Result{}, err
 		}
 		reqLogger.Info("Operator Deployment not found, using default DNS configuration")
-	} else {
+	} else if operatorDeployment.Spec.Template.Spec.DNSConfig != nil {
 		defaultDNSPolicy = operatorDeployment.Spec.Template.Spec.DNSPolicy
 		defaultDNSConfig = operatorDeployment.Spec.Template.Spec.DNSConfig
 	}
@@ -1317,7 +1334,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	nodeCfg := render.NodeConfiguration{
 		GoldmaneRunning:       goldmaneRunning,
 		K8sServiceEp:          k8sapi.Endpoint,
-		Installation:          &instance.Spec,
+		Installation:          &defaulted.Spec,
 		IPPools:               crdPoolsToOperator(currentPools.Items),
 		BirdTemplates:         birdTemplates,
 		TLS:                   typhaNodeTLS,
@@ -1329,10 +1346,8 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		NodeAppArmorProfile:   nodeAppArmorProfile,
 		MigrateNamespaces:     needsNamespaceMigration,
 		CanRemoveCNIFinalizer: canRemoveCNI,
-		FelixHealthPort:       *felixConfiguration.Spec.HealthPort,
-		NodeCgroupV2Path:      felixConfiguration.Spec.CgroupV2Path,
+		FelixConfiguration:    felixConfiguration,
 		V3CRDs:                r.opts.UseV3CRDs,
-		ImageOverrides:        r.ext.Images(),
 	}
 
 	if bgpConfiguration.Spec.BindMode != nil {
@@ -1340,53 +1355,53 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// Check if BPFNetworkBootstrap is Enabled and its requirements are met.
-	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &instance.Spec)
+	bpfBootstrapReq, err := utils.BPFBootstrapRequirements(ctx, r.client, &defaulted.Spec)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceValidationError, "bpfNetworkBootstrap is Enabled but the requirements are not met", err, reqLogger)
 		return reconcile.Result{}, err
 	}
 
 	// If BPFNetworkBootstrap is Enabled and its requirements are met configure the node with API Server info.
-	if bpfBootstrapReq != nil && instance.Spec.BPFEnabled() {
+	if bpfBootstrapReq != nil && defaulted.Spec.BPFEnabled() {
 		// Extract k8s service and endpoints to push them to ebpf-bootstrap init container.
 		nodeCfg.K8sServiceAddrs = serviceIPsAndPorts(bpfBootstrapReq.K8sService)
 		nodeCfg.K8sEndpointSlice = serviceEndpointSlice(bpfBootstrapReq.K8sServiceEndpoints)
 
-		if !instance.Spec.KubernetesProvider.IsNone() {
+		if !defaulted.Spec.KubernetesProvider.IsNone() {
 			// Warn once about potential issues with API server connectivity.
 			// This lock is necessary to prevent multiple warnings, since this Reconcile is called by multiple workers.
 			if warnOnce.TrySet() {
-				reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s. ", instance.Spec.KubernetesProvider) +
+				reqLogger.Info(fmt.Sprintf("[WARNING] Auto bootstrapping BPF network may result in unexpected behavior in %s. ", defaulted.Spec.KubernetesProvider) +
 					"If you experience API server communication issues, disable 'bpfBootstrapNetworking' in the Installation CR " +
 					"and follow the eBPF installation guide at https://docs.tigera.io.")
 			}
 		}
 	}
 
-	if !instance.Spec.BPFNetworkBootstrapEnabled() {
+	if !defaulted.Spec.BPFNetworkBootstrapEnabled() {
 		warnOnce.Reset()
 	}
 
 	components = append(components, render.Node(&nodeCfg))
 
 	csiCfg := render.CSIConfiguration{
-		Installation: &instance.Spec,
+		Installation: &defaulted.Spec,
 		Terminating:  installationMarkedForDeletion,
-		OpenShift:    instance.Spec.KubernetesProvider.IsOpenShift(),
+		OpenShift:    defaulted.Spec.KubernetesProvider.IsOpenShift(),
 	}
 	components = append(components, render.CSI(&csiCfg))
 
 	kubeControllersCfg := kubecontrollers.KubeControllersConfiguration{
 		K8sServiceEp:           k8sapi.Endpoint,
 		K8sServiceEpPodNetwork: k8sapi.PodNetworkEndpoint,
-		Installation:           &instance.Spec,
+		Installation:           &defaulted.Spec,
 		ClusterDomain:          r.opts.ClusterDomain,
 		MetricsPort:            kubeControllersMetricsPort,
 		Terminating:            installationMarkedForDeletion,
 		TrustedBundle:          typhaNodeTLS.TrustedBundle,
 		Namespace:              common.CalicoNamespace,
 		BindingNamespaces:      []string{common.CalicoNamespace},
-		ImageOverrides:         r.ext.Images(),
+		Image:                  r.ext.KubeControllersImage(),
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 
@@ -1399,7 +1414,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		)
 	}
 
-	imageSet, err := imageset.GetImageSet(ctx, r.client, instance.Spec.Variant)
+	imageSet, err := imageset.GetImageSet(ctx, r.client, defaulted.Spec.Variant)
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceReadError, "Error getting ImageSet", err, reqLogger)
 		return reconcile.Result{}, err
@@ -1409,7 +1424,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		// There is no imageSet for the configured variant, but check to see if there are any
 		// ImageSets with a different variant so we can give the user some kind of indication
 		// to why an existing ImageSet is being ignored.
-		nvis, err := imageset.DoesNonVariantImageSetExist(ctx, r.client, instance.Spec.Variant)
+		nvis, err := imageset.DoesNonVariantImageSetExist(ctx, r.client, defaulted.Spec.Variant)
 		if err != nil {
 			r.status.SetDegraded(operatorv1.ResourceReadError, "Error checking for non-variant ImageSet", err, reqLogger)
 			return reconcile.Result{}, err
@@ -1445,7 +1460,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// If eBPF is enabled in the operator API, patch FelixConfiguration to enable it within Felix.
 	_, err = utils.PatchFelixConfiguration(ctx, r.client, func(fc *v3.FelixConfiguration) (bool, error) {
-		return r.setBPFUpdatesOnFelixConfiguration(ctx, instance, fc, reqLogger)
+		return r.setBPFUpdatesOnFelixConfiguration(ctx, defaulted, fc, reqLogger)
 	})
 	if err != nil {
 		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error updating resource", err, reqLogger)
@@ -1472,9 +1487,9 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 
 	// Determine which MTU to use in the status fields.
 	statusMTU := 0
-	if instance.Spec.CalicoNetwork != nil && instance.Spec.CalicoNetwork.MTU != nil {
+	if defaulted.Spec.CalicoNetwork != nil && defaulted.Spec.CalicoNetwork.MTU != nil {
 		// If set explicitly in the spec, then use that.
-		statusMTU = int(*instance.Spec.CalicoNetwork.MTU)
+		statusMTU = int(*defaulted.Spec.CalicoNetwork.MTU)
 	} else if calicoDirectoryExists() {
 		// Otherwise, if the /var/lib/calico directory is present, see if we can read
 		// a value from there.
@@ -1491,7 +1506,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// We have successfully reconciled the Calico installation.
-	if instance.Spec.KubernetesProvider.IsOpenShift() {
+	if defaulted.Spec.KubernetesProvider.IsOpenShift() {
 		openshiftConfig := &configv1.Network{}
 		err = r.client.Get(ctx, types.NamespacedName{Name: openshiftNetworkConfig}, openshiftConfig)
 		if err != nil {
@@ -1543,14 +1558,13 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 	}
 	instance.Status.MTU = int32(statusMTU)
 	// Variant and CalicoVersion must be updated at the same time.
-	instance.Status.Variant = instance.Spec.Variant
+	instance.Status.Variant = defaulted.Spec.Variant
 	instance.Status.CalicoVersion = calicoVersion
 	if imageSet == nil {
 		instance.Status.ImageSet = ""
 	} else {
 		instance.Status.ImageSet = imageSet.Name
 	}
-	instance.Status.Computed = &instance.Spec
 	if err = r.client.Status().Update(ctx, instance); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -1576,83 +1590,6 @@ func readMTUFile() (int, error) {
 func calicoDirectoryExists() bool {
 	_, err := os.Stat("/var/lib/calico")
 	return err == nil
-}
-
-func GetOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager) (*render.TyphaNodeTLS, error) {
-	return getOrCreateTyphaNodeTLSConfig(cli, certificateManager, certificateManager.GetOrCreateKeyPair)
-}
-
-func GetTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager) (*render.TyphaNodeTLS, error) {
-	return getOrCreateTyphaNodeTLSConfig(cli, certificateManager, certificateManager.GetKeyPair)
-}
-
-// getOrCreateTyphaNodeTLSConfig reads and validates the CA ConfigMap and Secrets for
-// Typha and Felix configuration. It returns the validated resources or error
-// if there was one.
-func getOrCreateTyphaNodeTLSConfig(cli client.Client, certificateManager certificatemanager.CertificateManager, createKeyPairFunc func(cli client.Client, secretName, secretNamespace string, dnsNames []string) (certificatemanagement.KeyPairInterface, error)) (*render.TyphaNodeTLS, error) {
-	// accumulate all the error messages so all problems with the certs
-	// and CA are reported.
-	var errMsgs []string
-	getOrCreateKeyPair := func(secretName, commonName string, requireCNOrURISAN bool) (keyPair certificatemanagement.KeyPairInterface, cn string, uriSAN string) {
-		keyPair, err := createKeyPairFunc(cli, secretName, common.OperatorNamespace(), []string{commonName})
-		if err != nil {
-			errMsgs = append(errMsgs, err.Error())
-		} else {
-
-			if !keyPair.BYO() {
-				cn = commonName
-			} else {
-				// todo: Integrate this with the new certificate manager or find another alternative for uriSAN and cn.
-				secret, err := utils.GetSecret(context.Background(), cli, secretName, common.OperatorNamespace())
-				if err != nil {
-					errMsgs = append(errMsgs, err.Error())
-				} else if secret != nil {
-					data := secret.Data
-					if data != nil {
-						cn, uriSAN = string(data[render.CommonName]), string(data[render.URISAN])
-					}
-				}
-			}
-			if requireCNOrURISAN && cn == "" && uriSAN == "" {
-				errMsgs = append(errMsgs, "CertPair for Felix does not contain common-name or uri-san")
-			}
-		}
-		return
-	}
-	node, nodeCommonName, nodeURISAN := getOrCreateKeyPair(render.NodeTLSSecretName, render.FelixCommonName, true)
-	typha, typhaCommonName, typhaURISAN := getOrCreateKeyPair(render.TyphaTLSSecretName, render.TyphaCommonName, true)
-	var trustedBundle certificatemanagement.TrustedBundle
-	configMap, err := getConfigMap(cli, render.TyphaCAConfigMapName)
-	if err != nil {
-		errMsgs = append(errMsgs, fmt.Sprintf("CA for Typha is invalid: %s", err))
-	} else if configMap != nil {
-		if len(configMap.Data[render.TyphaCABundleName]) == 0 {
-			errMsgs = append(errMsgs, fmt.Sprintf("ConfigMap %q does not have a field named %q", render.TyphaCAConfigMapName, render.TyphaCABundleName))
-		} else {
-			trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates(node, typha,
-				certificatemanagement.NewCertificate(render.TyphaCAConfigMapName, common.CalicoNamespace, []byte(configMap.Data[render.TyphaCABundleName]), nil))
-			if err != nil {
-				errMsgs = append(errMsgs, fmt.Sprintf("Error creating trusted bundle %s", err))
-			}
-		}
-	} else {
-		trustedBundle, err = certificateManager.CreateTrustedBundleWithSystemRootCertificates(node, typha)
-		if err != nil {
-			errMsgs = append(errMsgs, fmt.Sprintf("Error creating trusted bundle %s", err))
-		}
-	}
-	if len(errMsgs) != 0 {
-		return nil, fmt.Errorf("%s", strings.Join(errMsgs, ";"))
-	}
-	return &render.TyphaNodeTLS{
-		TrustedBundle:   trustedBundle,
-		TyphaSecret:     typha,
-		TyphaCommonName: typhaCommonName,
-		TyphaURISAN:     typhaURISAN,
-		NodeSecret:      node,
-		NodeCommonName:  nodeCommonName,
-		NodeURISAN:      nodeURISAN,
-	}, nil
 }
 
 func (r *ReconcileInstallation) setNftablesMode(_ context.Context, install *operatorv1.Installation, fc *v3.FelixConfiguration, reqLogger logr.Logger) (bool, error) {
@@ -1720,7 +1657,7 @@ func (r *ReconcileInstallation) setDefaultsOnFelixConfiguration(ctx context.Cont
 
 	// Determine the felix health port to use. Prefer the configuration from FelixConfiguration,
 	// but default to 9099 (or 9199 on OpenShift). We will also write back whatever we select to FelixConfiguration.
-	felixHealthPort := 9099
+	felixHealthPort := render.DefaultFelixHealthPort
 	if install.Spec.KubernetesProvider.IsOpenShift() {
 		felixHealthPort = 9199
 	}
@@ -2153,23 +2090,8 @@ func (r *ReconcileInstallation) syncManagedAdmissionPolicies(
 	return nil
 }
 
-func getConfigMap(client client.Client, cmName string) (*corev1.ConfigMap, error) {
-	cm := &corev1.ConfigMap{}
-	cmNamespacedName := types.NamespacedName{
-		Name:      cmName,
-		Namespace: common.OperatorNamespace(),
-	}
-	if err := client.Get(context.Background(), cmNamespacedName, cm); err != nil {
-		if apierrors.IsNotFound(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read ConfigMap %q: %s", cmName, err)
-	}
-	return cm, nil
-}
-
 func getBirdTemplates(client client.Client) (map[string]string, error) {
-	cm, err := getConfigMap(client, render.BirdTemplatesConfigMapName)
+	cm, err := utils.GetOperatorConfigMap(client, render.BirdTemplatesConfigMapName)
 	if err != nil || cm == nil {
 		return nil, err
 	}

@@ -22,6 +22,14 @@ type Set struct {
 	APIServer         APIServerExtension
 	ClusterConnection ClusterConnectionExtension
 	Tiers             TiersExtension
+	CSR               CSRExtension
+	Istio             IstioExtension
+	Goldmane          GoldmaneExtension
+	Whisker           WhiskerExtension
+	GatewayAPI        GatewayAPIExtension
+
+	// Startup is the variant's hook into operator startup rather than into a controller.
+	Startup StartupExtension
 }
 
 // Extensions is the variant behavior the operator runs with. The zero value extends
@@ -69,4 +77,46 @@ func (e Extensions) Tiers() TiersExtension {
 		return noopTiers{}
 	}
 	return e.set.Tiers
+}
+
+func (e Extensions) CSR() CSRExtension {
+	if e.set.CSR == nil {
+		return noopCSR{}
+	}
+	return e.set.CSR
+}
+
+func (e Extensions) Istio() IstioExtension {
+	if e.set.Istio == nil {
+		return noopIstio{}
+	}
+	return e.set.Istio
+}
+
+func (e Extensions) Goldmane() GoldmaneExtension {
+	if e.set.Goldmane == nil {
+		return noopGoldmane{}
+	}
+	return e.set.Goldmane
+}
+
+func (e Extensions) Whisker() WhiskerExtension {
+	if e.set.Whisker == nil {
+		return noopWhisker{}
+	}
+	return e.set.Whisker
+}
+
+func (e Extensions) GatewayAPI() GatewayAPIExtension {
+	if e.set.GatewayAPI == nil {
+		return noopGatewayAPI{}
+	}
+	return e.set.GatewayAPI
+}
+
+func (e Extensions) Startup() StartupExtension {
+	if e.set.Startup == nil {
+		return noopStartup{}
+	}
+	return e.set.Startup
 }

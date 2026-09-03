@@ -15,7 +15,6 @@
 package clusterconnection
 
 import (
-	"net"
 	"net/url"
 
 	"github.com/sirupsen/logrus"
@@ -27,7 +26,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
-	"github.com/tigera/api/pkg/lib/numorstring"
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
@@ -131,44 +129,21 @@ func enterpriseGuardianPolicySpec(gpc *render.GuardianConfiguration) (v3.Network
 			continue
 		}
 
-		host, port, err := net.SplitHostPort(tunnelDestinationHostPort)
+		dest, err := networkpolicy.EntityRuleForDestination(tunnelDestinationHostPort, gpc.ClusterDomain)
 		if err != nil {
 			return v3.NetworkPolicySpec{}, err
 		}
-		parsedPort, err := numorstring.PortFromString(port)
-		if err != nil {
-			return v3.NetworkPolicySpec{}, err
+
+		if len(dest.Domains) > 0 && !gpc.IncludeEgressNetworkPolicy {
+			continue
 		}
-		parsedIP := net.ParseIP(host)
-		if parsedIP == nil {
-			// Domain-based egress rules require the EgressAccessControl license feature.
-			if !gpc.IncludeEgressNetworkPolicy {
-				continue
-			}
-			egressRules = append(egressRules, v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					Domains: []string{host},
-					Ports:   []numorstring.Port{parsedPort},
-				},
-			})
-			allowedDestinations[tunnelDestinationHostPort] = true
-		} else {
-			netSuffix := "/32"
-			if parsedIP.To4() == nil {
-				netSuffix = "/128"
-			}
-			egressRules = append(egressRules, v3.Rule{
-				Action:   v3.Allow,
-				Protocol: &networkpolicy.TCPProtocol,
-				Destination: v3.EntityRule{
-					Nets:  []string{parsedIP.String() + netSuffix},
-					Ports: []numorstring.Port{parsedPort},
-				},
-			})
-			allowedDestinations[tunnelDestinationHostPort] = true
-		}
+
+		egressRules = append(egressRules, v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: dest,
+		})
+		allowedDestinations[tunnelDestinationHostPort] = true
 	}
 
 	egressRules = append(egressRules, v3.Rule{Action: v3.Pass})
@@ -198,17 +173,13 @@ func enterpriseGuardianPolicySpec(gpc *render.GuardianConfiguration) (v3.Network
 func modifyGuardian(ri render.Inputs, cfg *render.GuardianConfiguration, objs, del []client.Object) ([]client.Object, []client.Object) {
 	gc := guardianInputsFrom(cfg)
 
-	if role, ok := extensions.FindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName); ok {
-		role.Rules = guardianEnterpriseRules(gc)
-	}
+	role := extensions.MustFindObject[*rbacv1.ClusterRole](objs, render.GuardianClusterRoleName)
+	role.Rules = guardianEnterpriseRules(gc)
 
-	if svc, ok := extensions.FindObject[*corev1.Service](objs, render.GuardianServiceName); ok {
-		svc.Spec.Ports = append(svc.Spec.Ports, guardianEnterpriseServicePorts()...)
-	}
+	svc := extensions.MustFindObject[*corev1.Service](objs, render.GuardianServiceName)
+	svc.Spec.Ports = append(svc.Spec.Ports, guardianEnterpriseServicePorts()...)
 
-	if dep, ok := extensions.FindObject[*appsv1.Deployment](objs, render.GuardianDeploymentName); ok {
-		addGuardianEnterpriseEnv(gc, dep)
-	}
+	addGuardianEnterpriseEnv(gc, extensions.MustFindObject[*appsv1.Deployment](objs, render.GuardianDeploymentName))
 
 	return append(objs,
 		guardianSecretsRole(),

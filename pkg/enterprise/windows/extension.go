@@ -26,39 +26,28 @@ import (
 
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
-	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller"
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/enterprise/installation"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	"github.com/tigera/operator/pkg/extensions"
-	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
 // Extension is the Calico Enterprise behavior for the windows controller.
 type Extension struct {
 	variant operatorv1.ProductVariant
-	images  *imageoverride.Overrides
 }
 
 var _ extensions.WindowsExtension = &Extension{}
 
 // New returns the windows extension for the variant the operator resolved.
 func New(variant operatorv1.ProductVariant) *Extension {
-	images := imageoverride.New()
-	images.Register(variant, render.ComponentNameWindowsNodeImg, components.ComponentTigeraNodeWindows)
-	images.Register(variant, render.ComponentNameWindowsCNIImg, components.ComponentTigeraCNIWindows)
-
-	return &Extension{variant: variant, images: images}
-}
-
-func (e *Extension) Images() *imageoverride.Overrides {
-	return e.images
+	return &Extension{variant: variant}
 }
 
 // Modify dispatches over the components the windows controller renders.
@@ -124,9 +113,7 @@ func (e *Extension) ExtendInputs(ctx context.Context, ci controller.Inputs) (con
 // daemonset configuration (flow/DNS log env, prometheus reporter, trusted DNS
 // servers, the calico log volume, and the prometheus reporter keypair mount).
 func modifyWindows(ri render.Inputs, objs, del []client.Object) ([]client.Object, []client.Object) {
-	if ds, ok := extensions.FindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName); ok {
-		modifyWindowsDaemonSet(ri, ds)
-	}
+	modifyWindowsDaemonSet(ri, extensions.MustFindObject[*appsv1.DaemonSet](objs, common.WindowsDaemonSetName))
 
 	return append(objs, windowsNodeMetricsService(ri)), del
 }

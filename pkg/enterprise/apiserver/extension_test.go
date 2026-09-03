@@ -45,11 +45,13 @@ import (
 	"github.com/tigera/operator/pkg/dns"
 	"github.com/tigera/operator/pkg/enterprise"
 	eoptions "github.com/tigera/operator/pkg/enterprise/options"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/extensions/extensionstest"
 	"github.com/tigera/operator/pkg/render"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
-	"github.com/tigera/operator/pkg/render/monitor"
+	"github.com/tigera/operator/pkg/render/common/wafmanagement"
 	"github.com/tigera/operator/pkg/render/webhooks"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
@@ -351,18 +353,34 @@ var _ = Describe("API server enterprise modifier", func() {
 			Verbs: []string{"create", "update", "delete", "patch", "get", "watch", "list"},
 		}))
 
-		// Both roles can read the Gateway API, so the WAF UI can detect it and offer
-		// Gateways and HTTPRoutes as policy attach targets.
+		// Both roles can read Gateways and HTTPRoutes to offer as WAF policy attach targets.
 		for _, role := range []*rbacv1.ClusterRole{uiUser, networkAdmin} {
-			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
-				APIGroups: []string{"operator.tigera.io"},
-				Resources: []string{"gatewayapis"},
-				Verbs:     []string{"get"},
-			}))
 			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
 				APIGroups: []string{"gateway.networking.k8s.io"},
 				Resources: []string{"gateways", "httproutes"},
 				Verbs:     []string{"get", "list", "watch"},
+			}))
+		}
+
+		Expect(uiUser.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get"},
+		}))
+		Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+			APIGroups: []string{"operator.tigera.io"},
+			Resources: []string{"gatewayapis"},
+			Verbs:     []string{"get", "create", "update", "patch"},
+		}))
+
+		// Both roles read the gatewayapi TigeraStatus, which is where Gateway API
+		// readiness lives.
+		for _, role := range []*rbacv1.ClusterRole{uiUser, networkAdmin} {
+			Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{"operator.tigera.io"},
+				Resources:     []string{"tigerastatuses"},
+				ResourceNames: []string{"gatewayapi"},
+				Verbs:         []string{"get"},
 			}))
 		}
 
@@ -406,6 +424,37 @@ var _ = Describe("API server enterprise modifier", func() {
 		Entry("enabled", rbacManagementGate("true"), true),
 		Entry("disabled", rbacManagementGate("false"), false),
 		Entry("no ConfigMap", nil, false),
+	)
+
+	DescribeTable("grants tigera-network-admin write access to the gate ConfigMap whatever the gate says",
+		func(gate *corev1.ConfigMap) {
+			var objs []client.Object
+			if gate != nil {
+				objs = append(objs, gate)
+			}
+			ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil, objs...)
+			eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+			Expect(err).NotTo(HaveOccurred())
+
+			rendered, _ := renderAPIServer(ci, eci.RenderInputs, apiServerKeyPair(ci))
+			networkAdmin, ok := extensions.FindObject[*rbacv1.ClusterRole](rendered, "tigera-network-admin")
+			Expect(ok).To(BeTrue())
+
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups: []string{""},
+				Resources: []string{"configmaps"},
+				Verbs:     []string{"create"},
+			}))
+			Expect(networkAdmin.Rules).To(ContainElement(rbacv1.PolicyRule{
+				APIGroups:     []string{""},
+				Resources:     []string{"configmaps"},
+				ResourceNames: []string{rbacmanagement.ConfigMapName, wafmanagement.ConfigMapName},
+				Verbs:         []string{"get", "list", "watch", "update", "patch", "delete"},
+			}))
+		},
+		Entry("enabled", rbacManagementGate("true")),
+		Entry("disabled", rbacManagementGate("false")),
+		Entry("no ConfigMap", nil),
 	)
 
 	It("reads the gate on a managed cluster, which carries tigera-network-admin too", func() {
@@ -836,6 +885,35 @@ var _ = Describe("API server enterprise policy modifier", func() {
 		n := len(policy.Spec.Egress)
 		Expect(n).To(BeNumerically(">", 0))
 		Expect(policy.Spec.Egress[n-1].Action).To(Equal(v3.Pass))
+	})
+
+	It("allows egress to Guardian on a managed cluster", func() {
+		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil,
+			&operatorv1.ManagementClusterConnection{ObjectMeta: metav1.ObjectMeta{Name: utils.DefaultEnterpriseInstanceKey.Name}})
+		eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+		ri := eci.RenderInputs
+		Expect(err).NotTo(HaveOccurred())
+
+		policy := applyPolicy(ci, ri)
+		guardian := v3.Rule{
+			Action:      v3.Allow,
+			Protocol:    &networkpolicy.TCPProtocol,
+			Destination: render.GuardianEntityRule,
+		}
+		// The rule is only reached if it precedes the trailing Pass.
+		n := len(policy.Spec.Egress)
+		Expect(policy.Spec.Egress[n-1].Action).To(Equal(v3.Pass))
+		Expect(policy.Spec.Egress[n-2]).To(Equal(guardian))
+	})
+
+	It("omits the Guardian egress rule when the cluster is not managed", func() {
+		ci := apiServerControllerInputs(operatorv1.CalicoEnterprise, nil)
+		eci, _, err := ext.APIServer().ExtendInputs(ctx, ci)
+		ri := eci.RenderInputs
+		Expect(err).NotTo(HaveOccurred())
+
+		policy := applyPolicy(ci, ri)
+		Expect(policy.Spec.Egress).NotTo(ContainElement(HaveField("Destination", render.GuardianEntityRule)))
 	})
 
 	It("adds the L7 admission controller ingress port when sidecar injection is enabled", func() {

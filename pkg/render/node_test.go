@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"strings"
 
+	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/gstruct"
@@ -38,7 +40,6 @@ import (
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
 	"github.com/tigera/operator/pkg/controller/k8sapi"
 	ctrlrfake "github.com/tigera/operator/pkg/ctrlruntime/client/fake"
-	"github.com/tigera/operator/pkg/imageoverride"
 	"github.com/tigera/operator/pkg/render"
 	rmeta "github.com/tigera/operator/pkg/render/common/meta"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
@@ -135,13 +136,12 @@ var _ = Describe("Node rendering tests", func() {
 
 				// Create a default configuration.
 				cfg = render.NodeConfiguration{
-					K8sServiceEp:    k8sServiceEp,
-					Installation:    defaultInstance,
-					TLS:             typhaNodeTLS,
-					ClusterDomain:   defaultClusterDomain,
-					FelixHealthPort: 9099,
-					IPPools:         defaultInstance.CalicoNetwork.IPPools,
-					ImageOverrides:  imageoverride.New(),
+					K8sServiceEp:       k8sServiceEp,
+					Installation:       defaultInstance,
+					TLS:                typhaNodeTLS,
+					ClusterDomain:      defaultClusterDomain,
+					FelixConfiguration: &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{HealthPort: ptr.To(9099)}},
+					IPPools:            defaultInstance.CalicoNetwork.IPPools,
 				}
 			})
 
@@ -157,6 +157,19 @@ var _ = Describe("Node rendering tests", func() {
 					Resources:     []string{"securitycontextconstraints"},
 					Verbs:         []string{"use"},
 					ResourceNames: []string{"privileged"},
+				}))
+			})
+
+			It("should grant calico-node access to the IP pool status subresource", func() {
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				role := rtest.GetResource(resources, "calico-node", "", "rbac.authorization.k8s.io", "v1", "ClusterRole").(*rbacv1.ClusterRole)
+				Expect(role.Rules).To(ContainElement(rbacv1.PolicyRule{
+					APIGroups: []string{"projectcalico.org", "crd.projectcalico.org"},
+					Resources: []string{"ippools/status"},
+					Verbs:     []string{"update"},
 				}))
 			})
 
@@ -214,6 +227,7 @@ var _ = Describe("Node rendering tests", func() {
       "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -418,6 +432,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -718,6 +733,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -1129,6 +1145,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -1429,7 +1446,7 @@ var _ = Describe("Node rendering tests", func() {
 				defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 				defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
 				defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
-				cfg.FelixHealthPort = 9199
+				cfg.FelixConfiguration = &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{HealthPort: ptr.To(9199)}}
 				component := render.Node(&cfg)
 				Expect(component.ResolveImages(nil)).To(BeNil())
 				resources, _ := component.Objects()
@@ -1841,6 +1858,31 @@ var _ = Describe("Node rendering tests", func() {
 				Expect(ds.Spec.Template.Annotations["prometheus.io/port"]).To(Equal("1234"))
 			})
 
+			It("should set CALICO_CGROUP_PATH from FelixConfiguration", func() {
+				cfg.FelixConfiguration.Spec.CgroupV2Path = "/run/calico/cgroup"
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+				bootstrap := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+				Expect(bootstrap).NotTo(BeNil())
+				rtest.ExpectEnv(bootstrap.Env, "CALICO_CGROUP_PATH", "/run/calico/cgroup")
+			})
+
+			It("should not set CALICO_CGROUP_PATH when FelixConfiguration has no override", func() {
+				component := render.Node(&cfg)
+				Expect(component.ResolveImages(nil)).To(BeNil())
+				resources, _ := component.Objects()
+
+				ds := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet").(*appsv1.DaemonSet)
+				bootstrap := rtest.GetContainer(ds.Spec.Template.Spec.InitContainers, "ebpf-bootstrap")
+				Expect(bootstrap).NotTo(BeNil())
+				for _, e := range bootstrap.Env {
+					Expect(e.Name).NotTo(Equal("CALICO_CGROUP_PATH"))
+				}
+			})
+
 			It("should not render a FlexVolume container if FlexVolumePath is set to None", func() {
 				defaultInstance.FlexVolumePath = "None"
 				component := render.Node(&cfg)
@@ -1965,6 +2007,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2051,6 +2094,7 @@ var _ = Describe("Node rendering tests", func() {
       "log_file_path": "/var/log/calico/cni/cni.log",
       "log_level": "Debug",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "policy": {
         "type": "k8s"
@@ -2100,6 +2144,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2149,6 +2194,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2197,6 +2243,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2282,6 +2329,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2339,6 +2387,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2390,6 +2439,7 @@ var _ = Describe("Node rendering tests", func() {
       "calico_api_group": "",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2435,6 +2485,7 @@ var _ = Describe("Node rendering tests", func() {
       "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2574,6 +2625,7 @@ var _ = Describe("Node rendering tests", func() {
       "endpoint_status_dir": "/var/run/calico/endpoint-status",
       "datastore_type": "kubernetes",
       "mtu": 0,
+      "require_mtu_file": true,
       "nodename_file_optional": false,
       "log_level": "Debug",
       "log_file_path": "/var/log/calico/cni/cni.log",
@@ -2658,7 +2710,7 @@ var _ = Describe("Node rendering tests", func() {
 						defaultInstance.KubernetesProvider = operatorv1.ProviderOpenShift
 						defaultCNIConfDir, defaultCNIBinDir := render.DefaultCNIDirectories(defaultInstance.KubernetesProvider)
 						defaultInstance.CNI.ConfDir, defaultInstance.CNI.BinDir = &defaultCNIConfDir, &defaultCNIBinDir
-						cfg.FelixHealthPort = 9199
+						cfg.FelixConfiguration = &v3.FelixConfiguration{Spec: v3.FelixConfigurationSpec{HealthPort: ptr.To(9199)}}
 					}
 
 					if isEnterprise {
@@ -2844,6 +2896,17 @@ var _ = Describe("Node rendering tests", func() {
 						corev1.ResourceMemory: resource.MustParse("500Mi"),
 					},
 				}
+
+				It("should default to the node's own DNS resolver", func() {
+					component := render.Node(&cfg)
+					resources, _ := component.Objects()
+					dsResource := rtest.GetResource(resources, "calico-node", "calico-system", "apps", "v1", "DaemonSet")
+					Expect(dsResource).ToNot(BeNil())
+
+					ds := dsResource.(*appsv1.DaemonSet)
+					Expect(ds.Spec.Template.Spec.DNSPolicy).To(Equal(corev1.DNSDefault))
+					Expect(ds.Spec.Template.Spec.DNSConfig).To(BeNil())
+				})
 
 				It("should handle calicoNodeDaemonSet overrides", func() {
 					var minReadySeconds int32 = 20

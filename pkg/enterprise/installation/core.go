@@ -32,6 +32,7 @@ import (
 	"github.com/tigera/operator/pkg/controller/utils"
 	"github.com/tigera/operator/pkg/ctrlruntime"
 	"github.com/tigera/operator/pkg/dns"
+	"github.com/tigera/operator/pkg/enterprise/render/monitor"
 	eutils "github.com/tigera/operator/pkg/enterprise/utils"
 	"github.com/tigera/operator/pkg/extensions"
 	"github.com/tigera/operator/pkg/imports/crds"
@@ -39,7 +40,6 @@ import (
 	relasticsearch "github.com/tigera/operator/pkg/render/common/elasticsearch"
 	"github.com/tigera/operator/pkg/render/common/rbacmanagement"
 	"github.com/tigera/operator/pkg/render/kubecontrollers"
-	"github.com/tigera/operator/pkg/render/monitor"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 )
 
@@ -93,9 +93,12 @@ func collectProcessPathEnabled(lc *operatorv1.LogCollector) bool {
 		*lc.Spec.CollectProcessPath == operatorv1.CollectProcessPathEnable
 }
 
-// Validate rejects installation config Calico Enterprise does not support.
-// ProductVersion is the Calico Enterprise release the operator reports in status.
-func (e *Extension) ProductVersion() string {
+// ProductVersion is the release the operator reports in status. The Enterprise
+// operator also manages Calico variant installs, during migration.
+func (e *Extension) ProductVersion(install *operatorv1.InstallationSpec) string {
+	if !install.Variant.IsEnterprise() {
+		return components.CalicoRelease
+	}
 	return components.EnterpriseRelease
 }
 

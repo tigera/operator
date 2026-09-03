@@ -506,13 +506,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			ownedClass[gcList.Items[i].Name] = true
 		}
 	}
-	nsSet := set.New[string]()
-	for i := range gwList.Items {
-		if ownedClass[string(gwList.Items[i].Spec.GatewayClassName)] {
-			nsSet.Insert(gwList.Items[i].Namespace)
-		}
-	}
-	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
+	gatewayConfig.GatewayNamespaces, gatewayConfig.GatewayListenerPorts = gatewayNamespacesAndPorts(gwList.Items, ownedClass)
 
 	// Legacy tigera-gateway teardown (TODO: remove once upgrades from 3.x are unsupported).
 	// Foreground-delete the old controller so its Deployment lingers until its pods are gone — only
@@ -685,6 +679,35 @@ func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI 
 	// These objects require graceful termination before the CNI plugin is torn down.
 	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.CalicoNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
+}
+
+// gatewayNamespacesAndPorts reports the namespaces holding a Gateway of one of our
+// classes, and for each the sorted listener ports its Gateways declare. The proxy policy
+// allows ingress on exactly those ports, so a user editing a listener is what widens or
+// narrows it. Both results are sorted so an unchanged cluster renders an unchanged policy.
+func gatewayNamespacesAndPorts(gateways []gapi.Gateway, ownedClass map[string]bool) ([]string, map[string][]uint16) {
+	nsSet := set.New[string]()
+	portSets := map[string]set.Set[uint16]{}
+	for i := range gateways {
+		gw := &gateways[i]
+		if !ownedClass[string(gw.Spec.GatewayClassName)] {
+			continue
+		}
+		nsSet.Insert(gw.Namespace)
+		ports, ok := portSets[gw.Namespace]
+		if !ok {
+			ports = set.New[uint16]()
+			portSets[gw.Namespace] = ports
+		}
+		for j := range gw.Spec.Listeners {
+			ports.Insert(uint16(gw.Spec.Listeners[j].Port))
+		}
+	}
+	listenerPorts := make(map[string][]uint16, len(portSets))
+	for ns, ports := range portSets {
+		listenerPorts[ns] = ports.SortedList()
+	}
+	return nsSet.SortedList(), listenerPorts
 }
 
 // reconcileGatewayNamespaceResources writes the per-namespace resources owned by the namespace's

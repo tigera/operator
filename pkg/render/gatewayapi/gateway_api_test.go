@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
@@ -116,9 +117,10 @@ var _ = Describe("Gateway API rendering tests", func() {
 		&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: GatewayClassName}},
 	}
 
+	// No Gateway anywhere means no proxy pods, so the proxy policy is not part of this
+	// baseline. It is asserted per namespace instead.
 	bootstrapExpected := []client.Object{
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: common.CalicoNamespace}},
-		&v3.GlobalNetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName}},
 	}
 
 	It("should render Gateway API resources from helm chart", func() {
@@ -983,6 +985,8 @@ value:
 			Installation:           installation,
 			GatewayAPI:             gatewayAPI,
 			IncludeV3NetworkPolicy: true,
+			GatewayNamespaces:      []string{"app-ns"},
+			GatewayListenerPorts:   map[string][]uint16{"app-ns": {80, 443}},
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1035,7 +1039,7 @@ value:
 		Expect(policy.Spec.Tier).To(Equal("calico-system"))
 		Expect(policy.Spec.Selector).To(Equal(EnvoyGatewayPolicySelector))
 
-		proxyPolicy, err := rtest.GetResourceOfType[*v3.GlobalNetworkPolicy](objsToCreate, ProxyPolicyName, "")
+		proxyPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ProxyPolicyName, "app-ns")
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxyPolicy.Spec.Tier).To(Equal("calico-system"))
 		Expect(proxyPolicy.Spec.Selector).To(Equal(EnvoyProxyPolicySelector))
@@ -1044,6 +1048,47 @@ value:
 
 		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", common.CalicoNamespace)
 		Expect(err).To(HaveOccurred(), "must not render default-deny in calico-system")
+	})
+
+	It("should scope proxy ingress to the listener ports in each Gateway namespace", func() {
+		gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: &operatorv1.InstallationSpec{},
+			GatewayAPI: &operatorv1.GatewayAPI{
+				Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}},
+			},
+			IncludeV3NetworkPolicy: true,
+			GatewayNamespaces:      []string{"shop", "blog"},
+			GatewayListenerPorts:   map[string][]uint16{"shop": {80, 443}, "blog": {8080}},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		objsToCreate, _ := gatewayComp.Objects()
+
+		// Nothing cluster-wide, so a pod outside a Gateway namespace cannot pick up
+		// these rules just by wearing the proxy label.
+		for _, obj := range objsToCreate {
+			Expect(obj).NotTo(BeAssignableToTypeOf(&v3.GlobalNetworkPolicy{}))
+		}
+
+		// 19001 is the metrics port and is never a listener, so every namespace gets it
+		// on top of whatever its own Gateways declare.
+		for ns, want := range map[string][]uint16{"shop": {19001, 80, 443}, "blog": {19001, 8080}} {
+			policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ProxyPolicyName, ns)
+			Expect(err).NotTo(HaveOccurred(), ns)
+			Expect(policy.Spec.Ingress).To(HaveLen(3), ns)
+
+			for i, nets := range [][]string{{"0.0.0.0/0"}, {"::/0"}} {
+				Expect(policy.Spec.Ingress[i].Action).To(Equal(v3.Allow), ns)
+				Expect(policy.Spec.Ingress[i].Source.Nets).To(Equal(nets), ns)
+				Expect(policy.Spec.Ingress[i].Destination.Ports).To(ConsistOf(networkpolicy.Ports(want...)), ns)
+			}
+			// Pass, so a port the user never asked to serve on still reaches their tiers.
+			Expect(policy.Spec.Ingress[2]).To(Equal(v3.Rule{Action: v3.Pass}), ns)
+		}
+
+		// A namespace with no Gateway in it gets no policy at all.
+		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ProxyPolicyName, "other-ns")
+		Expect(err).To(HaveOccurred())
 	})
 
 	It("should not render any v3 NetworkPolicy when IncludeV3NetworkPolicy is false", func() {

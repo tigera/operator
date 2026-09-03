@@ -748,6 +748,48 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, &gapi.GatewayClass{})).NotTo(HaveOccurred())
 	})
 
+	It("collects each Gateway namespace's listener ports, deduplicated and sorted", func() {
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+				Listeners:        []gapi.Listener{{Port: 443}, {Port: 80}},
+			}},
+			// A second Gateway in the same namespace adds to the set, and the port it
+			// shares with gw1 must not appear twice.
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw2"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+				Listeners:        []gapi.Listener{{Port: 443}, {Port: 8080}},
+			}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "blog-ns", Name: "gw3"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+				Listeners:        []gapi.Listener{{Port: 8443}},
+			}},
+			// Someone else's class, so neither its namespace nor its port is ours.
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "other-ns", Name: "gw4"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: "not-ours",
+				Listeners:        []gapi.Listener{{Port: 9999}},
+			}},
+		}
+
+		namespaces, ports := gatewayNamespacesAndPorts(gateways, map[string]bool{gatewayapi.GatewayClassName: true})
+		Expect(namespaces).To(Equal([]string{"app-ns", "blog-ns"}))
+		Expect(ports).To(Equal(map[string][]uint16{
+			"app-ns":  {80, 443, 8080},
+			"blog-ns": {8443},
+		}))
+	})
+
+	It("reports no namespaces and no ports when a Gateway has no listeners", func() {
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+			}},
+		}
+		namespaces, ports := gatewayNamespacesAndPorts(gateways, map[string]bool{gatewayapi.GatewayClassName: true})
+		Expect(namespaces).To(Equal([]string{"app-ns"}))
+		Expect(ports).To(Equal(map[string][]uint16{"app-ns": {}}))
+	})
+
 	It("writes the bundle and operator-secrets RoleBinding, but not WAF resources, on Calico", func() {
 		r.newComponentHandler = utils.NewComponentHandler
 		r.ext = extensions.Extensions{}.GatewayAPI()

@@ -76,6 +76,10 @@ const (
 	// gateway.envoyproxy.io/owning-gateway-name, which upstream is free to change.
 	ProxyPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway-proxy"
 	EnvoyProxyPolicySelector = "k8s-app == '" + GatewayProxyLabel + "'"
+
+	// Envoy Gateway fixes the proxy's Prometheus port, and it is never a Gateway
+	// listener, so the proxy policy has to allow it by hand.
+	proxyMetricsPort = 19001
 )
 
 // Component names, which key the image overrides a variant resolves through.
@@ -375,6 +379,12 @@ type GatewayAPIImplementationConfig struct {
 	// this operator.
 	GatewayNamespaces []string
 
+	// GatewayListenerPorts maps each Gateway namespace to the sorted, deduplicated
+	// listener ports the Gateways in it declare. The proxy policy allows ingress only
+	// on these, so a port the user never asked to serve on still falls through to
+	// their own tiers.
+	GatewayListenerPorts map[string][]uint16
+
 	// TrustedBundle carries the public CA bundle (extracted from the operator's UBI
 	// base image) plus Calico's internal CA. Mounted on the envoy-gateway controller
 	// and on every provisioned envoy-proxy pod so outbound TLS (OCI wasm fetch,
@@ -442,7 +452,9 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	// core Installation's default-deny.
 	if pr.cfg.IncludeV3NetworkPolicy {
 		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
-		objs = append(objs, gatewayAPIProxyPolicy(openShift))
+		for _, ns := range pr.cfg.GatewayNamespaces {
+			objs = append(objs, gatewayAPIProxyPolicy(ns, pr.cfg.GatewayListenerPorts[ns], openShift))
+		}
 	}
 
 	// Helm-rendered envoy-gateway controller in calico-system.
@@ -1085,9 +1097,10 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 	}
 }
 
-// gatewayAPIProxyPolicy lets the data-plane envoy proxies punch through any default-deny
-// in the Gateway namespaces they run in (deploy.type=GatewayNamespace).
-func gatewayAPIProxyPolicy(openShift bool) *v3.GlobalNetworkPolicy {
+// gatewayAPIProxyPolicy lets the data-plane envoy proxies in ns punch through any
+// default-deny there (deploy.type=GatewayNamespace). It is namespaced, not global, so a
+// pod outside a Gateway namespace cannot pick up these rules by wearing the proxy label.
+func gatewayAPIProxyPolicy(ns string, listenerPorts []uint16, openShift bool) *v3.NetworkPolicy {
 	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
 	egress = append(egress,
 		// xDS config (18000) and Wasm module fetch (18002) on the envoy-gateway controller.
@@ -1106,21 +1119,23 @@ func gatewayAPIProxyPolicy(openShift bool) *v3.GlobalNetworkPolicy {
 		v3.Rule{Action: v3.Pass},
 	)
 
-	return &v3.GlobalNetworkPolicy{
-		TypeMeta:   metav1.TypeMeta{Kind: "GlobalNetworkPolicy", APIVersion: "projectcalico.org/v3"},
-		ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName},
-		Spec: v3.GlobalNetworkPolicySpec{
+	// The metrics port is not a listener, so it never appears in a Gateway spec.
+	ports := networkpolicy.Ports(append([]uint16{proxyMetricsPort}, listenerPorts...)...)
+
+	return &v3.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName, Namespace: ns},
+		Spec: v3.NetworkPolicySpec{
 			Order:    &networkpolicy.HighPrecedenceOrder,
 			Tier:     networkpolicy.CalicoTierName,
 			Selector: EnvoyProxyPolicySelector,
 			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
-			// Listener ports are user-defined and dynamic, so the proxy has to accept
-			// arbitrary inbound TCP to serve traffic at all (this also covers the 19001
-			// metrics scrape). The Allow is terminal in this tier, so a user cannot
-			// narrow proxy ingress with a policy of their own.
+			// Allow only what a Gateway here actually listens on, then Pass, so the user
+			// keeps control of everything else. The Allow is terminal in this tier, so
+			// widening it any further would take that control away.
 			Ingress: []v3.Rule{
-				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"0.0.0.0/0"}}},
-				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"::/0"}}},
+				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"0.0.0.0/0"}}, Destination: v3.EntityRule{Ports: ports}},
+				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"::/0"}}, Destination: v3.EntityRule{Ports: ports}},
 				{Action: v3.Pass},
 			},
 			Egress: egress,

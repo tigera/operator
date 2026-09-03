@@ -71,6 +71,15 @@ const (
 
 	ControllerPolicyName       = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway"
 	EnvoyGatewayPolicySelector = "k8s-app == '" + GatewayControllerLabel + "' || k8s-app == '" + GatewayCertgenLabel + "'"
+
+	// Selects on a label we own, rather than Envoy Gateway's
+	// gateway.envoyproxy.io/owning-gateway-name, which upstream is free to change.
+	ProxyPolicyName          = networkpolicy.CalicoComponentPolicyPrefix + "envoy-gateway-proxy"
+	EnvoyProxyPolicySelector = "k8s-app == '" + GatewayProxyLabel + "'"
+
+	// Envoy Gateway fixes the proxy's Prometheus port, and it is never a Gateway
+	// listener, so the proxy policy has to allow it by hand.
+	proxyMetricsPort = 19001
 )
 
 // Component names, which key the image overrides a variant resolves through.
@@ -109,6 +118,7 @@ const (
 	GatewayAPIName                      = "calico-gateway-api"
 	GatewayControllerLabel              = GatewayAPIName + "-controller"
 	GatewayCertgenLabel                 = GatewayAPIName + "-certgen"
+	GatewayProxyLabel                   = GatewayAPIName + "-proxy"
 	EnvoyGatewayConfigName              = "envoy-gateway-config"
 	EnvoyGatewayConfigKey               = "envoy-gateway.yaml"
 	EnvoyGatewayDeploymentContainerName = "envoy-gateway"
@@ -369,6 +379,12 @@ type GatewayAPIImplementationConfig struct {
 	// this operator.
 	GatewayNamespaces []string
 
+	// GatewayListenerPorts maps each Gateway namespace to the sorted, deduplicated
+	// listener ports the Gateways in it declare. The proxy policy allows ingress only
+	// on these, so a port the user never asked to serve on still falls through to
+	// their own tiers.
+	GatewayListenerPorts map[string][]uint16
+
 	// TrustedBundle carries the public CA bundle (extracted from the operator's UBI
 	// base image) plus Calico's internal CA. Mounted on the envoy-gateway controller
 	// and on every provisioned envoy-proxy pod so outbound TLS (OCI wasm fetch,
@@ -432,10 +448,17 @@ func (pr *gatewayAPIImplementationComponent) Objects() ([]client.Object, []clien
 	var objs, objsToDelete []client.Object
 	openShift := pr.cfg.Installation.KubernetesProvider.IsOpenShift()
 
-	// Allow policy for the controller in calico-system to punch through the core
-	// Installation's default-deny.
+	// Allow policies for the controller and the data-plane proxies, to punch through the
+	// core Installation's default-deny.
 	if pr.cfg.IncludeV3NetworkPolicy {
 		objs = append(objs, gatewayAPIControllerPolicy(common.CalicoNamespace, openShift))
+		// One per Gateway namespace. These are owned by the GatewayAPI CR rather than by
+		// the namespace's Gateways, because mergeState skips a v3.NetworkPolicy whose Spec
+		// has not changed (component.go), so a second owner reference would never merge in.
+		// A namespace that stops hosting Gateways is swept by the controller instead.
+		for _, ns := range pr.cfg.GatewayNamespaces {
+			objs = append(objs, ProxyPolicy(ns, pr.cfg.GatewayListenerPorts[ns], openShift))
+		}
 	}
 
 	// Helm-rendered envoy-gateway controller in calico-system.
@@ -696,7 +719,7 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	controllerDeployment.Spec.Template.Spec.ImagePullSecrets = append(
 		controllerDeployment.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
-	controllerDeployment.Spec.Template.Labels["k8s-app"] = GatewayControllerLabel
+	setGatewayComponentLabel(&controllerDeployment.Spec.Template, GatewayControllerLabel)
 
 	// Mount the trust bundle on the envoy-gateway controller. The controller pulls
 	// wasm OCI images and may call out to JWT/OIDC providers, both of which need
@@ -730,14 +753,27 @@ func (pr *gatewayAPIImplementationComponent) controllerObjects() []client.Object
 	certgenJob.Spec.Template.Spec.ImagePullSecrets = append(
 		certgenJob.Spec.Template.Spec.ImagePullSecrets,
 		secret.GetReferenceList(pr.cfg.PullSecrets)...)
-	if certgenJob.Spec.Template.Labels == nil {
-		certgenJob.Spec.Template.Labels = map[string]string{}
-	}
-	certgenJob.Spec.Template.Labels["k8s-app"] = GatewayCertgenLabel
+	setGatewayComponentLabel(&certgenJob.Spec.Template, GatewayCertgenLabel)
 	rcomp.ApplyJobOverrides(certgenJob, pr.cfg.GatewayAPI.Spec.GatewayCertgenJob)
 	objs = append(objs, certgenJob)
 
 	return objs
+}
+
+func setGatewayComponentLabel(template *corev1.PodTemplateSpec, label string) {
+	if template.Labels == nil {
+		template.Labels = map[string]string{}
+	}
+	template.Labels["k8s-app"] = label
+}
+
+// Proxy pods are created by the envoy-gateway controller at runtime, so the EnvoyProxy
+// pod spec is the only place the operator gets to label them.
+func ensureGatewayProxyLabel(pod *envoyapi.KubernetesPodSpec) {
+	if pod.Labels == nil {
+		pod.Labels = map[string]string{}
+	}
+	pod.Labels["k8s-app"] = GatewayProxyLabel
 }
 
 func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns string, envoyProxy *envoyapi.EnvoyProxy, classSpec *operatorv1.GatewayClassSpec) *envoyapi.EnvoyProxy {
@@ -792,6 +828,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod = &envoyapi.KubernetesPodSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+		ensureGatewayProxyLabel(envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Pod)
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container == nil {
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDaemonSet.Container = &envoyapi.KubernetesContainerSpec{}
 		}
@@ -805,6 +842,7 @@ func (pr *gatewayAPIImplementationComponent) envoyProxyConfig(className, ns stri
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod = &envoyapi.KubernetesPodSpec{}
 		}
 		envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.ImagePullSecrets = secret.GetReferenceList(pr.cfg.PullSecrets)
+		ensureGatewayProxyLabel(envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod)
 		if envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container == nil {
 			envoyProxy.Spec.Provider.Kubernetes.EnvoyDeployment.Container = &envoyapi.KubernetesContainerSpec{}
 		}
@@ -1057,6 +1095,52 @@ func gatewayAPIControllerPolicy(namespace string, openShift bool) *v3.NetworkPol
 						Ports: networkpolicy.Ports(9443, 18000, 18001, 18002, 19001),
 					},
 				},
+			},
+			Egress: egress,
+		},
+	}
+}
+
+// ProxyPolicy lets the data-plane envoy proxies in ns punch through any default-deny
+// there (deploy.type=GatewayNamespace). It is namespaced, not global, so a pod outside a
+// Gateway namespace cannot pick up these rules by wearing the proxy label.
+func ProxyPolicy(ns string, listenerPorts []uint16, openShift bool) *v3.NetworkPolicy {
+	egress := networkpolicy.AppendDNSEgressRules(nil, openShift)
+	egress = append(egress,
+		// xDS config (18000) and Wasm module fetch (18002) on the envoy-gateway controller.
+		// 18001 is the ratelimit->controller path, which no proxy dials.
+		v3.Rule{
+			Action:   v3.Allow,
+			Protocol: &networkpolicy.TCPProtocol,
+			Destination: v3.EntityRule{
+				NamespaceSelector: "kubernetes.io/metadata.name == '" + common.CalicoNamespace + "'",
+				Selector:          EnvoyGatewayPolicySelector,
+				Ports:             networkpolicy.Ports(18000, 18002),
+			},
+		},
+		// Pass, not an end-of-tier deny: proxy->backend egress is the user's call, so hand
+		// it down to their tier. Until they allow it the proxy answers 503.
+		v3.Rule{Action: v3.Pass},
+	)
+
+	// The metrics port is not a listener, so it never appears in a Gateway spec.
+	ports := networkpolicy.Ports(append([]uint16{proxyMetricsPort}, listenerPorts...)...)
+
+	return &v3.NetworkPolicy{
+		TypeMeta:   metav1.TypeMeta{Kind: "NetworkPolicy", APIVersion: "projectcalico.org/v3"},
+		ObjectMeta: metav1.ObjectMeta{Name: ProxyPolicyName, Namespace: ns},
+		Spec: v3.NetworkPolicySpec{
+			Order:    &networkpolicy.HighPrecedenceOrder,
+			Tier:     networkpolicy.CalicoTierName,
+			Selector: EnvoyProxyPolicySelector,
+			Types:    []v3.PolicyType{v3.PolicyTypeIngress, v3.PolicyTypeEgress},
+			// Allow only what a Gateway here actually listens on, then Pass, so the user
+			// keeps control of everything else. The Allow is terminal in this tier, so
+			// widening it any further would take that control away.
+			Ingress: []v3.Rule{
+				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"0.0.0.0/0"}}, Destination: v3.EntityRule{Ports: ports}},
+				{Action: v3.Allow, Protocol: &networkpolicy.TCPProtocol, Source: v3.EntityRule{Nets: []string{"::/0"}}, Destination: v3.EntityRule{Ports: ports}},
+				{Action: v3.Pass},
 			},
 			Egress: egress,
 		},

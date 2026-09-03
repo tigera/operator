@@ -73,6 +73,7 @@ var log = logf.Log.WithName("controller_gatewayapi")
 func Add(mgr manager.Manager, opts options.ControllerOptions) error {
 	r := &ReconcileGatewayAPI{
 		client:              mgr.GetClient(),
+		apiReader:           mgr.GetAPIReader(),
 		scheme:              mgr.GetScheme(),
 		tierWatchReady:      &utils.ReadyFlag{},
 		status:              status.New(mgr.GetClient(), "gatewayapi", opts.KubernetesVersion),
@@ -177,7 +178,11 @@ var _ reconcile.Reconciler = &ReconcileGatewayAPI{}
 
 // ReconcileGatewayAPI reconciles a GatewayAPI object
 type ReconcileGatewayAPI struct {
-	client              client.Client
+	client client.Client
+	// apiReader reads straight from the API server. The sweep below needs to look at
+	// NetworkPolicies cluster-wide, and going through the cached client for that would
+	// start an informer holding every Calico policy on the cluster in memory.
+	apiReader           client.Reader
 	scheme              *runtime.Scheme
 	tierWatchReady      *utils.ReadyFlag
 	status              status.StatusManager
@@ -506,13 +511,7 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 			ownedClass[gcList.Items[i].Name] = true
 		}
 	}
-	nsSet := set.New[string]()
-	for i := range gwList.Items {
-		if ownedClass[string(gwList.Items[i].Spec.GatewayClassName)] {
-			nsSet.Insert(gwList.Items[i].Namespace)
-		}
-	}
-	gatewayConfig.GatewayNamespaces = nsSet.SortedList()
+	gatewayConfig.GatewayNamespaces, gatewayConfig.GatewayListenerPorts = gatewayNamespacesAndPorts(gwList.Items, ownedClass)
 
 	// Legacy tigera-gateway teardown (TODO: remove once upgrades from 3.x are unsupported).
 	// Foreground-delete the old controller so its Deployment lingers until its pods are gone — only
@@ -610,6 +609,11 @@ func (r *ReconcileGatewayAPI) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if err = r.sweepOrphanedProxyPolicies(ctx, gatewayConfig.GatewayNamespaces); err != nil {
+		r.status.SetDegraded(operatorv1.ResourceUpdateError, "Error removing orphaned proxy policies", err, log)
+		return reconcile.Result{}, err
+	}
+
 	// Clear the degraded bit if we've reached this far.
 	r.status.ClearDegraded()
 
@@ -685,6 +689,57 @@ func (r *ReconcileGatewayAPI) maintainFinalizer(ctx context.Context, gatewayAPI 
 	// These objects require graceful termination before the CNI plugin is torn down.
 	gatewayAPIDeployment := v1.Deployment{ObjectMeta: metav1.ObjectMeta{Name: "envoy-gateway", Namespace: common.CalicoNamespace}}
 	return utils.MaintainInstallationFinalizer(ctx, r.client, gatewayAPI, render.GatewayAPIFinalizer, &gatewayAPIDeployment)
+}
+
+// sweepOrphanedProxyPolicies deletes the proxy policy from namespaces that no longer host
+// one of our Gateways. The render owns these by the GatewayAPI CR, not by the Gateways in
+// the namespace, so nothing garbage-collects them when the last Gateway there goes away.
+// Matching is by our own policy name, so a user's own policies are never touched.
+func (r *ReconcileGatewayAPI) sweepOrphanedProxyPolicies(ctx context.Context, gatewayNamespaces []string) error {
+	policies := &v3.NetworkPolicyList{}
+	if err := r.apiReader.List(ctx, policies); err != nil {
+		return err
+	}
+	wanted := set.New(gatewayNamespaces...)
+	for i := range policies.Items {
+		policy := &policies.Items[i]
+		if policy.Name != gatewayapi.ProxyPolicyName || wanted.Has(policy.Namespace) {
+			continue
+		}
+		if err := r.client.Delete(ctx, policy); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// gatewayNamespacesAndPorts reports the namespaces holding a Gateway of one of our
+// classes, and for each the sorted listener ports its Gateways declare. The proxy policy
+// allows ingress on exactly those ports, so a user editing a listener is what widens or
+// narrows it. Both results are sorted so an unchanged cluster renders an unchanged policy.
+func gatewayNamespacesAndPorts(gateways []gapi.Gateway, ownedClass map[string]bool) ([]string, map[string][]uint16) {
+	nsSet := set.New[string]()
+	portSets := map[string]set.Set[uint16]{}
+	for i := range gateways {
+		gw := &gateways[i]
+		if !ownedClass[string(gw.Spec.GatewayClassName)] {
+			continue
+		}
+		nsSet.Insert(gw.Namespace)
+		ports, ok := portSets[gw.Namespace]
+		if !ok {
+			ports = set.New[uint16]()
+			portSets[gw.Namespace] = ports
+		}
+		for j := range gw.Spec.Listeners {
+			ports.Insert(uint16(gw.Spec.Listeners[j].Port))
+		}
+	}
+	listenerPorts := make(map[string][]uint16, len(portSets))
+	for ns, ports := range portSets {
+		listenerPorts[ns] = ports.SortedList()
+	}
+	return nsSet.SortedList(), listenerPorts
 }
 
 // reconcileGatewayNamespaceResources writes the per-namespace resources owned by the namespace's

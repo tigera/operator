@@ -25,6 +25,7 @@ import (
 	operatorv1 "github.com/tigera/operator/api/v1"
 	"github.com/tigera/operator/pkg/common"
 	"github.com/tigera/operator/pkg/components"
+	"github.com/tigera/operator/pkg/render/common/networkpolicy"
 	rtest "github.com/tigera/operator/pkg/render/common/test"
 	"github.com/tigera/operator/pkg/tls/certificatemanagement"
 	admissionregv1 "k8s.io/api/admissionregistration/v1"
@@ -116,7 +117,8 @@ var _ = Describe("Gateway API rendering tests", func() {
 		&gapi.GatewayClass{ObjectMeta: metav1.ObjectMeta{Name: GatewayClassName}},
 	}
 
-	// V3 NetworkPolicy allowing the controller under the calico-system default-deny tier.
+	// No Gateway anywhere means no proxy pods, so the proxy policy is not part of this
+	// baseline. It is asserted per namespace instead.
 	bootstrapExpected := []client.Object{
 		&v3.NetworkPolicy{ObjectMeta: metav1.ObjectMeta{Name: ControllerPolicyName, Namespace: common.CalicoNamespace}},
 	}
@@ -318,6 +320,7 @@ var _ = Describe("Gateway API rendering tests", func() {
 		proxy, err := rtest.GetResourceOfType[*envoyapi.EnvoyProxy](objsToCreate, GatewayClassName, common.CalicoNamespace)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("g-rural", "urban"))
+		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Labels).To(HaveKeyWithValue("k8s-app", GatewayProxyLabel))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Annotations).To(HaveKeyWithValue("g-haste", "speed"))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.Affinity).To(Equal(affinity))
 		Expect(proxy.Spec.Provider.Kubernetes.EnvoyDeployment.Pod.NodeSelector).To(HaveKeyWithValue("g-fast", "slow"))
@@ -982,6 +985,8 @@ value:
 			Installation:           installation,
 			GatewayAPI:             gatewayAPI,
 			IncludeV3NetworkPolicy: true,
+			GatewayNamespaces:      []string{"app-ns"},
+			GatewayListenerPorts:   map[string][]uint16{"app-ns": {80, 443}},
 		})
 		Expect(gatewayCompErr).NotTo(HaveOccurred())
 
@@ -1033,8 +1038,74 @@ value:
 		Expect(err).NotTo(HaveOccurred())
 		Expect(policy.Spec.Tier).To(Equal("calico-system"))
 		Expect(policy.Spec.Selector).To(Equal(EnvoyGatewayPolicySelector))
+
+		proxyPolicy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ProxyPolicyName, "app-ns")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(proxyPolicy.Spec.Tier).To(Equal("calico-system"))
+		Expect(proxyPolicy.Spec.Selector).To(Equal(EnvoyProxyPolicySelector))
+		Expect(proxyPolicy.Spec.Selector).NotTo(ContainSubstring("owning-gateway-name"),
+			"proxy policy must select by our Calico label, not Envoy Gateway's owning-gateway-name")
+
 		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, "calico-system.default-deny", common.CalicoNamespace)
 		Expect(err).To(HaveOccurred(), "must not render default-deny in calico-system")
+	})
+
+	It("should scope proxy ingress to the namespace's own listener ports", func() {
+		// 19001 is the metrics port and is never a listener, so it comes on top of
+		// whatever the namespace's Gateways declare.
+		for _, tc := range []struct {
+			listeners []uint16
+			want      []uint16
+		}{
+			{listeners: []uint16{80, 443}, want: []uint16{19001, 80, 443}},
+			{listeners: []uint16{8080}, want: []uint16{19001, 8080}},
+			{listeners: nil, want: []uint16{19001}},
+		} {
+			policy := ProxyPolicy("app-ns", tc.listeners, false)
+			Expect(policy.Namespace).To(Equal("app-ns"))
+			Expect(policy.Spec.Tier).To(Equal("calico-system"))
+			Expect(policy.Spec.Selector).To(Equal(EnvoyProxyPolicySelector))
+			Expect(policy.Spec.Ingress).To(HaveLen(3))
+
+			for i, nets := range [][]string{{"0.0.0.0/0"}, {"::/0"}} {
+				Expect(policy.Spec.Ingress[i].Action).To(Equal(v3.Allow))
+				Expect(policy.Spec.Ingress[i].Source.Nets).To(Equal(nets))
+				Expect(policy.Spec.Ingress[i].Destination.Ports).To(ConsistOf(networkpolicy.Ports(tc.want...)))
+			}
+			// Pass, so a port the user never asked to serve on still reaches their tiers.
+			Expect(policy.Spec.Ingress[2]).To(Equal(v3.Rule{Action: v3.Pass}))
+		}
+	})
+
+	It("should render one proxy policy per Gateway namespace and nothing cluster-wide", func() {
+		gatewayComp, err := GatewayAPIImplementationComponent(&GatewayAPIImplementationConfig{
+			Scheme:       testScheme(),
+			Installation: &operatorv1.InstallationSpec{},
+			GatewayAPI: &operatorv1.GatewayAPI{
+				Spec: operatorv1.GatewayAPISpec{GatewayClasses: []operatorv1.GatewayClassSpec{{Name: "tigera-gateway-class"}}},
+			},
+			IncludeV3NetworkPolicy: true,
+			GatewayNamespaces:      []string{"shop", "blog"},
+			GatewayListenerPorts:   map[string][]uint16{"shop": {80, 443}, "blog": {8080}},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		objsToCreate, _ := gatewayComp.Objects()
+
+		for ns, want := range map[string][]uint16{"shop": {19001, 80, 443}, "blog": {19001, 8080}} {
+			policy, err := rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ProxyPolicyName, ns)
+			Expect(err).NotTo(HaveOccurred(), ns)
+			Expect(policy.Spec.Ingress[0].Destination.Ports).To(ConsistOf(networkpolicy.Ports(want...)), ns)
+		}
+
+		// A namespace with no Gateway in it gets nothing.
+		_, err = rtest.GetResourceOfType[*v3.NetworkPolicy](objsToCreate, ProxyPolicyName, "other-ns")
+		Expect(err).To(HaveOccurred())
+
+		// And nothing cluster-wide, so a pod outside a Gateway namespace cannot pick up
+		// the rules just by wearing the proxy label.
+		for _, obj := range objsToCreate {
+			Expect(obj).NotTo(BeAssignableToTypeOf(&v3.GlobalNetworkPolicy{}))
+		}
 	})
 
 	It("should not render any v3 NetworkPolicy when IncludeV3NetworkPolicy is false", func() {

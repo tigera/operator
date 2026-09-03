@@ -117,6 +117,7 @@ var _ = Describe("Gateway API controller tests", func() {
 		fakeComponentHandlers = nil
 		r = &ReconcileGatewayAPI{
 			client:              c,
+			apiReader:           c,
 			scheme:              scheme,
 			status:              mockStatus,
 			variant:             operatorv1.CalicoEnterprise,
@@ -746,6 +747,68 @@ var _ = Describe("Gateway API controller tests", func() {
 		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-sa"}, &corev1.ServiceAccount{})).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Namespace: "tigera-gateway", Name: "user-config"}, &corev1.ConfigMap{})).NotTo(HaveOccurred())
 		Expect(c.Get(ctx, client.ObjectKey{Name: gatewayapi.GatewayClassName}, &gapi.GatewayClass{})).NotTo(HaveOccurred())
+	})
+
+	It("sweeps the proxy policy out of a namespace that no longer hosts a Gateway", func() {
+		// The render owns these by the GatewayAPI CR, so nothing garbage-collects one when
+		// the last Gateway in its namespace goes away. Without the sweep a pod there could
+		// keep the allow by wearing the proxy label.
+		for _, ns := range []string{"app-ns", "gone-ns"} {
+			Expect(c.Create(ctx, gatewayapi.ProxyPolicy(ns, []uint16{80}, false))).NotTo(HaveOccurred())
+		}
+		// A policy of the user's own in a namespace we are about to sweep, to prove the
+		// sweep matches on our name and does not touch anything else.
+		theirs := gatewayapi.ProxyPolicy("gone-ns", []uint16{80}, false)
+		theirs.Name = "their-own-policy"
+		Expect(c.Create(ctx, theirs)).NotTo(HaveOccurred())
+
+		Expect(r.sweepOrphanedProxyPolicies(ctx, []string{"app-ns"})).NotTo(HaveOccurred())
+
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "app-ns", Name: gatewayapi.ProxyPolicyName}, &v3.NetworkPolicy{})).NotTo(HaveOccurred())
+		Expect(apierrors.IsNotFound(c.Get(ctx, client.ObjectKey{Namespace: "gone-ns", Name: gatewayapi.ProxyPolicyName}, &v3.NetworkPolicy{}))).To(BeTrue())
+		Expect(c.Get(ctx, client.ObjectKey{Namespace: "gone-ns", Name: "their-own-policy"}, &v3.NetworkPolicy{})).NotTo(HaveOccurred())
+	})
+
+	It("collects each Gateway namespace's listener ports, deduplicated and sorted", func() {
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+				Listeners:        []gapi.Listener{{Port: 443}, {Port: 80}},
+			}},
+			// A second Gateway in the same namespace adds to the set, and the port it
+			// shares with gw1 must not appear twice.
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw2"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+				Listeners:        []gapi.Listener{{Port: 443}, {Port: 8080}},
+			}},
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "blog-ns", Name: "gw3"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+				Listeners:        []gapi.Listener{{Port: 8443}},
+			}},
+			// Someone else's class, so neither its namespace nor its port is ours.
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "other-ns", Name: "gw4"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: "not-ours",
+				Listeners:        []gapi.Listener{{Port: 9999}},
+			}},
+		}
+
+		namespaces, ports := gatewayNamespacesAndPorts(gateways, map[string]bool{gatewayapi.GatewayClassName: true})
+		Expect(namespaces).To(Equal([]string{"app-ns", "blog-ns"}))
+		Expect(ports).To(Equal(map[string][]uint16{
+			"app-ns":  {80, 443, 8080},
+			"blog-ns": {8443},
+		}))
+	})
+
+	It("reports no namespaces and no ports when a Gateway has no listeners", func() {
+		gateways := []gapi.Gateway{
+			{ObjectMeta: metav1.ObjectMeta{Namespace: "app-ns", Name: "gw1"}, Spec: gapi.GatewaySpec{
+				GatewayClassName: gatewayapi.GatewayClassName,
+			}},
+		}
+		namespaces, ports := gatewayNamespacesAndPorts(gateways, map[string]bool{gatewayapi.GatewayClassName: true})
+		Expect(namespaces).To(Equal([]string{"app-ns"}))
+		Expect(ports).To(Equal(map[string][]uint16{"app-ns": {}}))
 	})
 
 	It("writes the bundle and operator-secrets RoleBinding, but not WAF resources, on Calico", func() {

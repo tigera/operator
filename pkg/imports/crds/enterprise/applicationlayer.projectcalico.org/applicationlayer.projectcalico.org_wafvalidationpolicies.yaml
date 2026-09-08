@@ -185,7 +185,6 @@ spec:
                   enum:
                     - Compliant
                     - Warning
-                    - Degraded
                     - Critical
                   type: string
                 validationResults:

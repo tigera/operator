@@ -78,10 +78,10 @@ var (
 
 var errMismatchedError = fmt.Errorf("installation spec.kubernetesProvider 'DockerEnterprise' does not match auto-detected value 'OpenShift'")
 
-type fakeNamespaceMigration struct{}
+type fakeNamespaceMigration struct{ needsMigration bool }
 
 func (f *fakeNamespaceMigration) NeedsCoreNamespaceMigration(ctx context.Context) (bool, error) {
-	return false, nil
+	return f.needsMigration, nil
 }
 
 func (f *fakeNamespaceMigration) Run(ctx context.Context, log logr.Logger) error {
@@ -1652,6 +1652,64 @@ var _ = Describe("Testing core-controller installation", func() {
 			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(12345))
 		})
 
+		It("should not set BPFKubeProxyHealthzPort while calico-node is still on an older version", func() {
+			// A calico-node DaemonSet is already running and the status reports no version
+			// yet, so nodes may predate the value.
+			createNodeDaemonSet()
+
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).To(BeNil())
+		})
+
+		It("should set BPFKubeProxyHealthzPort once calico-node reports the target version", func() {
+			createNodeDaemonSet()
+
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+
+			cr.Status.Variant = operator.CalicoEnterprise
+			cr.Status.CalicoVersion = components.EnterpriseRelease
+			Expect(c.Status().Update(ctx, cr)).NotTo(HaveOccurred())
+
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).NotTo(BeNil())
+			Expect(*fc.Spec.BPFKubeProxyHealthzPort).To(Equal(0))
+		})
+
+		It("should not set BPFKubeProxyHealthzPort while the kube-system migration is pending", func() {
+			// calico-node pods from the manifest install are still serving nodes out of
+			// kube-system, so the operator's own DaemonSet says nothing about them.
+			r.namespaceMigration = &fakeNamespaceMigration{needsMigration: true}
+
+			network := operator.LinuxDataplaneBPF
+			cr.Spec.CalicoNetwork = &operator.CalicoNetworkSpec{LinuxDataplane: &network}
+			Expect(c.Create(ctx, cr)).NotTo(HaveOccurred())
+			_, err := r.Reconcile(ctx, reconcile.Request{})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			fc := &v3.FelixConfiguration{}
+			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
+			Expect(err).ShouldNot(HaveOccurred())
+
+			Expect(fc.Spec.BPFKubeProxyHealthzPort).To(BeNil())
+		})
+
 		It("should set BPFEnabled to ture on FelixConfiguration if BPF is enabled on installation", func() {
 			createNodeDaemonSet()
 
@@ -2562,6 +2620,30 @@ func (f *fakeComponentHandler) CreateOrUpdateOrDelete(ctx context.Context, compo
 	f.objectsToDelete = append(f.objectsToDelete, d...)
 	return nil
 }
+
+var _ = Describe("allNodesRunTargetVersion", func() {
+	const targetVersion = "v3.24.0-1.0"
+
+	install := func(statusVariant operator.ProductVariant, statusVersion string) *operator.Installation {
+		return &operator.Installation{
+			Spec:   operator.InstallationSpec{Variant: operator.CalicoEnterprise},
+			Status: operator.InstallationStatus{Variant: statusVariant, CalicoVersion: statusVersion},
+		}
+	}
+
+	DescribeTable("deciding whether older calico-node pods may still be running",
+		func(install *operator.Installation, needNsMigration, nodeDSExists, expected bool) {
+			Expect(allNodesRunTargetVersion(install, needNsMigration, nodeDSExists, targetVersion)).To(Equal(expected))
+		},
+		Entry("fresh install, no DaemonSet yet", install("", ""), false, false, true),
+		Entry("migration pending, no DaemonSet yet", install("", ""), true, false, false),
+		Entry("migration pending alongside a DaemonSet", install(operator.CalicoEnterprise, targetVersion), true, true, false),
+		Entry("DaemonSet running, no version reported yet", install("", ""), false, true, false),
+		Entry("version upgrade in flight", install(operator.CalicoEnterprise, "v3.23.0-1.1"), false, true, false),
+		Entry("variant change in flight", install(operator.Calico, targetVersion), false, true, false),
+		Entry("target version rolled out", install(operator.CalicoEnterprise, targetVersion), false, true, true),
+	)
+})
 
 var _ = Describe("updateMutatingAdmissionPolicies", func() {
 	var (

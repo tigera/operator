@@ -20,12 +20,12 @@ jobs:
       - name: Discover branches
         id: branches
         run: |
-          # Get master + the two most recent release branches (by semver).
+          # Get the two most recent release branches (by semver). master is not
+          # released from, so it is skipped.
           branches=$(gh api repos/${{ github.repository }}/branches --paginate --jq '
             [.[] | select(.name | test("^release-v[0-9]+\\.[0-9]+$")) | .name]
             | sort_by(ltrimstr("release-v") | split(".") | map(tonumber))
             | .[-2:]
-            | ["master"] + .
           ')
           echo "branches=${branches}" >> "$GITHUB_OUTPUT"
         env:

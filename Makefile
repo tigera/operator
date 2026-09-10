@@ -711,12 +711,12 @@ endef
 define copy_v1_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/libcalico-go/config/crd/* pkg/imports/crds/$(product)/v1.crd.projectcalico.org/ && echo "Copied $(product) CRDs"
+	@cp $(dir)/libcalico-go/config/crd/*.yaml pkg/imports/crds/$(product)/v1.crd.projectcalico.org/ && echo "Copied $(product) CRDs"
 endef
 define copy_v3_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/api/config/crd/* pkg/imports/crds/$(product)/v3.projectcalico.org/ && echo "Copied $(product) CRDs"
+	@cp $(dir)/api/config/crd/*.yaml pkg/imports/crds/$(product)/v3.projectcalico.org/ && echo "Copied $(product) CRDs"
 endef
 define copy_k8s_policy_crds
     $(eval product := $(1))
@@ -731,12 +731,12 @@ endef
 define copy_eck_crds
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/* pkg/imports/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
+	@cp $(dir)/charts/crd.projectcalico.org.v1/templates/eck/*.yaml pkg/imports/crds/$(product)/ && echo "Copied $(product) ECK CRDs"
 endef
 define copy_admission_policies
     $(eval dir := $(1))
 		$(eval product := $(2))
-	@cp $(dir)/api/admission/* pkg/imports/admission/$(product)/ && echo "Copied $(product) admission policies"
+	@cp $(dir)/api/admission/*.yaml pkg/imports/admission/$(product)/ && echo "Copied $(product) admission policies"
 endef
 
 .PHONY: read-libcalico-version read-libcalico-enterprise-version

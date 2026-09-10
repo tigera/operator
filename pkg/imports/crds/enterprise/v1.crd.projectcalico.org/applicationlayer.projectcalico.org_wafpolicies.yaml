@@ -312,9 +312,30 @@ spec:
                           ValidationFailure describes a single validation
                           rule failure
                         properties:
+                          expected:
+                            description: |-
+                              Expected is the value the rule requires, rendered as a string. Set from the
+                              violation's "expected" key.
+                            maxLength: 256
+                            type: string
+                          field:
+                            description: |-
+                              Field is the path of the setting that failed the rule, e.g.
+                              "spec.coreRuleSet.paranoiaLevel". Populated when the rule's Rego emits the
+                              object form of a violation with a "field" key; empty for rules that emit a
+                              bare message. Consumers use it to point a user at the setting to change
+                              rather than making them read the rule.
+                            maxLength: 253
+                            type: string
                           message:
                             description: Message explains why validation failed
                             maxLength: 1024
+                            type: string
+                          observed:
+                            description: |-
+                              Observed is the value the rule actually found, rendered as a string. Set
+                              from the violation's "observed" key.
+                            maxLength: 256
                             type: string
                           policyKind:
                             description: PolicyKind is Global or Namespace-scoped
@@ -328,6 +349,12 @@ spec:
                               PolicyName is the name of the validation policy
                               that failed
                             maxLength: 253
+                            type: string
+                          remedy:
+                            description: |-
+                              Remedy is a short, rule-authored instruction for resolving the failure. Set
+                              from the violation's "remedy" key.
+                            maxLength: 512
                             type: string
                           rule:
                             description:
@@ -360,7 +387,6 @@ spec:
                       enum:
                         - Compliant
                         - Warning
-                        - Degraded
                         - Critical
                       type: string
                     status:

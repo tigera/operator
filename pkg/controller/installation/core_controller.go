@@ -1447,6 +1447,7 @@ func (r *ReconcileInstallation) Reconcile(ctx context.Context, request reconcile
 		Namespace:              common.CalicoNamespace,
 		BindingNamespaces:      []string{common.CalicoNamespace},
 		ImageOverrides:         r.ext.Images(),
+		MigrationActive:        migrationExists,
 	}
 	components = append(components, kubecontrollers.NewCalicoKubeControllers(&kubeControllersCfg))
 

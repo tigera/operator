@@ -291,6 +291,8 @@ spec:
                     BPFExtToServiceConnmark in BPF mode, controls a 32bit mark that is set on connections from an
                     external client to a local service. This mark allows us to control how packets of that
                     connection are routed within the host and how is routing interpreted by RPF check. [Default: 0]
+                  maximum: 4294967295
+                  minimum: 0
                   type: integer
                 bpfExternalServiceMode:
                   description: |-
@@ -356,6 +358,8 @@ spec:
                     BPFKubeProxyHealthzPort, in BPF mode, controls the port that Felix's embedded kube-proxy health check server binds to.
                     The health check server is used by external load balancers to determine if this node should receive traffic.
                     Set to 0 to disable the health check server.  [Default: 10256]
+                  maximum: 65535
+                  minimum: 0
                   type: integer
                 bpfKubeProxyIptablesCleanupEnabled:
                   description: |-
@@ -404,6 +408,8 @@ spec:
                     and thus the amount of memory reserved.
 
                     [Default: 100]
+                  maximum: 3000
+                  minimum: 1
                   type: integer
                 bpfMaglevMaxServices:
                   description: |-
@@ -411,6 +417,8 @@ spec:
                     services that Felix will allocate lookup-tables for.
 
                     [Default: 100]
+                  maximum: 3000
+                  minimum: 1
                   type: integer
                 bpfMapSizeConntrack:
                   description: |-
@@ -588,6 +596,8 @@ spec:
                   description: |-
                     DebugPort if set, enables Felix's debug HTTP port, which allows memory and CPU profiles
                     to be retrieved.  The debug port is not secure, it should not be exposed to the internet.
+                  maximum: 65535
+                  minimum: 0
                   type: integer
                 debugSimulateCalcGraphHangAfter:
                   description: |-
@@ -1386,11 +1396,15 @@ spec:
                     values mean lower priority.  Elevated priority is used during VM live migration, and for
                     optimal behaviour IPv4ElevatedRoutePriority must be less than IPv4NormalRoutePriority
                     [Default: 512]
+                  maximum: 2147483646
+                  minimum: 1
                   type: integer
                 ipv4NormalRoutePriority:
                   description: |-
                     Route Priority value for a normal priority Calico-programmed IPv4 route.  Note, higher
                     values mean lower priority. [Default: 1024]
+                  maximum: 2147483646
+                  minimum: 1
                   type: integer
                 ipv6ElevatedRoutePriority:
                   description: |-
@@ -1398,11 +1412,15 @@ spec:
                     values mean lower priority.  Elevated priority is used during VM live migration, and for
                     optimal behaviour IPv6ElevatedRoutePriority must be less than IPv6NormalRoutePriority
                     [Default: 512]
+                  maximum: 2147483646
+                  minimum: 1
                   type: integer
                 ipv6NormalRoutePriority:
                   description: |-
                     Route Priority value for a normal priority Calico-programmed IPv6 route.  Note, higher
                     values mean lower priority. [Default: 1024]
+                  maximum: 2147483646
+                  minimum: 1
                   type: integer
                 ipv6Support:
                   description:
@@ -2259,11 +2277,15 @@ spec:
                   description:
                     "WireguardListeningPort controls the listening port used
                     by IPv4 Wireguard. [Default: 51820]"
+                  maximum: 65535
+                  minimum: 1
                   type: integer
                 wireguardListeningPortV6:
                   description:
                     "WireguardListeningPortV6 controls the listening port
                     used by IPv6 Wireguard. [Default: 51821]"
+                  maximum: 65535
+                  minimum: 1
                   type: integer
                 wireguardMTU:
                   description:
@@ -2279,6 +2301,8 @@ spec:
                   description:
                     "WireguardRoutingRulePriority controls the priority value
                     to use for the Wireguard routing rule. [Default: 99]"
+                  maximum: 32765
+                  minimum: 1
                   type: integer
                 wireguardThreadingEnabled:
                   description: |-

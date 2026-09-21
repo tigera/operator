@@ -375,12 +375,17 @@ admission policy installation; once an Installation exists it is the authority o
 					// in the cluster in memory (~36 MiB per 1000 pods), so read them uncached
 					// from the apiserver instead.
 					&corev1.Pod{},
+
+					// The shared-config writer resolves field ownership from managedFields,
+					// which are not preserved by the cache.
+					&v3.FelixConfiguration{},
+					&v3.BGPConfiguration{},
 				},
 			},
 		},
 
-		// Cached objects are only read by the operator's own controllers, which
-		// never consult managedFields; stripping them substantially shrinks the cache.
+		// Stripping managedFields substantially shrinks the cache.  Anything that resolves
+		// ownership from them has to be listed in DisableFor, above.
 		Cache: cache.Options{DefaultTransform: cache.TransformStripManagedFields()},
 
 		// Explicitly set the MapperProvider to the NewDynamicRESTMapper, as we had previously had issues with the default

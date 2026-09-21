@@ -56,6 +56,7 @@ import (
 	"github.com/tigera/operator/pkg/common/discovery"
 	"github.com/tigera/operator/pkg/components"
 	"github.com/tigera/operator/pkg/controller/certificatemanager"
+	"github.com/tigera/operator/pkg/controller/managedfields"
 	"github.com/tigera/operator/pkg/controller/options"
 	"github.com/tigera/operator/pkg/controller/status"
 	"github.com/tigera/operator/pkg/controller/utils"
@@ -208,6 +209,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				newComponentHandler: utils.NewComponentHandler,
+				fieldManager:        managedfields.New(c),
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -862,6 +864,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				newComponentHandler: utils.NewComponentHandler,
+				fieldManager:        managedfields.New(c),
 			}
 			r.typhaAutoscaler.start(ctx)
 
@@ -1087,6 +1090,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				newComponentHandler: utils.NewComponentHandler,
+				fieldManager:        managedfields.New(c),
 			}
 
 			r.typhaAutoscaler.start(ctx)
@@ -1457,9 +1461,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			// This is only set on EKS / GKE.
 			Expect(fc.Spec.RouteTableRange).To(BeNil())
 
-			// Should set correct annoation and BPFEnabled field.
-			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
+			// Should set the BPFEnabled field.
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
@@ -1791,9 +1793,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Should set correct annoation and BPFEnabled field.
-			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			// Should set the BPFEnabled field.
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
@@ -1809,9 +1809,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Should set correct annoation and BPFEnabled field.
-			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			// Should set the BPFEnabled field.
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
@@ -1830,9 +1828,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Should set correct annoation and BPFEnabled field.
-			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			// Should set the BPFEnabled field.
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 
@@ -1849,9 +1845,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Should set correct annoation and BPFEnabled field.
-			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("false"))
+			// Should set the BPFEnabled field.
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeFalse())
 		})
@@ -1879,9 +1873,7 @@ var _ = Describe("Testing core-controller installation", func() {
 			err = c.Get(ctx, types.NamespacedName{Name: "default"}, fc)
 			Expect(err).ShouldNot(HaveOccurred())
 
-			// Should set correct annoation and BPFEnabled field.
-			Expect(fc.Annotations).NotTo(BeNil())
-			Expect(fc.Annotations[render.BPFOperatorAnnotation]).To(Equal("true"))
+			// Should set the BPFEnabled field.
 			Expect(fc.Spec.BPFEnabled).NotTo(BeNil())
 			Expect(*fc.Spec.BPFEnabled).To(BeTrue())
 		})
@@ -2485,6 +2477,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				tierWatchReady:      ready,
 				migrationWatchReady: &utils.ReadyFlag{},
 				newComponentHandler: utils.NewComponentHandler,
+				fieldManager:        managedfields.New(c),
 			}
 			r.typhaAutoscaler.start(ctx)
 
@@ -2628,6 +2621,7 @@ var _ = Describe("Testing core-controller installation", func() {
 				newComponentHandler: func(logr.Logger, client.Client, *runtime.Scheme, metav1.Object, ...utils.ComponentHandlerOption) utils.ComponentHandler {
 					return componentHandler
 				},
+				fieldManager: managedfields.New(c),
 			}
 
 			r.typhaAutoscaler.start(ctx)

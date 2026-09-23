@@ -1,6 +1,6 @@
 module github.com/tigera/operator
 
-go 1.26.5
+go 1.27.1
 
 require (
 	github.com/Masterminds/semver/v3 v3.5.0
@@ -56,6 +56,7 @@ require (
 	sigs.k8s.io/gateway-api v1.5.1
 	sigs.k8s.io/kind v0.31.0 // Do not remove, not used by code but used by build
 	sigs.k8s.io/secrets-store-csi-driver v1.6.0
+	sigs.k8s.io/structured-merge-diff/v6 v6.4.2
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -203,7 +204,6 @@ require (
 	sigs.k8s.io/kustomize/api v0.21.1 // indirect
 	sigs.k8s.io/kustomize/kyaml v0.21.1 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
-	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
 
 replace (

@@ -337,11 +337,14 @@ var _ = Describe("Monitor controller tests", func() {
 								},
 							},
 							HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
-								BearerTokenSecret: &corev1.SecretKeySelector{
-									LocalObjectReference: corev1.LocalObjectReference{
-										Name: monitor.TigeraExternalPrometheus,
+								Authorization: &monitoringv1.SafeAuthorization{
+									Type: "Bearer",
+									Credentials: &corev1.SecretKeySelector{
+										LocalObjectReference: corev1.LocalObjectReference{
+											Name: monitor.TigeraExternalPrometheus,
+										},
+										Key: "token",
 									},
-									Key: "token",
 								},
 							},
 						},

@@ -1723,7 +1723,10 @@ func (mc *monitorComponent) externalServiceMonitor() (client.Object, bool) {
 						},
 					},
 					HTTPConfigWithoutTLS: monitoringv1.HTTPConfigWithoutTLS{
-						BearerTokenSecret: &ep.BearerTokenSecret,
+						Authorization: &monitoringv1.SafeAuthorization{
+							Type:        "Bearer",
+							Credentials: &ep.BearerTokenSecret,
+						},
 					},
 				},
 			},

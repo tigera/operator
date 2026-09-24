@@ -27,11 +27,14 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	v3 "github.com/tigera/api/pkg/apis/projectcalico/v3"
@@ -126,6 +129,29 @@ var _ = Describe("Istio controller tests", func() {
 	}
 
 	Context("Reconcile tests", func() {
+		It("configures Felix on Calico when the ApplicationLayer CRD is not installed", func() {
+			createResources()
+			fc := &v3.FelixConfiguration{ObjectMeta: metav1.ObjectMeta{Name: "default"}}
+			Expect(cli.Create(ctx, fc)).NotTo(HaveOccurred())
+
+			noALClient := interceptor.NewClient(cli.(client.WithWatch), interceptor.Funcs{
+				Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+					if _, ok := obj.(*operatorv1.ApplicationLayer); ok {
+						return &meta.NoKindMatchError{GroupKind: schema.GroupKind{Group: "operator.tigera.io", Kind: "ApplicationLayer"}}
+					}
+					return c.Get(ctx, key, obj, opts...)
+				},
+			})
+
+			r := &ReconcileIstio{Client: noALClient, scheme: scheme, provider: operatorv1.ProviderNone, status: mockStatus}
+			_, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "default"}})
+			Expect(err).ShouldNot(HaveOccurred())
+
+			patched := &v3.FelixConfiguration{}
+			Expect(cli.Get(ctx, types.NamespacedName{Name: "default"}, patched)).NotTo(HaveOccurred())
+			Expect(patched.Spec.IstioAmbientMode).NotTo(BeNil())
+		})
+
 		It("should handle basic Istio reconciliation", func() {
 			createResources()
 

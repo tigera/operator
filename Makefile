@@ -104,7 +104,7 @@ LOCAL_USER_ID?=$(shell id -u $$USER)
 # The project Go version.
 GO_VERSION?=1.27.1
 # Version of Kubernetes to use for dependencies, tests, and kubectl.
-K8S_VERSION?=v1.37.0
+K8S_VERSION?=v1.37.1
 # The version of LLVM to use for the go-build image.
 LLVM_VERSION?=21.1.8
 # Calico toolchain versions and the calico/go-build image to use.

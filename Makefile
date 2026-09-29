@@ -37,7 +37,7 @@ OPERATOR_SDK_URL = https://github.com/operator-framework/operator-sdk/releases/d
 
 # Our version of helm3 - Note that we use BUILD_ARCH here instead of NATIVE_ARCH because
 # that's what we used before and we don't want to break things if that's necessary.
-HELM3_VERSION = v3.21.3
+HELM3_VERSION = v3.21.4
 HELM3_URL = https://get.helm.sh/helm-$(HELM3_VERSION)-$(NATIVE_OS)-$(BUILDARCH).tar.gz
 HELM_BUILDARCH_BINARY = $(HACK_BIN)/helm-$(BUILDARCH)
 HELM_BUILDARCH_VERSIONED_BINARY = $(HELM_BUILDARCH_BINARY)-$(HELM3_VERSION)
@@ -271,7 +271,7 @@ $(ISTIO_RESOURCES_DIR)/%.tgz:
 # To update the Envoy Gateway version, see "Updating the bundled version of
 # Envoy Gateway" in docs/common_tasks.md.
 ENVOY_GATEWAY_HELM_CHART ?= oci://docker.io/envoyproxy/gateway-helm
-ENVOY_GATEWAY_VERSION ?= v1.8.0
+ENVOY_GATEWAY_VERSION ?= v1.8.4
 ENVOY_GATEWAY_PREFIX ?= tigera-gateway-api
 ENVOY_GATEWAY_NAMESPACE ?= tigera-gateway
 ENVOY_GATEWAY_RESOURCES = pkg/render/gatewayapi/gateway_api_resources.yaml
@@ -523,7 +523,7 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 # compiles it comes from GOTOOLCHAIN above plus the go.mod directive - not from
 # GO_VERSION. Keep this image's Go version in step with that floor so lint and
 # the binary are checked by the same compiler.
-CALICO_BUILD_LINT ?= calico/go-build:1.26.6-llvm21.1.8-k8s1.36.3-$(BUILDARCH)
+CALICO_BUILD_LINT ?= calico/go-build:1.26.7-llvm21.1.8-k8s1.36.4-$(BUILDARCH)
 static-checks:
 	$(CONTAINERIZED) $(CALICO_BUILD_LINT) golangci-lint run --timeout 5m
 

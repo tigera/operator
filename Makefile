@@ -523,7 +523,7 @@ cluster-destroy: $(BINDIR)/kubectl $(BINDIR)/kind
 # compiles it comes from GOTOOLCHAIN above plus the go.mod directive - not from
 # GO_VERSION. Keep this image's Go version in step with that floor so lint and
 # the binary are checked by the same compiler.
-CALICO_BUILD_LINT ?= calico/go-build:1.26.6-llvm21.1.8-k8s1.36.3-$(BUILDARCH)
+CALICO_BUILD_LINT ?= calico/go-build:1.26.7-llvm21.1.8-k8s1.36.4-$(BUILDARCH)
 static-checks:
 	$(CONTAINERIZED) $(CALICO_BUILD_LINT) golangci-lint run --timeout 5m
 
